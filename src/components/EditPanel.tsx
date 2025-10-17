@@ -219,6 +219,53 @@ export const EditPanel = () => {
                 </p>
               </div>
 
+              {/* Clients importés liés - Charges */}
+              {linkedClients.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Network className="w-4 h-4" />
+                      Clients importés liés ({linkedClients.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {linkedClients.map((client) => (
+                      <div key={client.id} className="flex items-center justify-between p-2 bg-muted/50 rounded text-sm">
+                        <div className="flex-1">
+                          <div className="font-medium">{client.nomCircuit || client.identifiantCircuit}</div>
+                          <div className="text-xs text-muted-foreground">{client.identifiantCircuit}</div>
+                        </div>
+                        <div className="text-right space-y-1">
+                          {client.puissanceContractuelle_kVA > 0 && (
+                            <div className="font-mono">
+                              ⚡ {client.puissanceContractuelle_kVA.toFixed(1)} kVA
+                            </div>
+                          )}
+                          {client.puissancePV_kVA > 0 && (
+                            <div className="font-mono text-green-600 dark:text-green-400">
+                              ☀️ {client.puissancePV_kVA.toFixed(1)} kVA PV
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    <div className="pt-2 border-t mt-2">
+                      <div className="flex justify-between text-sm font-medium">
+                        <span>Total clients liés:</span>
+                        <div className="space-y-1 text-right">
+                          {linkedChargeTotal > 0 && (
+                            <div>⚡ {linkedChargeTotal.toFixed(1)} kVA</div>
+                          )}
+                          {linkedProductionTotal > 0 && (
+                            <div className="text-green-600 dark:text-green-400">☀️ {linkedProductionTotal.toFixed(1)} kVA PV</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Clients */}
               <Card>
                 <CardHeader className="pb-3">
@@ -266,53 +313,6 @@ export const EditPanel = () => {
                   ))}
                 </CardContent>
               </Card>
-
-              {/* Clients importés liés - Charges */}
-              {linkedClients.length > 0 && (
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Network className="w-4 h-4" />
-                      Clients importés liés ({linkedClients.length})
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    {linkedClients.map((client) => (
-                      <div key={client.id} className="flex items-center justify-between p-2 bg-muted/50 rounded text-sm">
-                        <div className="flex-1">
-                          <div className="font-medium">{client.nomCircuit || client.identifiantCircuit}</div>
-                          <div className="text-xs text-muted-foreground">{client.identifiantCircuit}</div>
-                        </div>
-                        <div className="text-right space-y-1">
-                          {client.puissanceContractuelle_kVA > 0 && (
-                            <div className="font-mono">
-                              ⚡ {client.puissanceContractuelle_kVA.toFixed(1)} kVA
-                            </div>
-                          )}
-                          {client.puissancePV_kVA > 0 && (
-                            <div className="font-mono text-green-600 dark:text-green-400">
-                              ☀️ {client.puissancePV_kVA.toFixed(1)} kVA PV
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                    <div className="pt-2 border-t mt-2">
-                      <div className="flex justify-between text-sm font-medium">
-                        <span>Total clients liés:</span>
-                        <div className="space-y-1 text-right">
-                          {linkedChargeTotal > 0 && (
-                            <div>⚡ {linkedChargeTotal.toFixed(1)} kVA</div>
-                          )}
-                          {linkedProductionTotal > 0 && (
-                            <div className="text-green-600 dark:text-green-400">☀️ {linkedProductionTotal.toFixed(1)} kVA PV</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
 
               {/* Productions */}
               <Card>

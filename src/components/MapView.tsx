@@ -164,7 +164,8 @@ export const MapView = () => {
         setSelectedClient(clientId);
         openEditPanel('client');
       }
-    }
+    },
+    onClientDragToNode: linkClientToNode
   });
 
   // Gérer le changement de type de carte

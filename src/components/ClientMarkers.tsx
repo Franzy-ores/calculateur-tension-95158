@@ -9,11 +9,14 @@ interface ClientMarkersProps {
   nodes: Node[];
   selectedClientId?: string | null;
   onClientClick?: (clientId: string) => void;
+  onClientDragToNode?: (clientId: string, nodeId: string) => void;
 }
 
-export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId, onClientClick }: ClientMarkersProps) => {
+export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId, onClientClick, onClientDragToNode }: ClientMarkersProps) => {
   const clientMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   const linkLinesRef = useRef<Map<string, L.Polyline>>(new Map());
+  const dragLineRef = useRef<L.Polyline | null>(null);
+  const highlightCircleRef = useRef<L.Circle | null>(null);
 
   useEffect(() => {
     if (!map || !clients) return;
@@ -34,12 +37,106 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
       
       const icon = L.divIcon({
         className: 'client-marker',
-        html: `<div class="w-3 h-3 rounded-full shadow-md ${isSelected ? 'animate-pulse' : ''}" style="background-color: ${color}; border: ${borderWidth}px solid ${borderColor};"></div>`,
+        html: `<div class="w-3 h-3 rounded-full shadow-md ${isSelected ? 'animate-pulse' : ''}" style="background-color: ${color}; border: ${borderWidth}px solid ${borderColor}; cursor: grab;"></div>`,
         iconSize: [12, 12],
         iconAnchor: [6, 6]
       });
       
-      const marker = L.marker([client.lat, client.lng], { icon });
+      const marker = L.marker([client.lat, client.lng], { 
+        icon,
+        draggable: true,
+        autoPan: true
+      });
+
+      // Gestion du drag & drop
+      let initialPosition: L.LatLng;
+      
+      marker.on('dragstart', (e) => {
+        initialPosition = e.target.getLatLng();
+        const element = marker.getElement();
+        if (element) {
+          element.style.cursor = 'grabbing';
+        }
+      });
+
+      marker.on('drag', (e) => {
+        const currentLatLng = e.target.getLatLng();
+        
+        // Dessiner la ligne temporaire
+        if (!dragLineRef.current) {
+          dragLineRef.current = L.polyline(
+            [[initialPosition.lat, initialPosition.lng], [currentLatLng.lat, currentLatLng.lng]],
+            { color: '#3b82f6', weight: 2, opacity: 0.5, dashArray: '5, 10' }
+          ).addTo(map);
+        } else {
+          dragLineRef.current.setLatLngs([
+            [initialPosition.lat, initialPosition.lng],
+            [currentLatLng.lat, currentLatLng.lng]
+          ]);
+        }
+        
+        // Trouver le nœud le plus proche
+        const closestNode = nodes.reduce<{ node: Node | null; distance: number }>(
+          (closest, node) => {
+            const distance = map.distance([node.lat, node.lng], [currentLatLng.lat, currentLatLng.lng]);
+            if (distance < 30 && distance < closest.distance) {
+              return { node, distance };
+            }
+            return closest;
+          },
+          { node: null, distance: Infinity }
+        );
+        
+        // Mettre en surbrillance le nœud proche
+        if (closestNode.node) {
+          if (!highlightCircleRef.current) {
+            highlightCircleRef.current = L.circle(
+              [closestNode.node.lat, closestNode.node.lng],
+              { radius: 30, color: '#22c55e', fillColor: '#22c55e', fillOpacity: 0.2, weight: 2 }
+            ).addTo(map);
+          } else {
+            highlightCircleRef.current.setLatLng([closestNode.node.lat, closestNode.node.lng]);
+          }
+        } else if (highlightCircleRef.current) {
+          map.removeLayer(highlightCircleRef.current);
+          highlightCircleRef.current = null;
+        }
+      });
+
+      marker.on('dragend', (e) => {
+        const dropLatLng = e.target.getLatLng();
+        
+        // Nettoyer les éléments visuels
+        if (dragLineRef.current) {
+          map.removeLayer(dragLineRef.current);
+          dragLineRef.current = null;
+        }
+        if (highlightCircleRef.current) {
+          map.removeLayer(highlightCircleRef.current);
+          highlightCircleRef.current = null;
+        }
+        
+        // Vérifier si on a lâché sur un nœud
+        const droppedOnNode = nodes.find(node => {
+          const distance = map.distance(
+            [node.lat, node.lng],
+            [dropLatLng.lat, dropLatLng.lng]
+          );
+          return distance < 30;
+        });
+        
+        if (droppedOnNode && onClientDragToNode) {
+          onClientDragToNode(client.id, droppedOnNode.id);
+        }
+        
+        // Toujours revenir à la position initiale
+        marker.setLatLng(initialPosition);
+        
+        const element = marker.getElement();
+        if (element) {
+          element.style.cursor = 'grab';
+        }
+      });
       
       const popupContent = `
         <div style="min-width: 200px;">
@@ -85,8 +182,10 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
     return () => {
       clientMarkersRef.current.forEach(marker => map.removeLayer(marker));
       linkLinesRef.current.forEach(line => map.removeLayer(line));
+      if (dragLineRef.current) map.removeLayer(dragLineRef.current);
+      if (highlightCircleRef.current) map.removeLayer(highlightCircleRef.current);
     };
-  }, [map, clients, links, nodes, selectedClientId, onClientClick]);
+  }, [map, clients, links, nodes, selectedClientId, onClientClick, onClientDragToNode]);
 
   return { clientMarkersRef, linkLinesRef };
 };

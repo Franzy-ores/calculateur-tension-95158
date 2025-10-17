@@ -837,7 +837,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       updatedLinks = currentLinks.map(l =>
         l.clientId === clientId ? { ...l, nodeId } : l
       );
-      toast.success(`Client relié à ${node.name}`);
+      const client = currentProject.clientsImportes?.find(c => c.id === clientId);
+      toast.success(`✅ Client "${client?.nomCircuit || clientId}" relié à ${node.name}`);
     } else {
       // Créer une nouvelle liaison
       const newLink = {
@@ -846,7 +847,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         nodeId
       };
       updatedLinks = [...currentLinks, newLink];
-      toast.success(`Client lié à ${node.name}`);
+      const client = currentProject.clientsImportes?.find(c => c.id === clientId);
+      toast.success(`✅ Client "${client?.nomCircuit || clientId}" lié à ${node.name}`);
     }
     
     set({

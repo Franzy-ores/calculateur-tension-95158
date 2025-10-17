@@ -100,6 +100,7 @@ interface NetworkActions {
   setSelectedNode: (nodeId: string | null) => void;
   setSelectedCable: (cableId: string | null) => void;
   setSelectedClient: (clientId: string | null) => void;
+  setSelectedClientForLinking: (clientId: string | null) => void;
   setSelectedCableType: (cableTypeId: string) => void;
   openEditPanel: (target: 'node' | 'cable' | 'project' | 'simulation' | 'client') => void;
   closeEditPanel: () => void;
@@ -720,6 +721,10 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   setSelectedNode: (nodeId) => set({ selectedNodeId: nodeId }),
   setSelectedCable: (cableId) => set({ selectedCableId: cableId }),
   setSelectedClient: (clientId) => set({ selectedClientId: clientId }),
+  setSelectedClientForLinking: (clientId) => set({ 
+    selectedClientForLinking: clientId,
+    linkingMode: clientId !== null 
+  }),
   setSelectedCableType: (cableTypeId) => set({ selectedCableType: cableTypeId }),
 
   // Actions pour les clients importés

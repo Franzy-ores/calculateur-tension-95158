@@ -63,6 +63,7 @@ export const MapView = () => {
     selectedClientForLinking,
     linkClientToNode,
     setSelectedClient,
+    setSelectedClientForLinking,
   } = useNetworkStore();
 
   // Récupérer isSimulationActive du store
@@ -157,7 +158,7 @@ export const MapView = () => {
     selectedClientId: selectedClientForLinking,
     onClientClick: (clientId) => {
       if (selectedTool === 'linkClient') {
-        setSelectedClient(clientId);
+        setSelectedClientForLinking(clientId);
       } else {
         setSelectedClient(clientId);
         openEditPanel('client');
@@ -808,6 +809,11 @@ export const MapView = () => {
           } else {
             console.log('Same node clicked - ignoring');
           }
+        } else if (selectedTool === 'linkClient' && selectedClientForLinking) {
+          // Mode liaison client : créer la liaison
+          console.log('🔗 Linking client', selectedClientForLinking, 'to node', node.id);
+          linkClientToNode(selectedClientForLinking, node.id);
+          // Le store réinitialise automatiquement selectedClientForLinking et linkingMode
         } else if (selectedTool === 'edit') {
           setSelectedNode(node.id);
           openEditPanel('node');
@@ -828,7 +834,7 @@ export const MapView = () => {
 
       markersRef.current.set(node.id, marker);
     });
-  }, [currentProject?.nodes, selectedTool, selectedNodeId, selectedCableType, addCable, setSelectedNode, openEditPanel, deleteNode, showVoltages, resultsToUse, selectedScenario, moveNode, routingActive, routingFromNode, routingToNode]);
+  }, [currentProject?.nodes, selectedTool, selectedNodeId, selectedCableType, addCable, setSelectedNode, openEditPanel, deleteNode, showVoltages, resultsToUse, selectedScenario, moveNode, routingActive, routingFromNode, routingToNode, selectedClientForLinking, linkClientToNode]);
 
   // Update cables
   useEffect(() => {

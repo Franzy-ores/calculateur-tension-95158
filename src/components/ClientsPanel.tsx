@@ -19,6 +19,7 @@ export const ClientsPanel = () => {
     unlinkClient,
     setSelectedTool,
     setSelectedClient,
+    setSelectedClientForLinking,
     openEditPanel,
   } = useNetworkStore();
 
@@ -65,7 +66,7 @@ export const ClientsPanel = () => {
   const totalPV = clients.reduce((sum, c) => sum + c.puissancePV_kVA, 0);
 
   const handleStartLinking = (clientId: string) => {
-    setSelectedClient(clientId);
+    setSelectedClientForLinking(clientId);
     setSelectedTool('linkClient');
   };
 

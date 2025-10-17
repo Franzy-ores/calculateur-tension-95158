@@ -50,6 +50,8 @@ export const TopMenu = ({
     simulationEquipment,
     isSimulationActive,
     toggleSimulationActive,
+    clientColorMode,
+    setClientColorMode,
   } = useNetworkStore();
 
   // Calcul des puissances totales et foisonnées (manuel + clients importés)
@@ -157,6 +159,26 @@ export const TopMenu = ({
             <FileSpreadsheet className="h-4 w-4 mr-1" />
             Importer Clients
           </Button>
+          
+          {/* Sélecteur de mode de coloration des clients */}
+          {currentProject && currentProject.clientsImportes && currentProject.clientsImportes.length > 0 && (
+            <div className="flex items-center gap-2 ml-2">
+              <Label className="text-xs font-medium text-primary-foreground">Couleur:</Label>
+              <Select 
+                value={clientColorMode} 
+                onValueChange={(value: any) => setClientColorMode(value)}
+              >
+                <SelectTrigger className="w-[140px] bg-white/10 border-white/20 text-primary-foreground text-xs h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-background border z-[10000]">
+                  <SelectItem value="couplage">Par Couplage</SelectItem>
+                  <SelectItem value="circuit">Par Circuit</SelectItem>
+                  <SelectItem value="tension">Par Tension</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           
           <Button variant="ghost" size="sm" onClick={onNewNetwork} className="text-primary-foreground hover:bg-white/10 hover:text-primary-foreground">
             <FileText className="h-4 w-4 mr-1" />

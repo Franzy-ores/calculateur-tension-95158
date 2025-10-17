@@ -29,10 +29,11 @@ export const parseExcelToClients = (file: File): Promise<ClientImporte[]> => {
             puissanceContractuelle_kVA: parseFloat(row['Puissance contractuelle']) || 0,
             puissancePV_kVA: parseFloat(row['Puissance PV en kVA']) || 0,
             couplage,
-            tensionMin_V: parseFloat(row['Tension minimale']) || undefined,
-            tensionMax_V: parseFloat(row['Tension maximale']) || undefined,
-            tensionMoyenne_V: parseFloat(row['Tension moyenne']) || undefined,
-            identifiantCabine: String(row['Identifiant cabine'] || undefined),
+          tensionMin_V: parseFloat(row['Tension minimale']) || undefined,
+          tensionMax_V: parseFloat(row['Tension maximale']) || undefined,
+          tensionMoyenne_V: parseFloat(row['Tension moyenne']) || undefined,
+          tensionCircuit_V: parseFloat(row['Tension (Circuit)']) || undefined,
+          identifiantCabine: String(row['Identifiant cabine'] || undefined),
             identifiantPosteSource: String(row['Identifiant poste source'] || undefined),
             rawData: row
           };
@@ -146,4 +147,55 @@ export const calculateTotalPowersForNodes = (
     totalChargesContractuelles: totalCharges,
     totalProductionsContractuelles: totalProds
   };
+};
+
+/**
+ * Génère une couleur unique et cohérente pour un identifiant de circuit
+ */
+const hashStringToColor = (str: string): string => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  
+  const hue = Math.abs(hash % 360);
+  return `hsl(${hue}, 70%, 50%)`;
+};
+
+/**
+ * Détermine la couleur d'un marqueur client selon le mode sélectionné
+ */
+export const getClientMarkerColor = (
+  client: ClientImporte, 
+  mode: 'couplage' | 'circuit' | 'tension'
+): string => {
+  switch (mode) {
+    case 'couplage':
+      // TRI = bleu, MONO = orange (comportement actuel)
+      return client.couplage === 'TRI' ? '#3b82f6' : '#f97316';
+    
+    case 'circuit':
+      // Couleur unique par identifiant de circuit
+      return hashStringToColor(client.identifiantCircuit);
+    
+    case 'tension':
+      // Basé sur la colonne "Tension (Circuit)" du fichier Excel
+      if (!client.tensionCircuit_V) {
+        return '#6b7280'; // Gris si pas de tension
+      }
+      
+      const tension = client.tensionCircuit_V;
+      
+      // Logique simple : 230V vs 400V
+      if (tension <= 250) {
+        return '#22c55e';  // Vert pour 230V
+      } else if (tension > 250 && tension <= 450) {
+        return '#3b82f6';  // Bleu pour 400V
+      } else {
+        return '#ef4444';  // Rouge pour valeurs hors normes
+      }
+    
+    default:
+      return '#3b82f6'; // Fallback bleu
+  }
 };

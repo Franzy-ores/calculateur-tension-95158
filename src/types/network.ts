@@ -39,6 +39,7 @@ export interface ClientImporte {
   tensionMin_V?: number;
   tensionMax_V?: number;
   tensionMoyenne_V?: number;
+  tensionCircuit_V?: number; // Tension du circuit (230V ou 400V) - colonne "Tension (Circuit)"
   
   // Identifiants liés
   identifiantCabine?: string;

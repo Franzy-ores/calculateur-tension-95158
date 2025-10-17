@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { ClientImporte, ClientLink, Node } from '@/types/network';
+import { getClientMarkerColor } from '@/utils/clientsUtils';
+import type { ClientColorMode } from '@/store/networkStore';
 
 interface ClientMarkersProps {
   map: L.Map;
@@ -10,9 +12,10 @@ interface ClientMarkersProps {
   selectedClientId?: string | null;
   onClientClick?: (clientId: string) => void;
   onClientDragToNode?: (clientId: string, nodeId: string) => void;
+  colorMode: ClientColorMode;
 }
 
-export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId, onClientClick, onClientDragToNode }: ClientMarkersProps) => {
+export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId, onClientClick, onClientDragToNode, colorMode }: ClientMarkersProps) => {
   const clientMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   const linkLinesRef = useRef<Map<string, L.Polyline>>(new Map());
   const dragLineRef = useRef<L.Polyline | null>(null);
@@ -52,7 +55,7 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
 
     // Créer les marqueurs clients
     clients.forEach(client => {
-      const color = client.couplage === 'TRI' ? '#3b82f6' : '#f97316';
+      const color = getClientMarkerColor(client, colorMode);
       const isSelected = selectedClientId === client.id;
       const borderColor = isSelected ? '#22c55e' : 'white';
       const borderWidth = isSelected ? 3 : 2;
@@ -211,7 +214,7 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
       if (dragLineRef.current) map.removeLayer(dragLineRef.current);
       if (highlightCircleRef.current) map.removeLayer(highlightCircleRef.current);
     };
-  }, [map, clients, links, nodes, selectedClientId, onClientClick, onClientDragToNode]);
+  }, [map, clients, links, nodes, selectedClientId, onClientClick, onClientDragToNode, colorMode]);
 
   return { clientMarkersRef, linkLinesRef };
 };

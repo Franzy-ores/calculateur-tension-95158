@@ -65,6 +65,7 @@ export const MapView = () => {
     linkClientToNode,
     setSelectedClient,
     setSelectedClientForLinking,
+    clientColorMode,
   } = useNetworkStore();
 
   // Récupérer isSimulationActive du store
@@ -174,7 +175,8 @@ export const MapView = () => {
         openEditPanel('client');
       }
     },
-    onClientDragToNode: linkClientToNode
+    onClientDragToNode: linkClientToNode,
+    colorMode: clientColorMode,
   });
 
   // Gérer le changement de type de carte

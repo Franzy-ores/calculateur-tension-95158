@@ -15,6 +15,8 @@ import {
   CableUpgrade,
   SimulationEquipment
 } from '@/types/network';
+
+export type ClientColorMode = 'couplage' | 'circuit' | 'tension';
 import { SRG2Config, DEFAULT_SRG2_400_CONFIG, DEFAULT_SRG2_230_CONFIG } from '@/types/srg2';
 import { NodeWithConnectionType, getNodeConnectionType, addConnectionTypeToNodes } from '@/utils/nodeConnectionType';
 import { defaultCableTypes } from '@/data/defaultCableTypes';
@@ -75,6 +77,7 @@ interface NetworkStoreState extends NetworkState {
   selectedClientId: string | null;
   linkingMode: boolean;
   selectedClientForLinking: string | null;
+  clientColorMode: ClientColorMode;
 }
 
 interface NetworkActions {
@@ -146,6 +149,7 @@ interface NetworkActions {
   setFoisonnementProductions: (value: number) => void;
   calculateWithTargetVoltage: (nodeId: string, targetVoltage: number) => void;
   updateCableTypes: () => void;
+  setClientColorMode: (mode: ClientColorMode) => void;
 }
 
 // Fonction utilitaire pour créer la configuration par défaut du transformateur
@@ -310,6 +314,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   selectedClientId: null,
   linkingMode: false,
   selectedClientForLinking: null,
+  clientColorMode: 'couplage',
 
   // Actions
   createNewProject: (name, voltageSystem) => {
@@ -1609,4 +1614,6 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     focusMode: !state.focusMode,
     resultsPanelOpen: !state.focusMode ? false : state.resultsPanelOpen
   })),
+
+  setClientColorMode: (mode) => set({ clientColorMode: mode }),
 }));

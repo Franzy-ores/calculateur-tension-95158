@@ -21,6 +21,7 @@ export const ClientsPanel = () => {
     setSelectedClient,
     setSelectedClientForLinking,
     openEditPanel,
+    clientColorMode,
   } = useNetworkStore();
 
   if (!currentProject?.clientsImportes || currentProject.clientsImportes.length === 0) {
@@ -94,6 +95,56 @@ export const ClientsPanel = () => {
 
   return (
     <div className="h-full flex flex-col gap-4">
+      {/* Légende mode de coloration */}
+      <Card className="p-3">
+        <div className="text-sm">
+          <div className="font-medium mb-2">
+            Mode de coloration : 
+            <span className="ml-1 text-primary">
+              {clientColorMode === 'couplage' && 'Par Couplage'}
+              {clientColorMode === 'circuit' && 'Par Circuit'}
+              {clientColorMode === 'tension' && 'Par Tension'}
+            </span>
+          </div>
+          
+          {clientColorMode === 'couplage' && (
+            <div className="flex gap-4 mt-1.5 text-xs">
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-[#3b82f6]"></div>
+                <span>TRI</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-[#f97316]"></div>
+                <span>MONO</span>
+              </div>
+            </div>
+          )}
+          
+          {clientColorMode === 'circuit' && (
+            <div className="mt-1.5 text-xs text-muted-foreground">
+              Chaque circuit a une couleur unique
+            </div>
+          )}
+          
+          {clientColorMode === 'tension' && (
+            <div className="flex gap-4 mt-1.5 text-xs">
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-[#22c55e]"></div>
+                <span>230V</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-[#3b82f6]"></div>
+                <span>400V</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-[#6b7280]"></div>
+                <span>Non renseigné</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </Card>
+
       {/* Statistiques */}
       <Card className="p-4">
         <div className="grid grid-cols-2 gap-4 text-sm">

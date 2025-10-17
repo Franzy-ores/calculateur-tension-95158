@@ -11,6 +11,7 @@ import { ConnectionType, VoltageSystem, ClientCharge, ProductionPV, LoadModel } 
 import { getNodeConnectionType } from '@/utils/nodeConnectionType';
 import { getLinkedClientsForNode } from '@/utils/clientsUtils';
 import { toast } from 'sonner';
+import { ClientEditPanel } from './ClientEditPanel';
 
 export const EditPanel = () => {
   const {
@@ -171,9 +172,14 @@ export const EditPanel = () => {
             {editTarget === 'node' && 'Éditer le nœud'}
             {editTarget === 'cable' && 'Éditer le câble'}
             {editTarget === 'project' && 'Paramètres du projet'}
+            {editTarget === 'client' && 'Éditer le Client'}
           </SheetTitle>
         </SheetHeader>
 
+        {/* Client editing - use dedicated component */}
+        {editTarget === 'client' && <ClientEditPanel />}
+
+        {/* Other panels */}
         <div className="space-y-6 py-6">
           {/* Node editing */}
           {editTarget === 'node' && (

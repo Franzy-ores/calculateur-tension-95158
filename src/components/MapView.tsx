@@ -66,6 +66,8 @@ export const MapView = () => {
     setSelectedClient,
     setSelectedClientForLinking,
     clientColorMode,
+    circuitColorMapping,
+    generateCircuitColorMapping,
   } = useNetworkStore();
 
   // Récupérer isSimulationActive du store
@@ -160,6 +162,13 @@ export const MapView = () => {
     };
   }, []);
 
+  // Générer le mapping de couleurs des circuits au chargement des clients
+  useEffect(() => {
+    if (currentProject?.clientsImportes && currentProject.clientsImportes.length > 0) {
+      generateCircuitColorMapping();
+    }
+  }, [currentProject?.clientsImportes, generateCircuitColorMapping]);
+
   // Afficher les marqueurs clients sur la carte
   useClientMarkers({
     map: mapInstanceRef.current!,
@@ -177,6 +186,7 @@ export const MapView = () => {
     },
     onClientDragToNode: linkClientToNode,
     colorMode: clientColorMode,
+    circuitColorMapping: circuitColorMapping,
   });
 
   // Gérer le changement de type de carte

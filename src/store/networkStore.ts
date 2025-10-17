@@ -78,6 +78,7 @@ interface NetworkStoreState extends NetworkState {
   linkingMode: boolean;
   selectedClientForLinking: string | null;
   clientColorMode: ClientColorMode;
+  circuitColorMapping: Map<string, string>;
 }
 
 interface NetworkActions {
@@ -150,6 +151,7 @@ interface NetworkActions {
   calculateWithTargetVoltage: (nodeId: string, targetVoltage: number) => void;
   updateCableTypes: () => void;
   setClientColorMode: (mode: ClientColorMode) => void;
+  generateCircuitColorMapping: () => void;
 }
 
 // Fonction utilitaire pour créer la configuration par défaut du transformateur
@@ -315,6 +317,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   linkingMode: false,
   selectedClientForLinking: null,
   clientColorMode: 'couplage',
+  circuitColorMapping: new Map(),
 
   // Actions
   createNewProject: (name, voltageSystem) => {
@@ -1616,4 +1619,37 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   })),
 
   setClientColorMode: (mode) => set({ clientColorMode: mode }),
+
+  generateCircuitColorMapping: () => {
+    const state = get();
+    const clients = state.currentProject?.clientsImportes || [];
+    
+    // Extraire les circuits uniques
+    const uniqueCircuits = Array.from(
+      new Set(clients.map(c => c.identifiantCircuit))
+    ).filter(Boolean);
+    
+    // Palette de 6 couleurs distinctes
+    const colorPalette = [
+      '#ef4444', // Rouge
+      '#3b82f6', // Bleu
+      '#22c55e', // Vert
+      '#f59e0b', // Orange
+      '#8b5cf6', // Violet
+      '#ec4899', // Rose
+    ];
+    
+    // Créer le mapping
+    const mapping = new Map<string, string>();
+    uniqueCircuits.forEach((circuit, index) => {
+      if (index < 6) {
+        mapping.set(circuit, colorPalette[index]);
+      } else {
+        console.warn(`Plus de 6 circuits détectés. Le circuit "${circuit}" réutilise une couleur.`);
+        mapping.set(circuit, colorPalette[index % 6]);
+      }
+    });
+    
+    set({ circuitColorMapping: mapping });
+  },
 }));

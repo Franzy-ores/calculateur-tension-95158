@@ -149,65 +149,31 @@ export const calculateTotalPowersForNodes = (
   };
 };
 
-/**
- * Génère une couleur unique et cohérente pour un identifiant de circuit
- * Utilise une palette fixe de 6 couleurs bien distinctes
- */
-const hashStringToColor = (str: string): string => {
-  // Palette de 6 couleurs très distinctes
-  const colorPalette = [
-    '#ef4444', // Rouge vif
-    '#3b82f6', // Bleu
-    '#22c55e', // Vert
-    '#f59e0b', // Orange
-    '#8b5cf6', // Violet
-    '#ec4899', // Rose
-  ];
-  
-  // Hash simple pour assigner une couleur de manière cohérente
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  
-  const index = Math.abs(hash) % colorPalette.length;
-  return colorPalette[index];
-};
 
 /**
  * Détermine la couleur d'un marqueur client selon le mode sélectionné
  */
 export const getClientMarkerColor = (
   client: ClientImporte, 
-  mode: 'couplage' | 'circuit' | 'tension'
+  mode: 'couplage' | 'circuit' | 'tension',
+  circuitColorMapping?: Map<string, string>
 ): string => {
   switch (mode) {
     case 'couplage':
-      // TRI = bleu, MONO = orange (comportement actuel)
       return client.couplage === 'TRI' ? '#3b82f6' : '#f97316';
     
     case 'circuit':
-      // Couleur unique par identifiant de circuit
-      return hashStringToColor(client.identifiantCircuit);
+      // Utiliser le mapping si disponible, sinon couleur par défaut
+      if (circuitColorMapping && circuitColorMapping.has(client.identifiantCircuit)) {
+        return circuitColorMapping.get(client.identifiantCircuit)!;
+      }
+      return '#6b7280'; // Gris par défaut si pas de mapping
     
     case 'tension':
-      // Basé sur la colonne "Tension (Circuit)" du fichier Excel
-      if (!client.tensionCircuit_V) {
-        return '#6b7280'; // Gris si pas de tension
-      }
-      
-      const tension = client.tensionCircuit_V;
-      
-      // Logique simple : 230V vs 400V
-      if (tension <= 250) {
-        return '#22c55e';  // Vert pour 230V
-      } else if (tension > 250 && tension <= 450) {
-        return '#3b82f6';  // Bleu pour 400V
-      } else {
-        return '#ef4444';  // Rouge pour valeurs hors normes
-      }
+      if (!client.tensionMoyenne_V) return '#6b7280';
+      return client.tensionMoyenne_V < 300 ? '#22c55e' : '#3b82f6';
     
     default:
-      return '#3b82f6'; // Fallback bleu
+      return '#3b82f6';
   }
 };

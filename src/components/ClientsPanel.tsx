@@ -22,6 +22,7 @@ export const ClientsPanel = () => {
     setSelectedClientForLinking,
     openEditPanel,
     clientColorMode,
+    circuitColorMapping,
   } = useNetworkStore();
 
   if (!currentProject?.clientsImportes || currentProject.clientsImportes.length === 0) {
@@ -121,8 +122,21 @@ export const ClientsPanel = () => {
           )}
           
           {clientColorMode === 'circuit' && (
-            <div className="mt-1.5 text-xs text-muted-foreground">
-              Chaque circuit a une couleur unique
+            <div className="space-y-1.5 mt-1">
+              {Array.from(circuitColorMapping || new Map()).map(([circuit, color]) => (
+                <div key={circuit} className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }}></div>
+                  <span className="text-xs truncate">{circuit}</span>
+                </div>
+              ))}
+              {(circuitColorMapping?.size || 0) === 0 && (
+                <div className="text-xs text-muted-foreground">Aucun circuit détecté</div>
+              )}
+              {(circuitColorMapping?.size || 0) > 6 && (
+                <div className="text-xs text-amber-600 mt-1">
+                  ⚠️ Plus de 6 circuits : certaines couleurs sont réutilisées
+                </div>
+              )}
             </div>
           )}
           

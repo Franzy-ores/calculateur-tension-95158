@@ -13,9 +13,10 @@ interface ClientMarkersProps {
   onClientClick?: (clientId: string) => void;
   onClientDragToNode?: (clientId: string, nodeId: string) => void;
   colorMode: ClientColorMode;
+  circuitColorMapping?: Map<string, string>;
 }
 
-export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId, onClientClick, onClientDragToNode, colorMode }: ClientMarkersProps) => {
+export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId, onClientClick, onClientDragToNode, colorMode, circuitColorMapping }: ClientMarkersProps) => {
   const clientMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   const linkLinesRef = useRef<Map<string, L.Polyline>>(new Map());
   const dragLineRef = useRef<L.Polyline | null>(null);
@@ -55,7 +56,7 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
 
     // Créer les marqueurs clients
     clients.forEach(client => {
-      const color = getClientMarkerColor(client, colorMode);
+      const color = getClientMarkerColor(client, colorMode, circuitColorMapping);
       const isSelected = selectedClientId === client.id;
       const borderColor = isSelected ? '#22c55e' : 'white';
       const borderWidth = isSelected ? 3 : 2;
@@ -214,7 +215,7 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
       if (dragLineRef.current) map.removeLayer(dragLineRef.current);
       if (highlightCircleRef.current) map.removeLayer(highlightCircleRef.current);
     };
-  }, [map, clients, links, nodes, selectedClientId, onClientClick, onClientDragToNode, colorMode]);
+  }, [map, clients, links, nodes, selectedClientId, onClientClick, onClientDragToNode, colorMode, circuitColorMapping]);
 
   return { clientMarkersRef, linkLinesRef };
 };

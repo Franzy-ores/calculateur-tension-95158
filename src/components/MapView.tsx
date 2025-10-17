@@ -139,10 +139,19 @@ export const MapView = () => {
       zoomToProject(customEvent);
     };
 
+    const handleCenterOnClient = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (map && customEvent.detail) {
+        map.setView([customEvent.detail.lat, customEvent.detail.lng], 18);
+      }
+    };
+
     window.addEventListener('zoomToProject', handleZoomToProject);
+    window.addEventListener('centerMapOnClient', handleCenterOnClient);
 
     return () => {
       window.removeEventListener('zoomToProject', handleZoomToProject);
+      window.removeEventListener('centerMapOnClient', handleCenterOnClient);
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;

@@ -3,14 +3,20 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useNetworkStore } from '@/store/networkStore';
 import { ClientCouplage } from '@/types/network';
 import { toast } from 'sonner';
+import { MapPin, Unlink } from 'lucide-react';
 
 export const ClientEditPanel = () => {
-  const { currentProject, selectedClientId, updateClientImporte, closeEditPanel } = useNetworkStore();
+  const { currentProject, selectedClientId, updateClientImporte, closeEditPanel, unlinkClient } = useNetworkStore();
   
   const client = currentProject?.clientsImportes?.find(c => c.id === selectedClientId);
+  const clientLink = currentProject?.clientLinks?.find(link => link.clientId === selectedClientId);
+  const linkedNode = clientLink 
+    ? currentProject?.nodes.find(n => n.id === clientLink.nodeId)
+    : null;
 
   const [nomCircuit, setNomCircuit] = useState('');
   const [identifiantCircuit, setIdentifiantCircuit] = useState('');
@@ -160,11 +166,96 @@ export const ClientEditPanel = () => {
           </div>
         </div>
 
-        <div className="border-t pt-3 mt-3 text-xs text-muted-foreground">
-          <p><strong>Position:</strong> {client.lat.toFixed(6)}, {client.lng.toFixed(6)}</p>
-          {client.identifiantCabine && <p><strong>Cabine:</strong> {client.identifiantCabine}</p>}
-          {client.identifiantPosteSource && <p><strong>Poste source:</strong> {client.identifiantPosteSource}</p>}
+        <div className="border-t pt-3 mt-3">
+          <Label className="text-sm font-medium mb-2 block">Informations géographiques</Label>
+          <div className="space-y-1 text-xs text-muted-foreground">
+            <div className="grid grid-cols-2 gap-2">
+              <span className="font-medium">Latitude:</span>
+              <span>{client.lat.toFixed(6)}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <span className="font-medium">Longitude:</span>
+              <span>{client.lng.toFixed(6)}</span>
+            </div>
+            {client.identifiantCabine && (
+              <div className="grid grid-cols-2 gap-2">
+                <span className="font-medium">Cabine:</span>
+                <span>{client.identifiantCabine}</span>
+              </div>
+            )}
+            {client.identifiantPosteSource && (
+              <div className="grid grid-cols-2 gap-2">
+                <span className="font-medium">Poste source:</span>
+                <span>{client.identifiantPosteSource}</span>
+              </div>
+            )}
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="mt-2 w-full"
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('centerMapOnClient', { 
+                detail: { lat: client.lat, lng: client.lng } 
+              }));
+            }}
+          >
+            <MapPin className="w-4 h-4 mr-2" />
+            Centrer la carte
+          </Button>
         </div>
+
+        {linkedNode && (
+          <div className="border-t pt-3 mt-3">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <Label className="text-sm font-medium">Nœud lié</Label>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {linkedNode.name}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Position: {linkedNode.lat.toFixed(6)}, {linkedNode.lng.toFixed(6)}
+                </p>
+              </div>
+              <Button 
+                variant="destructive" 
+                size="sm"
+                onClick={() => {
+                  unlinkClient(client.id);
+                }}
+              >
+                <Unlink className="w-4 h-4 mr-2" />
+                Délier
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {client.rawData && Object.keys(client.rawData).length > 0 && (
+          <div className="border-t pt-3 mt-3">
+            <Accordion type="single" collapsible>
+              <AccordionItem value="rawData">
+                <AccordionTrigger className="text-sm font-medium">
+                  Données brutes Excel ({Object.keys(client.rawData).length} colonnes)
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {Object.entries(client.rawData).map(([key, value]) => (
+                      <div key={key} className="grid grid-cols-2 gap-2 text-xs">
+                        <span className="font-medium text-muted-foreground truncate" title={key}>
+                          {key}:
+                        </span>
+                        <span className="truncate" title={String(value)}>
+                          {String(value)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </div>
+        )}
       </div>
 
       <div className="flex gap-2 pt-4 border-t">

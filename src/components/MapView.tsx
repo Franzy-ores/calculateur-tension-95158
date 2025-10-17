@@ -9,6 +9,7 @@ import { Globe, Map as MapIcon } from 'lucide-react';
 import { getConnectedNodes } from '@/utils/networkConnectivity';
 import { getNodeConnectionType } from '@/utils/nodeConnectionType';
 import { useClientMarkers } from './ClientMarkers';
+import { getLinkedClientsForNode, calculateNodePowersFromClients } from '@/utils/clientsUtils';
 
 // Configuration des icônes Leaflet
 const configureLeafletIcons = () => {
@@ -471,9 +472,13 @@ export const MapView = () => {
 
     // Add new markers
     currentProject.nodes.forEach(node => {
-      // Calculer les totaux
-      const totalCharge = node.clients.reduce((sum, client) => sum + client.S_kVA, 0);
-      const totalPV = node.productions.reduce((sum, prod) => sum + prod.S_kVA, 0);
+      // Calculer les totaux (manuel + clients importés liés)
+      const linkedClients = currentProject.clientsImportes && currentProject.clientLinks
+        ? getLinkedClientsForNode(node.id, currentProject.clientsImportes, currentProject.clientLinks)
+        : [];
+
+      const { totalCharge_kVA: totalCharge, totalProduction_kVA: totalPV } = 
+        calculateNodePowersFromClients(node, linkedClients);
       
       // Calculer la tension avec chute cumulée selon le type de connexion
       let baseVoltage = 230; // Par défaut

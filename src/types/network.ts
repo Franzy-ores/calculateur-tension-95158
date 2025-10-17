@@ -14,8 +14,48 @@ export type CalculationScenario = "PRÉLÈVEMENT" | "MIXTE" | "PRODUCTION" | "FO
 
 export type LoadModel = 'monophase_reparti' | 'polyphase_equilibre';
 
+export type ClientCouplage = "TRI" | "MONO";
+
 // Import du type SRG2Config
 import { SRG2Config } from './srg2';
+
+// Types pour les clients importés
+export interface ClientImporte {
+  id: string;
+  // Identifiants
+  identifiantCircuit: string;      // ex: "BDIS8_DRA7"
+  nomCircuit: string;               // ex: "DRA7"
+  
+  // Position GPS
+  lat: number;
+  lng: number;
+  
+  // Attributs électriques
+  puissanceContractuelle_kVA: number;  // charge
+  puissancePV_kVA: number;             // production PV
+  couplage: ClientCouplage;            // "TRI" ou "MONO"
+  
+  // Tensions mesurées
+  tensionMin_V?: number;
+  tensionMax_V?: number;
+  tensionMoyenne_V?: number;
+  
+  // Identifiants liés
+  identifiantCabine?: string;
+  identifiantPosteSource?: string;
+  
+  // Liaison avec un nœud
+  linkedNodeId?: string;  // ID du nœud auquel ce client est lié (optionnel)
+  
+  // Métadonnées Excel brutes (pour conserver toutes les colonnes)
+  rawData?: Record<string, any>;
+}
+
+export interface ClientLink {
+  id: string;
+  clientId: string;  // ID du client importé
+  nodeId: string;    // ID du nœud lié
+}
 
 // Types pour le transformateur HT1/BT
 export type TransformerRating = "160kVA" | "250kVA" | "400kVA" | "630kVA";
@@ -169,6 +209,9 @@ export interface Project {
   nodes: Node[];
   cables: Cable[];
   cableTypes: CableType[];
+  // Clients importés et liaisons
+  clientsImportes?: ClientImporte[];
+  clientLinks?: ClientLink[];
 }
 
 
@@ -286,14 +329,18 @@ export interface NetworkState {
   simulationResults: {
     [key in CalculationScenario]: SimulationResult | null;
   };
-  selectedTool: 'select' | 'addNode' | 'addCable' | 'edit' | 'delete' | 'move' | 'simulation';
+  selectedTool: 'select' | 'addNode' | 'addCable' | 'edit' | 'delete' | 'move' | 'simulation' | 'linkClient';
   selectedNodeId: string | null;
   selectedCableId: string | null;
+  selectedClientId: string | null;
   editPanelOpen: boolean;
-  editTarget: 'node' | 'cable' | 'project' | 'simulation' | null;
+  editTarget: 'node' | 'cable' | 'project' | 'simulation' | 'client' | null;
   showVoltages: boolean;
   resultsPanelOpen: boolean;
   focusMode: boolean;
   simulationMode: boolean;
   simulationEquipment: SimulationEquipment;
+  // État pour la liaison de clients
+  linkingMode: boolean;
+  selectedClientForLinking: string | null;
 }

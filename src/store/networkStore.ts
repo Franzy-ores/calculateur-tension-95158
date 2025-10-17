@@ -72,6 +72,9 @@ interface NetworkStoreState extends NetworkState {
   };
   isSimulationActive: boolean;
   resultsPanelFullscreen: boolean;
+  selectedClientId: string | null;
+  linkingMode: boolean;
+  selectedClientForLinking: string | null;
 }
 
 interface NetworkActions {
@@ -96,9 +99,17 @@ interface NetworkActions {
   setSelectedScenario: (scenario: CalculationScenario) => void;
   setSelectedNode: (nodeId: string | null) => void;
   setSelectedCable: (cableId: string | null) => void;
+  setSelectedClient: (clientId: string | null) => void;
   setSelectedCableType: (cableTypeId: string) => void;
-  openEditPanel: (target: 'node' | 'cable' | 'project' | 'simulation') => void;
+  openEditPanel: (target: 'node' | 'cable' | 'project' | 'simulation' | 'client') => void;
   closeEditPanel: () => void;
+  
+  // Client actions
+  importClientsFromExcel: (clients: import('@/types/network').ClientImporte[]) => void;
+  updateClientImporte: (clientId: string, updates: Partial<import('@/types/network').ClientImporte>) => void;
+  deleteClientImporte: (clientId: string) => void;
+  linkClientToNode: (clientId: string, nodeId: string) => void;
+  unlinkClient: (clientId: string) => void;
   
   // Calculations
   calculateAll: () => void;
@@ -294,6 +305,10 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     neutralCompensators: [],
     cableUpgrades: []
   },
+  // État pour les clients
+  selectedClientId: null,
+  linkingMode: false,
+  selectedClientForLinking: null,
 
   // Actions
   createNewProject: (name, voltageSystem) => {
@@ -345,6 +360,14 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         productions: { A: 33.33, B: 33.33, C: 33.34 },
         constraints: { min: -20, max: 20, total: 100 }
       };
+    }
+
+    // Initialiser les clients importés et liaisons si pas définis
+    if (!project.clientsImportes) {
+      project.clientsImportes = [];
+    }
+    if (!project.clientLinks) {
+      project.clientLinks = [];
     }
 
     // Calculer les bounds géographiques si pas encore définis
@@ -696,7 +719,158 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   },
   setSelectedNode: (nodeId) => set({ selectedNodeId: nodeId }),
   setSelectedCable: (cableId) => set({ selectedCableId: cableId }),
+  setSelectedClient: (clientId) => set({ selectedClientId: clientId }),
   setSelectedCableType: (cableTypeId) => set({ selectedCableType: cableTypeId }),
+
+  // Actions pour les clients importés
+  importClientsFromExcel: (clients) => {
+    const { currentProject } = get();
+    if (!currentProject) return;
+    
+    const updatedProject = {
+      ...currentProject,
+      clientsImportes: [...(currentProject.clientsImportes || []), ...clients],
+      clientLinks: currentProject.clientLinks || []
+    };
+    
+    set({ currentProject: updatedProject });
+    toast.success(`${clients.length} clients importés avec succès`);
+    
+    // Recalculer les bounds pour inclure les nouveaux clients
+    const allPoints = [
+      ...currentProject.nodes.map(n => ({ lat: n.lat, lng: n.lng })),
+      ...clients.map(c => ({ lat: c.lat, lng: c.lng }))
+    ];
+    
+    if (allPoints.length > 0) {
+      const lats = allPoints.map(p => p.lat);
+      const lngs = allPoints.map(p => p.lng);
+      const bounds = {
+        north: Math.max(...lats),
+        south: Math.min(...lats),
+        east: Math.max(...lngs),
+        west: Math.min(...lngs),
+        center: {
+          lat: (Math.max(...lats) + Math.min(...lats)) / 2,
+          lng: (Math.max(...lngs) + Math.min(...lngs)) / 2
+        },
+        zoom: 14
+      };
+      updatedProject.geographicBounds = bounds;
+      set({ currentProject: updatedProject });
+    }
+  },
+
+  updateClientImporte: (clientId, updates) => {
+    const { currentProject, updateAllCalculations } = get();
+    if (!currentProject) return;
+    
+    const updatedClients = (currentProject.clientsImportes || []).map(client =>
+      client.id === clientId ? { ...client, ...updates } : client
+    );
+    
+    set({
+      currentProject: {
+        ...currentProject,
+        clientsImportes: updatedClients
+      }
+    });
+    
+    // Recalculer si le client est lié à un nœud
+    const isLinked = currentProject.clientLinks?.some(l => l.clientId === clientId);
+    if (isLinked) {
+      updateAllCalculations();
+    }
+  },
+
+  deleteClientImporte: (clientId) => {
+    const { currentProject, updateAllCalculations } = get();
+    if (!currentProject) return;
+    
+    const isLinked = currentProject.clientLinks?.some(l => l.clientId === clientId);
+    
+    set({
+      currentProject: {
+        ...currentProject,
+        clientsImportes: (currentProject.clientsImportes || []).filter(c => c.id !== clientId),
+        clientLinks: (currentProject.clientLinks || []).filter(l => l.clientId !== clientId)
+      }
+    });
+    
+    toast.success('Client supprimé');
+    
+    // Recalculer si le client était lié
+    if (isLinked) {
+      updateAllCalculations();
+    }
+  },
+
+  linkClientToNode: (clientId, nodeId) => {
+    const { currentProject, updateAllCalculations } = get();
+    if (!currentProject) return;
+    
+    // Vérifier si le client existe
+    const client = currentProject.clientsImportes?.find(c => c.id === clientId);
+    if (!client) {
+      toast.error('Client non trouvé');
+      return;
+    }
+    
+    // Vérifier si le nœud existe
+    const node = currentProject.nodes.find(n => n.id === nodeId);
+    if (!node) {
+      toast.error('Nœud non trouvé');
+      return;
+    }
+    
+    const currentLinks = currentProject.clientLinks || [];
+    const existingLink = currentLinks.find(l => l.clientId === clientId);
+    
+    let updatedLinks;
+    if (existingLink) {
+      // Mettre à jour la liaison existante
+      updatedLinks = currentLinks.map(l =>
+        l.clientId === clientId ? { ...l, nodeId } : l
+      );
+      toast.success(`Client relié à ${node.name}`);
+    } else {
+      // Créer une nouvelle liaison
+      const newLink = {
+        id: `link-${Date.now()}`,
+        clientId,
+        nodeId
+      };
+      updatedLinks = [...currentLinks, newLink];
+      toast.success(`Client lié à ${node.name}`);
+    }
+    
+    set({
+      currentProject: {
+        ...currentProject,
+        clientLinks: updatedLinks
+      },
+      selectedClientForLinking: null,
+      linkingMode: false,
+      selectedTool: 'select'
+    });
+    
+    updateAllCalculations();
+  },
+
+  unlinkClient: (clientId) => {
+    const { currentProject, updateAllCalculations } = get();
+    if (!currentProject) return;
+    
+    set({
+      currentProject: {
+        ...currentProject,
+        clientLinks: (currentProject.clientLinks || []).filter(l => l.clientId !== clientId)
+      }
+    });
+    
+    toast.success('Client délié');
+    updateAllCalculations();
+  },
 
   openEditPanel: (target) => {
     console.log('🐛 openEditPanel called with target:', target);

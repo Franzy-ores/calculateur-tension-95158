@@ -3,6 +3,7 @@ import { MapView } from "@/components/MapView";
 import { Toolbar } from "@/components/Toolbar";
 import { ResultsPanel } from "@/components/ResultsPanel";
 import { EditPanel } from "@/components/EditPanel";
+import { ClientsPanel } from "@/components/ClientsPanel";
 import { SimulationPanel } from "@/components/SimulationPanel";
 import { useNetworkStore } from "@/store/networkStore";
 
@@ -144,6 +145,13 @@ const Index = () => {
           isCollapsed={!shouldShowResults}
         />
       </div>
+
+      {/* Clients Panel - Slides in from left */}
+      {currentProject?.clientsImportes && currentProject.clientsImportes.length > 0 && (
+        <div className="fixed left-0 top-[160px] bottom-0 w-80 bg-background border-r shadow-lg overflow-hidden z-10">
+          <ClientsPanel />
+        </div>
+      )}
       
       <EditPanel />
 

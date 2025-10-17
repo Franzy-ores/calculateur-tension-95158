@@ -5,12 +5,15 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Progress } from "@/components/ui/progress";
-import { FileText, Save, FolderOpen, Settings, Zap, FileDown } from "lucide-react";
+import { useState } from 'react';
+import { FileText, Save, FolderOpen, Settings, Zap, FileDown, FileSpreadsheet } from "lucide-react";
 import { useNetworkStore } from "@/store/networkStore";
 import { PDFGenerator } from "@/utils/pdfGenerator";
 import { PhaseDistributionDisplay } from "@/components/PhaseDistributionDisplay";
 import { PhaseDistributionSliders } from "@/components/PhaseDistributionSliders";
 import { toast } from "sonner";
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { ExcelImporter } from '@/components/ExcelImporter';
 interface TopMenuProps {
   onNewNetwork: () => void;
   onSave: () => void;
@@ -25,6 +28,8 @@ export const TopMenu = ({
   onSettings,
   onSimulation
 }: TopMenuProps) => {
+  const [showImporter, setShowImporter] = useState(false);
+  
   const {
     currentProject,
     showVoltages,
@@ -136,6 +141,11 @@ export const TopMenu = ({
           <Button variant="ghost" size="sm" onClick={handleExportPDF} disabled={!currentProject || !calculationResults[selectedScenario]} className="text-primary-foreground hover:bg-white/10 hover:text-primary-foreground disabled:opacity-50">
             <FileDown className="h-4 w-4 mr-1" />
             PDF
+          </Button>
+          
+          <Button variant="ghost" size="sm" onClick={() => setShowImporter(true)} disabled={!currentProject} className="text-primary-foreground hover:bg-white/10 hover:text-primary-foreground disabled:opacity-50">
+            <FileSpreadsheet className="h-4 w-4 mr-1" />
+            Importer Clients
           </Button>
           
           <Button variant="ghost" size="sm" onClick={onNewNetwork} className="text-primary-foreground hover:bg-white/10 hover:text-primary-foreground">
@@ -344,5 +354,12 @@ export const TopMenu = ({
             <div className="flex items-center gap-4"></div>
           </div>
         </div>}
+      
+      {/* Dialog for Excel Importer */}
+      <Dialog open={showImporter} onOpenChange={setShowImporter}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <ExcelImporter onClose={() => setShowImporter(false)} />
+        </DialogContent>
+      </Dialog>
     </div>;
 };

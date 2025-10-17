@@ -59,6 +59,9 @@ export const MapView = () => {
     editTarget,
     focusMode,
     toggleFocusMode,
+    selectedClientForLinking,
+    linkClientToNode,
+    setSelectedClient,
   } = useNetworkStore();
 
   // Récupérer isSimulationActive du store
@@ -201,6 +204,9 @@ export const MapView = () => {
     const handleMapClick = (e: L.LeafletMouseEvent) => {
       if (selectedTool === 'addNode' && !routingActive) {
         addNode(e.latlng.lat, e.latlng.lng);
+      } else if (selectedTool === 'linkClient' && selectedClientForLinking) {
+        // Mode liaison client : ignorer les clics sur la carte
+        return;
       } else if (routingActive) {
         // En mode routage, ajouter des points intermédiaires
         const newPoint = { lat: e.latlng.lat, lng: e.latlng.lng };

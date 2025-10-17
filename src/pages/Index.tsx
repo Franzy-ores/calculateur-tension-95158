@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { TopMenu } from "@/components/TopMenu";
 import { MapView } from "@/components/MapView";
 import { Toolbar } from "@/components/Toolbar";
@@ -6,8 +7,13 @@ import { EditPanel } from "@/components/EditPanel";
 import { ClientsPanel } from "@/components/ClientsPanel";
 import { SimulationPanel } from "@/components/SimulationPanel";
 import { useNetworkStore } from "@/store/networkStore";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { Users } from "lucide-react";
 
 const Index = () => {
+  const [clientsPanelOpen, setClientsPanelOpen] = useState(false);
+  
   const { 
     currentProject, 
     calculationResults,
@@ -144,14 +150,31 @@ const Index = () => {
           selectedScenario={selectedScenario}
           isCollapsed={!shouldShowResults}
         />
+        
+        {/* Bouton pour ouvrir le panneau clients */}
+        {currentProject?.clientsImportes && currentProject.clientsImportes.length > 0 && !focusMode && (
+          <Button
+            onClick={() => setClientsPanelOpen(true)}
+            className="fixed left-20 top-20 z-20 shadow-lg"
+            size="sm"
+          >
+            <Users className="h-4 w-4 mr-2" />
+            Clients ({currentProject.clientsImportes.length})
+          </Button>
+        )}
       </div>
 
-      {/* Clients Panel - Slides in from left */}
-      {currentProject?.clientsImportes && currentProject.clientsImportes.length > 0 && (
-        <div className="fixed left-0 top-[160px] bottom-0 w-80 bg-background border-r shadow-lg overflow-hidden z-10">
-          <ClientsPanel />
-        </div>
-      )}
+      {/* Clients Panel - Sheet latéral */}
+      <Sheet open={clientsPanelOpen} onOpenChange={setClientsPanelOpen}>
+        <SheetContent side="left" className="w-96 sm:max-w-96 overflow-hidden flex flex-col">
+          <SheetHeader>
+            <SheetTitle>Gestion des Clients</SheetTitle>
+          </SheetHeader>
+          <div className="flex-1 overflow-hidden mt-4">
+            <ClientsPanel />
+          </div>
+        </SheetContent>
+      </Sheet>
       
       <EditPanel />
 

@@ -9,6 +9,7 @@ import { Trash2, Plus, Target, Zap, Network } from 'lucide-react';
 import { useNetworkStore } from '@/store/networkStore';
 import { ConnectionType, VoltageSystem, ClientCharge, ProductionPV, LoadModel } from '@/types/network';
 import { getNodeConnectionType } from '@/utils/nodeConnectionType';
+import { getLinkedClientsForNode } from '@/utils/clientsUtils';
 import { toast } from 'sonner';
 
 export const EditPanel = () => {
@@ -31,6 +32,17 @@ export const EditPanel = () => {
 
   const selectedNode = currentProject?.nodes?.find(n => n.id === selectedNodeId);
   const selectedCable = currentProject?.cables?.find(c => c.id === selectedCableId);
+
+  // Récupérer les clients importés liés au nœud sélectionné
+  const linkedClients = selectedNode && currentProject?.clientsImportes && currentProject?.clientLinks
+    ? getLinkedClientsForNode(selectedNode.id, currentProject.clientsImportes, currentProject.clientLinks)
+    : [];
+
+  // Calculer les totaux
+  const manualChargeTotal = formData.clients?.reduce((sum: number, c: ClientCharge) => sum + c.S_kVA, 0) || 0;
+  const linkedChargeTotal = linkedClients.reduce((sum, c) => sum + c.puissanceContractuelle_kVA, 0);
+  const manualProductionTotal = formData.productions?.reduce((sum: number, p: ProductionPV) => sum + p.S_kVA, 0) || 0;
+  const linkedProductionTotal = linkedClients.reduce((sum, c) => sum + c.puissancePV_kVA, 0);
 
   // Initialize form data when panel opens
   useEffect(() => {
@@ -175,6 +187,18 @@ export const EditPanel = () => {
                 />
               </div>
 
+              {linkedClients.length > 0 && (
+                <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded text-sm">
+                  <div className="font-medium text-blue-900 dark:text-blue-100 mb-1">
+                    ℹ️ Clients importés liés
+                  </div>
+                  <div className="text-blue-700 dark:text-blue-300">
+                    Ce nœud a {linkedClients.length} client(s) importé(s) lié(s). 
+                    Leurs puissances sont automatiquement incluses dans les calculs.
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label htmlFor="connection-type">Type de connexion (automatique)</Label>
                 <div className="p-2 bg-muted rounded text-sm">
@@ -237,6 +261,53 @@ export const EditPanel = () => {
                 </CardContent>
               </Card>
 
+              {/* Clients importés liés - Charges */}
+              {linkedClients.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Network className="w-4 h-4" />
+                      Clients importés liés ({linkedClients.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {linkedClients.map((client) => (
+                      <div key={client.id} className="flex items-center justify-between p-2 bg-muted/50 rounded text-sm">
+                        <div className="flex-1">
+                          <div className="font-medium">{client.nomCircuit || client.identifiantCircuit}</div>
+                          <div className="text-xs text-muted-foreground">{client.identifiantCircuit}</div>
+                        </div>
+                        <div className="text-right space-y-1">
+                          {client.puissanceContractuelle_kVA > 0 && (
+                            <div className="font-mono">
+                              ⚡ {client.puissanceContractuelle_kVA.toFixed(1)} kVA
+                            </div>
+                          )}
+                          {client.puissancePV_kVA > 0 && (
+                            <div className="font-mono text-green-600 dark:text-green-400">
+                              ☀️ {client.puissancePV_kVA.toFixed(1)} kVA PV
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    <div className="pt-2 border-t mt-2">
+                      <div className="flex justify-between text-sm font-medium">
+                        <span>Total clients liés:</span>
+                        <div className="space-y-1 text-right">
+                          {linkedChargeTotal > 0 && (
+                            <div>⚡ {linkedChargeTotal.toFixed(1)} kVA</div>
+                          )}
+                          {linkedProductionTotal > 0 && (
+                            <div className="text-green-600 dark:text-green-400">☀️ {linkedProductionTotal.toFixed(1)} kVA PV</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Productions */}
               <Card>
                 <CardHeader className="pb-3">
@@ -284,6 +355,39 @@ export const EditPanel = () => {
                   ))}
                  </CardContent>
                </Card>
+
+               {/* Récapitulatif des puissances totales */}
+               {(manualChargeTotal > 0 || linkedChargeTotal > 0 || manualProductionTotal > 0 || linkedProductionTotal > 0) && (
+                 <Card className="bg-primary/5 border-primary/20">
+                   <CardHeader className="pb-3">
+                     <CardTitle className="text-base">📊 Puissances totales du nœud</CardTitle>
+                   </CardHeader>
+                   <CardContent className="space-y-2 text-sm">
+                     <div className="grid grid-cols-2 gap-4">
+                       <div>
+                         <div className="font-medium mb-1">Charges:</div>
+                         <div className="space-y-1 text-muted-foreground">
+                           <div>Manuel: {manualChargeTotal.toFixed(1)} kVA</div>
+                           <div>Importé: {linkedChargeTotal.toFixed(1)} kVA</div>
+                         </div>
+                         <div className="font-bold mt-1 text-foreground">
+                           Total: {(manualChargeTotal + linkedChargeTotal).toFixed(1)} kVA
+                         </div>
+                       </div>
+                       <div>
+                         <div className="font-medium mb-1">Productions:</div>
+                         <div className="space-y-1 text-muted-foreground">
+                           <div>Manuel: {manualProductionTotal.toFixed(1)} kVA</div>
+                           <div>Importé: {linkedProductionTotal.toFixed(1)} kVA</div>
+                         </div>
+                         <div className="font-bold mt-1 text-foreground">
+                           Total: {(manualProductionTotal + linkedProductionTotal).toFixed(1)} kVA
+                         </div>
+                       </div>
+                     </div>
+                   </CardContent>
+                 </Card>
+               )}
 
                  {/* Configuration Transformateur et Tension Source */}
                  {selectedNode?.isSource && (

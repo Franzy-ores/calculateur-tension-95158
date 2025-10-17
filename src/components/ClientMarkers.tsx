@@ -1,15 +1,17 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
-import { ClientImporte, ClientLink } from '@/types/network';
+import { ClientImporte, ClientLink, Node } from '@/types/network';
 
 interface ClientMarkersProps {
   map: L.Map;
   clients: ClientImporte[];
   links: ClientLink[];
+  nodes: Node[];
+  selectedClientId?: string | null;
   onClientClick?: (clientId: string) => void;
 }
 
-export const useClientMarkers = ({ map, clients, links, onClientClick }: ClientMarkersProps) => {
+export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId, onClientClick }: ClientMarkersProps) => {
   const clientMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   const linkLinesRef = useRef<Map<string, L.Polyline>>(new Map());
 
@@ -26,10 +28,13 @@ export const useClientMarkers = ({ map, clients, links, onClientClick }: ClientM
     // Créer les marqueurs clients
     clients.forEach(client => {
       const color = client.couplage === 'TRI' ? '#3b82f6' : '#f97316';
+      const isSelected = selectedClientId === client.id;
+      const borderColor = isSelected ? '#22c55e' : 'white';
+      const borderWidth = isSelected ? 3 : 2;
       
       const icon = L.divIcon({
         className: 'client-marker',
-        html: `<div class="w-3 h-3 rounded-full border-2 border-white shadow-md" style="background-color: ${color}"></div>`,
+        html: `<div class="w-3 h-3 rounded-full shadow-md ${isSelected ? 'animate-pulse' : ''}" style="background-color: ${color}; border: ${borderWidth}px solid ${borderColor};"></div>`,
         iconSize: [12, 12],
         iconAnchor: [6, 6]
       });
@@ -58,11 +63,30 @@ export const useClientMarkers = ({ map, clients, links, onClientClick }: ClientM
       clientMarkersRef.current.set(client.id, marker);
     });
 
+    // Créer les lignes de liaison entre clients et nœuds
+    links.forEach(link => {
+      const client = clients.find(c => c.id === link.clientId);
+      const node = nodes.find(n => n.id === link.nodeId);
+      
+      if (client && node) {
+        const line = L.polyline(
+          [[client.lat, client.lng], [node.lat, node.lng]],
+          {
+            color: '#000000',
+            weight: 1.5,
+            opacity: 0.6
+          }
+        ).addTo(map);
+        
+        linkLinesRef.current.set(link.id, line);
+      }
+    });
+
     return () => {
       clientMarkersRef.current.forEach(marker => map.removeLayer(marker));
       linkLinesRef.current.forEach(line => map.removeLayer(line));
     };
-  }, [map, clients, links, onClientClick]);
+  }, [map, clients, links, nodes, selectedClientId, onClientClick]);
 
   return { clientMarkersRef, linkLinesRef };
 };

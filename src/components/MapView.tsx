@@ -8,6 +8,7 @@ import { Button } from './ui/button';
 import { Globe, Map as MapIcon } from 'lucide-react';
 import { getConnectedNodes } from '@/utils/networkConnectivity';
 import { getNodeConnectionType } from '@/utils/nodeConnectionType';
+import { useClientMarkers } from './ClientMarkers';
 
 // Configuration des icônes Leaflet
 const configureLeafletIcons = () => {
@@ -146,6 +147,23 @@ export const MapView = () => {
       }
     };
   }, []);
+
+  // Afficher les marqueurs clients sur la carte
+  useClientMarkers({
+    map: mapInstanceRef.current!,
+    clients: currentProject?.clientsImportes || [],
+    links: currentProject?.clientLinks || [],
+    nodes: currentProject?.nodes || [],
+    selectedClientId: selectedClientForLinking,
+    onClientClick: (clientId) => {
+      if (selectedTool === 'linkClient') {
+        setSelectedClient(clientId);
+      } else {
+        setSelectedClient(clientId);
+        openEditPanel('client');
+      }
+    }
+  });
 
   // Gérer le changement de type de carte
   const switchMapType = (newType: 'osm' | 'satellite') => {
@@ -690,6 +708,13 @@ export const MapView = () => {
 
       marker.on('click', (e) => {
         L.DomEvent.stopPropagation(e);
+        
+        // MODE LIAISON CLIENT: Lier le client sélectionné à ce nœud
+        if (selectedTool === 'linkClient' && selectedClientForLinking) {
+          linkClientToNode(selectedClientForLinking, node.id);
+          setSelectedClient(null);
+          return;
+        }
         
         // MODE ROUTAGE ACTIF: Finaliser le tracé sur n'importe quel nœud
         if (routingActive && routingFromNode) {

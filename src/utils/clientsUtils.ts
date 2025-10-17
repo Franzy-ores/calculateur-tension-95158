@@ -151,15 +151,24 @@ export const calculateTotalPowersForNodes = (
 
 /**
  * Génère une couleur unique et cohérente pour un identifiant de circuit
+ * Utilise l'algorithme de hash DJB2 pour une meilleure distribution
  */
 const hashStringToColor = (str: string): string => {
-  let hash = 0;
+  // Hash DJB2 pour une meilleure distribution
+  let hash = 5381;
   for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    hash = ((hash << 5) + hash) + str.charCodeAt(i);
   }
   
-  const hue = Math.abs(hash % 360);
-  return `hsl(${hue}, 70%, 50%)`;
+  // Convertir en valeur positive
+  hash = Math.abs(hash);
+  
+  // Varier teinte, saturation et luminosité pour plus de diversité
+  const hue = hash % 360;
+  const saturation = 60 + (hash % 30); // 60-90%
+  const lightness = 45 + (hash % 20);  // 45-65%
+  
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 };
 
 /**

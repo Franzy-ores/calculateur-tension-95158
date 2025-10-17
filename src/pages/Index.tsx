@@ -165,7 +165,7 @@ const Index = () => {
       </div>
 
       {/* Clients Panel - Sheet latéral */}
-      <Sheet open={clientsPanelOpen} onOpenChange={setClientsPanelOpen}>
+      <Sheet open={clientsPanelOpen} onOpenChange={setClientsPanelOpen} modal={false}>
         <SheetContent side="left" className="w-96 sm:max-w-96 overflow-hidden flex flex-col">
           <SheetHeader>
             <SheetTitle>Gestion des Clients</SheetTitle>

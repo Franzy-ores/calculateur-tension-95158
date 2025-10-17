@@ -155,7 +155,7 @@ const Index = () => {
         {currentProject?.clientsImportes && currentProject.clientsImportes.length > 0 && !focusMode && (
           <Button
             onClick={() => setClientsPanelOpen(true)}
-            className="fixed left-20 top-20 z-20 shadow-lg"
+            className="fixed right-20 top-20 z-20 shadow-lg"
             size="sm"
           >
             <Users className="h-4 w-4 mr-2" />

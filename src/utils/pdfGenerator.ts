@@ -4,6 +4,7 @@ import { generateCableDetailsTable } from './tableGenerator';
 import { Project, CalculationResult, CalculationScenario, SimulationResult } from '@/types/network';
 import { SRG2SimulationResult } from '@/types/srg2';
 import { getConnectedNodes, getConnectedCables } from '@/utils/networkConnectivity';
+import { calculateTotalPowersForNodes } from './clientsUtils';
 
 export interface PDFData {
   project: Project;
@@ -249,13 +250,15 @@ export class PDFGenerator {
     this.addText(`Conformité: ${this.getComplianceText(currentResult.compliance)}`);
     this.currentY += 5;
 
-    // Calcul charge et production contractuelles
+    // Calcul charge et production contractuelles (manuel + clients importés)
     const connectedNodes = getConnectedNodes(data.project.nodes, data.project.cables);
     const connectedNodesData = data.project.nodes.filter(node => connectedNodes.has(node.id));
-    const chargeContractuelle = connectedNodesData.reduce((sum, node) => 
-      sum + node.clients.reduce((clientSum, client) => clientSum + client.S_kVA, 0), 0);
-    const productionContractuelle = connectedNodesData.reduce((sum, node) => 
-      sum + node.productions.reduce((prodSum, prod) => prodSum + prod.S_kVA, 0), 0);
+    const { totalChargesContractuelles: chargeContractuelle, totalProductionsContractuelles: productionContractuelle } = 
+      calculateTotalPowersForNodes(
+        connectedNodesData,
+        data.project.clientsImportes || [],
+        data.project.clientLinks || []
+      );
     const productionFoisonnee = productionContractuelle * (data.project.foisonnementProductions / 100);
 
     // Bilan énergétique
@@ -312,11 +315,13 @@ export class PDFGenerator {
       const distCharges = data.project.manualPhaseDistribution?.charges || { A: 33.33, B: 33.33, C: 33.33 };
       const distProds = data.project.manualPhaseDistribution?.productions || { A: 33.33, B: 33.33, C: 33.33 };
       
-      // Calculer les totaux globaux
-      const totalCharges = connectedNodesData.reduce((sum, node) => 
-        sum + node.clients.reduce((clientSum, client) => clientSum + client.S_kVA, 0), 0);
-      const totalProds = connectedNodesData.reduce((sum, node) => 
-        sum + node.productions.reduce((prodSum, prod) => prodSum + prod.S_kVA, 0), 0);
+      // Calculer les totaux globaux (manuel + clients importés)
+      const { totalChargesContractuelles: totalCharges, totalProductionsContractuelles: totalProds } = 
+        calculateTotalPowersForNodes(
+          connectedNodesData,
+          data.project.clientsImportes || [],
+          data.project.clientLinks || []
+        );
       
       // Appliquer les pourcentages de répartition par phase
       const chargePhaseA = totalCharges * (distCharges.A / 100);

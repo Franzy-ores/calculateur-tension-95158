@@ -14,6 +14,8 @@ import { PhaseDistributionSliders } from "@/components/PhaseDistributionSliders"
 import { toast } from "sonner";
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { ExcelImporter } from '@/components/ExcelImporter';
+import { calculateTotalPowersForNodes } from '@/utils/clientsUtils';
+import { getConnectedNodes } from '@/utils/networkConnectivity';
 interface TopMenuProps {
   onNewNetwork: () => void;
   onSave: () => void;
@@ -50,14 +52,22 @@ export const TopMenu = ({
     toggleSimulationActive,
   } = useNetworkStore();
 
-  // Calcul des puissances totales et foisonnées
-  const totalChargesNonFoisonnees = currentProject?.nodes.reduce((sum, node) => 
-    sum + node.clients.reduce((clientSum, client) => clientSum + client.S_kVA, 0), 0
-  ) || 0;
+  // Calcul des puissances totales et foisonnées (manuel + clients importés)
+  const connectedNodes = currentProject?.cables && currentProject?.nodes 
+    ? getConnectedNodes(currentProject.nodes, currentProject.cables)
+    : new Set<string>();
+  const connectedNodesData = currentProject?.nodes.filter(node => connectedNodes.has(node.id)) || [];
 
-  const totalProductionsNonFoisonnees = currentProject?.nodes.reduce((sum, node) => 
-    sum + node.productions.reduce((prodSum, prod) => prodSum + prod.S_kVA, 0), 0
-  ) || 0;
+  const { totalChargesContractuelles, totalProductionsContractuelles } = currentProject
+    ? calculateTotalPowersForNodes(
+        connectedNodesData,
+        currentProject.clientsImportes || [],
+        currentProject.clientLinks || []
+      )
+    : { totalChargesContractuelles: 0, totalProductionsContractuelles: 0 };
+
+  const totalChargesNonFoisonnees = totalChargesContractuelles;
+  const totalProductionsNonFoisonnees = totalProductionsContractuelles;
 
   const chargesFoisonnees = totalChargesNonFoisonnees * (
     (simulationPreview.isActive && simulationPreview.foisonnementCharges !== undefined 

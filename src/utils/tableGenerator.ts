@@ -1,4 +1,5 @@
 import { CalculationResult, CalculationScenario, Project } from '@/types/network';
+import { calculateNodePowersFromClients, getLinkedClientsForNode } from './clientsUtils';
 
 export const generateCableDetailsTable = (
   currentResult: CalculationResult,
@@ -64,10 +65,18 @@ export const generateCableDetailsTable = (
       const distalCumulativeVoltageDrop = distalNodeVoltageDropResult?.deltaU_cum_V || 0;
       const distalNodeVoltage = sourceVoltage - distalCumulativeVoltageDrop;
 
-      // Calculer les charges et productions du nœud aval
-      const distalNodeChargesContractuelles = actualDistalNode?.clients.reduce((sum, client) => sum + client.S_kVA, 0) || 0;
+      // Calculer les charges et productions du nœud aval (manuel + clients importés)
+      const linkedClientsForDistalNode = actualDistalNode 
+        ? getLinkedClientsForNode(actualDistalNode.id, currentProject.clientsImportes || [], currentProject.clientLinks || [])
+        : [];
+
+      const distalNodePowers = actualDistalNode 
+        ? calculateNodePowersFromClients(actualDistalNode, linkedClientsForDistalNode)
+        : { totalCharge_kVA: 0, totalProduction_kVA: 0 };
+
+      const distalNodeChargesContractuelles = distalNodePowers.totalCharge_kVA;
       const distalNodeChargesFoisonnees = distalNodeChargesContractuelles * (currentProject.foisonnementCharges / 100);
-      const distalNodeProductions = actualDistalNode?.productions.reduce((sum, prod) => sum + prod.S_kVA, 0) || 0;
+      const distalNodeProductions = distalNodePowers.totalProduction_kVA;
 
       // Couleur pour la chute de tension (basée sur tension nominale)
       const nominalVoltage = (actualDistalNode?.connectionType === 'TÉTRA_3P+N_230_400V') ? 400 : 230;

@@ -7,6 +7,7 @@ import { useNetworkStore } from '@/store/networkStore';
 import { jsPDF } from 'jspdf';
 import { getConnectedNodes, getConnectedCables } from '@/utils/networkConnectivity';
 import { getNodeConnectionType } from '@/utils/nodeConnectionType';
+import { calculateTotalPowersForNodes } from '@/utils/clientsUtils';
 
 
 interface ResultsPanelProps {
@@ -305,8 +306,12 @@ export const ResultsPanel = ({ results, selectedScenario, isCollapsed = false }:
                   if (!currentProject?.nodes || !currentProject?.cables) return '0.0';
                   const connectedNodes = getConnectedNodes(currentProject.nodes, currentProject.cables);
                   const connectedNodesData = currentProject.nodes.filter(node => connectedNodes.has(node.id));
-                  return connectedNodesData.reduce((sum, node) => 
-                    sum + node.clients.reduce((clientSum, client) => clientSum + client.S_kVA, 0), 0).toFixed(1);
+                  const { totalChargesContractuelles } = calculateTotalPowersForNodes(
+                    connectedNodesData,
+                    currentProject.clientsImportes || [],
+                    currentProject.clientLinks || []
+                  );
+                  return totalChargesContractuelles.toFixed(1);
                 })()} kVA</p>
               </div>
               <div>
@@ -315,8 +320,12 @@ export const ResultsPanel = ({ results, selectedScenario, isCollapsed = false }:
                   if (!currentProject?.nodes || !currentProject?.cables) return '0.0';
                   const connectedNodes = getConnectedNodes(currentProject.nodes, currentProject.cables);
                   const connectedNodesData = currentProject.nodes.filter(node => connectedNodes.has(node.id));
-                  return connectedNodesData.reduce((sum, node) => 
-                    sum + node.productions.reduce((prodSum, prod) => prodSum + prod.S_kVA, 0), 0).toFixed(1);
+                  const { totalProductionsContractuelles } = calculateTotalPowersForNodes(
+                    connectedNodesData,
+                    currentProject.clientsImportes || [],
+                    currentProject.clientLinks || []
+                  );
+                  return totalProductionsContractuelles.toFixed(1);
                 })()} kVA</p>
               </div>
               <div>
@@ -337,10 +346,13 @@ export const ResultsPanel = ({ results, selectedScenario, isCollapsed = false }:
                   if (!currentProject?.nodes || !currentProject?.cables) return '0.0';
                   const connectedNodes = getConnectedNodes(currentProject.nodes, currentProject.cables);
                   const connectedNodesData = currentProject.nodes.filter(node => connectedNodes.has(node.id));
-                  const totalProdContractuelle = connectedNodesData.reduce((sum, node) => 
-                    sum + node.productions.reduce((prodSum, prod) => prodSum + prod.S_kVA, 0), 0);
+                  const { totalProductionsContractuelles } = calculateTotalPowersForNodes(
+                    connectedNodesData,
+                    currentProject.clientsImportes || [],
+                    currentProject.clientLinks || []
+                  );
                   const foisonnement = currentProject?.foisonnementProductions || 100;
-                  return (totalProdContractuelle * foisonnement / 100).toFixed(1);
+                  return (totalProductionsContractuelles * foisonnement / 100).toFixed(1);
                 })()} kVA</p>
               </div>
             </div>

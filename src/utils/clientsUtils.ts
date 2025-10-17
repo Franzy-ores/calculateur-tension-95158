@@ -116,3 +116,34 @@ export const validateClient = (client: ClientImporte): { valid: boolean; errors:
     errors
   };
 };
+
+/**
+ * Calcule les puissances totales pour un ensemble de nœuds (manuel + clients importés)
+ */
+export const calculateTotalPowersForNodes = (
+  nodes: Node[],
+  clientsImportes: ClientImporte[],
+  clientLinks: ClientLink[]
+): {
+  totalChargesContractuelles: number;
+  totalProductionsContractuelles: number;
+} => {
+  let totalCharges = 0;
+  let totalProds = 0;
+
+  nodes.forEach(node => {
+    // Charges/productions manuelles
+    totalCharges += node.clients.reduce((sum, c) => sum + c.S_kVA, 0);
+    totalProds += node.productions.reduce((sum, p) => sum + p.S_kVA, 0);
+
+    // Charges/productions importées liées à ce nœud
+    const linkedClients = getLinkedClientsForNode(node.id, clientsImportes, clientLinks);
+    totalCharges += linkedClients.reduce((sum, c) => sum + c.puissanceContractuelle_kVA, 0);
+    totalProds += linkedClients.reduce((sum, c) => sum + c.puissancePV_kVA, 0);
+  });
+
+  return {
+    totalChargesContractuelles: totalCharges,
+    totalProductionsContractuelles: totalProds
+  };
+};

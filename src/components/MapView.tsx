@@ -708,7 +708,8 @@ export const MapView = () => {
 
       const marker = L.marker([node.lat, node.lng], { 
         icon,
-        draggable: selectedTool === 'move'
+        draggable: selectedTool === 'move',
+        zIndexOffset: 0
       })
         .addTo(map)
         .bindPopup(node.name);

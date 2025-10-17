@@ -59,7 +59,7 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
       
       const icon = L.divIcon({
         className: 'client-marker',
-        html: `<div class="w-3 h-3 rounded-full shadow-md ${isSelected ? 'animate-pulse' : ''}" style="background-color: ${color}; border: ${borderWidth}px solid ${borderColor}; cursor: grab;"></div>`,
+        html: `<div class="w-3 h-3 rounded-full shadow-lg ${isSelected ? 'animate-pulse' : 'hover:scale-125 transition-transform'}" style="background-color: ${color}; border: ${borderWidth}px solid ${borderColor}; cursor: grab;"></div>`,
         iconSize: [12, 12],
         iconAnchor: [6, 6]
       });
@@ -67,7 +67,8 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
       const marker = L.marker([client.lat, client.lng], { 
         icon,
         draggable: true,
-        autoPan: true
+        autoPan: true,
+        zIndexOffset: 1000
       });
 
       // Gestion du drag & drop

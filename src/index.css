@@ -169,3 +169,23 @@ All colors MUST be HSL.
     margin: 0 !important;
   }
 }
+
+/* Forcer les marqueurs clients au premier plan */
+.client-marker {
+  z-index: 1000 !important;
+  pointer-events: auto;
+}
+
+/* Assurer que les marqueurs de nœuds restent derrière */
+.custom-node-marker {
+  z-index: 0 !important;
+}
+
+/* Garantir que les éléments interactifs des clients sont cliquables */
+.client-marker .leaflet-marker-icon {
+  cursor: grab !important;
+}
+
+.client-marker .leaflet-marker-icon:active {
+  cursor: grabbing !important;
+}

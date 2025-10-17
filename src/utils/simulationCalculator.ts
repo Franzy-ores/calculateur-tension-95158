@@ -97,7 +97,9 @@ export class SimulationCalculator extends ElectricalCalculator {
         project.transformerConfig,
         project.loadModel,
         project.desequilibrePourcent,
-        currentDistribution
+        currentDistribution,
+        project.clientsImportes,
+        project.clientLinks
       );
       
       // Récupérer les tensions calculées au nœud de mesure
@@ -325,7 +327,9 @@ export class SimulationCalculator extends ElectricalCalculator {
       project.transformerConfig,
       project.loadModel,
       project.desequilibrePourcent,
-      currentDistribution
+      currentDistribution,
+      project.clientsImportes,
+      project.clientLinks
     );
     
     const convergenceResult = {
@@ -548,7 +552,9 @@ export class SimulationCalculator extends ElectricalCalculator {
         project.transformerConfig,
         project.loadModel,
         project.desequilibrePourcent,
-        project.manualPhaseDistribution
+        project.manualPhaseDistribution,
+        project.clientsImportes,
+        project.clientLinks
       );
     }
 
@@ -597,7 +603,9 @@ export class SimulationCalculator extends ElectricalCalculator {
         project.transformerConfig,
         project.loadModel,
         project.desequilibrePourcent,
-        project.manualPhaseDistribution
+        project.manualPhaseDistribution,
+        project.clientsImportes,
+        project.clientLinks
       );
     }
     
@@ -814,7 +822,9 @@ export class SimulationCalculator extends ElectricalCalculator {
       project.transformerConfig,
       project.loadModel,
       project.desequilibrePourcent,
-      project.manualPhaseDistribution
+      project.manualPhaseDistribution,
+      project.clientsImportes,
+      project.clientLinks
     );
     
     return this.applyNeutralCompensatorsToResult(baseResult, project, compensators);
@@ -1127,7 +1137,9 @@ export class SimulationCalculator extends ElectricalCalculator {
         project.transformerConfig,
         project.loadModel,
         project.desequilibrePourcent,
-        project.manualPhaseDistribution
+        project.manualPhaseDistribution,
+        project.clientsImportes,
+        project.clientLinks
       );
       
       // Stocker les tensions originales à la première itération
@@ -1204,7 +1216,9 @@ export class SimulationCalculator extends ElectricalCalculator {
       project.transformerConfig,
       project.loadModel,
       project.desequilibrePourcent,
-      project.manualPhaseDistribution
+      project.manualPhaseDistribution,
+      project.clientsImportes,
+      project.clientLinks
     );
 
     console.log('🎯 SRG2 calcul final terminé - marqueurs SRG2 conservés pour nodeMetricsPerPhase');

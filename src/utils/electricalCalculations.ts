@@ -1,7 +1,8 @@
-import { Node, Cable, Project, CalculationResult, CalculationScenario, ConnectionType, CableType, TransformerConfig, VirtualBusbar, LoadModel } from '@/types/network';
+import { Node, Cable, Project, CalculationResult, CalculationScenario, ConnectionType, CableType, TransformerConfig, VirtualBusbar, LoadModel, ClientImporte, ClientLink } from '@/types/network';
 import { getConnectedNodes } from '@/utils/networkConnectivity';
 import { Complex, C, add, sub, mul, div, conj, scale, abs, fromPolar } from '@/utils/complex';
 import { getNodeConnectionType } from '@/utils/nodeConnectionType';
+import { getLinkedClientsForNode, calculateNodePowersFromClients } from '@/utils/clientsUtils';
 
 export class ElectricalCalculator {
   private cosPhi: number;
@@ -428,7 +429,9 @@ export class ElectricalCalculator {
     scenario: CalculationScenario,
     foisonnementCharges: number = 100,
     foisonnementProductions: number = 100,
-    manualPhaseDistribution?: { charges: {A:number;B:number;C:number}; productions: {A:number;B:number;C:number} }
+    manualPhaseDistribution?: { charges: {A:number;B:number;C:number}; productions: {A:number;B:number;C:number} },
+    clientsImportes?: ClientImporte[],
+    clientLinks?: ClientLink[]
   ): CalculationResult {
     // Si configuration HT disponible, ajuster la tension de la source
     let modifiedNodes = [...project.nodes];
@@ -476,7 +479,9 @@ export class ElectricalCalculator {
       project.transformerConfig,
       project.loadModel ?? 'polyphase_equilibre',
       project.desequilibrePourcent ?? 0,
-      manualPhaseDistribution
+      manualPhaseDistribution,
+      clientsImportes,
+      clientLinks
     );
   }
   calculateScenario(
@@ -489,7 +494,9 @@ export class ElectricalCalculator {
     transformerConfig?: TransformerConfig,
     loadModel: LoadModel = 'polyphase_equilibre',
     desequilibrePourcent: number = 0,
-    manualPhaseDistribution?: { charges: {A:number;B:number;C:number}; productions: {A:number;B:number;C:number} }
+    manualPhaseDistribution?: { charges: {A:number;B:number;C:number}; productions: {A:number;B:number;C:number} },
+    clientsImportes?: ClientImporte[],
+    clientLinks?: ClientLink[]
   ): CalculationResult {
     // Validation robuste des entrées
     this.validateInputs(nodes, cables, cableTypes, foisonnementCharges, foisonnementProductions, desequilibrePourcent);
@@ -530,9 +537,21 @@ export class ElectricalCalculator {
 
     const S_eq = new Map<string, number>();
     for (const n of nodes) {
-      // Appliquer les facteurs de foisonnement
-      const S_prel = (n.clients || []).reduce((s, c) => s + (c.S_kVA || 0), 0) * (foisonnementCharges / 100);
-      const S_pv   = (n.productions || []).reduce((s, p) => s + (p.S_kVA || 0), 0) * (foisonnementProductions / 100);
+      let S_prel = 0;
+      let S_pv = 0;
+      
+      // Si des clients importés sont disponibles, utiliser la fonction complète
+      if (clientsImportes && clientLinks) {
+        const linkedClients = getLinkedClientsForNode(n.id, clientsImportes, clientLinks);
+        const { totalCharge_kVA, totalProduction_kVA } = calculateNodePowersFromClients(n, linkedClients);
+        S_prel = totalCharge_kVA * (foisonnementCharges / 100);
+        S_pv = totalProduction_kVA * (foisonnementProductions / 100);
+      } else {
+        // Fallback : charges/productions manuelles uniquement
+        S_prel = (n.clients || []).reduce((s, c) => s + (c.S_kVA || 0), 0) * (foisonnementCharges / 100);
+        S_pv = (n.productions || []).reduce((s, p) => s + (p.S_kVA || 0), 0) * (foisonnementProductions / 100);
+      }
+      
       let val = 0;
       if (scenario === 'PRÉLÈVEMENT') val = S_prel;
       else if (scenario === 'PRODUCTION') val = - S_pv;
@@ -572,9 +591,16 @@ export class ElectricalCalculator {
     const connectedNodesData = nodes.filter(node => connectedNodes.has(node.id));
 
     for (const n of connectedNodesData) {
-      // Appliquer les facteurs de foisonnement aux totaux aussi (seulement pour les nœuds connectés)
-      totalLoads += (n.clients || []).reduce((s,c) => s + (c.S_kVA || 0), 0) * (foisonnementCharges / 100);
-      totalProductions += (n.productions || []).reduce((s,p) => s + (p.S_kVA || 0), 0) * (foisonnementProductions / 100);
+      if (clientsImportes && clientLinks) {
+        const linkedClients = getLinkedClientsForNode(n.id, clientsImportes, clientLinks);
+        const { totalCharge_kVA, totalProduction_kVA } = calculateNodePowersFromClients(n, linkedClients);
+        totalLoads += totalCharge_kVA * (foisonnementCharges / 100);
+        totalProductions += totalProduction_kVA * (foisonnementProductions / 100);
+      } else {
+        // Fallback : charges/productions manuelles uniquement
+        totalLoads += (n.clients || []).reduce((s,c) => s + (c.S_kVA || 0), 0) * (foisonnementCharges / 100);
+        totalProductions += (n.productions || []).reduce((s,p) => s + (p.S_kVA || 0), 0) * (foisonnementProductions / 100);
+      }
     }
 
     // ---- Power Flow using Backward-Forward Sweep (complex R+jX) ----

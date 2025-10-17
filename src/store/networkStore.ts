@@ -924,28 +924,36 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         'PRÉLÈVEMENT',
         currentProject.foisonnementCharges,
         currentProject.foisonnementProductions,
-        currentProject.manualPhaseDistribution
+        currentProject.manualPhaseDistribution,
+        currentProject.clientsImportes || [],
+        currentProject.clientLinks || []
       ),
       MIXTE: calculator.calculateScenarioWithHTConfig(
         currentProject,
         'MIXTE',
         currentProject.foisonnementCharges,
         currentProject.foisonnementProductions,
-        currentProject.manualPhaseDistribution
+        currentProject.manualPhaseDistribution,
+        currentProject.clientsImportes || [],
+        currentProject.clientLinks || []
       ),
       PRODUCTION: calculator.calculateScenarioWithHTConfig(
         currentProject,
         'PRODUCTION',
         currentProject.foisonnementCharges,
         currentProject.foisonnementProductions,
-        currentProject.manualPhaseDistribution
+        currentProject.manualPhaseDistribution,
+        currentProject.clientsImportes || [],
+        currentProject.clientLinks || []
       ),
       FORCÉ: calculator.calculateScenarioWithHTConfig(
         currentProject,
         'FORCÉ',
         currentProject.foisonnementCharges,
         currentProject.foisonnementProductions,
-        currentProject.manualPhaseDistribution
+        currentProject.manualPhaseDistribution,
+        currentProject.clientsImportes || [],
+        currentProject.clientLinks || []
       )
     };
 
@@ -1025,21 +1033,27 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         'PRÉLÈVEMENT',
         currentProject.foisonnementCharges,
         currentProject.foisonnementProductions,
-        currentProject.manualPhaseDistribution
+        currentProject.manualPhaseDistribution,
+        currentProject.clientsImportes || [],
+        currentProject.clientLinks || []
       ),
       MIXTE: calculator.calculateScenarioWithHTConfig(
         currentProject,
         'MIXTE',
         currentProject.foisonnementCharges,
         currentProject.foisonnementProductions,
-        currentProject.manualPhaseDistribution
+        currentProject.manualPhaseDistribution,
+        currentProject.clientsImportes || [],
+        currentProject.clientLinks || []
       ),
       PRODUCTION: calculator.calculateScenarioWithHTConfig(
         currentProject,
         'PRODUCTION',
         currentProject.foisonnementCharges,
         currentProject.foisonnementProductions,
-        currentProject.manualPhaseDistribution
+        currentProject.manualPhaseDistribution,
+        currentProject.clientsImportes || [],
+        currentProject.clientLinks || []
       ),
       FORCÉ: (() => {
         // Pour le mode FORCÉ, utiliser la simulation avec convergence
@@ -1060,7 +1074,9 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
               'FORCÉ',
               currentProject.foisonnementCharges,
               currentProject.foisonnementProductions,
-              currentProject.manualPhaseDistribution
+              currentProject.manualPhaseDistribution,
+              currentProject.clientsImportes || [],
+              currentProject.clientLinks || []
             );
           }
         } else {
@@ -1069,7 +1085,9 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
             'FORCÉ',
             currentProject.foisonnementCharges,
             currentProject.foisonnementProductions,
-            currentProject.manualPhaseDistribution
+            currentProject.manualPhaseDistribution,
+            currentProject.clientsImportes || [],
+            currentProject.clientLinks || []
           );
         }
       })()

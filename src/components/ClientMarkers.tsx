@@ -19,6 +19,28 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
   const highlightCircleRef = useRef<L.Circle | null>(null);
 
   useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && map && !map.dragging.enabled()) {
+        map.dragging.enable();
+        
+        if (dragLineRef.current) {
+          map.removeLayer(dragLineRef.current);
+          dragLineRef.current = null;
+        }
+        if (highlightCircleRef.current) {
+          map.removeLayer(highlightCircleRef.current);
+          highlightCircleRef.current = null;
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [map]);
+
+  useEffect(() => {
     if (!map || !clients) return;
 
     // Nettoyer les marqueurs existants
@@ -53,6 +75,7 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
       
       marker.on('dragstart', (e) => {
         initialPosition = e.target.getLatLng();
+        map.dragging.disable();
         const element = marker.getElement();
         if (element) {
           element.style.cursor = 'grabbing';
@@ -136,6 +159,8 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
         if (element) {
           element.style.cursor = 'grab';
         }
+        
+        map.dragging.enable();
       });
       
       const popupContent = `

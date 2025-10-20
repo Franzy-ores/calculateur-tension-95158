@@ -154,11 +154,17 @@ export const calculateTotalPowersForNodes = (
 
 /**
  * Détermine la couleur d'un marqueur client selon le mode sélectionné
+ * @param client - Client importé à colorer
+ * @param mode - Mode de coloration : 'couplage', 'circuit', 'tension', ou 'lien'
+ * @param circuitColorMapping - Mapping des couleurs par circuit (pour mode 'circuit')
+ * @param clientLinks - Liste des liens client-nœud (pour mode 'lien')
+ * @returns Code couleur hexadécimal
  */
 export const getClientMarkerColor = (
   client: ClientImporte, 
-  mode: 'couplage' | 'circuit' | 'tension',
-  circuitColorMapping?: Map<string, string>
+  mode: 'couplage' | 'circuit' | 'tension' | 'lien',
+  circuitColorMapping?: Map<string, string>,
+  clientLinks?: ClientLink[]
 ): string => {
   switch (mode) {
     case 'couplage':
@@ -175,6 +181,11 @@ export const getClientMarkerColor = (
       // Utiliser uniquement tensionCircuit_V
       if (client.tensionCircuit_V === undefined) return '#6b7280'; // Gris si pas de donnée
       return client.tensionCircuit_V < 300 ? '#06b6d4' : '#d946ef'; // Cyan pour 230V, Magenta pour 400V
+    
+    case 'lien':
+      // Vérifier si le client est lié à un nœud
+      const isLinked = clientLinks?.some(link => link.clientId === client.id);
+      return isLinked ? '#22c55e' : '#ef4444'; // Vert si lié, Rouge sinon
     
     default:
       return '#3b82f6';

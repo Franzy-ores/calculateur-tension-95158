@@ -175,6 +175,7 @@ export const TopMenu = ({
                   <SelectItem value="couplage">Par Couplage</SelectItem>
                   <SelectItem value="circuit">Par Circuit</SelectItem>
                   <SelectItem value="tension">Par Tension</SelectItem>
+                  <SelectItem value="lien">Par Lien</SelectItem>
                 </SelectContent>
               </Select>
             </div>

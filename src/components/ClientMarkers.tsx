@@ -57,7 +57,7 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
 
     // Créer les marqueurs clients
     clients.forEach(client => {
-      const color = getClientMarkerColor(client, colorMode, circuitColorMapping);
+      const color = getClientMarkerColor(client, colorMode, circuitColorMapping, links);
       const isSelected = selectedClientId === client.id;
       const borderColor = isSelected ? '#22c55e' : 'white';
       const borderWidth = isSelected ? 3 : 2;

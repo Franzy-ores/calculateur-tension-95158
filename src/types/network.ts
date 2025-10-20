@@ -35,11 +35,13 @@ export interface ClientImporte {
   puissancePV_kVA: number;             // production PV
   couplage: ClientCouplage;            // "TRI" ou "MONO"
   
-  // Tensions mesurées
-  tensionMin_V?: number;
-  tensionMax_V?: number;
-  tensionMoyenne_V?: number;
-  tensionCircuit_V?: number; // Tension du circuit (230V ou 400V) - colonne "Tension (Circuit)"
+  // Tensions mesurées (noms EXACTS des colonnes Excel)
+  tensionMin_V?: number;                    // "Min Tension"
+  tensionMax_V?: number;                    // "Max Tension"
+  tensionMinHiver_V?: number;              // "Min Tension hiver"
+  tensionMaxEte_V?: number;                // "Max Tension été"
+  ecartTension15jours_V?: number;          // "Ecart de tension sur les 15 derniers jours"
+  tensionCircuit_V?: number;               // "Tension (Circuit)" - 230V ou 400V selon couplage
   
   // Identifiants liés
   identifiantCabine?: string;

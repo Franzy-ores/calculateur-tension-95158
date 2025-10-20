@@ -25,7 +25,12 @@ export const ClientEditPanel = () => {
   const [couplage, setCouplage] = useState<ClientCouplage>('TRI');
   const [tensionMin, setTensionMin] = useState<number | undefined>(undefined);
   const [tensionMax, setTensionMax] = useState<number | undefined>(undefined);
-  const [tensionMoyenne, setTensionMoyenne] = useState<number | undefined>(undefined);
+  const [tensionMinHiver, setTensionMinHiver] = useState<number | undefined>(undefined);
+  const [tensionMaxEte, setTensionMaxEte] = useState<number | undefined>(undefined);
+  const [ecartTension15jours, setEcartTension15jours] = useState<number | undefined>(undefined);
+  const [tensionCircuit, setTensionCircuit] = useState<number | undefined>(undefined);
+  const [identifiantCabine, setIdentifiantCabine] = useState<string>('');
+  const [identifiantPosteSource, setIdentifiantPosteSource] = useState<string>('');
 
   useEffect(() => {
     if (client) {
@@ -36,7 +41,12 @@ export const ClientEditPanel = () => {
       setCouplage(client.couplage);
       setTensionMin(client.tensionMin_V);
       setTensionMax(client.tensionMax_V);
-      setTensionMoyenne(client.tensionMoyenne_V);
+      setTensionMinHiver(client.tensionMinHiver_V);
+      setTensionMaxEte(client.tensionMaxEte_V);
+      setEcartTension15jours(client.ecartTension15jours_V);
+      setTensionCircuit(client.tensionCircuit_V);
+      setIdentifiantCabine(client.identifiantCabine || '');
+      setIdentifiantPosteSource(client.identifiantPosteSource || '');
     }
   }, [client]);
 
@@ -57,7 +67,12 @@ export const ClientEditPanel = () => {
       couplage,
       tensionMin_V: tensionMin,
       tensionMax_V: tensionMax,
-      tensionMoyenne_V: tensionMoyenne,
+      tensionMinHiver_V: tensionMinHiver,
+      tensionMaxEte_V: tensionMaxEte,
+      ecartTension15jours_V: ecartTension15jours,
+      tensionCircuit_V: tensionCircuit,
+      identifiantCabine,
+      identifiantPosteSource,
     });
     
     toast.success('Client mis à jour');
@@ -125,11 +140,11 @@ export const ClientEditPanel = () => {
         </div>
 
         <div className="border-t pt-3 mt-3">
-          <h4 className="text-sm font-medium mb-2">Tensions mesurées (optionnel)</h4>
+          <Label className="text-sm font-medium mb-2 block">Tensions mesurées</Label>
           
-          <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
             <div>
-              <Label htmlFor="tensionMin">Tension minimale (V)</Label>
+              <Label htmlFor="tensionMin">Min Tension (V)</Label>
               <Input
                 id="tensionMin"
                 type="number"
@@ -141,7 +156,7 @@ export const ClientEditPanel = () => {
             </div>
 
             <div>
-              <Label htmlFor="tensionMax">Tension maximale (V)</Label>
+              <Label htmlFor="tensionMax">Max Tension (V)</Label>
               <Input
                 id="tensionMax"
                 type="number"
@@ -153,43 +168,97 @@ export const ClientEditPanel = () => {
             </div>
 
             <div>
-              <Label htmlFor="tensionMoyenne">Tension moyenne (V)</Label>
+              <Label htmlFor="tensionMinHiver">Min Tension hiver (V)</Label>
               <Input
-                id="tensionMoyenne"
+                id="tensionMinHiver"
                 type="number"
                 step="0.1"
-                value={tensionMoyenne || ''}
-                onChange={(e) => setTensionMoyenne(e.target.value ? parseFloat(e.target.value) : undefined)}
+                value={tensionMinHiver || ''}
+                onChange={(e) => setTensionMinHiver(e.target.value ? parseFloat(e.target.value) : undefined)}
                 placeholder="Non renseigné"
               />
+            </div>
+
+            <div>
+              <Label htmlFor="tensionMaxEte">Max Tension été (V)</Label>
+              <Input
+                id="tensionMaxEte"
+                type="number"
+                step="0.1"
+                value={tensionMaxEte || ''}
+                onChange={(e) => setTensionMaxEte(e.target.value ? parseFloat(e.target.value) : undefined)}
+                placeholder="Non renseigné"
+              />
+            </div>
+
+            <div className="col-span-2">
+              <Label htmlFor="ecartTension15jours">Écart de tension sur les 15 derniers jours (V)</Label>
+              <Input
+                id="ecartTension15jours"
+                type="number"
+                step="0.1"
+                value={ecartTension15jours || ''}
+                onChange={(e) => setEcartTension15jours(e.target.value ? parseFloat(e.target.value) : undefined)}
+                placeholder="Non renseigné"
+              />
+            </div>
+
+            <div className="col-span-2">
+              <Label htmlFor="tensionCircuit">Tension (Circuit) (V)</Label>
+              <Input
+                id="tensionCircuit"
+                type="number"
+                step="0.1"
+                value={tensionCircuit || ''}
+                onChange={(e) => setTensionCircuit(e.target.value ? parseFloat(e.target.value) : undefined)}
+                placeholder="230 ou 400"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Tension du circuit selon le couplage (230V ou 400V)
+              </p>
             </div>
           </div>
         </div>
 
         <div className="border-t pt-3 mt-3">
-          <Label className="text-sm font-medium mb-2 block">Informations géographiques</Label>
-          <div className="space-y-1 text-xs text-muted-foreground">
-            <div className="grid grid-cols-2 gap-2">
-              <span className="font-medium">Latitude:</span>
-              <span>{client.lat.toFixed(6)}</span>
+          <Label className="text-sm font-medium mb-2 block">Identifiants et localisation</Label>
+          
+          <div className="space-y-2">
+            <div>
+              <Label htmlFor="identifiantCabine">Identifiant cabine</Label>
+              <Input
+                id="identifiantCabine"
+                value={identifiantCabine}
+                onChange={(e) => setIdentifiantCabine(e.target.value)}
+                placeholder="Non renseigné"
+              />
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <span className="font-medium">Longitude:</span>
-              <span>{client.lng.toFixed(6)}</span>
+
+            <div>
+              <Label htmlFor="identifiantPosteSource">Identifiant poste source</Label>
+              <Input
+                id="identifiantPosteSource"
+                value={identifiantPosteSource}
+                onChange={(e) => setIdentifiantPosteSource(e.target.value)}
+                placeholder="Non renseigné"
+              />
             </div>
-            {client.identifiantCabine && (
-              <div className="grid grid-cols-2 gap-2">
-                <span className="font-medium">Cabine:</span>
-                <span>{client.identifiantCabine}</span>
+
+            <div className="pt-2">
+              <Label className="text-xs text-muted-foreground">Coordonnées GPS (lecture seule)</Label>
+              <div className="space-y-1 text-xs text-muted-foreground mt-1">
+                <div className="grid grid-cols-2 gap-2">
+                  <span className="font-medium">Latitude:</span>
+                  <span>{client.lat.toFixed(6)}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <span className="font-medium">Longitude:</span>
+                  <span>{client.lng.toFixed(6)}</span>
+                </div>
               </div>
-            )}
-            {client.identifiantPosteSource && (
-              <div className="grid grid-cols-2 gap-2">
-                <span className="font-medium">Poste source:</span>
-                <span>{client.identifiantPosteSource}</span>
-              </div>
-            )}
+            </div>
           </div>
+          
           <Button 
             variant="outline" 
             size="sm" 

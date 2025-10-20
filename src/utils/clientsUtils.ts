@@ -29,12 +29,14 @@ export const parseExcelToClients = (file: File): Promise<ClientImporte[]> => {
             puissanceContractuelle_kVA: parseFloat(row['Puissance contractuelle']) || 0,
             puissancePV_kVA: parseFloat(row['Puissance PV en kVA']) || 0,
             couplage,
-          tensionMin_V: parseFloat(row['Tension minimale']) || undefined,
-          tensionMax_V: parseFloat(row['Tension maximale']) || undefined,
-          tensionMoyenne_V: parseFloat(row['Tension moyenne']) || undefined,
+          tensionMin_V: parseFloat(row['Min Tension']) || undefined,
+          tensionMax_V: parseFloat(row['Max Tension']) || undefined,
+          tensionMinHiver_V: parseFloat(row['Min Tension hiver']) || undefined,
+          tensionMaxEte_V: parseFloat(row['Max Tension été']) || undefined,
+          ecartTension15jours_V: parseFloat(row['Ecart de tension sur les 15 derniers jours']) || undefined,
           tensionCircuit_V: parseFloat(row['Tension (Circuit)']) || undefined,
-          identifiantCabine: String(row['Identifiant cabine'] || undefined),
-            identifiantPosteSource: String(row['Identifiant poste source'] || undefined),
+          identifiantCabine: String(row['Identifiant cabine'] || ''),
+          identifiantPosteSource: String(row['Identifiant poste source'] || ''),
             rawData: row
           };
         });
@@ -170,8 +172,9 @@ export const getClientMarkerColor = (
       return '#6b7280'; // Gris par défaut si pas de mapping
     
     case 'tension':
-      if (!client.tensionMoyenne_V) return '#6b7280';
-      return client.tensionMoyenne_V < 300 ? '#22c55e' : '#3b82f6';
+      if (!client.tensionMin_V && !client.tensionMax_V) return '#6b7280';
+      const avgTension = ((client.tensionMin_V || 0) + (client.tensionMax_V || 0)) / 2;
+      return avgTension < 300 ? '#22c55e' : '#3b82f6';
     
     default:
       return '#3b82f6';

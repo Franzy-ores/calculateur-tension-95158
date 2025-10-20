@@ -175,7 +175,7 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
           <strong>Couplage:</strong> ${client.couplage}<br>
           <strong>Charge:</strong> ${client.puissanceContractuelle_kVA.toFixed(1)} kVA<br>
           <strong>PV:</strong> ${client.puissancePV_kVA.toFixed(1)} kVA<br>
-          ${client.tensionMoyenne_V ? `<strong>U moy:</strong> ${client.tensionMoyenne_V.toFixed(1)} V<br>` : ''}
+          ${client.tensionMin_V || client.tensionMax_V ? `<strong>U moy:</strong> ${(((client.tensionMin_V || 0) + (client.tensionMax_V || 0)) / 2).toFixed(1)} V<br>` : ''}
           ${client.identifiantCabine ? `<strong>Cabine:</strong> ${client.identifiantCabine}<br>` : ''}
         </div>
       `;

@@ -267,6 +267,7 @@ const createDefaultProject2 = (name: string, voltageSystem: VoltageSystem): Proj
   transformerConfig: createDefaultTransformerConfig(voltageSystem), // Configuration transformateur adaptée au système
   loadModel: 'polyphase_equilibre',
   desequilibrePourcent: 0,
+  addEmptyNodeByDefault: false, // Par défaut, on garde le comportement actuel
   manualPhaseDistribution: {
     charges: { A: 33.33, B: 33.33, C: 33.34 },
     productions: { A: 33.33, B: 33.33, C: 33.34 },
@@ -380,6 +381,11 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     }
     if (!project.clientLinks) {
       project.clientLinks = [];
+    }
+
+    // Rétrocompatibilité: définir addEmptyNodeByDefault si non défini
+    if (project.addEmptyNodeByDefault === undefined) {
+      project.addEmptyNodeByDefault = false;
     }
 
     // Calculer les bounds géographiques si pas encore définis
@@ -509,23 +515,26 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     // Déduire le type de connexion automatiquement selon le modèle de charge
     const connectionType = mapConnectionTypeForLoadModel(currentProject.voltageSystem, currentProject.loadModel || 'polyphase_equilibre', currentProject.nodes.length === 0);
 
+    const isSource = currentProject.nodes.length === 0;
+    const shouldAddDefaults = !isSource && !currentProject.addEmptyNodeByDefault;
+
     const newNode: Node = {
       id: `node-${Date.now()}`,
       name: `Nœud ${currentProject.nodes.length + 1}`,
       lat,
       lng,
       connectionType,
-      clients: currentProject.nodes.length === 0 ? [] : [{ 
+      clients: shouldAddDefaults ? [{ 
         id: `client-${Date.now()}`, 
         label: 'Charge 1', 
         S_kVA: currentProject.defaultChargeKVA || 10 
-      }],
-      productions: currentProject.nodes.length === 0 ? [] : [{ 
+      }] : [],
+      productions: shouldAddDefaults ? [{ 
         id: `prod-${Date.now()}`, 
         label: 'PV 1', 
         S_kVA: currentProject.defaultProductionKVA || 5
-      }],
-      isSource: currentProject.nodes.length === 0 // Premier nœud = source
+      }] : [],
+      isSource
     };
 
     const updatedNodes = [...currentProject.nodes, newNode];

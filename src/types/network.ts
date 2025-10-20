@@ -215,6 +215,8 @@ export interface Project {
   // Clients importés et liaisons
   clientsImportes?: ClientImporte[];
   clientLinks?: ClientLink[];
+  // Option pour ajouter des nœuds vierges par défaut
+  addEmptyNodeByDefault?: boolean;
 }
 
 

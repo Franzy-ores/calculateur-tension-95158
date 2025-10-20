@@ -69,7 +69,6 @@ export const MapView = () => {
     circuitColorMapping,
     generateCircuitColorMapping,
     showClientTensionLabels,
-    nodeDisplayMode,
   } = useNetworkStore();
 
   // Récupérer isSimulationActive du store
@@ -647,36 +646,19 @@ export const MapView = () => {
       // Obtenir le numéro de circuit
       const circuitNumber = getNodeCircuit(node.id);
       
-      // Déterminer la taille et le contenu selon le mode d'affichage
-      let iconSize: [number, number];
-      let anchorPoint: [number, number];
-      let iconSizeClass: string;
-      let iconHtml: string;
+      // Déterminer si on affiche du texte (charge/production uniquement si > 0)
+      const hasDisplayableLoad = !node.isSource && totalCharge > 0;
+      const hasDisplayableProduction = !node.isSource && totalPV > 0;
+      const hasDisplayableText = showVoltages && (hasDisplayableLoad || hasDisplayableProduction || !node.isSource);
       
-      if (nodeDisplayMode === 'proportional') {
-        // MODE PROPORTIONNEL : Taille = 2× nombre de clients (24px par client)
-        const baseSize = 24; // Taille minimale
-        const sizePerClient = 24; // 2× taille d'un client (12px × 2)
-        const calculatedSize = Math.max(baseSize, Math.min(200, baseSize + (linkedClients.length * sizePerClient)));
-        
-        iconSize = [calculatedSize, calculatedSize];
-        anchorPoint = [calculatedSize / 2, calculatedSize / 2];
-        
-        // PAS DE TEXTE en mode proportionnel
-        iconHtml = `<div class="rounded-full border-2 flex items-center justify-center ${iconClass}" style="width: ${calculatedSize}px; height: ${calculatedSize}px; font-size: 0;"></div>`;
-      } else {
-        // MODE NORMAL : Affichage actuel
-        // Déterminer si on affiche du texte (charge/production uniquement si > 0)
-        const hasDisplayableLoad = !node.isSource && totalCharge > 0;
-        const hasDisplayableProduction = !node.isSource && totalPV > 0;
-        const hasDisplayableText = showVoltages && (hasDisplayableLoad || hasDisplayableProduction || !node.isSource);
-        
-        // Taille adaptative : plus grande si du texte est affiché
-        iconSize = hasDisplayableText ? [70, 70] : [56, 56];
-        anchorPoint = hasDisplayableText ? [35, 35] : [28, 28];
-        iconSizeClass = hasDisplayableText ? 'w-[70px] h-[70px]' : 'w-14 h-14';
-        
-        iconHtml = `<div class="${iconSizeClass} rounded-full border-2 flex flex-col items-center justify-center text-xs font-bold ${iconClass} p-1">
+      // Taille adaptative : plus grande si du texte est affiché
+      const iconSize: [number, number] = hasDisplayableText ? [70, 70] : [56, 56];
+      const anchorPoint: [number, number] = hasDisplayableText ? [35, 35] : [28, 28];
+      const iconSizeClass = hasDisplayableText ? 'w-[70px] h-[70px]' : 'w-14 h-14';
+
+      const icon = L.divIcon({
+        className: 'custom-node-marker',
+        html: `<div class="${iconSizeClass} rounded-full border-2 flex flex-col items-center justify-center text-xs font-bold ${iconClass} p-1">
           <div class="text-base">${iconContent}</div>
           ${circuitNumber ? `<div class="text-[9px] bg-black bg-opacity-50 rounded px-1">C${circuitNumber}</div>` : ''}
           ${showVoltages ? `<div class="text-[9px] leading-tight text-center">
@@ -742,12 +724,7 @@ export const MapView = () => {
               }
             })()}
           </div>` : ''}
-        </div>`;
-      }
-
-      const icon = L.divIcon({
-        className: 'custom-node-marker',
-        html: iconHtml,
+        </div>`,
         iconSize: iconSize,
         iconAnchor: anchorPoint
       });

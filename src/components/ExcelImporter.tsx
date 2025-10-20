@@ -102,12 +102,6 @@ export const ExcelImporter = ({ onClose }: ExcelImporterProps) => {
 
     importClientsFromExcel(validClients);
     toast.success(`${validClients.length} clients importés avec succès`);
-    
-    // Déclencher le zoom automatique sur les clients importés
-    setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('zoomToProject'));
-    }, 100);
-    
     onClose();
   };
 

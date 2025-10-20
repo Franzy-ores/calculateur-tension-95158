@@ -201,7 +201,7 @@ export interface Project {
     east: number;
     west: number;
     center: { lat: number; lng: number };
-    zoom: number;
+    zoom?: number;
   };
   // Répartition manuelle des phases (charges et productions)
   manualPhaseDistribution?: {

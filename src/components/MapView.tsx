@@ -96,16 +96,32 @@ export const MapView = () => {
 
     const bounds = event?.detail || currentProject.geographicBounds;
     
-    if (bounds && bounds.center) {
-      // Utiliser les bounds sauvegardés du projet
-      map.setView([bounds.center.lat, bounds.center.lng], bounds.zoom);
+    if (bounds && bounds.north && bounds.south && bounds.east && bounds.west) {
+      // Créer des bounds Leaflet
+      const latLngBounds = L.latLngBounds(
+        [bounds.south, bounds.west], // coin sud-ouest
+        [bounds.north, bounds.east]  // coin nord-est
+      );
+      
+      // Si un zoom est défini dans les bounds (projet sauvegardé), l'utiliser
+      if (bounds.zoom && bounds.center) {
+        map.setView([bounds.center.lat, bounds.center.lng], bounds.zoom);
+      } else {
+        // Sinon, utiliser fitBounds pour un zoom adaptatif (import de clients)
+        map.fitBounds(latLngBounds, {
+          padding: [50, 50], // Marge de 50px
+          maxZoom: 16 // Limiter le zoom maximum
+        });
+      }
     } else if (currentProject.nodes.length > 0) {
       // Fallback : calculer à partir des nœuds
       const latLngBounds = L.latLngBounds(
         currentProject.nodes.map(node => [node.lat, node.lng])
       );
-      const paddedBounds = latLngBounds.pad(0.1);
-      map.fitBounds(paddedBounds);
+      map.fitBounds(latLngBounds, {
+        padding: [50, 50],
+        maxZoom: 16
+      });
     }
   };
 

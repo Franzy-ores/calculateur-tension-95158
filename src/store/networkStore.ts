@@ -778,11 +778,18 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         center: {
           lat: (Math.max(...lats) + Math.min(...lats)) / 2,
           lng: (Math.max(...lngs) + Math.min(...lngs)) / 2
-        },
-        zoom: 14
+        }
       };
       updatedProject.geographicBounds = bounds;
       set({ currentProject: updatedProject });
+      
+      // Déclencher le zoom exactement comme loadProject
+      setTimeout(() => {
+        const event = new CustomEvent('zoomToProject', { 
+          detail: bounds 
+        });
+        window.dispatchEvent(event);
+      }, 100);
     }
   },
 

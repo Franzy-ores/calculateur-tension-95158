@@ -22,7 +22,7 @@ export const parseExcelToClients = (file: File): Promise<ClientImporte[]> => {
           
           return {
             id: `client-import-${Date.now()}-${index}`,
-            identifiantCircuit: String(row['Identifiant circuit'] || ''),
+            identifiantCircuit: String(row['Identifiant circuit (Circuit)'] || ''),
             nomCircuit: String(row['Nom (Circuit)'] || ''),
             lat: parseFloat(row['E_CLIENT.N_WGS84_Y']) || 0,
             lng: parseFloat(row['E_CLIENT.N_WGS84_X']) || 0,

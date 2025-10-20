@@ -89,7 +89,7 @@ export const Toolbar = () => {
         title={showClientTensionLabels ? "Masquer tensions clients" : "Afficher tensions clients (Min/Max)"}
         className="w-12 h-12 mb-2"
       >
-        <span className="text-lg">{showClientTensionLabels ? '⚡' : '📊'}</span>
+        <span className="text-lg">{showClientTensionLabels ? '⚡' : '🔢'}</span>
       </Button>
       
       <div className="w-full h-px bg-border mb-1" />

@@ -124,11 +124,13 @@ export const MapView = () => {
       zoomControl: true,
       attributionControl: true,
       preferCanvas: true, // CRUCIAL: Force le rendu Canvas pour tous les éléments vectoriels
+      maxZoom: 22,
     });
 
     const initialTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors',
-      maxZoom: 18,
+      maxNativeZoom: 18,
+      maxZoom: 22,
       minZoom: 3,
     }).addTo(map);
 
@@ -201,13 +203,15 @@ export const MapView = () => {
     if (newType === 'osm') {
       tileLayerRef.current = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
-        maxZoom: 18,
+        maxNativeZoom: 18,
+        maxZoom: 22,
         minZoom: 3,
       }).addTo(map);
     } else {
       tileLayerRef.current = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         attribution: '© Esri, Maxar, Earthstar Geographics, and the GIS User Community',
-        maxZoom: 18,
+        maxNativeZoom: 18,
+        maxZoom: 22,
         minZoom: 3,
       }).addTo(map);
     }

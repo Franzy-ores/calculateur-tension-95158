@@ -163,14 +163,22 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
           highlightCircleRef.current = null;
         }
         
-        // Vérifier si on a lâché sur un nœud
-        const droppedOnNode = nodes.find(node => {
-          const distance = map.distance(
-            [node.lat, node.lng],
-            [dropLatLng.lat, dropLatLng.lng]
-          );
-          return distance < 30;
-        });
+        // Vérifier si on a lâché sur un nœud (trouver le plus proche)
+        const closestNodeAtDrop = nodes.reduce<{ node: Node | null; distance: number }>(
+          (closest, node) => {
+            const distance = map.distance(
+              [node.lat, node.lng],
+              [dropLatLng.lat, dropLatLng.lng]
+            );
+            if (distance < 30 && distance < closest.distance) {
+              return { node, distance };
+            }
+            return closest;
+          },
+          { node: null, distance: Infinity }
+        );
+        
+        const droppedOnNode = closestNodeAtDrop.node;
         
         if (droppedOnNode && onClientDragToNode) {
           onClientDragToNode(client.id, droppedOnNode.id);

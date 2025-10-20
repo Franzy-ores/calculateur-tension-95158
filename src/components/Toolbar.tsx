@@ -13,6 +13,8 @@ export const Toolbar = () => {
     toggleFocusMode,
     showClientTensionLabels,
     toggleClientTensionLabels,
+    nodeDisplayMode,
+    toggleNodeDisplayMode,
   } = useNetworkStore();
 
   const handleCalculate = () => {
@@ -90,6 +92,16 @@ export const Toolbar = () => {
         className="w-12 h-12 mb-2"
       >
         <span className="text-lg">{showClientTensionLabels ? '⚡' : '📊'}</span>
+      </Button>
+      
+      <Button
+        variant={nodeDisplayMode === 'reduced' ? "default" : "outline"}
+        size="icon"
+        onClick={toggleNodeDisplayMode}
+        title={nodeDisplayMode === 'reduced' ? "Mode normal" : "Mode réduit (24px sans texte)"}
+        className="w-12 h-12 mb-2"
+      >
+        <span className="text-lg">{nodeDisplayMode === 'reduced' ? '🔍' : '📌'}</span>
       </Button>
       
       <div className="w-full h-px bg-border mb-1" />

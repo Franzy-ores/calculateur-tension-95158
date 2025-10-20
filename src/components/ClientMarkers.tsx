@@ -14,9 +14,10 @@ interface ClientMarkersProps {
   onClientDragToNode?: (clientId: string, nodeId: string) => void;
   colorMode: ClientColorMode;
   circuitColorMapping?: Map<string, string>;
+  showTensionLabels?: boolean;
 }
 
-export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId, onClientClick, onClientDragToNode, colorMode, circuitColorMapping }: ClientMarkersProps) => {
+export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId, onClientClick, onClientDragToNode, colorMode, circuitColorMapping, showTensionLabels = false }: ClientMarkersProps) => {
   const clientMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   const linkLinesRef = useRef<Map<string, L.Polyline>>(new Map());
   const dragLineRef = useRef<L.Polyline | null>(null);
@@ -74,6 +75,24 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
         autoPan: true,
         zIndexOffset: 1000
       });
+
+      // Ajouter un tooltip permanent avec les tensions si disponibles et si activé
+      if (showTensionLabels && (client.tensionMin_V !== undefined || client.tensionMax_V !== undefined)) {
+        const tooltipContent = `
+          <div style="font-size: 10px; line-height: 1.3; white-space: nowrap;">
+            ${client.tensionMin_V !== undefined ? `<div><strong>Min:</strong> ${client.tensionMin_V.toFixed(1)}V</div>` : ''}
+            ${client.tensionMax_V !== undefined ? `<div><strong>Max:</strong> ${client.tensionMax_V.toFixed(1)}V</div>` : ''}
+          </div>
+        `;
+        
+        marker.bindTooltip(tooltipContent, {
+          permanent: true,
+          direction: 'right',
+          offset: [10, 0],
+          className: 'client-tension-label',
+          opacity: 0.95
+        });
+      }
 
       // Gestion du drag & drop
       let initialPosition: L.LatLng;
@@ -215,7 +234,7 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
       if (dragLineRef.current) map.removeLayer(dragLineRef.current);
       if (highlightCircleRef.current) map.removeLayer(highlightCircleRef.current);
     };
-  }, [map, clients, links, nodes, selectedClientId, onClientClick, onClientDragToNode, colorMode, circuitColorMapping]);
+  }, [map, clients, links, nodes, selectedClientId, onClientClick, onClientDragToNode, colorMode, circuitColorMapping, showTensionLabels]);
 
   return { clientMarkersRef, linkLinesRef };
 };

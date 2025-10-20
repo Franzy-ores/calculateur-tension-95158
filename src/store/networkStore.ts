@@ -79,6 +79,7 @@ interface NetworkStoreState extends NetworkState {
   selectedClientForLinking: string | null;
   clientColorMode: ClientColorMode;
   circuitColorMapping: Map<string, string>;
+  showClientTensionLabels: boolean;
 }
 
 interface NetworkActions {
@@ -145,6 +146,7 @@ interface NetworkActions {
   toggleResultsPanel: () => void;
   toggleResultsPanelFullscreen: () => void;
   toggleFocusMode: () => void;
+  toggleClientTensionLabels: () => void;
   changeVoltageSystem: () => void;
   setFoisonnementCharges: (value: number) => void;
   setFoisonnementProductions: (value: number) => void;
@@ -318,6 +320,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   selectedClientForLinking: null,
   clientColorMode: 'couplage',
   circuitColorMapping: new Map(),
+  showClientTensionLabels: false,
 
   // Actions
   createNewProject: (name, voltageSystem) => {
@@ -1616,6 +1619,10 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   toggleFocusMode: () => set(state => ({ 
     focusMode: !state.focusMode,
     resultsPanelOpen: !state.focusMode ? false : state.resultsPanelOpen
+  })),
+
+  toggleClientTensionLabels: () => set(state => ({ 
+    showClientTensionLabels: !state.showClientTensionLabels 
   })),
 
   setClientColorMode: (mode) => set({ clientColorMode: mode }),

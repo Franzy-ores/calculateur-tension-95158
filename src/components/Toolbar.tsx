@@ -11,6 +11,8 @@ export const Toolbar = () => {
     setSelectedNode,
     focusMode,
     toggleFocusMode,
+    showClientTensionLabels,
+    toggleClientTensionLabels,
   } = useNetworkStore();
 
   const handleCalculate = () => {
@@ -78,6 +80,16 @@ export const Toolbar = () => {
         className="w-12 h-12 mb-2"
       >
         <span className="text-lg">{focusMode ? '↩️' : '🎯'}</span>
+      </Button>
+      
+      <Button
+        variant={showClientTensionLabels ? "default" : "outline"}
+        size="icon"
+        onClick={toggleClientTensionLabels}
+        title={showClientTensionLabels ? "Masquer tensions clients" : "Afficher tensions clients (Min/Max)"}
+        className="w-12 h-12 mb-2"
+      >
+        <span className="text-lg">{showClientTensionLabels ? '⚡' : '📊'}</span>
       </Button>
       
       <div className="w-full h-px bg-border mb-1" />

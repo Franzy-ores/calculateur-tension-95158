@@ -68,6 +68,7 @@ export const MapView = () => {
     clientColorMode,
     circuitColorMapping,
     generateCircuitColorMapping,
+    showClientTensionLabels,
   } = useNetworkStore();
 
   // Récupérer isSimulationActive du store
@@ -187,6 +188,7 @@ export const MapView = () => {
     onClientDragToNode: linkClientToNode,
     colorMode: clientColorMode,
     circuitColorMapping: circuitColorMapping,
+    showTensionLabels: showClientTensionLabels,
   });
 
   // Gérer le changement de type de carte

@@ -174,7 +174,7 @@ export const getClientMarkerColor = (
     case 'tension':
       if (!client.tensionMin_V && !client.tensionMax_V) return '#6b7280';
       const avgTension = ((client.tensionMin_V || 0) + (client.tensionMax_V || 0)) / 2;
-      return avgTension < 300 ? '#22c55e' : '#3b82f6';
+      return avgTension < 300 ? '#06b6d4' : '#d946ef'; // Cyan pour 230V, Magenta pour 400V
     
     default:
       return '#3b82f6';

@@ -45,6 +45,18 @@ export const EditPanel = () => {
   const manualProductionTotal = formData.productions?.reduce((sum: number, p: ProductionPV) => sum + p.S_kVA, 0) || 0;
   const linkedProductionTotal = linkedClients.reduce((sum, c) => sum + c.puissancePV_kVA, 0);
 
+  // Calculer les tensions Min et Max extrêmes parmi les clients liés
+  const extremeTensions = linkedClients.length > 0 ? {
+    minVoltage: linkedClients
+      .filter(c => c.tensionMin_V !== undefined)
+      .reduce((min, c) => c.tensionMin_V! < min ? c.tensionMin_V! : min, Infinity),
+    maxVoltage: linkedClients
+      .filter(c => c.tensionMax_V !== undefined)
+      .reduce((max, c) => c.tensionMax_V! > max ? c.tensionMax_V! : max, -Infinity),
+    hasMinData: linkedClients.some(c => c.tensionMin_V !== undefined),
+    hasMaxData: linkedClients.some(c => c.tensionMax_V !== undefined)
+  } : { minVoltage: undefined, maxVoltage: undefined, hasMinData: false, hasMaxData: false };
+
   // Initialize form data when panel opens
   useEffect(() => {
     if (editPanelOpen) {
@@ -391,6 +403,64 @@ export const EditPanel = () => {
                          </div>
                        </div>
                      </div>
+                   </CardContent>
+                 </Card>
+               )}
+
+               {/* Tensions extrêmes des clients liés */}
+               {linkedClients.length > 0 && (extremeTensions.hasMinData || extremeTensions.hasMaxData) && (
+                 <Card className="bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800">
+                   <CardHeader className="pb-3">
+                     <CardTitle className="text-base flex items-center gap-2">
+                       <Zap className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                       ⚡ Tensions mesurées (clients liés)
+                     </CardTitle>
+                   </CardHeader>
+                   <CardContent className="space-y-2 text-sm">
+                     <div className="text-xs text-muted-foreground mb-2">
+                       Valeurs extrêmes parmi les {linkedClients.length} client(s) lié(s)
+                     </div>
+                     <div className="grid grid-cols-2 gap-4">
+                       {extremeTensions.hasMinData && extremeTensions.minVoltage !== Infinity && (
+                         <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded">
+                           <div className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">
+                             Tension Min
+                           </div>
+                           <div className="text-lg font-bold text-blue-900 dark:text-blue-100">
+                             {extremeTensions.minVoltage.toFixed(1)} V
+                           </div>
+                           <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                             Plus basse mesurée
+                           </div>
+                         </div>
+                       )}
+                       {extremeTensions.hasMaxData && extremeTensions.maxVoltage !== -Infinity && (
+                         <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded">
+                           <div className="text-xs font-medium text-red-700 dark:text-red-300 mb-1">
+                             Tension Max
+                           </div>
+                           <div className="text-lg font-bold text-red-900 dark:text-red-100">
+                             {extremeTensions.maxVoltage.toFixed(1)} V
+                           </div>
+                           <div className="text-xs text-red-600 dark:text-red-400 mt-1">
+                             Plus haute mesurée
+                           </div>
+                         </div>
+                       )}
+                     </div>
+                     
+                     {/* Optionnel : Afficher l'écart de tension */}
+                     {extremeTensions.hasMinData && extremeTensions.hasMaxData && 
+                      extremeTensions.minVoltage !== Infinity && extremeTensions.maxVoltage !== -Infinity && (
+                       <div className="pt-2 border-t mt-2">
+                         <div className="flex justify-between items-center">
+                           <span className="text-xs text-muted-foreground">Écart:</span>
+                           <span className="font-mono font-medium">
+                             {(extremeTensions.maxVoltage - extremeTensions.minVoltage).toFixed(1)} V
+                           </span>
+                         </div>
+                       </div>
+                     )}
                    </CardContent>
                  </Card>
                )}

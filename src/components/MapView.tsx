@@ -646,10 +646,158 @@ export const MapView = () => {
       // Obtenir le numéro de circuit
       const circuitNumber = getNodeCircuit(node.id);
       
+      // MODE RÉDUIT : Tensions désactivées → 24px sans texte ni icône
+      if (!showVoltages) {
+        const icon = L.divIcon({
+          className: 'custom-node-marker',
+          html: `<div class="rounded-full border-2 ${iconClass}" style="width: 24px; height: 24px;"></div>`,
+          iconSize: [24, 24],
+          iconAnchor: [12, 12]
+        });
+
+        const marker = L.marker([node.lat, node.lng], { 
+          icon,
+          draggable: selectedTool === 'move',
+          zIndexOffset: 0
+        })
+          .addTo(map)
+          .bindPopup(node.name);
+
+        // Gestionnaires d'événements complets
+        marker.on('click', (e) => {
+          L.DomEvent.stopPropagation(e);
+          
+          // MODE LIAISON CLIENT: Lier le client sélectionné à ce nœud
+          if (selectedTool === 'linkClient' && selectedClientForLinking) {
+            linkClientToNode(selectedClientForLinking, node.id);
+            setSelectedClient(null);
+            return;
+          }
+          
+          // MODE ROUTAGE ACTIF: Finaliser le tracé sur n'importe quel nœud
+          if (routingActive && routingFromNode) {
+            console.log('=== FINALIZING CABLE ON NODE CLICK ===');
+            console.log('Finalizing from', routingFromNode, 'to', node.id);
+            console.log('Routing points:', routingPointsRef.current);
+            
+            // VÉRIFICATION CRITIQUE : S'assurer qu'on a vraiment des points de routage
+            if (routingPointsRef.current.length === 0) {
+              console.log('ERROR: No routing points found, ignoring finalization');
+              return;
+            }
+            
+            // VÉRIFICATION : Empêcher la création d'un câble duplicate même en finalisation
+            if (cableExistsBetweenNodes(routingFromNode, node.id)) {
+              alert('Un câble existe déjà entre ces deux nœuds !');
+              clearRouting(); // Nettoyer le routage en cours
+              return;
+            }
+            
+            // Créer le tracé complet avec tous les points intermédiaires + point final
+            const finalCoords = [...routingPointsRef.current, { lat: node.lat, lng: node.lng }];
+            console.log('Final cable coordinates:', finalCoords);
+            
+            if (finalCoords.length >= 2) {
+              addCable(routingFromNode, node.id, selectedCableType, finalCoords);
+              clearRouting();
+            }
+            return;
+          }
+          
+          // MODE NORMAL: Sélection et début de tracé
+          if (selectedTool === 'select') {
+            setSelectedNode(node.id);
+            openEditPanel('node');
+          } else if (selectedTool === 'addCable') {
+            console.log('=== ADD CABLE TOOL CLICKED ON NODE ===');
+            console.log('Current selectedNodeId:', selectedNodeId);
+            console.log('Clicked node:', node.id);
+            console.log('routingActive:', routingActive);
+            
+            // Premier clic: sélectionner noeud de départ
+            if (!selectedNodeId) {
+              console.log('Selecting start node:', node.id);
+              setSelectedNode(node.id);
+              return;
+            }
+            
+            // Deuxième clic: démarrer ou terminer le câble
+            if (selectedNodeId !== node.id) {
+              console.log('Second click - start to end cable connection');
+              
+              // VÉRIFICATION : Empêcher la création d'un câble duplicate
+              if (cableExistsBetweenNodes(selectedNodeId, node.id)) {
+                alert('Un câble existe déjà entre ces deux nœuds !');
+                setSelectedNode(null); // Désélectionner
+                return;
+              }
+              
+              const cableType = currentProject?.cableTypes.find(ct => ct.id === selectedCableType);
+              const isUnderground = cableType?.posesPermises.includes('SOUTERRAIN') && !cableType?.posesPermises.includes('AÉRIEN');
+              console.log('Cable type:', cableType?.id, 'isUnderground:', isUnderground);
+              
+              if (isUnderground) {
+                // CÂBLE SOUTERRAIN: Démarrer le mode routage
+                const fromNode = currentProject.nodes.find(n => n.id === selectedNodeId);
+                if (fromNode) {
+                  console.log('=== STARTING UNDERGROUND CABLE ROUTING ===');
+                  console.log('From node:', selectedNodeId, 'To node:', node.id);
+                  
+                  setRoutingFromNode(selectedNodeId);
+                  setRoutingToNode(node.id);
+                  routingPointsRef.current = [{ lat: fromNode.lat, lng: fromNode.lng }];
+                  setRoutingActive(true);
+                  setSelectedNode(null); // Désélectionner pour éviter la confusion
+                  
+                  console.log('Routing activated, click on map to add intermediate points, then click on destination node to finish');
+                }
+              } else {
+                // CÂBLE AÉRIEN: Connexion directe
+                const fromNode = currentProject.nodes.find(n => n.id === selectedNodeId);
+                if (fromNode) {
+                  const coordinates = [
+                    { lat: fromNode.lat, lng: fromNode.lng },
+                    { lat: node.lat, lng: node.lng }
+                  ];
+                  addCable(selectedNodeId, node.id, selectedCableType, coordinates);
+                  setSelectedNode(null);
+                }
+              }
+            } else {
+              console.log('Same node clicked - ignoring');
+            }
+          } else if (selectedTool === 'linkClient' && selectedClientForLinking) {
+            // Mode liaison client : créer la liaison
+            console.log('🔗 Linking client', selectedClientForLinking, 'to node', node.id);
+            linkClientToNode(selectedClientForLinking, node.id);
+            // Le store réinitialise automatiquement selectedClientForLinking et linkingMode
+          } else if (selectedTool === 'edit') {
+            setSelectedNode(node.id);
+            openEditPanel('node');
+          } else if (selectedTool === 'delete') {
+            if (confirm(`Supprimer le nœud "${node.name}" ?`)) {
+              deleteNode(node.id);
+            }
+          } else if (selectedTool === 'move') {
+            setSelectedNode(node.id);
+          }
+        });
+
+        // Gestionnaire pour le drag & drop
+        marker.on('dragend', (e) => {
+          const newLatLng = e.target.getLatLng();
+          moveNode(node.id, newLatLng.lat, newLatLng.lng);
+        });
+
+        markersRef.current.set(node.id, marker);
+        return; // ⚠️ Sortir de l'itération pour ce nœud
+      }
+      
+      // MODE NORMAL : Tensions activées → Affichage complet avec texte
       // Déterminer si on affiche du texte (charge/production uniquement si > 0)
       const hasDisplayableLoad = !node.isSource && totalCharge > 0;
       const hasDisplayableProduction = !node.isSource && totalPV > 0;
-      const hasDisplayableText = showVoltages && (hasDisplayableLoad || hasDisplayableProduction || !node.isSource);
+      const hasDisplayableText = hasDisplayableLoad || hasDisplayableProduction || !node.isSource;
       
       // Taille adaptative : plus grande si du texte est affiché
       const iconSize: [number, number] = hasDisplayableText ? [70, 70] : [56, 56];
@@ -661,7 +809,7 @@ export const MapView = () => {
         html: `<div class="${iconSizeClass} rounded-full border-2 flex flex-col items-center justify-center text-xs font-bold ${iconClass} p-1">
           <div class="text-base">${iconContent}</div>
           ${circuitNumber ? `<div class="text-[9px] bg-black bg-opacity-50 rounded px-1">C${circuitNumber}</div>` : ''}
-          ${showVoltages ? `<div class="text-[9px] leading-tight text-center">
+          <div class="text-[9px] leading-tight text-center">
             ${(() => {
               // Afficher les 3 phases en mode monophasé réparti
               if (currentProject.loadModel === 'monophase_reparti') {
@@ -723,7 +871,7 @@ export const MapView = () => {
                 return displayText;
               }
             })()}
-          </div>` : ''}
+          </div>
         </div>`,
         iconSize: iconSize,
         iconAnchor: anchorPoint

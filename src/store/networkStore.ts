@@ -80,7 +80,7 @@ interface NetworkStoreState extends NetworkState {
   clientColorMode: ClientColorMode;
   circuitColorMapping: Map<string, string>;
   showClientTensionLabels: boolean;
-  nodeDisplayMode: 'normal' | 'reduced';
+  nodeDisplayMode: 'normal' | 'proportional';
 }
 
 interface NetworkActions {
@@ -1629,7 +1629,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   })),
 
   toggleNodeDisplayMode: () => set(state => ({
-    nodeDisplayMode: state.nodeDisplayMode === 'normal' ? 'reduced' : 'normal'
+    nodeDisplayMode: state.nodeDisplayMode === 'normal' ? 'proportional' : 'normal'
   })),
 
   setClientColorMode: (mode) => set({ clientColorMode: mode }),

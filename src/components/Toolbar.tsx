@@ -95,13 +95,13 @@ export const Toolbar = () => {
       </Button>
       
       <Button
-        variant={nodeDisplayMode === 'reduced' ? "default" : "outline"}
+        variant={nodeDisplayMode === 'proportional' ? "default" : "outline"}
         size="icon"
         onClick={toggleNodeDisplayMode}
-        title={nodeDisplayMode === 'reduced' ? "Mode normal" : "Mode réduit (24px sans texte)"}
+        title={nodeDisplayMode === 'proportional' ? "Mode normal" : "Taille proportionnelle aux clients"}
         className="w-12 h-12 mb-2"
       >
-        <span className="text-lg">{nodeDisplayMode === 'reduced' ? '🔍' : '📌'}</span>
+        <span className="text-lg">{nodeDisplayMode === 'proportional' ? '⚖️' : '📏'}</span>
       </Button>
       
       <div className="w-full h-px bg-border mb-1" />

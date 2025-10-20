@@ -647,120 +647,107 @@ export const MapView = () => {
       // Obtenir le numéro de circuit
       const circuitNumber = getNodeCircuit(node.id);
       
-      // Déterminer si on affiche du texte (charge/production uniquement si > 0)
-      const hasDisplayableLoad = !node.isSource && totalCharge > 0;
-      const hasDisplayableProduction = !node.isSource && totalPV > 0;
-      const hasDisplayableText = showVoltages && (hasDisplayableLoad || hasDisplayableProduction || !node.isSource);
+      // Déterminer la taille et le contenu selon le mode d'affichage
+      let iconSize: [number, number];
+      let anchorPoint: [number, number];
+      let iconSizeClass: string;
+      let iconHtml: string;
       
-      // === MODE RÉDUIT : 24px sans texte ===
-      if (nodeDisplayMode === 'reduced') {
-        const icon = L.divIcon({
-          className: 'custom-node-marker',
-          html: `<div class="rounded-full border-2 ${iconClass}" style="width: 24px; height: 24px;"></div>`,
-          iconSize: [24, 24],
-          iconAnchor: [12, 12]
-        });
-
-        const marker = L.marker([node.lat, node.lng], { 
-          icon,
-          draggable: selectedTool === 'move',
-          zIndexOffset: 0
-        })
-          .addTo(map)
-          .bindPopup(node.name);
-
-        // Gestion du clic
-        marker.on('click', () => {
-          console.log('Node clicked:', node.id);
-          
-          if (selectedClientForLinking) {
-            linkClientToNode(selectedClientForLinking, node.id);
-            setSelectedClientForLinking(null);
-            return;
-          }
-          
-          if (selectedTool === 'select') {
-            setSelectedNode(node.id);
-          } else if (selectedTool === 'delete') {
-            deleteNode(node.id);
-          } else if (selectedTool === 'edit') {
-            setSelectedNode(node.id);
-            openEditPanel('node');
-          } else if (selectedTool === 'addCable') {
-            console.log('=== CABLE ROUTING: Node clicked in addCable mode ===');
-            console.log('Current routing state:', {
-              routingActive,
-              routingFromNode,
-              routingToNode
-            });
-            
-            if (!routingActive) {
-              console.log('Starting new routing from node:', node.id);
-              setRoutingActive(true);
-              setRoutingFromNode(node.id);
-              setSelectedNode(node.id);
-            } else if (routingFromNode === node.id) {
-              console.log('Clicked same node - cancelling routing');
-              clearRouting();
-            } else if (!routingToNode) {
-              console.log('Setting destination node:', node.id);
-              setRoutingToNode(node.id);
-              
-              if (routingPointsRef.current.length > 0) {
-                const coordinates = [
-                  currentProject.nodes.find(n => n.id === routingFromNode)!,
-                  ...routingPointsRef.current.map((p, i) => ({ 
-                    id: `temp-${i}`,
-                    name: `Point ${i+1}`,
-                    lat: p.lat,
-                    lng: p.lng,
-                    connectionType: 'TÉTRA_3P+N_230_400V' as const,
-                    clients: [],
-                    productions: [],
-                    isSource: false
-                  })),
-                  node
-                ].map(n => ({ lat: n.lat, lng: n.lng }));
-                
-                addCable(routingFromNode, node.id, selectedCableType, coordinates);
-              } else {
-                addCable(routingFromNode, node.id, selectedCableType, [
-                  { lat: currentProject.nodes.find(n => n.id === routingFromNode)!.lat, 
-                    lng: currentProject.nodes.find(n => n.id === routingFromNode)!.lng },
-                  { lat: node.lat, lng: node.lng }
-                ]);
-              }
-              
-              clearRouting();
-            }
-          }
-        });
-
-        // Gestion du drag
-        marker.on('dragend', (e) => {
-          const newPos = (e.target as L.Marker).getLatLng();
-          moveNode(node.id, newPos.lat, newPos.lng);
-        });
-
-        markersRef.current.set(node.id, marker);
-        return; // ⚠️ IMPORTANT : sortir de la boucle pour ce nœud
-      }
-      
-      // === MODE NORMAL : Affichage actuel ===
-      // Taille adaptative : plus grande si du texte est affiché
-      const iconSize: [number, number] = hasDisplayableText ? [70, 70] : [56, 56];
-      const anchorPoint: [number, number] = hasDisplayableText ? [35, 35] : [28, 28];
-      const iconSizeClass = hasDisplayableText ? 'w-[70px] h-[70px]' : 'w-14 h-14';
-
-      const icon = L.divIcon({
-        className: 'custom-node-marker',
-        html: `<div class="${iconSizeClass} rounded-full border-2 flex flex-col items-center justify-center text-xs font-bold ${iconClass} p-1">
+      if (nodeDisplayMode === 'proportional') {
+        // MODE PROPORTIONNEL : Taille = 2× nombre de clients (24px par client)
+        const baseSize = 24; // Taille minimale
+        const sizePerClient = 24; // 2× taille d'un client (12px × 2)
+        const calculatedSize = Math.max(baseSize, Math.min(200, baseSize + (linkedClients.length * sizePerClient)));
+        
+        iconSize = [calculatedSize, calculatedSize];
+        anchorPoint = [calculatedSize / 2, calculatedSize / 2];
+        
+        // PAS DE TEXTE en mode proportionnel
+        iconHtml = `<div class="rounded-full border-2 flex items-center justify-center ${iconClass}" style="width: ${calculatedSize}px; height: ${calculatedSize}px; font-size: 0;"></div>`;
+      } else {
+        // MODE NORMAL : Affichage actuel
+        // Déterminer si on affiche du texte (charge/production uniquement si > 0)
+        const hasDisplayableLoad = !node.isSource && totalCharge > 0;
+        const hasDisplayableProduction = !node.isSource && totalPV > 0;
+        const hasDisplayableText = showVoltages && (hasDisplayableLoad || hasDisplayableProduction || !node.isSource);
+        
+        // Taille adaptative : plus grande si du texte est affiché
+        iconSize = hasDisplayableText ? [70, 70] : [56, 56];
+        anchorPoint = hasDisplayableText ? [35, 35] : [28, 28];
+        iconSizeClass = hasDisplayableText ? 'w-[70px] h-[70px]' : 'w-14 h-14';
+        
+        iconHtml = `<div class="${iconSizeClass} rounded-full border-2 flex flex-col items-center justify-center text-xs font-bold ${iconClass} p-1">
           <div class="text-base">${iconContent}</div>
           ${circuitNumber ? `<div class="text-[9px] bg-black bg-opacity-50 rounded px-1">C${circuitNumber}</div>` : ''}
           ${showVoltages ? `<div class="text-[9px] leading-tight text-center">
-...
+            ${(() => {
+              // Afficher les 3 phases en mode monophasé réparti
+              if (currentProject.loadModel === 'monophase_reparti') {
+                const results = resultsToUse[selectedScenario];
+                const phaseMetrics = results?.nodeMetricsPerPhase?.find(n => n.nodeId === node.id);
+                
+                const isUsingSimulation = (simulationMode && activeEquipmentCount > 0);
+                
+                console.log('🐛 Phase voltages for node', node.id, {
+                  simulationMode,
+                  activeEquipmentCount,
+                  usingSimulation: isUsingSimulation,
+                  hasPhaseMetrics: !!phaseMetrics,
+                  voltages: phaseMetrics?.voltagesPerPhase
+                });
+                
+                // Comparaison spéciale pour le nœud compensateur
+                if (node.id === 'node-1756199772381') {
+                  const calcResults = calculationResults[selectedScenario];
+                  const simResults = simulationResults[selectedScenario];
+                  const calcMetrics = calcResults?.nodeMetricsPerPhase?.find(n => n.nodeId === node.id);
+                  const simMetrics = simResults?.nodeMetricsPerPhase?.find(n => n.nodeId === node.id);
+                  
+                  console.log('🔍 COMPENSATEUR COMPARISON:', {
+                    nodeId: node.id,
+                    calculation: calcMetrics?.voltagesPerPhase,
+                    simulation: simMetrics?.voltagesPerPhase,
+                    difference: {
+                      A: simMetrics?.voltagesPerPhase.A - calcMetrics?.voltagesPerPhase.A,
+                      B: simMetrics?.voltagesPerPhase.B - calcMetrics?.voltagesPerPhase.B,
+                      C: simMetrics?.voltagesPerPhase.C - calcMetrics?.voltagesPerPhase.C
+                    }
+                  });
+                }
+                
+                if (phaseMetrics) {
+                  const vA = phaseMetrics.voltagesPerPhase.A.toFixed(1);
+                  const vB = phaseMetrics.voltagesPerPhase.B.toFixed(1);
+                  const vC = phaseMetrics.voltagesPerPhase.C.toFixed(1);
+                  return `<span class="text-black">A:${vA}V</span><br><span class="text-black">B:${vB}V</span><br><span class="text-black">C:${vC}V</span>`;
+                } else {
+                  return `A:${nodeVoltage.toFixed(0)}V<br>B:${nodeVoltage.toFixed(0)}V<br>C:${nodeVoltage.toFixed(0)}V`;
+                }
+              } else {
+                // Mode normal : afficher une seule tension
+                let displayText = `${nodeVoltage.toFixed(0)}V`;
+                if (hasDisplayableLoad) {
+                  displayText += `<br>${(totalCharge * (currentProject.foisonnementCharges / 100)).toFixed(1)}kVA`;
+                }
+                if (hasDisplayableProduction) {
+                  displayText += `<br>PV: ${(totalPV * (currentProject.foisonnementProductions / 100)).toFixed(1)}kVA`;
+                }
+                // Ajouter l'indicateur de conformité (± % signé)
+                if (!node.isSource && nominalDropPercent !== 0) {
+                  const sign = nominalDropPercent >= 0 ? '+' : '';
+                  const colorClass = isOutOfCompliance ? 'text-red-500' : (Math.abs(nominalDropPercent) > 5 ? 'text-yellow-500' : 'text-green-500');
+                  displayText += `<br><span class="${colorClass}">${sign}${nominalDropPercent.toFixed(1)}%</span>`;
+                }
+                return displayText;
+              }
+            })()}
           </div>` : ''}
-        </div>`,
+        </div>`;
+      }
+
+      const icon = L.divIcon({
+        className: 'custom-node-marker',
+        html: iconHtml,
         iconSize: iconSize,
         iconAnchor: anchorPoint
       });

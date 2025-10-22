@@ -139,7 +139,7 @@ describe('EQUI8 - Modèle phasoriel correct', () => {
     );
 
     // Calcul AVEC EQUI8
-    const resultWithEQUI8 = calculator.runSimulation(
+    const resultWithEQUI8 = calculator.calculateWithSimulation(
       project,
       'PRÉLÈVEMENT',
       { srg2Devices: [], neutralCompensators: [compensator], cableUpgrades: [] }
@@ -290,7 +290,7 @@ describe('EQUI8 - Modèle phasoriel correct', () => {
       'PRÉLÈVEMENT'
     );
 
-    const resultAfter = calculator.runSimulation(
+    const resultAfter = calculator.calculateWithSimulation(
       project,
       'PRÉLÈVEMENT',
       { srg2Devices: [], neutralCompensators: [compensator], cableUpgrades: [] }
@@ -423,7 +423,7 @@ describe('EQUI8 - Modèle phasoriel correct', () => {
       name: 'Circuit B - Bout',
       lat: 0.003,
       lng: -0.001,
-      connectionType: 'TÉRA_3P+N_230_400V',
+      connectionType: 'TÉTRA_3P+N_230_400V',
       clients: [],
       productions: []
     };
@@ -478,7 +478,7 @@ describe('EQUI8 - Modèle phasoriel correct', () => {
       'PRÉLÈVEMENT'
     );
 
-    const resultWith = calculator.runSimulation(
+    const resultWith = calculator.calculateWithSimulation(
       project,
       'PRÉLÈVEMENT',
       { srg2Devices: [], neutralCompensators: [compensatorA], cableUpgrades: [] }

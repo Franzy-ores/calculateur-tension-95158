@@ -14,7 +14,7 @@ import {
 } from '@/types/network';
 import { SRG2Config, SRG2SimulationResult, SRG2SwitchState, DEFAULT_SRG2_400_CONFIG, DEFAULT_SRG2_230_CONFIG } from '@/types/srg2';
 import { ElectricalCalculator } from '@/utils/electricalCalculations';
-import { Complex, C, add, sub, mul, div, abs, fromPolar, scale, normalize } from '@/utils/complex';
+import { Complex, C, add, sub, mul, div, abs, fromPolar, scale, normalize, arg } from '@/utils/complex';
 import { getCircuitNodes } from '@/utils/networkConnectivity';
 
 export class SimulationCalculator extends ElectricalCalculator {
@@ -999,11 +999,21 @@ export class SimulationCalculator extends ElectricalCalculator {
     console.log(`📍 [EQUI8] Circuit ${compensator.nodeId}: ${circuitNodes.size} nœuds identifiés`);
     console.log(`📍 [EQUI8] Nœuds en aval dans le circuit: ${downstreamNodes.length}`);
     
-    // Répartition du courant compensateur par phase (approximation homopolaire: I_comp / 3)
-    // L'EQUI8 compense la composante homopolaire, donc effet identique sur les 3 phases
-    const I_phase_comp = div(I_comp_injected, C(3, 0));
+    // Répartition du courant compensateur par phase avec déphasages triphasés corrects
+    // L'EQUI8 compense la composante homopolaire : même magnitude sur chaque phase
+    // mais avec les déphasages respectifs: A=0°, B=-120°, C=+120°
+    const I_comp_mag = abs(I_comp_injected) / 3;
+    const I_comp_phase = arg(I_comp_injected); // Phase du courant de compensation
     
-    console.log(`⚡ [EQUI8] I_phase_comp = ${I_phase_comp.re.toFixed(2)}+j${I_phase_comp.im.toFixed(2)} A par phase`);
+    // Courants de compensation par phase (triphasé équilibré)
+    const I_comp_A = fromPolar(I_comp_mag, I_comp_phase);
+    const I_comp_B = fromPolar(I_comp_mag, I_comp_phase - (2 * Math.PI / 3)); // -120°
+    const I_comp_C = fromPolar(I_comp_mag, I_comp_phase + (2 * Math.PI / 3)); // +120°
+    
+    console.log(`⚡ [EQUI8] Courants de compensation par phase (triphasé):`);
+    console.log(`   I_comp_A = ${I_comp_A.re.toFixed(2)}+j${I_comp_A.im.toFixed(2)} A (∠${(I_comp_phase * 180 / Math.PI).toFixed(1)}°)`);
+    console.log(`   I_comp_B = ${I_comp_B.re.toFixed(2)}+j${I_comp_B.im.toFixed(2)} A (∠${((I_comp_phase - 2*Math.PI/3) * 180 / Math.PI).toFixed(1)}°)`);
+    console.log(`   I_comp_C = ${I_comp_C.re.toFixed(2)}+j${I_comp_C.im.toFixed(2)} A (∠${((I_comp_phase + 2*Math.PI/3) * 180 / Math.PI).toFixed(1)}°)`);
     
     // Pour chaque nœud en aval, calculer la chute de tension due à la compensation
     for (const downstreamNodeId of downstreamNodes) {
@@ -1034,33 +1044,45 @@ export class SimulationCalculator extends ElectricalCalculator {
         Z_path_phase = add(Z_path_phase, Z_segment);
       }
       
-      // Calculer les chutes de tension par phase (phasors)
-      // ΔV_ph = Z_path_phase × I_phase_comp
-      const dV_A = mul(Z_path_phase, I_phase_comp);
-      const dV_B = mul(Z_path_phase, I_phase_comp);
-      const dV_C = mul(Z_path_phase, I_phase_comp);
+      // Calculer les chutes de tension par phase avec les courants triphasés
+      // ΔV_ph = Z_path_phase × I_comp_ph (courant de compensation par phase)
+      const dV_A = mul(Z_path_phase, I_comp_A);
+      const dV_B = mul(Z_path_phase, I_comp_B);
+      const dV_C = mul(Z_path_phase, I_comp_C);
       
       // Magnitudes des chutes de tension (pour affichage et mise à jour)
       const dV_A_mag = abs(dV_A);
       const dV_B_mag = abs(dV_B);
       const dV_C_mag = abs(dV_C);
       
-      // Appliquer la chute de tension à chaque phase
-      // L'EQUI8 absorbe du courant réactif, ce qui diminue la tension en aval
+      // Récupérer la tension au nœud compensateur (déjà corrigée par applyEQUI8Compensation)
+      const compensatorMetrics = result.nodeMetricsPerPhase.find(nm => nm.nodeId === compensator.nodeId);
+      
       const oldVoltages = { ...nodeMetrics.voltagesPerPhase };
       
-      // Signe: si I_comp_injected est négatif (absorption), diminution de tension
-      // On applique la magnitude de la chute
-      nodeMetrics.voltagesPerPhase.A -= dV_A_mag;
-      nodeMetrics.voltagesPerPhase.B -= dV_B_mag;
-      nodeMetrics.voltagesPerPhase.C -= dV_C_mag;
+      if (compensatorMetrics) {
+        // Recalculer les tensions en aval depuis la tension du compensateur
+        // V_aval = V_compensateur - ΔV_chemin
+        // L'EQUI8 injecte un courant qui s'oppose à la composante homopolaire
+        // Le signe de la chute dépend du sens du courant de compensation
+        nodeMetrics.voltagesPerPhase.A = compensatorMetrics.voltagesPerPhase.A - dV_A_mag;
+        nodeMetrics.voltagesPerPhase.B = compensatorMetrics.voltagesPerPhase.B - dV_B_mag;
+        nodeMetrics.voltagesPerPhase.C = compensatorMetrics.voltagesPerPhase.C - dV_C_mag;
+      } else {
+        // Fallback: simple soustraction (cas où compensateur non trouvé)
+        nodeMetrics.voltagesPerPhase.A -= dV_A_mag;
+        nodeMetrics.voltagesPerPhase.B -= dV_B_mag;
+        nodeMetrics.voltagesPerPhase.C -= dV_C_mag;
+      }
       
       console.log(`  📉 [EQUI8] Nœud ${downstreamNodeId}:`);
       console.log(`     Z_path = ${Z_path_phase.re.toFixed(4)}+j${Z_path_phase.im.toFixed(4)} Ω`);
       console.log(`     dV_A = ${dV_A.re.toFixed(2)}+j${dV_A.im.toFixed(2)} V (|dV| = ${dV_A_mag.toFixed(2)}V)`);
-      console.log(`     A: ${oldVoltages.A.toFixed(1)}V -> ${nodeMetrics.voltagesPerPhase.A.toFixed(1)}V`);
-      console.log(`     B: ${oldVoltages.B.toFixed(1)}V -> ${nodeMetrics.voltagesPerPhase.B.toFixed(1)}V`);
-      console.log(`     C: ${oldVoltages.C.toFixed(1)}V -> ${nodeMetrics.voltagesPerPhase.C.toFixed(1)}V`);
+      console.log(`     dV_B = ${dV_B.re.toFixed(2)}+j${dV_B.im.toFixed(2)} V (|dV| = ${dV_B_mag.toFixed(2)}V)`);
+      console.log(`     dV_C = ${dV_C.re.toFixed(2)}+j${dV_C.im.toFixed(2)} V (|dV| = ${dV_C_mag.toFixed(2)}V)`);
+      console.log(`     A: ${oldVoltages.A.toFixed(1)}V -> ${nodeMetrics.voltagesPerPhase.A.toFixed(1)}V (Δ=${(nodeMetrics.voltagesPerPhase.A - oldVoltages.A).toFixed(2)}V)`);
+      console.log(`     B: ${oldVoltages.B.toFixed(1)}V -> ${nodeMetrics.voltagesPerPhase.B.toFixed(1)}V (Δ=${(nodeMetrics.voltagesPerPhase.B - oldVoltages.B).toFixed(2)}V)`);
+      console.log(`     C: ${oldVoltages.C.toFixed(1)}V -> ${nodeMetrics.voltagesPerPhase.C.toFixed(1)}V (Δ=${(nodeMetrics.voltagesPerPhase.C - oldVoltages.C).toFixed(2)}V)`);
       
       // Recalculer la conformité par phase
       const sourceVoltage = 230; // Tension nominale de référence

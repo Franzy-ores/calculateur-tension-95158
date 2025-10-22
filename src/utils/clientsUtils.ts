@@ -16,9 +16,8 @@ export const parseExcelToClients = (file: File): Promise<ClientImporte[]> => {
         const jsonData = XLSX.utils.sheet_to_json(firstSheet);
         
         const clients: ClientImporte[] = jsonData.map((row: any, index: number) => {
-          // Parser le couplage
-          const couplageStr = String(row['Couplage'] || '').toUpperCase();
-          const couplage = couplageStr.startsWith('TRI') ? 'TRI' : 'MONO';
+          // Prendre la valeur brute du couplage sans interprétation
+          const couplage = String(row['Couplage'] || '').trim();
           
           return {
             id: `client-import-${Date.now()}-${index}`,
@@ -168,7 +167,15 @@ export const getClientMarkerColor = (
 ): string => {
   switch (mode) {
     case 'couplage':
-      return client.couplage === 'TRI' ? '#3b82f6' : '#f97316';
+      // Interpréter les valeurs brutes pour la coloration
+      const couplageUpper = client.couplage.toUpperCase();
+      const isTriphasé = (
+        couplageUpper.includes('TRI') || 
+        couplageUpper.includes('TETRA') || 
+        couplageUpper.includes('TÉTRA') ||
+        couplageUpper.includes('3P')
+      );
+      return isTriphasé ? '#3b82f6' : '#f97316';
     
     case 'circuit':
       // Utiliser le mapping si disponible, sinon couleur par défaut

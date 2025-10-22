@@ -14,7 +14,7 @@ export type CalculationScenario = "PRÉLÈVEMENT" | "MIXTE" | "PRODUCTION" | "FO
 
 export type LoadModel = 'monophase_reparti' | 'polyphase_equilibre';
 
-export type ClientCouplage = "TRI" | "MONO";
+export type ClientCouplage = string; // Valeur brute du champ "Couplage" depuis Excel
 
 // Import du type SRG2Config
 import { SRG2Config } from './srg2';

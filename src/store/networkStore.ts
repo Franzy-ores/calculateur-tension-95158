@@ -423,7 +423,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         PRODUCTION: null,
         FORCÉ: null
       },
-      simulationEquipment: {
+      simulationEquipment: project.simulationEquipment || {
         srg2Devices: [],
         neutralCompensators: [],
         cableUpgrades: []

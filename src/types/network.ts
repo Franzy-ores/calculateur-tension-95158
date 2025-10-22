@@ -217,6 +217,8 @@ export interface Project {
   clientLinks?: ClientLink[];
   // Option pour ajouter des nœuds vierges par défaut
   addEmptyNodeByDefault?: boolean;
+  // Équipements de simulation (SRG2 et EQUI8)
+  simulationEquipment?: SimulationEquipment;
 }
 
 

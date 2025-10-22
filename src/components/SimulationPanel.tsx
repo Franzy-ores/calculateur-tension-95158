@@ -61,7 +61,6 @@ export const SimulationPanel = () => {
             </div>
             <div className="flex items-center gap-2">
               <Switch checked={compensator.enabled} onCheckedChange={enabled => {
-              if (!eligible) return;
               updateNeutralCompensator(compensator.id, {
                 enabled
               });
@@ -70,7 +69,7 @@ export const SimulationPanel = () => {
                 console.log('🔄 Auto-triggering simulation after compensator activation');
                 setTimeout(() => runSimulation(), 100);
               }
-            }} disabled={!eligible} />
+            }} />
               <Button variant="ghost" size="sm" onClick={() => removeNeutralCompensator(compensator.id)}>
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -114,7 +113,7 @@ export const SimulationPanel = () => {
               <Label className="text-xs">Puissance max (kVA)</Label>
               <Input type="number" value={compensator.maxPower_kVA} onChange={e => updateNeutralCompensator(compensator.id, {
               maxPower_kVA: Number(e.target.value)
-            })} className="h-8" disabled={!eligible} />
+            })} className="h-8" />
             </div>
             <div>
               <Label className="text-xs">Seuil I_N (A)</Label>
@@ -129,14 +128,14 @@ export const SimulationPanel = () => {
               <Label className="text-xs">Zph - Phase (Ω)</Label>
               <Input type="number" step="0.01" value={compensator.Zph_Ohm ?? 0.5} onChange={e => updateNeutralCompensator(compensator.id, {
               Zph_Ohm: Number(e.target.value)
-            })} className="h-8" disabled={!eligible} />
+            })} className="h-8" />
               {compensator.Zph_Ohm < 0.15 && <p className="text-xs text-yellow-500 mt-1">⚠️ Doit être &gt; 0,15 Ω</p>}
             </div>
             <div>
               <Label className="text-xs">Zn - Neutre (Ω)</Label>
               <Input type="number" step="0.01" value={compensator.Zn_Ohm ?? 0.2} onChange={e => updateNeutralCompensator(compensator.id, {
               Zn_Ohm: Number(e.target.value)
-            })} className="h-8" disabled={!eligible} />
+            })} className="h-8" />
               {compensator.Zn_Ohm < 0.15 && <p className="text-xs text-yellow-500 mt-1">⚠️ Doit être &gt; 0,15 Ω</p>}
             </div>
           </div>

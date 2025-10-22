@@ -954,7 +954,14 @@ export class SimulationCalculator extends ElectricalCalculator {
   ): void {
     if (!result.nodeMetricsPerPhase) return;
 
-    console.log(`🔄 Recalcul des tensions en aval du compensateur ${compensator.nodeId}`);
+    // Vérifier que le compensateur est sur un circuit identifiable
+    const circuitId = this.identifyCircuitOfNode(project, compensator.nodeId);
+    if (!circuitId) {
+      console.warn(`⚠️ EQUI8 sur ${compensator.nodeId}: impossible d'identifier le circuit - pas de propagation`);
+      return;
+    }
+    
+    console.log(`🔄 Recalcul tensions en aval compensateur ${compensator.nodeId} (Circuit: ${circuitId})`);
 
     // Le compensateur absorbe du courant pour équilibrer les phases
     // Ce courant absorbé crée une chute de tension supplémentaire en aval
@@ -1021,7 +1028,50 @@ export class SimulationCalculator extends ElectricalCalculator {
   }
 
   /**
-   * Trouve tous les nœuds en aval d'un nœud donné
+   * Identifie le circuit auquel appartient un nœud
+   * Retourne l'ID du câble principal (premier câble depuis la source)
+   */
+  private identifyCircuitOfNode(project: Project, nodeId: string): string | null {
+    const sourceNode = project.nodes.find(n => n.isSource);
+    if (!sourceNode) return null;
+    
+    // Si c'est la source elle-même, pas de circuit unique
+    if (nodeId === sourceNode.id) {
+      console.warn(`⚠️ Nœud ${nodeId} est la source - pas de circuit unique`);
+      return null;
+    }
+    
+    // Trouver le chemin depuis la source jusqu'au nœud
+    const visited = new Set<string>();
+    const queue: Array<{ nodeId: string; firstCableId: string | null }> = [
+      { nodeId: sourceNode.id, firstCableId: null }
+    ];
+    
+    while (queue.length > 0) {
+      const { nodeId: currentId, firstCableId } = queue.shift()!;
+      
+      if (currentId === nodeId) {
+        return firstCableId; // Le premier câble du chemin = circuit
+      }
+      
+      if (visited.has(currentId)) continue;
+      visited.add(currentId);
+      
+      // Suivre uniquement le sens source → charge (nodeA → nodeB)
+      const outgoingCables = project.cables.filter(c => c.nodeAId === currentId);
+      
+      for (const cable of outgoingCables) {
+        const circuitId = firstCableId || cable.id; // Premier câble = ID circuit
+        queue.push({ nodeId: cable.nodeBId, firstCableId: circuitId });
+      }
+    }
+    
+    console.warn(`⚠️ Impossible de trouver le circuit pour le nœud ${nodeId}`);
+    return null;
+  }
+
+  /**
+   * Trouve tous les nœuds en aval d'un nœud donné DANS LE MÊME CIRCUIT
    */
   private findDownstreamNodes(project: Project, startNodeId: string): string[] {
     const downstream: string[] = [];
@@ -1029,26 +1079,43 @@ export class SimulationCalculator extends ElectricalCalculator {
     const queue: string[] = [startNodeId];
     visited.add(startNodeId);
     
+    // Identifier le circuit de départ
+    const targetCircuitId = this.identifyCircuitOfNode(project, startNodeId);
+    
+    if (!targetCircuitId) {
+      console.warn(`⚠️ Impossible d'identifier le circuit pour ${startNodeId} - pas de propagation`);
+      return [];
+    }
+    
+    console.log(`🔍 Recherche nœuds en aval de ${startNodeId} (Circuit: ${targetCircuitId})`);
+    
     while (queue.length > 0) {
       const currentId = queue.shift()!;
       
-      // Trouver les câbles partant de ce nœud
-      const outgoingCables = project.cables.filter(
-        c => c.nodeAId === currentId || c.nodeBId === currentId
-      );
+      // Ne suivre QUE les câbles où le nœud actuel est nodeA (sens A→B)
+      const outgoingCables = project.cables.filter(c => c.nodeAId === currentId);
       
       for (const cable of outgoingCables) {
-        const nextNodeId = cable.nodeAId === currentId ? cable.nodeBId : cable.nodeAId;
+        const nextNodeId = cable.nodeBId;
         
-        // Éviter de remonter vers la source (vérifier si le nœud suivant est plus proche de la source)
+        // Vérifier que le nœud suivant appartient au même circuit
+        const nextCircuitId = this.identifyCircuitOfNode(project, nextNodeId);
+        
+        if (nextCircuitId !== targetCircuitId) {
+          console.log(`  ⏭️ Nœud ${nextNodeId} ignoré (circuit différent: ${nextCircuitId})`);
+          continue;
+        }
+        
         if (!visited.has(nextNodeId)) {
           visited.add(nextNodeId);
           downstream.push(nextNodeId);
           queue.push(nextNodeId);
+          console.log(`  ✅ Nœud ${nextNodeId} ajouté (même circuit)`);
         }
       }
     }
     
+    console.log(`🔍 ${downstream.length} nœuds en aval trouvés dans le circuit ${targetCircuitId}`);
     return downstream;
   }
 

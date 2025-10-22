@@ -961,33 +961,59 @@ export class SimulationCalculator extends ElectricalCalculator {
       return;
     }
     
-    console.log(`🔄 Recalcul tensions en aval compensateur ${compensator.nodeId} (Circuit: ${circuitId})`);
+    console.log(`🔄 Recalcul tensions compensateur ${compensator.nodeId} (Circuit: ${circuitId})`);
 
     // Le compensateur absorbe du courant pour équilibrer les phases
-    // Ce courant absorbé crée une chute de tension supplémentaire en aval
+    // Ce courant absorbé modifie les courants de branche et donc les chutes de tension
     const I_absorbed_A = compensator.iN_absorbed_A || 0;
-    
+
     if (I_absorbed_A === 0) {
-      console.log(`⚠️ Compensateur ${compensator.nodeId}: pas de courant absorbé, pas d'effet en aval`);
+      console.log(`⚠️ Compensateur ${compensator.nodeId}: pas de courant absorbé, pas d'effet`);
       return;
     }
-    
-    // Courant absorbé réparti sur les 3 phases (approximation pour calcul de chute de tension)
+
+    // Courant absorbé réparti sur les 3 phases
     const I_absorbed_per_phase = I_absorbed_A / Math.sqrt(3);
-    
-    // Trouver les nœuds en aval du compensateur
-    const downstreamNodes = this.findDownstreamNodes(project, compensator.nodeId);
-    
-    console.log(`📍 Nœuds en aval: ${downstreamNodes.length}`, downstreamNodes);
-    console.log(`⚡ Courant absorbé par compensateur: ${I_absorbed_A.toFixed(1)}A (${I_absorbed_per_phase.toFixed(1)}A par phase)`);
-    
-    // Pour chaque nœud en aval, calculer la chute de tension due à la consommation du compensateur
-    for (const downstreamNodeId of downstreamNodes) {
-      const nodeMetrics = result.nodeMetricsPerPhase.find(nm => nm.nodeId === downstreamNodeId);
+
+    // ✅ NOUVEAU : Trouver les nœuds EN AMONT du compensateur (vers la source)
+    const upstreamNodes = this.findUpstreamNodesInCircuit(project, compensator.nodeId);
+
+    console.log(`📍 Nœuds en amont: ${upstreamNodes.length}`, upstreamNodes);
+    console.log(`⚡ Courant absorbé: ${I_absorbed_A.toFixed(1)}A (${I_absorbed_per_phase.toFixed(1)}A par phase)`);
+
+    // Modifier d'abord la tension du nœud compensateur lui-même
+    const compensatorMetrics = result.nodeMetricsPerPhase?.find(nm => nm.nodeId === compensator.nodeId);
+    if (compensatorMetrics) {
+      const oldVoltages = { ...compensatorMetrics.voltagesPerPhase };
+      
+      // L'effet principal de l'EQUI8 est d'ÉQUILIBRER les tensions entre phases
+      // Calculer la tension moyenne
+      const avgVoltage = (compensatorMetrics.voltagesPerPhase.A + 
+                          compensatorMetrics.voltagesPerPhase.B + 
+                          compensatorMetrics.voltagesPerPhase.C) / 3;
+      
+      // Rapprocher chaque phase de la moyenne (stabilisation)
+      const stabilizationFactor = reductionFraction; // 0 à 1
+      compensatorMetrics.voltagesPerPhase.A = compensatorMetrics.voltagesPerPhase.A + 
+        (avgVoltage - compensatorMetrics.voltagesPerPhase.A) * stabilizationFactor;
+      compensatorMetrics.voltagesPerPhase.B = compensatorMetrics.voltagesPerPhase.B + 
+        (avgVoltage - compensatorMetrics.voltagesPerPhase.B) * stabilizationFactor;
+      compensatorMetrics.voltagesPerPhase.C = compensatorMetrics.voltagesPerPhase.C + 
+        (avgVoltage - compensatorMetrics.voltagesPerPhase.C) * stabilizationFactor;
+      
+      console.log(`  🎯 Nœud compensateur ${compensator.nodeId}:`);
+      console.log(`     A: ${oldVoltages.A.toFixed(1)}V -> ${compensatorMetrics.voltagesPerPhase.A.toFixed(1)}V`);
+      console.log(`     B: ${oldVoltages.B.toFixed(1)}V -> ${compensatorMetrics.voltagesPerPhase.B.toFixed(1)}V`);
+      console.log(`     C: ${oldVoltages.C.toFixed(1)}V -> ${compensatorMetrics.voltagesPerPhase.C.toFixed(1)}V`);
+    }
+
+    // Pour les nœuds en amont, l'effet est plus limité (consommation du compensateur)
+    for (const upstreamNodeId of upstreamNodes) {
+      const nodeMetrics = result.nodeMetricsPerPhase.find(nm => nm.nodeId === upstreamNodeId);
       if (!nodeMetrics) continue;
       
-      // Trouver le chemin de câbles du compensateur au nœud aval
-      const pathCables = this.findCablePath(project, compensator.nodeId, downstreamNodeId);
+      // Trouver le chemin de câbles du nœud amont au compensateur
+      const pathCables = this.findCablePath(project, upstreamNodeId, compensator.nodeId);
       
       // Calculer l'impédance totale du chemin
       let totalResistance = 0;
@@ -1005,17 +1031,26 @@ export class SimulationCalculator extends ElectricalCalculator {
       // Impédance complexe totale
       const Z_total = Math.sqrt(totalResistance * totalResistance + totalReactance * totalReactance);
       
-      // Chute de tension due au courant absorbé par le compensateur
+      // Chute de tension due au courant absorbé par le compensateur en amont
       // ΔU = Z × I (réactif principalement)
-      const voltageDrop = Z_total * I_absorbed_per_phase;
+      const voltageDrop = Z_total * I_absorbed_per_phase * 0.3; // Effet atténué en amont
       
-      // Appliquer la chute de tension à chaque phase (DIMINUTION car consommation)
+      // Appliquer une légère stabilisation également en amont
       const oldVoltages = { ...nodeMetrics.voltagesPerPhase };
-      nodeMetrics.voltagesPerPhase.A -= voltageDrop;
-      nodeMetrics.voltagesPerPhase.B -= voltageDrop;
-      nodeMetrics.voltagesPerPhase.C -= voltageDrop;
+      const avgVoltage = (nodeMetrics.voltagesPerPhase.A + 
+                          nodeMetrics.voltagesPerPhase.B + 
+                          nodeMetrics.voltagesPerPhase.C) / 3;
       
-      console.log(`  📉 Nœud ${downstreamNodeId}: A: ${oldVoltages.A.toFixed(1)}V -> ${nodeMetrics.voltagesPerPhase.A.toFixed(1)}V (-${voltageDrop.toFixed(2)}V)`);
+      // Effet combiné: légère stabilisation + chute de tension
+      const attenuatedStabilization = reductionFraction * 0.5; // Effet réduit en amont
+      nodeMetrics.voltagesPerPhase.A = nodeMetrics.voltagesPerPhase.A + 
+        (avgVoltage - nodeMetrics.voltagesPerPhase.A) * attenuatedStabilization - voltageDrop;
+      nodeMetrics.voltagesPerPhase.B = nodeMetrics.voltagesPerPhase.B + 
+        (avgVoltage - nodeMetrics.voltagesPerPhase.B) * attenuatedStabilization - voltageDrop;
+      nodeMetrics.voltagesPerPhase.C = nodeMetrics.voltagesPerPhase.C + 
+        (avgVoltage - nodeMetrics.voltagesPerPhase.C) * attenuatedStabilization - voltageDrop;
+      
+      console.log(`  📈 Nœud amont ${upstreamNodeId}: A: ${oldVoltages.A.toFixed(1)}V -> ${nodeMetrics.voltagesPerPhase.A.toFixed(1)}V`);
       
       // Recalculer les chutes de tension totales
       const sourceVoltage = 230; // Tension nominale de référence
@@ -1068,6 +1103,61 @@ export class SimulationCalculator extends ElectricalCalculator {
     
     console.warn(`⚠️ Impossible de trouver le circuit pour le nœud ${nodeId}`);
     return null;
+  }
+
+  /**
+   * Trouve tous les nœuds en amont d'un nœud donné DANS LE MÊME CIRCUIT
+   * (du nœud vers la source)
+   */
+  private findUpstreamNodesInCircuit(project: Project, startNodeId: string): string[] {
+    const upstream: string[] = [];
+    const visited = new Set<string>();
+    
+    // Identifier le circuit de départ
+    const targetCircuitId = this.identifyCircuitOfNode(project, startNodeId);
+    
+    if (!targetCircuitId) {
+      console.warn(`⚠️ Impossible d'identifier le circuit pour ${startNodeId} - pas de propagation amont`);
+      return [];
+    }
+    
+    const sourceNode = project.nodes.find(n => n.isSource);
+    if (!sourceNode) return [];
+    
+    console.log(`🔍 Recherche nœuds en amont de ${startNodeId} (Circuit: ${targetCircuitId})`);
+    
+    let currentNodeId: string | null = startNodeId;
+    
+    while (currentNodeId && currentNodeId !== sourceNode.id) {
+      // Trouver le câble parent (où currentNode est nodeB)
+      const parentCable = project.cables.find(c => c.nodeBId === currentNodeId);
+      
+      if (!parentCable) {
+        console.warn(`⚠️ Pas de câble parent pour ${currentNodeId}`);
+        break;
+      }
+      
+      const parentNodeId = parentCable.nodeAId;
+      
+      // Vérifier que le nœud parent appartient au même circuit
+      const parentCircuitId = this.identifyCircuitOfNode(project, parentNodeId);
+      
+      if (parentCircuitId !== targetCircuitId && parentNodeId !== sourceNode.id) {
+        console.log(`  ⏭️ Nœud ${parentNodeId} ignoré (circuit différent: ${parentCircuitId})`);
+        break;
+      }
+      
+      if (!visited.has(parentNodeId)) {
+        visited.add(parentNodeId);
+        upstream.push(parentNodeId);
+        console.log(`  ✅ Nœud ${parentNodeId} ajouté (même circuit)`);
+      }
+      
+      currentNodeId = parentNodeId;
+    }
+    
+    console.log(`🔍 ${upstream.length} nœuds en amont trouvés dans le circuit ${targetCircuitId}`);
+    return upstream;
   }
 
   /**

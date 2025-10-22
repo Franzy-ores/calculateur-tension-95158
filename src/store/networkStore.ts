@@ -1461,13 +1461,34 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       toast.error('Un compensateur de neutre existe déjà sur ce nœud');
       return;
     }
-
+    
+    // Récupérer le nœud concerné
+    const node = currentProject.nodes.find(n => n.id === nodeId);
+    if (!node) {
+      toast.error('Nœud introuvable');
+      return;
+    }
+    
+    // Vérifier les conditions d'éligibilité
+    const is400V = currentProject.voltageSystem === 'TÉTRAPHASÉ_400V';
+    const nodeConnectionType = getNodeConnectionType(
+      currentProject.voltageSystem,
+      currentProject.loadModel || 'polyphase_equilibre',
+      node.isSource
+    );
+    const isMonoPN = nodeConnectionType === 'MONO_230V_PN';
+    const hasDeseq = (currentProject.loadModel ?? 'polyphase_equilibre') === 'monophase_reparti' && 
+                     (currentProject.desequilibrePourcent ?? 0) > 0;
+    
+    const eligible = is400V && isMonoPN && hasDeseq;
+    
+    // Créer le nouveau compensateur
     const newCompensator: NeutralCompensator = {
       id: `compensator-${nodeId}-${Date.now()}`,
       nodeId,
       maxPower_kVA: 30,
       tolerance_A: 5,
-      enabled: true,
+      enabled: eligible, // Actif uniquement si toutes les conditions sont remplies
       Zph_Ohm: 0.5,  // Impédance câble phase (modèle EQUI8)
       Zn_Ohm: 0.2    // Impédance câble neutre (modèle EQUI8)
     };
@@ -1479,7 +1500,22 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       }
     });
     
-    toast.success('Compensateur de neutre ajouté');
+    // Message adapté selon l'éligibilité
+    if (eligible) {
+      toast.success(`Compensateur EQUI8 ajouté sur ${node.name}`);
+    } else {
+      const reasons = [];
+      if (!is400V) reasons.push('Réseau doit être 400V');
+      if (!isMonoPN) reasons.push(`Nœud doit être MONO_230V_PN (actuellement: ${nodeConnectionType})`);
+      if (!hasDeseq) reasons.push('Mode déséquilibré requis avec déséquilibre > 0%');
+      
+      toast.warning(
+        `Compensateur EQUI8 ajouté sur ${node.name} mais inactif`,
+        { 
+          description: reasons.join('. ')
+        }
+      );
+    }
     
     // Recalculer automatiquement la simulation
     get().runSimulation();

@@ -618,16 +618,18 @@ export class SimulationCalculator extends ElectricalCalculator {
       );
     }
     
-    // Cas 3: Uniquement EQUI8 → calcul itératif avec formules CME Transformateur
+    // Cas 3: Uniquement compensateurs → nouvelle méthode
     if (activeSRG2.length === 0 && activeCompensators.length > 0) {
-      console.log('🔄 EQUI8 détectés: calcul itératif avec formules fabricant');
-      return this.calculateWithEQUI8Iteration(project, scenario, activeCompensators);
+      return this.calculateWithNeutralCompensation(
+        project,
+        scenario,
+        activeCompensators
+      );
     }
     
-    // Cas 4: EQUI8 + SRG2 actifs → calcul séquentiel (EQUI8 puis SRG2)
-    // Pour l'instant, calcul EQUI8 uniquement (compatibilité avec SRG2 à implémenter)
-    console.log('🔄 EQUI8 + SRG2: EQUI8 prioritaire');
-    return this.calculateWithEQUI8Iteration(project, scenario, activeCompensators);
+    // Cas 4: Les deux actifs → calcul avec SRG2 puis compensateurs
+    const srg2Result = this.calculateWithSRG2Regulation(project, scenario, activeSRG2);
+    return this.applyNeutralCompensatorsToResult(srg2Result, project, activeCompensators);
   }
 
   /**
@@ -802,97 +804,30 @@ export class SimulationCalculator extends ElectricalCalculator {
   }
 
   /**
-   * Calcul itératif EQUI8 avec formules fabricant CME Transformateur
-   * Recalcule le circuit complet avec courants de compensation jusqu'à convergence
+   * Calcule un scénario avec compensation de neutre uniquement
    */
-  private calculateWithEQUI8Iteration(
+  private calculateWithNeutralCompensation(
     project: Project,
     scenario: CalculationScenario,
     compensators: NeutralCompensator[]
   ): CalculationResult {
-    console.log(`🔄 Calcul itératif EQUI8 (formules CME Transformateur)`);
-    
-    let iteration = 0;
-    let converged = false;
-    let previousVoltages: Map<string, {A: number, B: number, C: number}> = new Map();
-    const workingProject = JSON.parse(JSON.stringify(project)) as Project;
-    
-    while (!converged && iteration < SimulationCalculator.SIM_MAX_ITERATIONS) {
-      iteration++;
-      const result = this.calculateScenario(
-        workingProject.nodes, workingProject.cables, workingProject.cableTypes,
-        scenario, workingProject.foisonnementCharges, workingProject.foisonnementProductions,
-        workingProject.transformerConfig, workingProject.loadModel, workingProject.desequilibrePourcent,
-        workingProject.manualPhaseDistribution, workingProject.clientsImportes, workingProject.clientLinks
-      );
-      
-      const currentVoltages = new Map<string, {A: number, B: number, C: number}>();
-      
-      for (const comp of compensators) {
-        if (!comp.enabled) continue;
-        const nm = result.nodeMetricsPerPhase?.find(n => n.nodeId === comp.nodeId);
-        if (!nm) continue;
-        
-        // Obtenir les courants depuis les câbles parents
-        const parentCables = result.cables.filter(c => c.nodeBId === comp.nodeId);
-        if (parentCables.length === 0) continue;
-        
-        // Calculer les courants totaux par phase
-        let I_A = 0, I_B = 0, I_C = 0;
-        for (const cable of parentCables) {
-          if (cable.currentsPerPhase_A) {
-            I_A += cable.currentsPerPhase_A.A;
-            I_B += cable.currentsPerPhase_A.B;
-            I_C += cable.currentsPerPhase_A.C;
-          }
-        }
-        
-        const v = nm.voltagesPerPhase;
-        const equi8 = this.applyEQUI8Compensation(v.A, v.B, v.C, C(I_A,0), C(I_B,0), C(I_C,0), comp);
-        currentVoltages.set(comp.nodeId, {A: equi8.UEQUI8_ph1, B: equi8.UEQUI8_ph2, C: equi8.UEQUI8_ph3});
-        
-        const Z = C(comp.Zph_Ohm, 0);
-        const I_comp_A = div(C(equi8.UEQUI8_ph1 - v.A, 0), Z);
-        const I_comp_B = div(C(equi8.UEQUI8_ph2 - v.B, 0), Z);
-        const I_comp_C = div(C(equi8.UEQUI8_ph3 - v.C, 0), Z);
-        this.applyEQUI8CurrentsToNode(workingProject, comp.nodeId, I_comp_A, I_comp_B, I_comp_C);
-      }
-      
-      converged = this.checkEQUI8Convergence(currentVoltages, previousVoltages);
-      if (converged) {
-        console.log(`✅ EQUI8 convergé en ${iteration} itérations`);
-        return result; // Retourner le résultat sans modification du type
-      }
-      previousVoltages = currentVoltages;
-    }
-    
-    console.warn(`⚠️ EQUI8 non convergé après ${iteration} itérations`);
-    const final = this.calculateScenario(
-      workingProject.nodes, workingProject.cables, workingProject.cableTypes,
-      scenario, workingProject.foisonnementCharges, workingProject.foisonnementProductions,
-      workingProject.transformerConfig, workingProject.loadModel, workingProject.desequilibrePourcent,
-      workingProject.manualPhaseDistribution, workingProject.clientsImportes, workingProject.clientLinks
+    // 1. Calcul de base sans équipement
+    const baseResult = this.calculateScenario(
+      project.nodes,
+      project.cables,
+      project.cableTypes,
+      scenario,
+      project.foisonnementCharges,
+      project.foisonnementProductions,
+      project.transformerConfig,
+      project.loadModel,
+      project.desequilibrePourcent,
+      project.manualPhaseDistribution,
+      project.clientsImportes,
+      project.clientLinks
     );
-    return final;
-  }
-  
-  private applyEQUI8CurrentsToNode(project: Project, nodeId: string, I_A: Complex, I_B: Complex, I_C: Complex): void {
-    const node = project.nodes.find(n => n.id === nodeId);
-    if (!node) return;
-    (node as any).equi8VirtualLoads = {
-      A_kVA: (230 * abs(I_A)) / 1000, B_kVA: (230 * abs(I_B)) / 1000, C_kVA: (230 * abs(I_C)) / 1000,
-      A_injection: I_A.re > 0, B_injection: I_B.re > 0, C_injection: I_C.re > 0
-    };
-  }
-  
-  private checkEQUI8Convergence(current: Map<string, {A: number, B: number, C: number}>, 
-                                 previous: Map<string, {A: number, B: number, C: number}>): boolean {
-    if (previous.size === 0) return false;
-    for (const [id, curr] of current.entries()) {
-      const prev = previous.get(id);
-      if (!prev || Math.max(Math.abs(curr.A - prev.A), Math.abs(curr.B - prev.B), Math.abs(curr.C - prev.C)) > 2.0) return false;
-    }
-    return true;
+    
+    return this.applyNeutralCompensatorsToResult(baseResult, project, compensators);
   }
 
   /**
@@ -1019,66 +954,33 @@ export class SimulationCalculator extends ElectricalCalculator {
   ): void {
     if (!result.nodeMetricsPerPhase) return;
 
-    // Vérifier que le compensateur est sur un circuit identifiable
-    const circuitId = this.identifyCircuitOfNode(project, compensator.nodeId);
-    if (!circuitId) {
-      console.warn(`⚠️ EQUI8 sur ${compensator.nodeId}: impossible d'identifier le circuit - pas de propagation`);
+    console.log(`🔄 Recalcul des tensions en aval du compensateur ${compensator.nodeId}`);
+
+    // Le compensateur absorbe du courant pour équilibrer les phases
+    // Ce courant absorbé crée une chute de tension supplémentaire en aval
+    const I_absorbed_A = compensator.iN_absorbed_A || 0;
+    
+    if (I_absorbed_A === 0) {
+      console.log(`⚠️ Compensateur ${compensator.nodeId}: pas de courant absorbé, pas d'effet en aval`);
       return;
     }
     
-    console.log(`🔄 Recalcul tensions compensateur ${compensator.nodeId} (Circuit: ${circuitId})`);
-
-    // Le compensateur absorbe du courant pour équilibrer les phases
-    // Ce courant absorbé modifie les courants de branche et donc les chutes de tension
-    const I_absorbed_A = compensator.iN_absorbed_A || 0;
-
-    if (I_absorbed_A === 0) {
-      console.log(`⚠️ Compensateur ${compensator.nodeId}: pas de courant absorbé, pas d'effet`);
-      return;
-    }
-
-    // Courant absorbé réparti sur les 3 phases
+    // Courant absorbé réparti sur les 3 phases (approximation pour calcul de chute de tension)
     const I_absorbed_per_phase = I_absorbed_A / Math.sqrt(3);
-
-    // ✅ NOUVEAU : Trouver les nœuds EN AMONT du compensateur (vers la source)
-    const upstreamNodes = this.findUpstreamNodesInCircuit(project, compensator.nodeId);
-
-    console.log(`📍 Nœuds en amont: ${upstreamNodes.length}`, upstreamNodes);
-    console.log(`⚡ Courant absorbé: ${I_absorbed_A.toFixed(1)}A (${I_absorbed_per_phase.toFixed(1)}A par phase)`);
-
-    // Modifier d'abord la tension du nœud compensateur lui-même
-    const compensatorMetrics = result.nodeMetricsPerPhase?.find(nm => nm.nodeId === compensator.nodeId);
-    if (compensatorMetrics) {
-      const oldVoltages = { ...compensatorMetrics.voltagesPerPhase };
-      
-      // L'effet principal de l'EQUI8 est d'ÉQUILIBRER les tensions entre phases
-      // Calculer la tension moyenne
-      const avgVoltage = (compensatorMetrics.voltagesPerPhase.A + 
-                          compensatorMetrics.voltagesPerPhase.B + 
-                          compensatorMetrics.voltagesPerPhase.C) / 3;
-      
-      // Rapprocher chaque phase de la moyenne (stabilisation)
-      const stabilizationFactor = reductionFraction; // 0 à 1
-      compensatorMetrics.voltagesPerPhase.A = compensatorMetrics.voltagesPerPhase.A + 
-        (avgVoltage - compensatorMetrics.voltagesPerPhase.A) * stabilizationFactor;
-      compensatorMetrics.voltagesPerPhase.B = compensatorMetrics.voltagesPerPhase.B + 
-        (avgVoltage - compensatorMetrics.voltagesPerPhase.B) * stabilizationFactor;
-      compensatorMetrics.voltagesPerPhase.C = compensatorMetrics.voltagesPerPhase.C + 
-        (avgVoltage - compensatorMetrics.voltagesPerPhase.C) * stabilizationFactor;
-      
-      console.log(`  🎯 Nœud compensateur ${compensator.nodeId}:`);
-      console.log(`     A: ${oldVoltages.A.toFixed(1)}V -> ${compensatorMetrics.voltagesPerPhase.A.toFixed(1)}V`);
-      console.log(`     B: ${oldVoltages.B.toFixed(1)}V -> ${compensatorMetrics.voltagesPerPhase.B.toFixed(1)}V`);
-      console.log(`     C: ${oldVoltages.C.toFixed(1)}V -> ${compensatorMetrics.voltagesPerPhase.C.toFixed(1)}V`);
-    }
-
-    // Pour les nœuds en amont, l'effet est plus limité (consommation du compensateur)
-    for (const upstreamNodeId of upstreamNodes) {
-      const nodeMetrics = result.nodeMetricsPerPhase.find(nm => nm.nodeId === upstreamNodeId);
+    
+    // Trouver les nœuds en aval du compensateur
+    const downstreamNodes = this.findDownstreamNodes(project, compensator.nodeId);
+    
+    console.log(`📍 Nœuds en aval: ${downstreamNodes.length}`, downstreamNodes);
+    console.log(`⚡ Courant absorbé par compensateur: ${I_absorbed_A.toFixed(1)}A (${I_absorbed_per_phase.toFixed(1)}A par phase)`);
+    
+    // Pour chaque nœud en aval, calculer la chute de tension due à la consommation du compensateur
+    for (const downstreamNodeId of downstreamNodes) {
+      const nodeMetrics = result.nodeMetricsPerPhase.find(nm => nm.nodeId === downstreamNodeId);
       if (!nodeMetrics) continue;
       
-      // Trouver le chemin de câbles du nœud amont au compensateur
-      const pathCables = this.findCablePath(project, upstreamNodeId, compensator.nodeId);
+      // Trouver le chemin de câbles du compensateur au nœud aval
+      const pathCables = this.findCablePath(project, compensator.nodeId, downstreamNodeId);
       
       // Calculer l'impédance totale du chemin
       let totalResistance = 0;
@@ -1096,26 +998,17 @@ export class SimulationCalculator extends ElectricalCalculator {
       // Impédance complexe totale
       const Z_total = Math.sqrt(totalResistance * totalResistance + totalReactance * totalReactance);
       
-      // Chute de tension due au courant absorbé par le compensateur en amont
+      // Chute de tension due au courant absorbé par le compensateur
       // ΔU = Z × I (réactif principalement)
-      const voltageDrop = Z_total * I_absorbed_per_phase * 0.3; // Effet atténué en amont
+      const voltageDrop = Z_total * I_absorbed_per_phase;
       
-      // Appliquer une légère stabilisation également en amont
+      // Appliquer la chute de tension à chaque phase (DIMINUTION car consommation)
       const oldVoltages = { ...nodeMetrics.voltagesPerPhase };
-      const avgVoltage = (nodeMetrics.voltagesPerPhase.A + 
-                          nodeMetrics.voltagesPerPhase.B + 
-                          nodeMetrics.voltagesPerPhase.C) / 3;
+      nodeMetrics.voltagesPerPhase.A -= voltageDrop;
+      nodeMetrics.voltagesPerPhase.B -= voltageDrop;
+      nodeMetrics.voltagesPerPhase.C -= voltageDrop;
       
-      // Effet combiné: légère stabilisation + chute de tension
-      const attenuatedStabilization = reductionFraction * 0.5; // Effet réduit en amont
-      nodeMetrics.voltagesPerPhase.A = nodeMetrics.voltagesPerPhase.A + 
-        (avgVoltage - nodeMetrics.voltagesPerPhase.A) * attenuatedStabilization - voltageDrop;
-      nodeMetrics.voltagesPerPhase.B = nodeMetrics.voltagesPerPhase.B + 
-        (avgVoltage - nodeMetrics.voltagesPerPhase.B) * attenuatedStabilization - voltageDrop;
-      nodeMetrics.voltagesPerPhase.C = nodeMetrics.voltagesPerPhase.C + 
-        (avgVoltage - nodeMetrics.voltagesPerPhase.C) * attenuatedStabilization - voltageDrop;
-      
-      console.log(`  📈 Nœud amont ${upstreamNodeId}: A: ${oldVoltages.A.toFixed(1)}V -> ${nodeMetrics.voltagesPerPhase.A.toFixed(1)}V`);
+      console.log(`  📉 Nœud ${downstreamNodeId}: A: ${oldVoltages.A.toFixed(1)}V -> ${nodeMetrics.voltagesPerPhase.A.toFixed(1)}V (-${voltageDrop.toFixed(2)}V)`);
       
       // Recalculer les chutes de tension totales
       const sourceVoltage = 230; // Tension nominale de référence
@@ -1128,105 +1021,7 @@ export class SimulationCalculator extends ElectricalCalculator {
   }
 
   /**
-   * Identifie le circuit auquel appartient un nœud
-   * Retourne l'ID du câble principal (premier câble depuis la source)
-   */
-  private identifyCircuitOfNode(project: Project, nodeId: string): string | null {
-    const sourceNode = project.nodes.find(n => n.isSource);
-    if (!sourceNode) return null;
-    
-    // Si c'est la source elle-même, pas de circuit unique
-    if (nodeId === sourceNode.id) {
-      console.warn(`⚠️ Nœud ${nodeId} est la source - pas de circuit unique`);
-      return null;
-    }
-    
-    // Trouver le chemin depuis la source jusqu'au nœud
-    const visited = new Set<string>();
-    const queue: Array<{ nodeId: string; firstCableId: string | null }> = [
-      { nodeId: sourceNode.id, firstCableId: null }
-    ];
-    
-    while (queue.length > 0) {
-      const { nodeId: currentId, firstCableId } = queue.shift()!;
-      
-      if (currentId === nodeId) {
-        return firstCableId; // Le premier câble du chemin = circuit
-      }
-      
-      if (visited.has(currentId)) continue;
-      visited.add(currentId);
-      
-      // Suivre uniquement le sens source → charge (nodeA → nodeB)
-      const outgoingCables = project.cables.filter(c => c.nodeAId === currentId);
-      
-      for (const cable of outgoingCables) {
-        const circuitId = firstCableId || cable.id; // Premier câble = ID circuit
-        queue.push({ nodeId: cable.nodeBId, firstCableId: circuitId });
-      }
-    }
-    
-    console.warn(`⚠️ Impossible de trouver le circuit pour le nœud ${nodeId}`);
-    return null;
-  }
-
-  /**
-   * Trouve tous les nœuds en amont d'un nœud donné DANS LE MÊME CIRCUIT
-   * (du nœud vers la source)
-   */
-  private findUpstreamNodesInCircuit(project: Project, startNodeId: string): string[] {
-    const upstream: string[] = [];
-    const visited = new Set<string>();
-    
-    // Identifier le circuit de départ
-    const targetCircuitId = this.identifyCircuitOfNode(project, startNodeId);
-    
-    if (!targetCircuitId) {
-      console.warn(`⚠️ Impossible d'identifier le circuit pour ${startNodeId} - pas de propagation amont`);
-      return [];
-    }
-    
-    const sourceNode = project.nodes.find(n => n.isSource);
-    if (!sourceNode) return [];
-    
-    console.log(`🔍 Recherche nœuds en amont de ${startNodeId} (Circuit: ${targetCircuitId})`);
-    
-    let currentNodeId: string | null = startNodeId;
-    
-    while (currentNodeId && currentNodeId !== sourceNode.id) {
-      // Trouver le câble parent (où currentNode est nodeB)
-      const parentCable = project.cables.find(c => c.nodeBId === currentNodeId);
-      
-      if (!parentCable) {
-        console.warn(`⚠️ Pas de câble parent pour ${currentNodeId}`);
-        break;
-      }
-      
-      const parentNodeId = parentCable.nodeAId;
-      
-      // Vérifier que le nœud parent appartient au même circuit
-      const parentCircuitId = this.identifyCircuitOfNode(project, parentNodeId);
-      
-      if (parentCircuitId !== targetCircuitId && parentNodeId !== sourceNode.id) {
-        console.log(`  ⏭️ Nœud ${parentNodeId} ignoré (circuit différent: ${parentCircuitId})`);
-        break;
-      }
-      
-      if (!visited.has(parentNodeId)) {
-        visited.add(parentNodeId);
-        upstream.push(parentNodeId);
-        console.log(`  ✅ Nœud ${parentNodeId} ajouté (même circuit)`);
-      }
-      
-      currentNodeId = parentNodeId;
-    }
-    
-    console.log(`🔍 ${upstream.length} nœuds en amont trouvés dans le circuit ${targetCircuitId}`);
-    return upstream;
-  }
-
-  /**
-   * Trouve tous les nœuds en aval d'un nœud donné DANS LE MÊME CIRCUIT
+   * Trouve tous les nœuds en aval d'un nœud donné
    */
   private findDownstreamNodes(project: Project, startNodeId: string): string[] {
     const downstream: string[] = [];
@@ -1234,43 +1029,26 @@ export class SimulationCalculator extends ElectricalCalculator {
     const queue: string[] = [startNodeId];
     visited.add(startNodeId);
     
-    // Identifier le circuit de départ
-    const targetCircuitId = this.identifyCircuitOfNode(project, startNodeId);
-    
-    if (!targetCircuitId) {
-      console.warn(`⚠️ Impossible d'identifier le circuit pour ${startNodeId} - pas de propagation`);
-      return [];
-    }
-    
-    console.log(`🔍 Recherche nœuds en aval de ${startNodeId} (Circuit: ${targetCircuitId})`);
-    
     while (queue.length > 0) {
       const currentId = queue.shift()!;
       
-      // Ne suivre QUE les câbles où le nœud actuel est nodeA (sens A→B)
-      const outgoingCables = project.cables.filter(c => c.nodeAId === currentId);
+      // Trouver les câbles partant de ce nœud
+      const outgoingCables = project.cables.filter(
+        c => c.nodeAId === currentId || c.nodeBId === currentId
+      );
       
       for (const cable of outgoingCables) {
-        const nextNodeId = cable.nodeBId;
+        const nextNodeId = cable.nodeAId === currentId ? cable.nodeBId : cable.nodeAId;
         
-        // Vérifier que le nœud suivant appartient au même circuit
-        const nextCircuitId = this.identifyCircuitOfNode(project, nextNodeId);
-        
-        if (nextCircuitId !== targetCircuitId) {
-          console.log(`  ⏭️ Nœud ${nextNodeId} ignoré (circuit différent: ${nextCircuitId})`);
-          continue;
-        }
-        
+        // Éviter de remonter vers la source (vérifier si le nœud suivant est plus proche de la source)
         if (!visited.has(nextNodeId)) {
           visited.add(nextNodeId);
           downstream.push(nextNodeId);
           queue.push(nextNodeId);
-          console.log(`  ✅ Nœud ${nextNodeId} ajouté (même circuit)`);
         }
       }
     }
     
-    console.log(`🔍 ${downstream.length} nœuds en aval trouvés dans le circuit ${targetCircuitId}`);
     return downstream;
   }
 

@@ -814,34 +814,6 @@ export class ElectricalCalculator {
         S_B_map.set(n.id, C(P_B_kW * 1000, Q_B_kVAr * 1000));
         S_C_map.set(n.id, C(P_C_kW * 1000, Q_C_kVAr * 1000));
 
-        // ✅ Intégrer les charges virtuelles EQUI8 (compensateurs de neutre)
-        if ((n as any).equi8VirtualLoads) {
-          const virtualLoads = (n as any).equi8VirtualLoads;
-          
-          console.log(`  🔧 Application charges virtuelles EQUI8 au nœud ${n.id}`);
-          
-          // Modifier les puissances équivalentes par phase
-          // Si injection : ajouter comme production (signe -)
-          // Si absorption : ajouter comme charge (signe +)
-          const factorA = virtualLoads.A_injection ? -1 : 1;
-          const factorB = virtualLoads.B_injection ? -1 : 1;
-          const factorC = virtualLoads.C_injection ? -1 : 1;
-          
-          // Convertir kVA en W (puissance apparente)
-          const S_virtual_A = C(factorA * virtualLoads.A_kVA * 1000 * cosPhi_eff, factorA * virtualLoads.A_kVA * 1000 * sinPhi);
-          const S_virtual_B = C(factorB * virtualLoads.B_kVA * 1000 * cosPhi_eff, factorB * virtualLoads.B_kVA * 1000 * sinPhi);
-          const S_virtual_C = C(factorC * virtualLoads.C_kVA * 1000 * cosPhi_eff, factorC * virtualLoads.C_kVA * 1000 * sinPhi);
-          
-          // Ajouter aux puissances complexes
-          S_A_map.set(n.id, add(S_A_map.get(n.id) || C(0,0), S_virtual_A));
-          S_B_map.set(n.id, add(S_B_map.get(n.id) || C(0,0), S_virtual_B));
-          S_C_map.set(n.id, add(S_C_map.get(n.id) || C(0,0), S_virtual_C));
-          
-          console.log(`     A: ${virtualLoads.A_kVA.toFixed(2)}kVA (${virtualLoads.A_injection ? 'injection' : 'absorption'})`);
-          console.log(`     B: ${virtualLoads.B_kVA.toFixed(2)}kVA (${virtualLoads.B_injection ? 'injection' : 'absorption'})`);
-          console.log(`     C: ${virtualLoads.C_kVA.toFixed(2)}kVA (${virtualLoads.C_injection ? 'injection' : 'absorption'})`);
-        }
-
         // Intégrer les contributions explicites P/Q (équipements virtuels)
         const addExtra = (items: any[], sign: 1 | -1) => {
           for (const it of items || []) {

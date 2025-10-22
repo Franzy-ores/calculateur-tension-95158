@@ -15,6 +15,7 @@ import {
 import { SRG2Config, SRG2SimulationResult, SRG2SwitchState, DEFAULT_SRG2_400_CONFIG, DEFAULT_SRG2_230_CONFIG } from '@/types/srg2';
 import { ElectricalCalculator } from '@/utils/electricalCalculations';
 import { Complex, C, add, sub, mul, div, abs, fromPolar, scale } from '@/utils/complex';
+import { getCircuitNodes } from '@/utils/networkConnectivity';
 
 export class SimulationCalculator extends ElectricalCalculator {
   
@@ -968,10 +969,15 @@ export class SimulationCalculator extends ElectricalCalculator {
     // Courant absorbé réparti sur les 3 phases (approximation pour calcul de chute de tension)
     const I_absorbed_per_phase = I_absorbed_A / Math.sqrt(3);
     
-    // Trouver les nœuds en aval du compensateur
-    const downstreamNodes = this.findDownstreamNodes(project, compensator.nodeId);
+    // Identifier le circuit du compensateur (tous les nœuds alimentés par la même source)
+    const circuitNodes = getCircuitNodes(project.nodes, project.cables, compensator.nodeId);
     
-    console.log(`📍 Nœuds en aval: ${downstreamNodes.length}`, downstreamNodes);
+    // Trouver les nœuds en aval du compensateur ET dans le même circuit
+    const allDownstreamNodes = this.findDownstreamNodes(project, compensator.nodeId);
+    const downstreamNodes = allDownstreamNodes.filter(nodeId => circuitNodes.has(nodeId));
+    
+    console.log(`📍 Circuit EQUI8 ${compensator.nodeId}: ${circuitNodes.size} nœuds identifiés`);
+    console.log(`📍 Nœuds en aval dans le circuit: ${downstreamNodes.length}`, downstreamNodes);
     console.log(`⚡ Courant absorbé par compensateur: ${I_absorbed_A.toFixed(1)}A (${I_absorbed_per_phase.toFixed(1)}A par phase)`);
     
     // Pour chaque nœud en aval, calculer la chute de tension due à la consommation du compensateur

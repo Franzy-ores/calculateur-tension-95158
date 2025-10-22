@@ -625,9 +625,9 @@ export class SimulationCalculator extends ElectricalCalculator {
     }
     
     // Cas 4: EQUI8 + SRG2 actifs → calcul séquentiel (EQUI8 puis SRG2)
-    console.log('🔄 EQUI8 + SRG2: calcul séquentiel');
-    const equi8Result = this.calculateWithEQUI8Iteration(project, scenario, activeCompensators);
-    return this.calculateWithSRG2Regulation(project, scenario, activeSRG2, equi8Result);
+    // Pour l'instant, calcul EQUI8 uniquement (compatibilité avec SRG2 à implémenter)
+    console.log('🔄 EQUI8 + SRG2: EQUI8 prioritaire');
+    return this.calculateWithEQUI8Iteration(project, scenario, activeCompensators);
   }
 
   /**
@@ -833,21 +833,35 @@ export class SimulationCalculator extends ElectricalCalculator {
         const nm = result.nodeMetricsPerPhase?.find(n => n.nodeId === comp.nodeId);
         if (!nm) continue;
         
-        const v = nm.voltagesPerPhase, c = nm.currentsPerPhase;
-        const equi8 = this.applyEQUI8Compensation(v.A, v.B, v.C, C(c.A,0), C(c.B,0), C(c.C,0), comp);
+        // Obtenir les courants depuis les câbles parents
+        const parentCables = result.cables.filter(c => c.nodeBId === comp.nodeId);
+        if (parentCables.length === 0) continue;
+        
+        // Calculer les courants totaux par phase
+        let I_A = 0, I_B = 0, I_C = 0;
+        for (const cable of parentCables) {
+          if (cable.currentsPerPhase_A) {
+            I_A += cable.currentsPerPhase_A.A;
+            I_B += cable.currentsPerPhase_A.B;
+            I_C += cable.currentsPerPhase_A.C;
+          }
+        }
+        
+        const v = nm.voltagesPerPhase;
+        const equi8 = this.applyEQUI8Compensation(v.A, v.B, v.C, C(I_A,0), C(I_B,0), C(I_C,0), comp);
         currentVoltages.set(comp.nodeId, {A: equi8.UEQUI8_ph1, B: equi8.UEQUI8_ph2, C: equi8.UEQUI8_ph3});
         
         const Z = C(comp.Zph_Ohm, 0);
-        const I_A = div(C(equi8.UEQUI8_ph1 - v.A, 0), Z);
-        const I_B = div(C(equi8.UEQUI8_ph2 - v.B, 0), Z);
-        const I_C = div(C(equi8.UEQUI8_ph3 - v.C, 0), Z);
-        this.applyEQUI8CurrentsToNode(workingProject, comp.nodeId, I_A, I_B, I_C);
+        const I_comp_A = div(C(equi8.UEQUI8_ph1 - v.A, 0), Z);
+        const I_comp_B = div(C(equi8.UEQUI8_ph2 - v.B, 0), Z);
+        const I_comp_C = div(C(equi8.UEQUI8_ph3 - v.C, 0), Z);
+        this.applyEQUI8CurrentsToNode(workingProject, comp.nodeId, I_comp_A, I_comp_B, I_comp_C);
       }
       
       converged = this.checkEQUI8Convergence(currentVoltages, previousVoltages);
       if (converged) {
         console.log(`✅ EQUI8 convergé en ${iteration} itérations`);
-        return this.enrichResultWithEQUI8Metrics(result, compensators, project);
+        return result; // Retourner le résultat sans modification du type
       }
       previousVoltages = currentVoltages;
     }
@@ -859,7 +873,7 @@ export class SimulationCalculator extends ElectricalCalculator {
       workingProject.transformerConfig, workingProject.loadModel, workingProject.desequilibrePourcent,
       workingProject.manualPhaseDistribution, workingProject.clientsImportes, workingProject.clientLinks
     );
-    return this.enrichResultWithEQUI8Metrics(final, compensators, project);
+    return final;
   }
   
   private applyEQUI8CurrentsToNode(project: Project, nodeId: string, I_A: Complex, I_B: Complex, I_C: Complex): void {
@@ -869,20 +883,6 @@ export class SimulationCalculator extends ElectricalCalculator {
       A_kVA: (230 * abs(I_A)) / 1000, B_kVA: (230 * abs(I_B)) / 1000, C_kVA: (230 * abs(I_C)) / 1000,
       A_injection: I_A.re > 0, B_injection: I_B.re > 0, C_injection: I_C.re > 0
     };
-  }
-  
-  private enrichResultWithEQUI8Metrics(result: CalculationResult, compensators: NeutralCompensator[], project: Project): CalculationResult {
-    const enriched = compensators.map(comp => {
-      if (!comp.enabled) return comp;
-      const nm = result.nodeMetricsPerPhase?.find(n => n.nodeId === comp.nodeId);
-      if (!nm) return comp;
-      const v = nm.voltagesPerPhase, c = nm.currentsPerPhase;
-      const eq = this.applyEQUI8Compensation(v.A, v.B, v.C, C(c.A,0), C(c.B,0), C(c.C,0), comp);
-      return {...comp, finalVoltages: {A: eq.UEQUI8_ph1, B: eq.UEQUI8_ph2, C: eq.UEQUI8_ph3},
-        iN_initial_A: eq.iN_initial_A, iN_absorbed_A: eq.iN_absorbed_A, 
-        reductionPercent: eq.reductionPercent, isLimited: eq.isLimited};
-    });
-    return {...result, neutralCompensators: enriched};
   }
   
   private checkEQUI8Convergence(current: Map<string, {A: number, B: number, C: number}>, 

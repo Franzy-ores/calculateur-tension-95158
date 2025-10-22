@@ -618,18 +618,16 @@ export class SimulationCalculator extends ElectricalCalculator {
       );
     }
     
-    // Cas 3: Uniquement compensateurs → nouvelle méthode
+    // Cas 3: Uniquement EQUI8 → calcul itératif avec formules CME Transformateur
     if (activeSRG2.length === 0 && activeCompensators.length > 0) {
-      return this.calculateWithNeutralCompensation(
-        project,
-        scenario,
-        activeCompensators
-      );
+      console.log('🔄 EQUI8 détectés: calcul itératif avec formules fabricant');
+      return this.calculateWithEQUI8Iteration(project, scenario, activeCompensators);
     }
     
-    // Cas 4: Les deux actifs → calcul avec SRG2 puis compensateurs
-    const srg2Result = this.calculateWithSRG2Regulation(project, scenario, activeSRG2);
-    return this.applyNeutralCompensatorsToResult(srg2Result, project, activeCompensators);
+    // Cas 4: EQUI8 + SRG2 actifs → calcul séquentiel (EQUI8 puis SRG2)
+    console.log('🔄 EQUI8 + SRG2: calcul séquentiel');
+    const equi8Result = this.calculateWithEQUI8Iteration(project, scenario, activeCompensators);
+    return this.calculateWithSRG2Regulation(project, scenario, activeSRG2, equi8Result);
   }
 
   /**
@@ -804,30 +802,97 @@ export class SimulationCalculator extends ElectricalCalculator {
   }
 
   /**
-   * Calcule un scénario avec compensation de neutre uniquement
+   * Calcul itératif EQUI8 avec formules fabricant CME Transformateur
+   * Recalcule le circuit complet avec courants de compensation jusqu'à convergence
    */
-  private calculateWithNeutralCompensation(
+  private calculateWithEQUI8Iteration(
     project: Project,
     scenario: CalculationScenario,
     compensators: NeutralCompensator[]
   ): CalculationResult {
-    // 1. Calcul de base sans équipement
-    const baseResult = this.calculateScenario(
-      project.nodes,
-      project.cables,
-      project.cableTypes,
-      scenario,
-      project.foisonnementCharges,
-      project.foisonnementProductions,
-      project.transformerConfig,
-      project.loadModel,
-      project.desequilibrePourcent,
-      project.manualPhaseDistribution,
-      project.clientsImportes,
-      project.clientLinks
-    );
+    console.log(`🔄 Calcul itératif EQUI8 (formules CME Transformateur)`);
     
-    return this.applyNeutralCompensatorsToResult(baseResult, project, compensators);
+    let iteration = 0;
+    let converged = false;
+    let previousVoltages: Map<string, {A: number, B: number, C: number}> = new Map();
+    const workingProject = JSON.parse(JSON.stringify(project)) as Project;
+    
+    while (!converged && iteration < SimulationCalculator.SIM_MAX_ITERATIONS) {
+      iteration++;
+      const result = this.calculateScenario(
+        workingProject.nodes, workingProject.cables, workingProject.cableTypes,
+        scenario, workingProject.foisonnementCharges, workingProject.foisonnementProductions,
+        workingProject.transformerConfig, workingProject.loadModel, workingProject.desequilibrePourcent,
+        workingProject.manualPhaseDistribution, workingProject.clientsImportes, workingProject.clientLinks
+      );
+      
+      const currentVoltages = new Map<string, {A: number, B: number, C: number}>();
+      
+      for (const comp of compensators) {
+        if (!comp.enabled) continue;
+        const nm = result.nodeMetricsPerPhase?.find(n => n.nodeId === comp.nodeId);
+        if (!nm) continue;
+        
+        const v = nm.voltagesPerPhase, c = nm.currentsPerPhase;
+        const equi8 = this.applyEQUI8Compensation(v.A, v.B, v.C, C(c.A,0), C(c.B,0), C(c.C,0), comp);
+        currentVoltages.set(comp.nodeId, {A: equi8.UEQUI8_ph1, B: equi8.UEQUI8_ph2, C: equi8.UEQUI8_ph3});
+        
+        const Z = C(comp.Zph_Ohm, 0);
+        const I_A = div(C(equi8.UEQUI8_ph1 - v.A, 0), Z);
+        const I_B = div(C(equi8.UEQUI8_ph2 - v.B, 0), Z);
+        const I_C = div(C(equi8.UEQUI8_ph3 - v.C, 0), Z);
+        this.applyEQUI8CurrentsToNode(workingProject, comp.nodeId, I_A, I_B, I_C);
+      }
+      
+      converged = this.checkEQUI8Convergence(currentVoltages, previousVoltages);
+      if (converged) {
+        console.log(`✅ EQUI8 convergé en ${iteration} itérations`);
+        return this.enrichResultWithEQUI8Metrics(result, compensators, project);
+      }
+      previousVoltages = currentVoltages;
+    }
+    
+    console.warn(`⚠️ EQUI8 non convergé après ${iteration} itérations`);
+    const final = this.calculateScenario(
+      workingProject.nodes, workingProject.cables, workingProject.cableTypes,
+      scenario, workingProject.foisonnementCharges, workingProject.foisonnementProductions,
+      workingProject.transformerConfig, workingProject.loadModel, workingProject.desequilibrePourcent,
+      workingProject.manualPhaseDistribution, workingProject.clientsImportes, workingProject.clientLinks
+    );
+    return this.enrichResultWithEQUI8Metrics(final, compensators, project);
+  }
+  
+  private applyEQUI8CurrentsToNode(project: Project, nodeId: string, I_A: Complex, I_B: Complex, I_C: Complex): void {
+    const node = project.nodes.find(n => n.id === nodeId);
+    if (!node) return;
+    (node as any).equi8VirtualLoads = {
+      A_kVA: (230 * abs(I_A)) / 1000, B_kVA: (230 * abs(I_B)) / 1000, C_kVA: (230 * abs(I_C)) / 1000,
+      A_injection: I_A.re > 0, B_injection: I_B.re > 0, C_injection: I_C.re > 0
+    };
+  }
+  
+  private enrichResultWithEQUI8Metrics(result: CalculationResult, compensators: NeutralCompensator[], project: Project): CalculationResult {
+    const enriched = compensators.map(comp => {
+      if (!comp.enabled) return comp;
+      const nm = result.nodeMetricsPerPhase?.find(n => n.nodeId === comp.nodeId);
+      if (!nm) return comp;
+      const v = nm.voltagesPerPhase, c = nm.currentsPerPhase;
+      const eq = this.applyEQUI8Compensation(v.A, v.B, v.C, C(c.A,0), C(c.B,0), C(c.C,0), comp);
+      return {...comp, finalVoltages: {A: eq.UEQUI8_ph1, B: eq.UEQUI8_ph2, C: eq.UEQUI8_ph3},
+        iN_initial_A: eq.iN_initial_A, iN_absorbed_A: eq.iN_absorbed_A, 
+        reductionPercent: eq.reductionPercent, isLimited: eq.isLimited};
+    });
+    return {...result, neutralCompensators: enriched};
+  }
+  
+  private checkEQUI8Convergence(current: Map<string, {A: number, B: number, C: number}>, 
+                                 previous: Map<string, {A: number, B: number, C: number}>): boolean {
+    if (previous.size === 0) return false;
+    for (const [id, curr] of current.entries()) {
+      const prev = previous.get(id);
+      if (!prev || Math.max(Math.abs(curr.A - prev.A), Math.abs(curr.B - prev.B), Math.abs(curr.C - prev.C)) > 2.0) return false;
+    }
+    return true;
   }
 
   /**

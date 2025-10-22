@@ -201,8 +201,16 @@ export const TopMenu = ({
             Câbles
           </Button>
           
-          <Button variant="ghost" size="sm" onClick={onSimulation} className="text-primary-foreground hover:bg-white/10 hover:text-primary-foreground">
-            <Zap className="h-4 w-4 mr-1" />
+          <Button 
+            variant={editTarget === 'simulation' ? 'secondary' : 'ghost'} 
+            size="sm" 
+            onClick={onSimulation} 
+            className={`${editTarget === 'simulation' 
+              ? 'bg-white/20 text-primary-foreground font-semibold border border-white/30' 
+              : 'text-primary-foreground hover:bg-white/10 hover:text-primary-foreground'
+            }`}
+          >
+            <Zap className={`h-4 w-4 mr-1 ${editTarget === 'simulation' ? 'text-orange-400' : ''}`} />
             Simulation
           </Button>
           

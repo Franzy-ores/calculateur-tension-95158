@@ -18,6 +18,7 @@ export type ClientCouplage = string; // Valeur brute du champ "Couplage" depuis 
 
 // Import du type SRG2Config
 import { SRG2Config } from './srg2';
+import { Complex } from '@/utils/complex';
 
 // Types pour les clients importés
 export interface ClientImporte {
@@ -165,6 +166,12 @@ export interface Cable {
   voltageDropPerPhase_V?: { A: number; B: number; C: number };
 }
 
+export interface EQUI8PerPhaseInjection {
+  IA: Complex;  // Injection phase A (phasor)
+  IB: Complex;  // Injection phase B (phasor)
+  IC: Complex;  // Injection phase C (phasor)
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -221,6 +228,13 @@ export interface Project {
   addEmptyNodeByDefault?: boolean;
   // Équipements de simulation (SRG2 et EQUI8)
   simulationEquipment?: SimulationEquipment;
+  // Debug flags pour développement
+  debug?: {
+    equi8?: {
+      logPerPhaseInjections?: boolean;
+      verbose?: boolean;
+    };
+  };
 }
 
 
@@ -253,6 +267,7 @@ export interface NeutralCompensator {
   ecart_init_V?: number;    // (Umax-Umin)init
   ecart_equi8_V?: number;   // (Umax-Umin)EQUI8 après compensation
   compensationQ_kVAr?: { A: number; B: number; C: number }; // Q par phase (si modélisé)
+  I_EQUI8_complex?: Complex; // Phasor d'injection calculé (pour intégration physique)
 }
 
 export interface CableUpgrade {

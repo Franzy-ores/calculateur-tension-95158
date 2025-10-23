@@ -861,7 +861,19 @@ export class ElectricalCalculator {
             const Vn = V_node_phase.get(n.id) || Vslack_phase_ph;
             const Sph = S_map.get(n.id) || C(0, 0);
             const Vsafe = abs(Vn) > ElectricalCalculator.MIN_VOLTAGE_SAFETY ? Vn : Vslack_phase_ph;
-            const Iinj = conj(div(Sph, Vsafe));
+            let Iinj = conj(div(Sph, Vsafe));
+            
+            // AJOUT : injection EQUI8 par phase (KCL physique)
+            const vNode = nodeById.get(n.id);
+            const perPhase = vNode?.customProps?.['equi8_current_injection_perPhase'];
+            if (perPhase) {
+              const phaseKey = (angleDeg === 0 ? 'A' : (angleDeg === -120 ? 'B' : 'C'));
+              const I_eq = perPhase[phaseKey];
+              if (I_eq && abs(I_eq) > 1e-6) {
+                Iinj = add(Iinj, I_eq);
+              }
+            }
+            
             I_inj_node_phase.set(n.id, Iinj);
           }
 
@@ -903,23 +915,15 @@ export class ElectricalCalculator {
               // Calculer tension selon Kirchhoff : V_v = V_u - Z * I_uv
               let Vv = sub(Vu, mul(Z, Iuv));
               
-              // Vérifier si le nœud de destination a une injection EQUI8
+              // DÉSACTIVÉ : Injection EQUI8 traitée en KCL. Fallback legacy si pas de per-phase
               const vNode = nodeById.get(v);
-              if (vNode?.customProps?.['equi8_modified']) {
+              if (vNode?.customProps?.['equi8_modified'] && !vNode.customProps?.['equi8_current_injection_perPhase']) {
                 const I_equi8 = vNode.customProps['equi8_current_injection'];
                 if (I_equi8) {
-                  console.log(`🔍 Injection EQUI8 détectée sur nœud ${v} : ${abs(I_equi8).toFixed(1)}A ∠${(arg(I_equi8)*180/Math.PI).toFixed(0)}°`);
-                  
-                  // Calculer l'impédance de couplage neutre-phase
-                  // Approximation : Z_couplage ≈ Z_cable / 3 (couplage capacitif/inductif)
                   const Z_couplage = scale(Z, 1/3);
-                  
-                  // Ajouter la contribution de l'injection EQUI8 à la tension
-                  // ΔV = Z_couplage × I_EQUI8
                   const delta_V_equi8 = mul(Z_couplage, I_equi8);
                   Vv = add(Vv, delta_V_equi8);
-                  
-                  console.log(`🔌 EQUI8 nœud ${v} (phase ${angleDeg}°): ΔV = ${abs(delta_V_equi8).toFixed(1)}V, V_final = ${abs(Vv).toFixed(1)}V ∠${(arg(Vv)*180/Math.PI).toFixed(0)}°`);
+                  console.warn(`⚠️ EQUI8 nœud ${v}: Fallback ΔV local (mode legacy)`);
                 }
               }
               

@@ -189,3 +189,11 @@ All colors MUST be HSL.
 .client-marker .leaflet-marker-icon:active {
   cursor: grabbing !important;
 }
+
+/* Labels de tension permanents pour les clients */
+.client-tension-label-permanent {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}

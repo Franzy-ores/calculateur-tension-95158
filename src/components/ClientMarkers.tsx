@@ -76,24 +76,50 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
         zIndexOffset: 1000
       });
 
-      // Tooltip au survol avec les informations du client
-      const tooltipContent = `
-        <div style="font-size: 11px; line-height: 1.4; white-space: nowrap;">
-          <strong>${client.nomCircuit || client.identifiantCircuit}</strong><br>
-          <span style="color: #666;">Couplage: ${client.couplage}</span><br>
-          <span style="color: #666;">Charge: ${client.puissanceContractuelle_kVA.toFixed(1)} kVA</span>
-          ${client.puissancePV_kVA > 0 ? `<br><span style="color: #666;">PV: ${client.puissancePV_kVA.toFixed(1)} kVA</span>` : ''}
-          ${showTensionLabels && (client.tensionMin_V || client.tensionMax_V) ? `<br><span style="color: #f59e0b;">Min: ${(client.tensionMin_V || 0).toFixed(1)}V / Max: ${(client.tensionMax_V || 0).toFixed(1)}V</span>` : ''}
-        </div>
-      `;
+      // Affichage conditionnel : permanent si showTensionLabels, sinon au survol
+      if (showTensionLabels && (client.tensionMin_V || client.tensionMax_V)) {
+        // Mode label permanent : afficher uniquement les tensions
+        const tensionLabel = `<div style="
+          font-size: 10px;
+          font-weight: 600;
+          color: #f59e0b;
+          background: rgba(255, 255, 255, 0.95);
+          padding: 2px 4px;
+          border-radius: 3px;
+          white-space: nowrap;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+          border: 1px solid #f59e0b;
+        ">
+          ${(client.tensionMin_V || 0).toFixed(1)}V / ${(client.tensionMax_V || 0).toFixed(1)}V
+        </div>`;
+        
+        marker.bindTooltip(tensionLabel, {
+          permanent: true,
+          direction: 'right',
+          offset: [8, 0],
+          className: 'client-tension-label-permanent',
+          opacity: 1
+        });
+      } else {
+        // Mode normal : tooltip au survol avec toutes les infos
+        const tooltipContent = `
+          <div style="font-size: 11px; line-height: 1.4; white-space: nowrap;">
+            <strong>${client.nomCircuit || client.identifiantCircuit}</strong><br>
+            <span style="color: #666;">Couplage: ${client.couplage}</span><br>
+            <span style="color: #666;">Charge: ${client.puissanceContractuelle_kVA.toFixed(1)} kVA</span>
+            ${client.puissancePV_kVA > 0 ? `<br><span style="color: #666;">PV: ${client.puissancePV_kVA.toFixed(1)} kVA</span>` : ''}
+            ${(client.tensionMin_V || client.tensionMax_V) ? `<br><span style="color: #f59e0b;">Min: ${(client.tensionMin_V || 0).toFixed(1)}V / Max: ${(client.tensionMax_V || 0).toFixed(1)}V</span>` : ''}
+          </div>
+        `;
 
-      marker.bindTooltip(tooltipContent, {
-        permanent: false,
-        direction: 'top',
-        offset: [0, -10],
-        className: 'client-hover-tooltip',
-        opacity: 0.95
-      });
+        marker.bindTooltip(tooltipContent, {
+          permanent: false,
+          direction: 'top',
+          offset: [0, -10],
+          className: 'client-hover-tooltip',
+          opacity: 0.95
+        });
+      }
 
       // Gestion du drag & drop
       let initialPosition: L.LatLng;

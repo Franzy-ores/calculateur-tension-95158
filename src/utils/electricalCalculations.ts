@@ -678,15 +678,15 @@ export class ElectricalCalculator {
     // 1. Priorité : tensionCible explicite (tension réelle mesurée)
     if (source.tensionCible) {
       // tensionCible représente toujours la tension phase-phase mesurée
-      // → Conversion systématique basée sur le type de connexion
+      // → Conversion basée sur le type de connexion
       if (source.connectionType === 'TÉTRA_3P+N_230_400V') {
-        // Réseau tétra : tensionCible = tension phase-phase mesurée
+        // Réseau tétra : tensionCible = tension phase-phase mesurée → convertir en phase-neutre
         Vslack_phase = source.tensionCible / Math.sqrt(3);
         console.log(`📐 Tétra 400V: ${source.tensionCible}V phase-phase → ${Vslack_phase.toFixed(1)}V phase-neutre`);
       } else if (source.connectionType === 'TRI_230V_3F') {
-        // Réseau triangle : tensionCible = tension phase-phase mesurée
-        Vslack_phase = source.tensionCible / Math.sqrt(3);
-        console.log(`📐 Triangle 230V: ${source.tensionCible}V phase-phase → ${Vslack_phase.toFixed(1)}V phase-neutre (équivalent)`);
+        // Réseau triangle : pas de neutre → utiliser tension phase-phase directement
+        Vslack_phase = source.tensionCible;
+        console.log(`📐 Triangle 230V: ${source.tensionCible}V phase-phase (utilisé directement, pas de neutre)`);
       } else {
         // Autres types (monophasé, etc.) : tensionCible est déjà en phase
         Vslack_phase = source.tensionCible;
@@ -695,15 +695,26 @@ export class ElectricalCalculator {
     // 2. Sinon : utiliser tension nominale
     else if (transformerConfig?.nominalVoltage_V) {
       const U_line = transformerConfig.nominalVoltage_V;
-      Vslack_phase = U_line >= 345 ? U_line / Math.sqrt(3) : U_line;
+      // Décision basée sur le type de connexion, pas sur un seuil de tension
+      if (source.connectionType === 'TÉTRA_3P+N_230_400V') {
+        Vslack_phase = U_line / Math.sqrt(3); // Tétra : convertir phase-phase → phase-neutre
+      } else {
+        Vslack_phase = U_line; // Triangle ou mono : utiliser directement
+      }
     } else {
-      Vslack_phase = U_line_base >= 345 ? U_line_base / Math.sqrt(3) : U_line_base;
+      // Fallback sur U_line_base
+      if (source.connectionType === 'TÉTRA_3P+N_230_400V') {
+        Vslack_phase = U_line_base / Math.sqrt(3);
+      } else {
+        Vslack_phase = U_line_base;
+      }
     }
     
-    // 3. Validation élargie pour accepter les variations réalistes
-    if (!isFinite(Vslack_phase) || Vslack_phase < 180 || Vslack_phase > 280) {
-      console.warn(`⚠️ Vslack_phase hors limites: ${Vslack_phase}V, réinitialisation à 230V`);
-      Vslack_phase = 230;
+    // 3. Validation élargie : accepter 180-450V pour couvrir à la fois 230V et 400V
+    if (!isFinite(Vslack_phase) || Vslack_phase < 180 || Vslack_phase > 450) {
+      console.warn(`⚠️ Vslack_phase hors limites: ${Vslack_phase}V, réinitialisation basée sur type réseau`);
+      // Réinitialisation intelligente basée sur le type de réseau
+      Vslack_phase = source.connectionType === 'TÉTRA_3P+N_230_400V' ? 230 : U_line_base;
     }
     
     console.log(`✅ Vslack_phase: ${Vslack_phase.toFixed(1)}V | U_line_base nominal: ${U_line_base}V`);

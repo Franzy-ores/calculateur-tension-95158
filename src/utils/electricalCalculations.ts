@@ -629,7 +629,8 @@ export class ElectricalCalculator {
     const VcfgSrc = this.getVoltage(source.connectionType);
     let U_line_base = VcfgSrc.U_base;
     if (transformerConfig?.nominalVoltage_V) U_line_base = transformerConfig.nominalVoltage_V;
-    if (source.tensionCible) U_line_base = source.tensionCible;
+    // ✅ U_line_base reste toujours la tension nominale (230V ou 400V)
+    // tensionCible sera utilisée uniquement pour Vslack_phase
     const isSrcThree = VcfgSrc.isThreePhase;
 
     if (!isFinite(U_line_base) || U_line_base <= 0) {
@@ -669,43 +670,43 @@ export class ElectricalCalculator {
       cableParentId.set(cab.id, parentId);
     }
 
-    // ===== CONVENTION UNIFIÉE : Toutes les tensions internes sont phase-neutre (230V) =====
-    // La conversion √3 est appliquée UNIQUEMENT à l'entrée (si tension ligne fournie)
-    // et à la sortie (affichage des tensions ligne-ligne)
+    // ===== TENSION DE RÉFÉRENCE POUR LES CALCULS =====
+    // U_line_base : tension nominale du réseau (230V ou 400V) - utilisée pour Zbase et choix impédances
+    // Vslack_phase : tension réelle mesurée aux bornes du transfo - point de départ des calculs de chute
     let Vslack_phase: number;
     
-    // 1. Priorité absolue : tensionCible explicite
+    // 1. Priorité : tensionCible explicite (tension réelle mesurée)
     if (source.tensionCible) {
-      // Détecter si la tension fournie est ligne-ligne ou phase-neutre
-      if (source.connectionType === 'TÉTRA_3P+N_230_400V' && source.tensionCible >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD) {
-        // Source triphasée 400V avec tension ligne fournie → convertir en phase
+      // tensionCible représente toujours la tension phase-phase mesurée
+      // → Conversion systématique basée sur le type de connexion
+      if (source.connectionType === 'TÉTRA_3P+N_230_400V') {
+        // Réseau tétra : tensionCible = tension phase-phase mesurée
         Vslack_phase = source.tensionCible / Math.sqrt(3);
-        console.log(`📐 Conversion √3: ${source.tensionCible}V ligne → ${Vslack_phase.toFixed(1)}V phase`);
-      } else if (source.connectionType === 'TRI_230V_3F' && source.tensionCible <= 250) {
-        // Triangle 230V : tension fournie est ligne-ligne, convertir en phase
+        console.log(`📐 Tétra 400V: ${source.tensionCible}V phase-phase → ${Vslack_phase.toFixed(1)}V phase-neutre`);
+      } else if (source.connectionType === 'TRI_230V_3F') {
+        // Réseau triangle : tensionCible = tension phase-phase mesurée
         Vslack_phase = source.tensionCible / Math.sqrt(3);
-        console.log(`📐 Conversion √3 (triangle): ${source.tensionCible}V ligne → ${Vslack_phase.toFixed(1)}V phase`);
+        console.log(`📐 Triangle 230V: ${source.tensionCible}V phase-phase → ${Vslack_phase.toFixed(1)}V phase-neutre (équivalent)`);
       } else {
-        // Autres cas : tension fournie est déjà en phase
+        // Autres types (monophasé, etc.) : tensionCible est déjà en phase
         Vslack_phase = source.tensionCible;
       }
     }
-    // 2. Sinon : utiliser tension nominale du transformateur ou base
+    // 2. Sinon : utiliser tension nominale
     else if (transformerConfig?.nominalVoltage_V) {
       const U_line = transformerConfig.nominalVoltage_V;
-      Vslack_phase = U_line >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD ? U_line / Math.sqrt(3) : U_line;
-    }
-    else {
-      Vslack_phase = U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD ? U_line_base / Math.sqrt(3) : U_line_base;
+      Vslack_phase = U_line >= 345 ? U_line / Math.sqrt(3) : U_line;
+    } else {
+      Vslack_phase = U_line_base >= 345 ? U_line_base / Math.sqrt(3) : U_line_base;
     }
     
-    // 3. Validation (safety)
-    if (!isFinite(Vslack_phase) || Vslack_phase < 200 || Vslack_phase > 450) {
+    // 3. Validation élargie pour accepter les variations réalistes
+    if (!isFinite(Vslack_phase) || Vslack_phase < 180 || Vslack_phase > 280) {
       console.warn(`⚠️ Vslack_phase hors limites: ${Vslack_phase}V, réinitialisation à 230V`);
       Vslack_phase = 230;
     }
     
-    console.log(`✅ Vslack_phase initialisé: ${Vslack_phase.toFixed(1)}V (source: ${source.tensionCible ? 'tensionCible' : 'nominal'})`);
+    console.log(`✅ Vslack_phase: ${Vslack_phase.toFixed(1)}V | U_line_base nominal: ${U_line_base}V`);
     const Vslack = C(Vslack_phase, 0);
 
     // Transformer series impedance (per phase)

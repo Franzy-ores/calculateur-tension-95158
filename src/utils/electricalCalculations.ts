@@ -1,6 +1,6 @@
 import { Node, Cable, Project, CalculationResult, CalculationScenario, ConnectionType, CableType, TransformerConfig, VirtualBusbar, LoadModel, ClientImporte, ClientLink } from '@/types/network';
 import { getConnectedNodes } from '@/utils/networkConnectivity';
-import { Complex, C, add, sub, mul, div, conj, scale, abs, fromPolar } from '@/utils/complex';
+import { Complex, C, add, sub, mul, div, conj, scale, abs, fromPolar, arg } from '@/utils/complex';
 import { getNodeConnectionType } from '@/utils/nodeConnectionType';
 import { getLinkedClientsForNode, calculateNodePowersFromClients } from '@/utils/clientsUtils';
 
@@ -906,22 +906,24 @@ export class ElectricalCalculator {
               // Vérifier si le nœud de destination a des marqueurs EQUI8
               const vNode = nodeById.get(v);
               if (vNode?.customProps?.['equi8_modified']) {
-                // Utiliser les tensions EQUI8 imposées
+                // Utiliser les tensions EQUI8 imposées (phasors complets)
                 const equi8Voltages = vNode.customProps['equi8_voltages'];
                 if (equi8Voltages) {
+                  console.log(`🔍 Marqueur EQUI8 détecté sur nœud ${v} pour phase ${angleDeg}°`);
                   let Vv_equi8: Complex;
                   if (angleDeg === 0) {
-                    Vv_equi8 = C(equi8Voltages.A, 0);
+                    Vv_equi8 = equi8Voltages.A;  // ✅ Utiliser le phasor complet
                   } else if (angleDeg === -120) {
-                    Vv_equi8 = C(equi8Voltages.B, 0);
+                    Vv_equi8 = equi8Voltages.B;  // ✅ Utiliser le phasor complet
                   } else if (angleDeg === 120) {
-                    Vv_equi8 = C(equi8Voltages.C, 0);
+                    Vv_equi8 = equi8Voltages.C;  // ✅ Utiliser le phasor complet
                   } else {
-                    const avgVoltage = (equi8Voltages.A + equi8Voltages.B + equi8Voltages.C) / 3;
+                    // Fallback: moyenne des magnitudes avec phase 0
+                    const avgVoltage = (abs(equi8Voltages.A) + abs(equi8Voltages.B) + abs(equi8Voltages.C)) / 3;
                     Vv_equi8 = C(avgVoltage, 0);
                   }
                   V_node_phase.set(v, Vv_equi8);
-                  console.log(`🔌 EQUI8 nœud ${v} (phase ${angleDeg}°): tension imposée ${abs(Vv_equi8).toFixed(1)}V`);
+                  console.log(`🔌 EQUI8 nœud ${v} (phase ${angleDeg}°): tension imposée ${abs(Vv_equi8).toFixed(1)}V ∠${(arg(Vv_equi8)*180/Math.PI).toFixed(0)}°`);
                 }
               } else if (vNode?.hasSRG2Device && vNode.srg2RegulationCoefficients) {
                 // Appliquer les coefficients de régulation SRG2 aux tensions calculées

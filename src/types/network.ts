@@ -324,6 +324,7 @@ export interface CalculationResult {
     nodeId: string; 
     voltagesPerPhase: { A: number; B: number; C: number };
     voltageDropsPerPhase: { A: number; B: number; C: number };
+    deviationsPerPhase?: { A: number; B: number; C: number }; // Déviation EN50160 en % (+ surtension, - sous-tension)
     compliancePerPhase?: { A: 'normal' | 'warning' | 'critical'; B: 'normal' | 'warning' | 'critical'; C: 'normal' | 'warning' | 'critical' };
     nodeCompliance?: 'normal' | 'warning' | 'critical';
   }[];

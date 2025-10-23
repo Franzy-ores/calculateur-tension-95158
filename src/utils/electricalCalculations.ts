@@ -1303,17 +1303,24 @@ export class ElectricalCalculator {
         
         // ===== CORRECTION 2 : CALCUL DE CONFORMITÉ EN50160 AVEC RÉFÉRENCE APPROPRIÉE =====
         
-        // Calcul des chutes de tension par rapport à la référence
+        // Calcul des déviations de tension par rapport à la référence EN50160
+        // Valeur positive = surtension, négative = sous-tension
+        const deviationA_percent = ((Va_display - U_ref) / U_ref) * 100;
+        const deviationB_percent = ((Vb_display - U_ref) / U_ref) * 100;
+        const deviationC_percent = ((Vc_display - U_ref) / U_ref) * 100;
+        
+        // Calcul des chutes de tension par rapport à la référence (pour compatibilité affichage)
         const dropA = U_ref - Va_display;
         const dropB = U_ref - Vb_display;
         const dropC = U_ref - Vc_display;
         
         // ===== AMÉLIORATION : CONFORMITÉ EN50160 MULTI-PHASE =====
         // Évaluation individuelle de chaque phase selon EN50160
+        // Conformité basée sur la valeur absolue de la déviation
         const compliancePerPhase = {
-          A: this.getComplianceStatus(Math.abs((U_ref - Va_display) / U_ref * 100)),
-          B: this.getComplianceStatus(Math.abs((U_ref - Vb_display) / U_ref * 100)),
-          C: this.getComplianceStatus(Math.abs((U_ref - Vc_display) / U_ref * 100))
+          A: this.getComplianceStatus(Math.abs(deviationA_percent)),
+          B: this.getComplianceStatus(Math.abs(deviationB_percent)),
+          C: this.getComplianceStatus(Math.abs(deviationC_percent))
         };
         
         // Conformité globale du nœud = pire cas des 3 phases
@@ -1332,6 +1339,11 @@ export class ElectricalCalculator {
             A: dropA,
             B: dropB,
             C: dropC
+          },
+          deviationsPerPhase: {
+            A: deviationA_percent,
+            B: deviationB_percent,
+            C: deviationC_percent
           },
           compliancePerPhase,
           nodeCompliance

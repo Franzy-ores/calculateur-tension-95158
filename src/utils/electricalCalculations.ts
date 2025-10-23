@@ -903,9 +903,27 @@ export class ElectricalCalculator {
               // Calculer tension selon Kirchhoff : V_v = V_u - Z * I_uv
               const Vv = sub(Vu, mul(Z, Iuv));
               
-              // Vérifier si le nœud de destination a un dispositif SRG2
+              // Vérifier si le nœud de destination a des marqueurs EQUI8
               const vNode = nodeById.get(v);
-              if (vNode?.hasSRG2Device && vNode.srg2RegulationCoefficients) {
+              if (vNode?.customProps?.['equi8_modified']) {
+                // Utiliser les tensions EQUI8 imposées
+                const equi8Voltages = vNode.customProps['equi8_voltages'];
+                if (equi8Voltages) {
+                  let Vv_equi8: Complex;
+                  if (angleDeg === 0) {
+                    Vv_equi8 = C(equi8Voltages.A, 0);
+                  } else if (angleDeg === -120) {
+                    Vv_equi8 = C(equi8Voltages.B, 0);
+                  } else if (angleDeg === 120) {
+                    Vv_equi8 = C(equi8Voltages.C, 0);
+                  } else {
+                    const avgVoltage = (equi8Voltages.A + equi8Voltages.B + equi8Voltages.C) / 3;
+                    Vv_equi8 = C(avgVoltage, 0);
+                  }
+                  V_node_phase.set(v, Vv_equi8);
+                  console.log(`🔌 EQUI8 nœud ${v} (phase ${angleDeg}°): tension imposée ${abs(Vv_equi8).toFixed(1)}V`);
+                }
+              } else if (vNode?.hasSRG2Device && vNode.srg2RegulationCoefficients) {
                 // Appliquer les coefficients de régulation SRG2 aux tensions calculées
                 let regulationCoeff = 0;
                 if (angleDeg === 0) {

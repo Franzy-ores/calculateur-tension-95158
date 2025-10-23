@@ -619,9 +619,9 @@ export class SimulationCalculator extends ElectricalCalculator {
       );
     }
     
-    // Cas 3: Uniquement compensateurs → nouvelle méthode
+    // Cas 3: Uniquement compensateurs → méthode itérative EQUI8
     if (activeSRG2.length === 0 && activeCompensators.length > 0) {
-      return this.calculateWithNeutralCompensation(
+      return this.calculateWithNeutralCompensationIterative(
         project,
         scenario,
         activeCompensators
@@ -822,14 +822,102 @@ export class SimulationCalculator extends ElectricalCalculator {
   /**
    * Calcule un scénario avec compensation de neutre uniquement
    */
-  private calculateWithNeutralCompensation(
+  /**
+   * Calcul itératif avec compensateurs de neutre (méthode EQUI8)
+   * Similaire à calculateWithSRG2Regulation, recalcule le circuit complet à chaque itération
+   */
+  private calculateWithNeutralCompensationIterative(
     project: Project,
     scenario: CalculationScenario,
     compensators: NeutralCompensator[]
   ): CalculationResult {
-    // 1. Calcul de base sans équipement
-    const baseResult = this.calculateScenario(
-      project.nodes,
+    console.log(`🔄 Début calcul itératif EQUI8 avec ${compensators.length} compensateurs`);
+    
+    let iteration = 0;
+    let converged = false;
+    let previousVoltages: Map<string, {A: number, B: number, C: number}> = new Map();
+    
+    // Copie des nœuds pour modification itérative
+    const workingNodes = JSON.parse(JSON.stringify(project.nodes)) as Node[];
+    
+    while (!converged && iteration < SimulationCalculator.SIM_MAX_ITERATIONS) {
+      iteration++;
+      
+      // Nettoyer les marqueurs EQUI8 précédents si iteration > 1
+      if (iteration > 1) {
+        this.cleanupEQUI8Markers(workingNodes);
+      }
+      
+      // RECALCUL COMPLET DU CIRCUIT avec l'état actuel
+      const result = this.calculateScenario(
+        workingNodes,
+        project.cables,
+        project.cableTypes,
+        scenario,
+        project.foisonnementCharges,
+        project.foisonnementProductions,
+        project.transformerConfig,
+        project.loadModel,
+        project.desequilibrePourcent,
+        project.manualPhaseDistribution,
+        project.clientsImportes,
+        project.clientLinks
+      );
+      
+      // Appliquer les compensateurs et stocker les changements de tension
+      const voltageChanges = new Map<string, {A: number, B: number, C: number}>();
+      
+      for (const compensator of compensators) {
+        // Calculer la compensation EQUI8
+        const equi8Result = this.calculateEQUI8ForNode(result, project, compensator);
+        
+        if (equi8Result) {
+          voltageChanges.set(compensator.nodeId, {
+            A: equi8Result.UEQUI8_ph1,
+            B: equi8Result.UEQUI8_ph2,
+            C: equi8Result.UEQUI8_ph3
+          });
+          
+          // Mettre à jour les métriques du compensateur
+          compensator.iN_initial_A = equi8Result.iN_initial_A;
+          compensator.iN_absorbed_A = equi8Result.iN_absorbed_A;
+          compensator.currentIN_A = equi8Result.I_EQUI8_A;
+          compensator.reductionPercent = equi8Result.reductionPercent;
+          compensator.isLimited = equi8Result.isLimited;
+          compensator.compensationQ_kVAr = equi8Result.compensationQ_kVAr;
+          compensator.umoy_init_V = equi8Result.umoy_init_V;
+          compensator.umax_init_V = equi8Result.umax_init_V;
+          compensator.umin_init_V = equi8Result.umin_init_V;
+          compensator.ecart_init_V = equi8Result.ecart_init_V;
+          compensator.ecart_equi8_V = equi8Result.ecart_equi8_V;
+          compensator.u1p_V = equi8Result.UEQUI8_ph1;
+          compensator.u2p_V = equi8Result.UEQUI8_ph2;
+          compensator.u3p_V = equi8Result.UEQUI8_ph3;
+          
+          // Appliquer les tensions EQUI8 au nœud dans workingNodes
+          this.applyEQUI8Voltages(workingNodes, compensator, equi8Result);
+          
+          console.log(`📊 EQUI8 iteration ${iteration} - nœud ${compensator.nodeId}:`, {
+            U1p: equi8Result.UEQUI8_ph1.toFixed(1) + 'V',
+            U2p: equi8Result.UEQUI8_ph2.toFixed(1) + 'V',
+            U3p: equi8Result.UEQUI8_ph3.toFixed(1) + 'V',
+            'I_N': equi8Result.I_EQUI8_A.toFixed(1) + 'A',
+            'Réduction': equi8Result.reductionPercent.toFixed(1) + '%'
+          });
+        }
+      }
+      
+      // Vérifier convergence
+      converged = this.checkEQUI8Convergence(voltageChanges, previousVoltages);
+      previousVoltages = new Map(voltageChanges);
+      
+      console.log(`🔄 EQUI8 Iteration ${iteration}: ${converged ? 'Convergé ✓' : 'En cours...'}`);
+    }
+    
+    // Recalcul final avec les tensions stabilisées
+    this.cleanupEQUI8Markers(workingNodes);
+    const finalResult = this.calculateScenario(
+      workingNodes,
       project.cables,
       project.cableTypes,
       scenario,
@@ -843,7 +931,13 @@ export class SimulationCalculator extends ElectricalCalculator {
       project.clientLinks
     );
     
-    return this.applyNeutralCompensatorsToResult(baseResult, project, compensators);
+    console.log(`✅ EQUI8 simulation terminée: ${converged ? 'convergé' : 'non convergé'} après ${iteration} itérations`);
+    
+    return {
+      ...finalResult,
+      convergenceStatus: converged ? 'converged' : 'not_converged',
+      iterations: iteration
+    };
   }
 
   /**
@@ -935,19 +1029,6 @@ export class SimulationCalculator extends ElectricalCalculator {
         nodeMetrics.voltagesPerPhase.B = equi8Result.UEQUI8_ph2;
         nodeMetrics.voltagesPerPhase.C = equi8Result.UEQUI8_ph3;
         
-        // Si compensation active, propager les effets en aval avec calcul phasor
-        if (equi8Result.reductionPercent > 0) {
-          this.propagateEqui8InjectionDownstream(
-            result,
-            project,
-            compensator,
-            equi8Result.I_EQUI8_complex,
-            I_A_total,
-            I_B_total,
-            I_C_total
-          );
-        }
-        
         console.log(`📊 EQUI8 tensions finales au nœud ${compensator.nodeId}:`, {
           U1p: compensator.u1p_V.toFixed(1) + 'V',
           U2p: compensator.u2p_V.toFixed(1) + 'V',
@@ -966,132 +1047,121 @@ export class SimulationCalculator extends ElectricalCalculator {
    * L'EQUI8 injecte un courant de compensation qui modifie les chutes de tension en aval
    * selon l'impédance complexe des tronçons (calculs phasors Z = R + jX)
    */
-  private propagateEqui8InjectionDownstream(
+  /**
+   * Calcule l'effet EQUI8 pour un nœud donné
+   * Extrait les tensions et courants, applique le modèle EQUI8
+   */
+  private calculateEQUI8ForNode(
     result: CalculationResult,
     project: Project,
+    compensator: NeutralCompensator
+  ): any | null {
+    if (!result.nodeMetricsPerPhase) return null;
+    
+    const nodeMetrics = result.nodeMetricsPerPhase.find(nm => nm.nodeId === compensator.nodeId);
+    if (!nodeMetrics) {
+      console.warn(`⚠️ Nœud ${compensator.nodeId} non trouvé dans les résultats`);
+      return null;
+    }
+    
+    // Récupérer les courants de phase depuis les câbles parent
+    const parentCables = project.cables.filter(c => c.nodeBId === compensator.nodeId);
+    if (parentCables.length === 0) {
+      console.warn(`⚠️ Pas de câble parent pour le nœud ${compensator.nodeId}`);
+      return null;
+    }
+    
+    let I_A_total = C(0, 0);
+    let I_B_total = C(0, 0);
+    let I_C_total = C(0, 0);
+    
+    for (const cable of parentCables) {
+      const cableResult = result.cables.find(cr => cr.id === cable.id);
+      if (!cableResult || !cableResult.currentsPerPhase_A) continue;
+      
+      const I_A_mag = cableResult.currentsPerPhase_A.A || 0;
+      const I_B_mag = cableResult.currentsPerPhase_A.B || 0;
+      const I_C_mag = cableResult.currentsPerPhase_A.C || 0;
+      
+      // Approximation: phases décalées de 120°
+      I_A_total = add(I_A_total, fromPolar(I_A_mag, 0));
+      I_B_total = add(I_B_total, fromPolar(I_B_mag, -2*Math.PI/3));
+      I_C_total = add(I_C_total, fromPolar(I_C_mag, 2*Math.PI/3));
+    }
+    
+    // Récupérer les tensions initiales
+    const Uinit_ph1 = nodeMetrics.voltagesPerPhase.A;
+    const Uinit_ph2 = nodeMetrics.voltagesPerPhase.B;
+    const Uinit_ph3 = nodeMetrics.voltagesPerPhase.C;
+    
+    // Appliquer le modèle EQUI8
+    return this.applyEQUI8Compensation(
+      Uinit_ph1,
+      Uinit_ph2,
+      Uinit_ph3,
+      I_A_total,
+      I_B_total,
+      I_C_total,
+      compensator
+    );
+  }
+  
+  /**
+   * Nettoie les marqueurs EQUI8 après calcul
+   */
+  private cleanupEQUI8Markers(nodes: Node[]): void {
+    for (const node of nodes) {
+      if (node.customProps?.['equi8_modified']) {
+        delete node.customProps['equi8_modified'];
+        delete node.customProps['equi8_voltages'];
+      }
+    }
+  }
+  
+  /**
+   * Applique les tensions EQUI8 au nœud
+   */
+  private applyEQUI8Voltages(
+    nodes: Node[],
     compensator: NeutralCompensator,
-    I_comp_injected: Complex,
-    I_A_original: Complex,
-    I_B_original: Complex,
-    I_C_original: Complex
+    equi8Result: { UEQUI8_ph1: number; UEQUI8_ph2: number; UEQUI8_ph3: number }
   ): void {
-    if (!result.nodeMetricsPerPhase) return;
-
-    console.log(`🔄 [EQUI8] Propagation phasorielle en aval du compensateur ${compensator.nodeId}`);
-    console.log(`🔄 [EQUI8] I_comp_injected = ${I_comp_injected.re.toFixed(2)}+j${I_comp_injected.im.toFixed(2)} A`);
-
-    // L'EQUI8 injecte/absorbe un courant homopolaire I_comp
-    // Ce courant se répartit sur les trois phases de manière homopolaire (composante neutre)
-    const I_absorbed_A = abs(I_comp_injected);
+    const node = nodes.find(n => n.id === compensator.nodeId);
+    if (!node) return;
     
-    if (I_absorbed_A === 0) {
-      console.log(`⚠️ [EQUI8] Compensateur ${compensator.nodeId}: pas de courant injecté, pas d'effet en aval`);
-      return;
+    // Marquer le nœud comme modifié par EQUI8
+    if (!node.customProps) node.customProps = {};
+    node.customProps['equi8_modified'] = true;
+    node.customProps['equi8_voltages'] = {
+      A: equi8Result.UEQUI8_ph1,
+      B: equi8Result.UEQUI8_ph2,
+      C: equi8Result.UEQUI8_ph3
+    };
+  }
+  
+  /**
+   * Vérifie la convergence EQUI8
+   */
+  private checkEQUI8Convergence(
+    current: Map<string, {A: number, B: number, C: number}>,
+    previous: Map<string, {A: number, B: number, C: number}>
+  ): boolean {
+    if (previous.size === 0) return false;
+    
+    for (const [nodeId, voltages] of current) {
+      const prev = previous.get(nodeId);
+      if (!prev) return false;
+      
+      // Seuil de convergence: 0.1V sur chaque phase
+      const tolerance = SimulationCalculator.SIM_CONVERGENCE_TOLERANCE_PHASE_V;
+      if (Math.abs(voltages.A - prev.A) > tolerance ||
+          Math.abs(voltages.B - prev.B) > tolerance ||
+          Math.abs(voltages.C - prev.C) > tolerance) {
+        return false;
+      }
     }
     
-    // Identifier le circuit du compensateur (tous les nœuds alimentés par la même source)
-    const circuitNodes = getCircuitNodes(project.nodes, project.cables, compensator.nodeId);
-    
-    // Trouver les nœuds en aval du compensateur ET dans le même circuit
-    const allDownstreamNodes = this.findDownstreamNodes(project, compensator.nodeId);
-    const downstreamNodes = allDownstreamNodes.filter(nodeId => circuitNodes.has(nodeId));
-    
-    console.log(`📍 [EQUI8] Circuit ${compensator.nodeId}: ${circuitNodes.size} nœuds identifiés`);
-    console.log(`📍 [EQUI8] Nœuds en aval dans le circuit: ${downstreamNodes.length}`);
-    
-    // Répartition du courant compensateur par phase avec déphasages triphasés corrects
-    // L'EQUI8 compense la composante homopolaire : même magnitude sur chaque phase
-    // mais avec les déphasages respectifs: A=0°, B=-120°, C=+120°
-    const I_comp_mag = abs(I_comp_injected) / 3;
-    const I_comp_phase = arg(I_comp_injected); // Phase du courant de compensation
-    
-    // Courants de compensation par phase (triphasé équilibré)
-    const I_comp_A = fromPolar(I_comp_mag, I_comp_phase);
-    const I_comp_B = fromPolar(I_comp_mag, I_comp_phase - (2 * Math.PI / 3)); // -120°
-    const I_comp_C = fromPolar(I_comp_mag, I_comp_phase + (2 * Math.PI / 3)); // +120°
-    
-    console.log(`⚡ [EQUI8] Courants de compensation par phase (triphasé):`);
-    console.log(`   I_comp_A = ${I_comp_A.re.toFixed(2)}+j${I_comp_A.im.toFixed(2)} A (∠${(I_comp_phase * 180 / Math.PI).toFixed(1)}°)`);
-    console.log(`   I_comp_B = ${I_comp_B.re.toFixed(2)}+j${I_comp_B.im.toFixed(2)} A (∠${((I_comp_phase - 2*Math.PI/3) * 180 / Math.PI).toFixed(1)}°)`);
-    console.log(`   I_comp_C = ${I_comp_C.re.toFixed(2)}+j${I_comp_C.im.toFixed(2)} A (∠${((I_comp_phase + 2*Math.PI/3) * 180 / Math.PI).toFixed(1)}°)`);
-    
-    // Pour chaque nœud en aval, calculer la chute de tension due à la compensation
-    for (const downstreamNodeId of downstreamNodes) {
-      const nodeMetrics = result.nodeMetricsPerPhase.find(nm => nm.nodeId === downstreamNodeId);
-      if (!nodeMetrics) continue;
-      
-      // Trouver le chemin de câbles du compensateur au nœud aval
-      const pathCables = this.findCablePath(project, compensator.nodeId, downstreamNodeId);
-      
-      if (pathCables.length === 0) {
-        console.log(`⚠️ [EQUI8] Pas de chemin trouvé vers ${downstreamNodeId}`);
-        continue;
-      }
-      
-      // Calculer l'impédance complexe totale du chemin (phase: R12+jX12)
-      let Z_path_phase: Complex = C(0, 0);
-      
-      for (const cable of pathCables) {
-        const cableType = project.cableTypes.find(ct => ct.id === cable.typeId);
-        if (!cableType) continue;
-        
-        const length_km = cable.length_m / 1000;
-        // Impédance phase: utiliser R12/X12 (pas R0/X0)
-        const Z_segment = C(
-          cableType.R12_ohm_per_km * length_km,
-          cableType.X12_ohm_per_km * length_km
-        );
-        Z_path_phase = add(Z_path_phase, Z_segment);
-      }
-      
-      // Calculer les chutes de tension par phase avec les courants triphasés
-      // ΔV_ph = Z_path_phase × I_comp_ph (courant de compensation par phase)
-      const dV_A = mul(Z_path_phase, I_comp_A);
-      const dV_B = mul(Z_path_phase, I_comp_B);
-      const dV_C = mul(Z_path_phase, I_comp_C);
-      
-      // Magnitudes des chutes de tension (pour affichage et mise à jour)
-      const dV_A_mag = abs(dV_A);
-      const dV_B_mag = abs(dV_B);
-      const dV_C_mag = abs(dV_C);
-      
-      // Récupérer la tension au nœud compensateur (déjà corrigée par applyEQUI8Compensation)
-      const compensatorMetrics = result.nodeMetricsPerPhase.find(nm => nm.nodeId === compensator.nodeId);
-      
-      const oldVoltages = { ...nodeMetrics.voltagesPerPhase };
-      
-      if (compensatorMetrics) {
-        // Recalculer les tensions en aval depuis la tension du compensateur
-        // V_aval = V_compensateur - ΔV_chemin
-        // L'EQUI8 injecte un courant qui s'oppose à la composante homopolaire
-        // Le signe de la chute dépend du sens du courant de compensation
-        nodeMetrics.voltagesPerPhase.A = compensatorMetrics.voltagesPerPhase.A - dV_A_mag;
-        nodeMetrics.voltagesPerPhase.B = compensatorMetrics.voltagesPerPhase.B - dV_B_mag;
-        nodeMetrics.voltagesPerPhase.C = compensatorMetrics.voltagesPerPhase.C - dV_C_mag;
-      } else {
-        // Fallback: simple soustraction (cas où compensateur non trouvé)
-        nodeMetrics.voltagesPerPhase.A -= dV_A_mag;
-        nodeMetrics.voltagesPerPhase.B -= dV_B_mag;
-        nodeMetrics.voltagesPerPhase.C -= dV_C_mag;
-      }
-      
-      console.log(`  📉 [EQUI8] Nœud ${downstreamNodeId}:`);
-      console.log(`     Z_path = ${Z_path_phase.re.toFixed(4)}+j${Z_path_phase.im.toFixed(4)} Ω`);
-      console.log(`     dV_A = ${dV_A.re.toFixed(2)}+j${dV_A.im.toFixed(2)} V (|dV| = ${dV_A_mag.toFixed(2)}V)`);
-      console.log(`     dV_B = ${dV_B.re.toFixed(2)}+j${dV_B.im.toFixed(2)} V (|dV| = ${dV_B_mag.toFixed(2)}V)`);
-      console.log(`     dV_C = ${dV_C.re.toFixed(2)}+j${dV_C.im.toFixed(2)} V (|dV| = ${dV_C_mag.toFixed(2)}V)`);
-      console.log(`     A: ${oldVoltages.A.toFixed(1)}V -> ${nodeMetrics.voltagesPerPhase.A.toFixed(1)}V (Δ=${(nodeMetrics.voltagesPerPhase.A - oldVoltages.A).toFixed(2)}V)`);
-      console.log(`     B: ${oldVoltages.B.toFixed(1)}V -> ${nodeMetrics.voltagesPerPhase.B.toFixed(1)}V (Δ=${(nodeMetrics.voltagesPerPhase.B - oldVoltages.B).toFixed(2)}V)`);
-      console.log(`     C: ${oldVoltages.C.toFixed(1)}V -> ${nodeMetrics.voltagesPerPhase.C.toFixed(1)}V (Δ=${(nodeMetrics.voltagesPerPhase.C - oldVoltages.C).toFixed(2)}V)`);
-      
-      // Recalculer la conformité par phase
-      const sourceVoltage = 230; // Tension nominale de référence
-      const dropA = ((sourceVoltage - nodeMetrics.voltagesPerPhase.A) / sourceVoltage) * 100;
-      const dropB = ((sourceVoltage - nodeMetrics.voltagesPerPhase.B) / sourceVoltage) * 100;
-      const dropC = ((sourceVoltage - nodeMetrics.voltagesPerPhase.C) / sourceVoltage) * 100;
-      
-      console.log(`     Chutes totales: A=${dropA.toFixed(2)}%, B=${dropB.toFixed(2)}%, C=${dropC.toFixed(2)}%`);
-    }
+    return true;
   }
 
   /**

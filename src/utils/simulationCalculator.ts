@@ -38,7 +38,7 @@ export class SimulationCalculator extends ElectricalCalculator {
     ratio_ph2: number;
     ratio_ph3: number;
     Umoy_init: number;
-    facteur_reduction: number;
+    ecart_equi8: number;  // (Umax-Umin)EQUI8 selon formule CME
   }> = new Map();
   
   constructor(cosPhi: number = 0.95) {
@@ -645,6 +645,7 @@ export class SimulationCalculator extends ElectricalCalculator {
   /**
    * Calcule les ratios de compensation EQUI8 basés sur les tensions naturelles
    * Ces ratios sont ensuite figés pour toutes les itérations
+   * Conforme à la documentation officielle CME Transformateur
    */
   private computeEQUI8CompensationRatio(
     Uinit_ph1: number,
@@ -657,27 +658,28 @@ export class SimulationCalculator extends ElectricalCalculator {
     ratio_ph2: number;
     ratio_ph3: number;
     Umoy_init: number;
-    facteur_reduction: number;
+    ecart_equi8: number;
   } {
     // Calculer la tension moyenne et l'écart initial
     const Umoy_init = (Uinit_ph1 + Uinit_ph2 + Uinit_ph3) / 3;
     const Umax_init = Math.max(Uinit_ph1, Uinit_ph2, Uinit_ph3);
     const Umin_init = Math.min(Uinit_ph1, Uinit_ph2, Uinit_ph3);
-    const ecart_init = Umax_init - Umin_init;
+    const ecart_init = Umax_init - Umin_init;  // (Umax-Umin)init
     
     // Calculer les ratios normalisés (avec signe conservé)
+    // Ratio-phX = (Uinitphx - Umoy-3ph-init) / (Umax-3Ph-init - Umin-3Ph-init)
     const ratio_ph1 = ecart_init > 0 ? (Uinit_ph1 - Umoy_init) / ecart_init : 0;
     const ratio_ph2 = ecart_init > 0 ? (Uinit_ph2 - Umoy_init) / ecart_init : 0;
     const ratio_ph3 = ecart_init > 0 ? (Uinit_ph3 - Umoy_init) / ecart_init : 0;
     
-    // Facteur de réduction du déséquilibre (formule EQUI8)
-    // Ce facteur est appliqué à l'amplitude du courant injecté
+    // ✅ FORMULE EXACTE selon documentation EQUI8 (CME Transformateur)
+    // (Umax-Umin)EQUI8 = 1 / [0,9119 × Ln(Zph) + 3,8654] × (Umax-Umin)init × 2 × Zph / (Zph + Zn)
     const lnZph = Math.log(Zph);
     const denominateur = 0.9119 * lnZph + 3.8654;
     const facteur_impedance = (2 * Zph) / (Zph + Zn);
-    const facteur_reduction = (1 / denominateur) * facteur_impedance;
+    const ecart_equi8 = (1 / denominateur) * ecart_init * facteur_impedance;
     
-    return { ratio_ph1, ratio_ph2, ratio_ph3, Umoy_init, facteur_reduction };
+    return { ratio_ph1, ratio_ph2, ratio_ph3, Umoy_init, ecart_equi8 };
   }
 
   /**
@@ -840,11 +842,11 @@ export class SimulationCalculator extends ElectricalCalculator {
       };
     }
     
-    // Utiliser les ratios FIXES et le facteur de réduction
-    const { ratio_ph1, ratio_ph2, ratio_ph3, Umoy_init: Umoy_fixed, facteur_reduction } = ratios;
+    // Utiliser les ratios FIXES et l'écart EQUI8 calculé à l'itération 1
+    const { ratio_ph1, ratio_ph2, ratio_ph3, Umoy_init: Umoy_fixed, ecart_equi8 } = ratios;
     
-    // Calculer les tensions finales avec les ratios fixes (pour affichage)
-    const ecart_equi8 = ecart_init * facteur_reduction;
+    // ✅ FORMULE EXACTE selon documentation EQUI8 (CME Transformateur)
+    // UEQUI8-ph1 = Umoy-3Ph-init + Ratio-ph1 × (Umax-Umin)EQUI8
     const UEQUI8_ph1_mag = Umoy_fixed + ratio_ph1 * ecart_equi8;
     const UEQUI8_ph2_mag = Umoy_fixed + ratio_ph2 * ecart_equi8;
     const UEQUI8_ph3_mag = Umoy_fixed + ratio_ph3 * ecart_equi8;
@@ -855,14 +857,15 @@ export class SimulationCalculator extends ElectricalCalculator {
     const UEQUI8_ph2_phasor = fromPolar(UEQUI8_ph2_mag, -2*Math.PI/3);
     const UEQUI8_ph3_phasor = fromPolar(UEQUI8_ph3_mag, 2*Math.PI/3);
     
-    // 6. Recalculer le courant injecté EQUI8 à chaque itération
-    // L'EQUI8 mesure le courant de neutre actuel et injecte un courant opposé
-    // I_EQUI8 = -facteur_reduction × I_N
-    const I_N_normalized = abs(I_N_complex) > 0 ? scale(I_N_complex, 1 / abs(I_N_complex)) : C(0, 0);
-    const I_EQUI8_mag = abs(I_N_complex) * facteur_reduction;
+    // 6. Calculer le courant injecté EQUI8 selon formule officielle CME
+    // ✅ FORMULE EXACTE: I-EQUI8 = 0,392 × Zph^(-0,8065) × (Umax-Umin)init × 2 × Zph / (Zph + Zn)
+    const facteur_courant = 0.392 * Math.pow(Zph, -0.8065);
+    const facteur_impedance_courant = (2 * Zph) / (Zph + Zn);
+    const I_EQUI8_mag = facteur_courant * ecart_init * facteur_impedance_courant;
     
     // Construire le phasor de compensation: opposé à I_N_complex
-    // L'EQUI8 injecte un courant qui s'oppose à la composante homopolaire
+    // L'EQUI8 injecte un courant qui s'oppose au courant de neutre
+    const I_N_normalized = abs(I_N_complex) > 0 ? scale(I_N_complex, 1 / abs(I_N_complex)) : C(0, 0);
     const I_EQUI8_complex = scale(I_N_normalized, -I_EQUI8_mag);
     
     // 7. Calculer la réduction de courant de neutre
@@ -882,15 +885,14 @@ export class SimulationCalculator extends ElectricalCalculator {
     // Estimation des puissances réactives (pour affichage)
     const Q_per_phase = Math.min(estimatedPower_kVA, compensator.maxPower_kVA) / 3;
 
-    console.log(`📐 EQUI8 au nœud ${compensator.nodeId} (ratios fixes):`, {
-      'Ratios': `A=${ratio_ph1.toFixed(3)}, B=${ratio_ph2.toFixed(3)}, C=${ratio_ph3.toFixed(3)}`,
-      'Umoy_init (fixe)': `${Umoy_fixed.toFixed(1)}V`,
-      'Écart EQUI8 (fixe)': `${ecart_equi8.toFixed(1)}V`,
-      'Tensions calculées': `${UEQUI8_ph1_mag.toFixed(1)}V / ${UEQUI8_ph2_mag.toFixed(1)}V / ${UEQUI8_ph3_mag.toFixed(1)}V`,
-      'Phasors EQUI8': `A: ${abs(UEQUI8_ph1_phasor).toFixed(1)}V∠${(arg(UEQUI8_ph1_phasor)*180/Math.PI).toFixed(0)}°`,
-      'I_N': `${I_N_initial.toFixed(1)}A → ${I_EQUI8_mag.toFixed(1)}A`,
-      'I_N_phasor': `${I_N_complex.re.toFixed(2)}+j${I_N_complex.im.toFixed(2)}`,
-      'I_comp_phasor': `${I_EQUI8_complex.re.toFixed(2)}+j${I_EQUI8_complex.im.toFixed(2)}`,
+    console.log(`📐 EQUI8 au nœud ${compensator.nodeId} (formule officielle CME):`, {
+      'Ratios (fixes)': `A=${ratio_ph1.toFixed(3)}, B=${ratio_ph2.toFixed(3)}, C=${ratio_ph3.toFixed(3)}`,
+      'Umoy-3Ph-init': `${Umoy_fixed.toFixed(1)}V`,
+      '(Umax-Umin)init': `${ecart_init.toFixed(1)}V`,
+      '(Umax-Umin)EQUI8': `${ecart_equi8.toFixed(1)}V`,
+      'Tensions EQUI8': `${UEQUI8_ph1_mag.toFixed(1)}V / ${UEQUI8_ph2_mag.toFixed(1)}V / ${UEQUI8_ph3_mag.toFixed(1)}V`,
+      'I-EQUI8': `${I_EQUI8_mag.toFixed(1)}A (formule: 0.392×Zph^-0.8065×...)`,
+      'I_N_initial': `${I_N_initial.toFixed(1)}A`,
       'Réduction': `${reductionPercent.toFixed(1)}%`
     });
 
@@ -982,12 +984,12 @@ export class SimulationCalculator extends ElectricalCalculator {
             // Stocker dans la Map
             this.equi8Ratios.set(compensator.nodeId, ratios);
             
-            console.log(`✅ Ratios EQUI8 stockés pour nœud ${compensator.nodeId}:`, {
+            console.log(`✅ Ratios EQUI8 stockés pour nœud ${compensator.nodeId} (formule CME):`, {
               ratio_A: ratios.ratio_ph1.toFixed(3),
               ratio_B: ratios.ratio_ph2.toFixed(3),
               ratio_C: ratios.ratio_ph3.toFixed(3),
               Umoy_init: ratios.Umoy_init.toFixed(1) + 'V',
-              facteur_reduction: ratios.facteur_reduction.toFixed(3)
+              '(Umax-Umin)EQUI8': ratios.ecart_equi8.toFixed(1) + 'V'
             });
           }
         }

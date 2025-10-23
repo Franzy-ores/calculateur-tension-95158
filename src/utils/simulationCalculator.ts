@@ -38,7 +38,7 @@ export class SimulationCalculator extends ElectricalCalculator {
     ratio_ph2: number;
     ratio_ph3: number;
     Umoy_init: number;
-    ecart_equi8: number;
+    facteur_reduction: number;
   }> = new Map();
   
   constructor(cosPhi: number = 0.95) {
@@ -657,7 +657,7 @@ export class SimulationCalculator extends ElectricalCalculator {
     ratio_ph2: number;
     ratio_ph3: number;
     Umoy_init: number;
-    ecart_equi8: number;
+    facteur_reduction: number;
   } {
     // Calculer la tension moyenne et l'écart initial
     const Umoy_init = (Uinit_ph1 + Uinit_ph2 + Uinit_ph3) / 3;
@@ -670,13 +670,14 @@ export class SimulationCalculator extends ElectricalCalculator {
     const ratio_ph2 = ecart_init > 0 ? (Uinit_ph2 - Umoy_init) / ecart_init : 0;
     const ratio_ph3 = ecart_init > 0 ? (Uinit_ph3 - Umoy_init) / ecart_init : 0;
     
-    // Formule EQUI8 pour l'écart après compensation
+    // Facteur de réduction du déséquilibre (formule EQUI8)
+    // Ce facteur est appliqué à l'amplitude du courant injecté
     const lnZph = Math.log(Zph);
     const denominateur = 0.9119 * lnZph + 3.8654;
     const facteur_impedance = (2 * Zph) / (Zph + Zn);
-    const ecart_equi8 = (1 / denominateur) * ecart_init * facteur_impedance;
+    const facteur_reduction = (1 / denominateur) * facteur_impedance;
     
-    return { ratio_ph1, ratio_ph2, ratio_ph3, Umoy_init, ecart_equi8 };
+    return { ratio_ph1, ratio_ph2, ratio_ph3, Umoy_init, facteur_reduction };
   }
 
   /**
@@ -839,28 +840,29 @@ export class SimulationCalculator extends ElectricalCalculator {
       };
     }
     
-    // Utiliser les ratios FIXES
-    const { ratio_ph1, ratio_ph2, ratio_ph3, Umoy_init: Umoy_fixed, ecart_equi8 } = ratios;
+    // Utiliser les ratios FIXES et le facteur de réduction
+    const { ratio_ph1, ratio_ph2, ratio_ph3, Umoy_init: Umoy_fixed, facteur_reduction } = ratios;
     
-    // Calculer les tensions finales avec les ratios fixes
+    // Calculer les tensions finales avec les ratios fixes (pour affichage)
+    const ecart_equi8 = ecart_init * facteur_reduction;
     const UEQUI8_ph1_mag = Umoy_fixed + ratio_ph1 * ecart_equi8;
     const UEQUI8_ph2_mag = Umoy_fixed + ratio_ph2 * ecart_equi8;
     const UEQUI8_ph3_mag = Umoy_fixed + ratio_ph3 * ecart_equi8;
     
-    // 5. Calculer les phasors complets avec les phases naturelles
+    // 5. Calculer les phasors complets avec les phases naturelles (pour affichage)
     // Phase A: 0°, Phase B: -120°, Phase C: +120°
     const UEQUI8_ph1_phasor = fromPolar(UEQUI8_ph1_mag, 0);
     const UEQUI8_ph2_phasor = fromPolar(UEQUI8_ph2_mag, -2*Math.PI/3);
     const UEQUI8_ph3_phasor = fromPolar(UEQUI8_ph3_mag, 2*Math.PI/3);
     
-    // 6. Calculer le courant dans le neutre de l'EQUI8 (magnitude)
-    // I-EQUI8 = 0,392 × Zph^(-0,8065) × (Umax - Umin)init × 2 × Zph / (Zph + Zn)
-    const facteur_impedance = (2 * Zph) / (Zph + Zn);
-    const I_EQUI8_mag = 0.392 * Math.pow(Zph, -0.8065) * ecart_init * facteur_impedance;
+    // 6. Recalculer le courant injecté EQUI8 à chaque itération
+    // L'EQUI8 mesure le courant de neutre actuel et injecte un courant opposé
+    // I_EQUI8 = -facteur_reduction × I_N
+    const I_N_normalized = abs(I_N_complex) > 0 ? scale(I_N_complex, 1 / abs(I_N_complex)) : C(0, 0);
+    const I_EQUI8_mag = abs(I_N_complex) * facteur_reduction;
     
-    // Construire le phasor de compensation: opposé à I_N_complex avec magnitude I_EQUI8_mag
+    // Construire le phasor de compensation: opposé à I_N_complex
     // L'EQUI8 injecte un courant qui s'oppose à la composante homopolaire
-    const I_N_normalized = normalize(I_N_complex);
     const I_EQUI8_complex = scale(I_N_normalized, -I_EQUI8_mag);
     
     // 7. Calculer la réduction de courant de neutre
@@ -985,7 +987,7 @@ export class SimulationCalculator extends ElectricalCalculator {
               ratio_B: ratios.ratio_ph2.toFixed(3),
               ratio_C: ratios.ratio_ph3.toFixed(3),
               Umoy_init: ratios.Umoy_init.toFixed(1) + 'V',
-              ecart_equi8: ratios.ecart_equi8.toFixed(1) + 'V'
+              facteur_reduction: ratios.facteur_reduction.toFixed(3)
             });
           }
         }
@@ -1252,15 +1254,13 @@ export class SimulationCalculator extends ElectricalCalculator {
   }
   
   /**
-   * Applique les tensions EQUI8 au nœud
+   * Applique l'injection de courant EQUI8 au nœud
    */
   private applyEQUI8Voltages(
     nodes: Node[],
     compensator: NeutralCompensator,
     equi8Result: { 
-      UEQUI8_ph1_phasor: Complex; 
-      UEQUI8_ph2_phasor: Complex; 
-      UEQUI8_ph3_phasor: Complex;
+      I_EQUI8_complex: Complex;
       UEQUI8_ph1_mag: number;
       UEQUI8_ph2_mag: number;
       UEQUI8_ph3_mag: number;
@@ -1269,21 +1269,17 @@ export class SimulationCalculator extends ElectricalCalculator {
     const node = nodes.find(n => n.id === compensator.nodeId);
     if (!node) return;
     
-    // Marquer le nœud comme modifié par EQUI8
+    // Marquer le nœud comme ayant une injection EQUI8
     if (!node.customProps) node.customProps = {};
     node.customProps['equi8_modified'] = true;
-    node.customProps['equi8_voltages'] = {
-      A: equi8Result.UEQUI8_ph1_phasor,  // ✅ Stocker le phasor complet
-      B: equi8Result.UEQUI8_ph2_phasor,  // ✅ Stocker le phasor complet
-      C: equi8Result.UEQUI8_ph3_phasor   // ✅ Stocker le phasor complet
-    };
+    node.customProps['equi8_current_injection'] = equi8Result.I_EQUI8_complex;
     
-    console.log(`✅ Marqueur EQUI8 appliqué sur nœud ${compensator.nodeId}:`, {
-      equi8_modified: true,
-      equi8_voltages: {
-        A: `${equi8Result.UEQUI8_ph1_mag.toFixed(1)}V ∠${(arg(equi8Result.UEQUI8_ph1_phasor)*180/Math.PI).toFixed(0)}°`,
-        B: `${equi8Result.UEQUI8_ph2_mag.toFixed(1)}V ∠${(arg(equi8Result.UEQUI8_ph2_phasor)*180/Math.PI).toFixed(0)}°`,
-        C: `${equi8Result.UEQUI8_ph3_mag.toFixed(1)}V ∠${(arg(equi8Result.UEQUI8_ph3_phasor)*180/Math.PI).toFixed(0)}°`
+    console.log(`✅ Injection EQUI8 appliquée sur nœud ${compensator.nodeId}:`, {
+      'I_inj': `${abs(equi8Result.I_EQUI8_complex).toFixed(1)}A ∠${(arg(equi8Result.I_EQUI8_complex)*180/Math.PI).toFixed(0)}°`,
+      'V_cibles (affichage)': {
+        A: `${equi8Result.UEQUI8_ph1_mag.toFixed(1)}V`,
+        B: `${equi8Result.UEQUI8_ph2_mag.toFixed(1)}V`,
+        C: `${equi8Result.UEQUI8_ph3_mag.toFixed(1)}V`
       }
     });
   }

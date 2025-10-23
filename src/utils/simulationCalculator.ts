@@ -32,6 +32,15 @@ export class SimulationCalculator extends ElectricalCalculator {
   
   private simCosPhi: number;
   
+  // Stockage des ratios EQUI8 fixes calculés à l'itération 1
+  private equi8Ratios: Map<string, {
+    ratio_ph1: number;
+    ratio_ph2: number;
+    ratio_ph3: number;
+    Umoy_init: number;
+    ecart_equi8: number;
+  }> = new Map();
+  
   constructor(cosPhi: number = 0.95) {
     super(cosPhi);
     this.simCosPhi = Math.min(1, Math.max(0, cosPhi));
@@ -634,6 +643,43 @@ export class SimulationCalculator extends ElectricalCalculator {
   }
 
   /**
+   * Calcule les ratios de compensation EQUI8 basés sur les tensions naturelles
+   * Ces ratios sont ensuite figés pour toutes les itérations
+   */
+  private computeEQUI8CompensationRatio(
+    Uinit_ph1: number,
+    Uinit_ph2: number,
+    Uinit_ph3: number,
+    Zph: number,
+    Zn: number
+  ): {
+    ratio_ph1: number;
+    ratio_ph2: number;
+    ratio_ph3: number;
+    Umoy_init: number;
+    ecart_equi8: number;
+  } {
+    // Calculer la tension moyenne et l'écart initial
+    const Umoy_init = (Uinit_ph1 + Uinit_ph2 + Uinit_ph3) / 3;
+    const Umax_init = Math.max(Uinit_ph1, Uinit_ph2, Uinit_ph3);
+    const Umin_init = Math.min(Uinit_ph1, Uinit_ph2, Uinit_ph3);
+    const ecart_init = Umax_init - Umin_init;
+    
+    // Calculer les ratios normalisés (avec signe conservé)
+    const ratio_ph1 = ecart_init > 0 ? (Uinit_ph1 - Umoy_init) / ecart_init : 0;
+    const ratio_ph2 = ecart_init > 0 ? (Uinit_ph2 - Umoy_init) / ecart_init : 0;
+    const ratio_ph3 = ecart_init > 0 ? (Uinit_ph3 - Umoy_init) / ecart_init : 0;
+    
+    // Formule EQUI8 pour l'écart après compensation
+    const lnZph = Math.log(Zph);
+    const denominateur = 0.9119 * lnZph + 3.8654;
+    const facteur_impedance = (2 * Zph) / (Zph + Zn);
+    const ecart_equi8 = (1 / denominateur) * ecart_init * facteur_impedance;
+    
+    return { ratio_ph1, ratio_ph2, ratio_ph3, Umoy_init, ecart_equi8 };
+  }
+
+  /**
    * Calcule le courant de neutre à partir des courants de phases
    */
   private calculateNeutralCurrent(
@@ -725,8 +771,10 @@ export class SimulationCalculator extends ElectricalCalculator {
 
     // === CALCULS INTERMÉDIAIRES EQUI8 ===
     
-    // 1. Calculer les statistiques des tensions initiales
-    const Umoy_init = (Uinit_ph1 + Uinit_ph2 + Uinit_ph3) / 3;
+    // Si pas de déséquilibre, pas de compensation nécessaire
+    // Récupérer les statistiques depuis ratios (si elles existent)
+    const ratiosData = this.equi8Ratios.get(compensator.nodeId);
+    const Umoy_init = ratiosData?.Umoy_init ?? (Uinit_ph1 + Uinit_ph2 + Uinit_ph3) / 3;
     const Umax_init = Math.max(Uinit_ph1, Uinit_ph2, Uinit_ph3);
     const Umin_init = Math.min(Uinit_ph1, Uinit_ph2, Uinit_ph3);
     const ecart_init = Umax_init - Umin_init;
@@ -759,23 +807,45 @@ export class SimulationCalculator extends ElectricalCalculator {
       };
     }
     
-    // 2. Calculer les ratios pour chaque phase (conservation des proportions)
-    const Ratio_ph1 = (Uinit_ph1 - Umoy_init) / ecart_init;
-    const Ratio_ph2 = (Uinit_ph2 - Umoy_init) / ecart_init;
-    const Ratio_ph3 = (Uinit_ph3 - Umoy_init) / ecart_init;
+    // Récupérer les ratios fixes calculés à l'itération 1
+    const ratios = this.equi8Ratios.get(compensator.nodeId);
     
-    // 3. Formule EQUI8 pour l'écart de tension après compensation
-    // (Umax-Umin)EQUI8 = 1 / [0,9119 × Ln(Zph) + 3,8654] × (Umax-Umin)init × 2 × Zph / (Zph + Zn)
-    const lnZph = Math.log(Zph);
-    const denominateur = 0.9119 * lnZph + 3.8654;
-    const facteur_impedance = (2 * Zph) / (Zph + Zn);
-    const ecart_equi8 = (1 / denominateur) * ecart_init * facteur_impedance;
+    if (!ratios) {
+      console.error(`❌ Pas de ratios EQUI8 pour nœud ${compensator.nodeId} - Utilisation fallback`);
+      // Fallback: retourner les tensions non modifiées
+      const U_A_phasor = fromPolar(Uinit_ph1, 0);
+      const U_B_phasor = fromPolar(Uinit_ph2, -2*Math.PI/3);
+      const U_C_phasor = fromPolar(Uinit_ph3, 2*Math.PI/3);
+      return {
+        UEQUI8_ph1_mag: Uinit_ph1,
+        UEQUI8_ph2_mag: Uinit_ph2,
+        UEQUI8_ph3_mag: Uinit_ph3,
+        UEQUI8_ph1_phasor: U_A_phasor,
+        UEQUI8_ph2_phasor: U_B_phasor,
+        UEQUI8_ph3_phasor: U_C_phasor,
+        I_EQUI8_A: I_N_initial,
+        I_EQUI8_complex: C(0, 0),
+        iN_initial_complex: I_N_complex,
+        reductionPercent: 0,
+        iN_initial_A: I_N_initial,
+        iN_absorbed_A: 0,
+        isLimited: false,
+        compensationQ_kVAr: { A: 0, B: 0, C: 0 },
+        umoy_init_V: Umoy_init,
+        umax_init_V: Umax_init,
+        umin_init_V: Umin_init,
+        ecart_init_V: ecart_init,
+        ecart_equi8_V: ecart_init
+      };
+    }
     
-    // 4. Calculer les tensions finales avec EQUI8 (magnitudes)
-    // UEQUI8-phX = Umoy-3Ph-init + Ratio-phX × (Umax-Umin)EQUI8
-    const UEQUI8_ph1_mag = Umoy_init + Ratio_ph1 * ecart_equi8;
-    const UEQUI8_ph2_mag = Umoy_init + Ratio_ph2 * ecart_equi8;
-    const UEQUI8_ph3_mag = Umoy_init + Ratio_ph3 * ecart_equi8;
+    // Utiliser les ratios FIXES
+    const { ratio_ph1, ratio_ph2, ratio_ph3, Umoy_init: Umoy_fixed, ecart_equi8 } = ratios;
+    
+    // Calculer les tensions finales avec les ratios fixes
+    const UEQUI8_ph1_mag = Umoy_fixed + ratio_ph1 * ecart_equi8;
+    const UEQUI8_ph2_mag = Umoy_fixed + ratio_ph2 * ecart_equi8;
+    const UEQUI8_ph3_mag = Umoy_fixed + ratio_ph3 * ecart_equi8;
     
     // 5. Calculer les phasors complets avec les phases naturelles
     // Phase A: 0°, Phase B: -120°, Phase C: +120°
@@ -785,6 +855,7 @@ export class SimulationCalculator extends ElectricalCalculator {
     
     // 6. Calculer le courant dans le neutre de l'EQUI8 (magnitude)
     // I-EQUI8 = 0,392 × Zph^(-0,8065) × (Umax - Umin)init × 2 × Zph / (Zph + Zn)
+    const facteur_impedance = (2 * Zph) / (Zph + Zn);
     const I_EQUI8_mag = 0.392 * Math.pow(Zph, -0.8065) * ecart_init * facteur_impedance;
     
     // Construire le phasor de compensation: opposé à I_N_complex avec magnitude I_EQUI8_mag
@@ -809,11 +880,11 @@ export class SimulationCalculator extends ElectricalCalculator {
     // Estimation des puissances réactives (pour affichage)
     const Q_per_phase = Math.min(estimatedPower_kVA, compensator.maxPower_kVA) / 3;
 
-    console.log(`📐 EQUI8 au nœud ${compensator.nodeId}:`, {
-      'Tensions init': `${Uinit_ph1.toFixed(1)}V / ${Uinit_ph2.toFixed(1)}V / ${Uinit_ph3.toFixed(1)}V`,
-      'Écart init': `${ecart_init.toFixed(1)}V`,
-      'Écart EQUI8': `${ecart_equi8.toFixed(1)}V`,
-      'Tensions EQUI8': `${UEQUI8_ph1_mag.toFixed(1)}V / ${UEQUI8_ph2_mag.toFixed(1)}V / ${UEQUI8_ph3_mag.toFixed(1)}V`,
+    console.log(`📐 EQUI8 au nœud ${compensator.nodeId} (ratios fixes):`, {
+      'Ratios': `A=${ratio_ph1.toFixed(3)}, B=${ratio_ph2.toFixed(3)}, C=${ratio_ph3.toFixed(3)}`,
+      'Umoy_init (fixe)': `${Umoy_fixed.toFixed(1)}V`,
+      'Écart EQUI8 (fixe)': `${ecart_equi8.toFixed(1)}V`,
+      'Tensions calculées': `${UEQUI8_ph1_mag.toFixed(1)}V / ${UEQUI8_ph2_mag.toFixed(1)}V / ${UEQUI8_ph3_mag.toFixed(1)}V`,
       'Phasors EQUI8': `A: ${abs(UEQUI8_ph1_phasor).toFixed(1)}V∠${(arg(UEQUI8_ph1_phasor)*180/Math.PI).toFixed(0)}°`,
       'I_N': `${I_N_initial.toFixed(1)}A → ${I_EQUI8_mag.toFixed(1)}A`,
       'I_N_phasor': `${I_N_complex.re.toFixed(2)}+j${I_N_complex.im.toFixed(2)}`,
@@ -889,6 +960,37 @@ export class SimulationCalculator extends ElectricalCalculator {
         project.clientLinks
       );
       
+      // 🔹 À l'itération 1 : calculer et stocker les ratios fixes
+      if (iteration === 1) {
+        console.log(`🔧 EQUI8 - Calcul des ratios de compensation (iteration 1)`);
+        
+        for (const compensator of compensators) {
+          const nodeMetrics = result.nodeMetricsPerPhase?.find(nm => nm.nodeId === compensator.nodeId);
+          
+          if (nodeMetrics?.voltagesPerPhase) {
+            const { A, B, C } = nodeMetrics.voltagesPerPhase;
+            
+            // Calculer les ratios une seule fois
+            const ratios = this.computeEQUI8CompensationRatio(
+              A, B, C,
+              compensator.Zph_Ohm,
+              compensator.Zn_Ohm
+            );
+            
+            // Stocker dans la Map
+            this.equi8Ratios.set(compensator.nodeId, ratios);
+            
+            console.log(`✅ Ratios EQUI8 stockés pour nœud ${compensator.nodeId}:`, {
+              ratio_A: ratios.ratio_ph1.toFixed(3),
+              ratio_B: ratios.ratio_ph2.toFixed(3),
+              ratio_C: ratios.ratio_ph3.toFixed(3),
+              Umoy_init: ratios.Umoy_init.toFixed(1) + 'V',
+              ecart_equi8: ratios.ecart_equi8.toFixed(1) + 'V'
+            });
+          }
+        }
+      }
+      
       // Appliquer les compensateurs et stocker les changements de tension
       const voltageChanges = new Map<string, {A: number, B: number, C: number}>();
       
@@ -958,6 +1060,9 @@ export class SimulationCalculator extends ElectricalCalculator {
     
     // Nettoyer APRÈS le recalcul final (comme SRG2)
     this.cleanupEQUI8Markers(workingNodes);
+    
+    // Nettoyer les ratios stockés
+    this.equi8Ratios.clear();
     
     console.log(`✅ EQUI8 simulation terminée: ${converged ? 'convergé' : 'non convergé'} après ${iteration} itérations`);
     

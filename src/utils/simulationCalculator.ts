@@ -11,6 +11,7 @@ import {
   SimulationEquipment,
   SimulationResult,
   CableUpgrade,
+  EQUI8PerPhaseInjection,
 } from '@/types/network';
 import { SRG2Config, SRG2SimulationResult, SRG2SwitchState, DEFAULT_SRG2_400_CONFIG, DEFAULT_SRG2_230_CONFIG } from '@/types/srg2';
 import { ElectricalCalculator } from '@/utils/electricalCalculations';
@@ -1484,6 +1485,8 @@ export class SimulationCalculator extends ElectricalCalculator {
       if (node.customProps?.['equi8_modified']) {
         delete node.customProps['equi8_modified'];
         delete node.customProps['equi8_voltages'];
+        delete node.customProps['equi8_current_injection'];
+        delete node.customProps['equi8_current_injection_perPhase'];
       }
     }
   }
@@ -1496,6 +1499,7 @@ export class SimulationCalculator extends ElectricalCalculator {
     compensator: NeutralCompensator,
     equi8Result: { 
       I_EQUI8_complex: Complex;
+      I_EQUI8_perPhase?: EQUI8PerPhaseInjection;
       UEQUI8_ph1_mag: number;
       UEQUI8_ph2_mag: number;
       UEQUI8_ph3_mag: number;
@@ -1508,6 +1512,22 @@ export class SimulationCalculator extends ElectricalCalculator {
     if (!node.customProps) node.customProps = {};
     node.customProps['equi8_modified'] = true;
     node.customProps['equi8_current_injection'] = equi8Result.I_EQUI8_complex;
+    
+    // NOUVEAU : Stocker l'injection par phase pour intégration KCL
+    if (equi8Result.I_EQUI8_perPhase) {
+      node.customProps['equi8_current_injection_perPhase'] = {
+        A: equi8Result.I_EQUI8_perPhase.IA,
+        B: equi8Result.I_EQUI8_perPhase.IB,
+        C: equi8Result.I_EQUI8_perPhase.IC
+      };
+      
+      console.log(`🔋 EQUI8 injection par phase stockée au nœud ${compensator.nodeId}:`, {
+        'Total': `${abs(equi8Result.I_EQUI8_complex).toFixed(1)}A`,
+        'Phase A': `${abs(equi8Result.I_EQUI8_perPhase.IA).toFixed(1)}A ∠${(arg(equi8Result.I_EQUI8_perPhase.IA)*180/Math.PI).toFixed(0)}°`,
+        'Phase B': `${abs(equi8Result.I_EQUI8_perPhase.IB).toFixed(1)}A ∠${(arg(equi8Result.I_EQUI8_perPhase.IB)*180/Math.PI).toFixed(0)}°`,
+        'Phase C': `${abs(equi8Result.I_EQUI8_perPhase.IC).toFixed(1)}A ∠${(arg(equi8Result.I_EQUI8_perPhase.IC)*180/Math.PI).toFixed(0)}°`
+      });
+    }
     
     console.log(`✅ Injection EQUI8 appliquée sur nœud ${compensator.nodeId}:`, {
       'I_inj': `${abs(equi8Result.I_EQUI8_complex).toFixed(1)}A ∠${(arg(equi8Result.I_EQUI8_complex)*180/Math.PI).toFixed(0)}°`,

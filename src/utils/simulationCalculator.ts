@@ -679,6 +679,18 @@ export class SimulationCalculator extends ElectricalCalculator {
     const facteur_impedance = (2 * Zph) / (Zph + Zn);
     const ecart_equi8 = (1 / denominateur) * ecart_init * facteur_impedance;
     
+    // 🔬 LOG DE DIAGNOSTIC EQUI8
+    console.log(`🔬 EQUI8 Calcul détaillé (formule CME):`, {
+      'Zph': `${Zph.toFixed(3)}Ω`,
+      'Zn': `${Zn.toFixed(3)}Ω`,
+      'Ln(Zph)': lnZph.toFixed(3),
+      'Dénominateur [0.9119×Ln(Zph)+3.8654]': denominateur.toFixed(3),
+      'Facteur impédance [2×Zph/(Zph+Zn)]': facteur_impedance.toFixed(3),
+      '(Umax-Umin)init': `${ecart_init.toFixed(3)}V`,
+      '(Umax-Umin)EQUI8 calculé': `${ecart_equi8.toFixed(3)}V`,
+      'Formule complète': `(1/${denominateur.toFixed(2)}) × ${ecart_init.toFixed(2)} × ${facteur_impedance.toFixed(2)} = ${ecart_equi8.toFixed(3)}V`
+    });
+    
     return { ratio_ph1, ratio_ph2, ratio_ph3, Umoy_init, ecart_equi8 };
   }
 
@@ -736,6 +748,13 @@ export class SimulationCalculator extends ElectricalCalculator {
     const Zph = compensator.Zph_Ohm;
     const Zn = compensator.Zn_Ohm;
     
+    // 🔧 LOG: Impédances utilisées
+    console.log(`🔧 EQUI8 nœud ${compensator.nodeId} - Impédances:`, {
+      'Zph': `${Zph.toFixed(3)}Ω`,
+      'Zn': `${Zn.toFixed(3)}Ω`,
+      'Condition CME (>0.15Ω)': Zph >= 0.15 && Zn >= 0.15 ? '✅ Valide' : '❌ Invalide'
+    });
+    
     // Validation des conditions EQUI8 : Zph et Zn > 0,15 Ω
     if (Zph < 0.15 || Zn < 0.15) {
       console.warn(`⚠️ EQUI8 au nœud ${compensator.nodeId}: Zph (${Zph.toFixed(3)}Ω) ou Zn (${Zn.toFixed(3)}Ω) < 0,15Ω - Précision réduite`);
@@ -783,7 +802,8 @@ export class SimulationCalculator extends ElectricalCalculator {
     const ecart_init = Umax_init - Umin_init;
     
     // Si pas de déséquilibre, pas de compensation nécessaire
-    if (ecart_init < 0.1) {
+    if (ecart_init < 0.01) {
+      console.log(`ℹ️ EQUI8 nœud ${compensator.nodeId}: Écart initial ${ecart_init.toFixed(3)}V < 0.01V - Pas de compensation`);
       const U_A_phasor = fromPolar(Uinit_ph1, 0);
       const U_B_phasor = fromPolar(Uinit_ph2, -2*Math.PI/3);
       const U_C_phasor = fromPolar(Uinit_ph3, 2*Math.PI/3);
@@ -973,6 +993,14 @@ export class SimulationCalculator extends ElectricalCalculator {
           
           if (nodeMetrics?.voltagesPerPhase) {
             const { A, B, C } = nodeMetrics.voltagesPerPhase;
+            
+            // 📊 LOG: Tensions initiales pour calcul des ratios
+            console.log(`📊 EQUI8 nœud ${compensator.nodeId} - Tensions initiales pour ratios:`, {
+              'Phase A': `${A.toFixed(1)}V`,
+              'Phase B': `${B.toFixed(1)}V`,
+              'Phase C': `${C.toFixed(1)}V`,
+              'Écart (Umax-Umin)': `${(Math.max(A, B, C) - Math.min(A, B, C)).toFixed(3)}V`
+            });
             
             // Calculer les ratios une seule fois
             const ratios = this.computeEQUI8CompensationRatio(

@@ -660,6 +660,18 @@ export class SimulationCalculator extends ElectricalCalculator {
     Umoy_init: number;
     ecart_equi8: number;
   } {
+    // Clamper les impédances à la condition CME (≥ 0,15Ω)
+    const Zph_eff = Math.max(0.15, Zph);
+    const Zn_eff = Math.max(0.15, Zn);
+    
+    if (Zph !== Zph_eff || Zn !== Zn_eff) {
+      console.warn(
+        `ℹ️ EQUI8: Zph/Zn clampés à ≥0.15Ω ` +
+        `(Zph_in=${Zph.toFixed(3)}Ω, Zn_in=${Zn.toFixed(3)}Ω → ` +
+        `Zph=${Zph_eff.toFixed(3)}Ω, Zn=${Zn_eff.toFixed(3)}Ω)`
+      );
+    }
+    
     // Calculer la tension moyenne et l'écart initial
     const Umoy_init = (Uinit_ph1 + Uinit_ph2 + Uinit_ph3) / 3;
     const Umax_init = Math.max(Uinit_ph1, Uinit_ph2, Uinit_ph3);
@@ -674,15 +686,15 @@ export class SimulationCalculator extends ElectricalCalculator {
     
     // ✅ FORMULE EXACTE selon documentation EQUI8 (CME Transformateur)
     // (Umax-Umin)EQUI8 = 1 / [0,9119 × Ln(Zph) + 3,8654] × (Umax-Umin)init × 2 × Zph / (Zph + Zn)
-    const lnZph = Math.log(Zph);
+    const lnZph = Math.log(Zph_eff);
     const denominateur = 0.9119 * lnZph + 3.8654;
-    const facteur_impedance = (2 * Zph) / (Zph + Zn);
+    const facteur_impedance = (2 * Zph_eff) / (Zph_eff + Zn_eff);
     const ecart_equi8 = (1 / denominateur) * ecart_init * facteur_impedance;
     
     // 🔬 LOG DE DIAGNOSTIC EQUI8
     console.log(`🔬 EQUI8 Calcul détaillé (formule CME):`, {
-      'Zph': `${Zph.toFixed(3)}Ω`,
-      'Zn': `${Zn.toFixed(3)}Ω`,
+      'Zph_effectif': `${Zph_eff.toFixed(3)}Ω`,
+      'Zn_effectif': `${Zn_eff.toFixed(3)}Ω`,
       'Ln(Zph)': lnZph.toFixed(3),
       'Dénominateur [0.9119×Ln(Zph)+3.8654]': denominateur.toFixed(3),
       'Facteur impédance [2×Zph/(Zph+Zn)]': facteur_impedance.toFixed(3),
@@ -744,21 +756,26 @@ export class SimulationCalculator extends ElectricalCalculator {
     ecart_init_V: number;
     ecart_equi8_V: number;
   } {
-    // Extraire les paramètres EQUI8
-    const Zph = compensator.Zph_Ohm;
-    const Zn = compensator.Zn_Ohm;
+    // Extraire et clamper les impédances
+    const Zph_raw = compensator.Zph_Ohm;
+    const Zn_raw = compensator.Zn_Ohm;
+    const Zph = Math.max(0.15, Zph_raw);
+    const Zn = Math.max(0.15, Zn_raw);
+    
+    if (Zph !== Zph_raw || Zn !== Zn_raw) {
+      console.warn(
+        `ℹ️ EQUI8: Zph/Zn clampés à ≥0.15Ω ` +
+        `(Zph_in=${Zph_raw.toFixed(3)}Ω, Zn_in=${Zn_raw.toFixed(3)}Ω → ` +
+        `Zph=${Zph.toFixed(3)}Ω, Zn=${Zn.toFixed(3)}Ω)`
+      );
+    }
     
     // 🔧 LOG: Impédances utilisées
     console.log(`🔧 EQUI8 nœud ${compensator.nodeId} - Impédances:`, {
-      'Zph': `${Zph.toFixed(3)}Ω`,
-      'Zn': `${Zn.toFixed(3)}Ω`,
-      'Condition CME (>0.15Ω)': Zph >= 0.15 && Zn >= 0.15 ? '✅ Valide' : '❌ Invalide'
+      'Zph_effectif': `${Zph.toFixed(3)}Ω`,
+      'Zn_effectif': `${Zn.toFixed(3)}Ω`,
+      'Condition CME (>0.15Ω)': '✅ Clampé si nécessaire'
     });
-    
-    // Validation des conditions EQUI8 : Zph et Zn > 0,15 Ω
-    if (Zph < 0.15 || Zn < 0.15) {
-      console.warn(`⚠️ EQUI8 au nœud ${compensator.nodeId}: Zph (${Zph.toFixed(3)}Ω) ou Zn (${Zn.toFixed(3)}Ω) < 0,15Ω - Précision réduite`);
-    }
     
     // Calculer le courant de neutre initial (magnitude et phasor)
     const { magnitude: I_N_initial, complex: I_N_complex } = this.calculateNeutralCurrent(I_A_total, I_B_total, I_C_total);
@@ -881,25 +898,51 @@ export class SimulationCalculator extends ElectricalCalculator {
     // ✅ FORMULE EXACTE: I-EQUI8 = 0,392 × Zph^(-0,8065) × (Umax-Umin)init × 2 × Zph / (Zph + Zn)
     const facteur_courant = 0.392 * Math.pow(Zph, -0.8065);
     const facteur_impedance_courant = (2 * Zph) / (Zph + Zn);
-    const I_EQUI8_mag = facteur_courant * ecart_init * facteur_impedance_courant;
+    let I_EQUI8_mag = facteur_courant * ecart_init * facteur_impedance_courant;
     
     // Construire le phasor de compensation: opposé à I_N_complex
     // L'EQUI8 injecte un courant qui s'oppose au courant de neutre
     const I_N_normalized = abs(I_N_complex) > 0 ? scale(I_N_complex, 1 / abs(I_N_complex)) : C(0, 0);
-    const I_EQUI8_complex = scale(I_N_normalized, -I_EQUI8_mag);
+    let I_EQUI8_complex = scale(I_N_normalized, -I_EQUI8_mag);
     
     // 7. Calculer la réduction de courant de neutre
-    const I_N_absorbed = Math.max(0, I_N_initial - I_EQUI8_mag);
-    const reductionPercent = I_N_initial > 0 ? (I_N_absorbed / I_N_initial) * 100 : 0;
+    // Courant résiduel dans le neutre après compensation
+    let I_N_residual = Math.max(0, I_N_initial - I_EQUI8_mag);
+    
+    // Pourcentage de réduction réelle (0..100%)
+    let reductionPercent = I_N_initial > 0 
+      ? (1 - I_N_residual / I_N_initial) * 100 
+      : 0;
+    reductionPercent = Math.min(100, Math.max(0, reductionPercent));
     
     // 8. Vérifier la limitation par puissance
-    // P ≈ √3 × Umoy × I_absorbed
-    const estimatedPower_kVA = (Math.sqrt(3) * Umoy_init * I_N_absorbed) / 1000;
+    // La puissance demandée dépend du courant INJECTÉ par l'EQUI8
+    let I_EQUI8_effective = I_EQUI8_mag;
+    let estimatedPower_kVA = (Math.sqrt(3) * Umoy_init * I_EQUI8_effective) / 1000;
     let isLimited = false;
     
     if (estimatedPower_kVA > compensator.maxPower_kVA) {
       isLimited = true;
-      console.warn(`⚠️ EQUI8 limité par puissance: ${estimatedPower_kVA.toFixed(1)} kVA demandés > ${compensator.maxPower_kVA} kVA disponibles`);
+      // Calculer le courant limite pour ne pas dépasser maxPower_kVA
+      const I_limit = (compensator.maxPower_kVA * 1000) / (Math.sqrt(3) * Umoy_init);
+      console.warn(
+        `⚠️ EQUI8 limité par puissance: ${estimatedPower_kVA.toFixed(1)} kVA > ` +
+        `${compensator.maxPower_kVA} kVA → I injecté borné à ${I_limit.toFixed(1)} A`
+      );
+      
+      I_EQUI8_effective = I_limit;
+      
+      // Reconstruire le phasor injecté avec la magnitude limitée
+      I_EQUI8_complex = scale(I_N_normalized, -I_EQUI8_effective);
+      
+      // Recalculer résiduel et réduction avec le courant effectif
+      I_N_residual = Math.max(0, I_N_initial - I_EQUI8_effective);
+      reductionPercent = I_N_initial > 0 
+        ? (1 - I_N_residual / I_N_initial) * 100 
+        : 0;
+      reductionPercent = Math.min(100, Math.max(0, reductionPercent));
+      
+      estimatedPower_kVA = compensator.maxPower_kVA;
     }
     
     // Estimation des puissances réactives (pour affichage)
@@ -911,7 +954,7 @@ export class SimulationCalculator extends ElectricalCalculator {
       '(Umax-Umin)init': `${ecart_init.toFixed(1)}V`,
       '(Umax-Umin)EQUI8': `${ecart_equi8.toFixed(1)}V`,
       'Tensions EQUI8': `${UEQUI8_ph1_mag.toFixed(1)}V / ${UEQUI8_ph2_mag.toFixed(1)}V / ${UEQUI8_ph3_mag.toFixed(1)}V`,
-      'I-EQUI8': `${I_EQUI8_mag.toFixed(1)}A (formule: 0.392×Zph^-0.8065×...)`,
+      'I-EQUI8': `${I_EQUI8_effective.toFixed(1)}A (formule: 0.392×Zph^-0.8065×...)`,
       'I_N_initial': `${I_N_initial.toFixed(1)}A`,
       'Réduction': `${reductionPercent.toFixed(1)}%`
     });
@@ -923,12 +966,12 @@ export class SimulationCalculator extends ElectricalCalculator {
       UEQUI8_ph1_phasor,
       UEQUI8_ph2_phasor,
       UEQUI8_ph3_phasor,
-      I_EQUI8_A: I_EQUI8_mag,
+      I_EQUI8_A: I_EQUI8_effective,
       I_EQUI8_complex,
       iN_initial_complex: I_N_complex,
       reductionPercent,
       iN_initial_A: I_N_initial,
-      iN_absorbed_A: I_N_absorbed,
+      iN_absorbed_A: (I_N_initial - I_N_residual),
       isLimited,
       compensationQ_kVAr: { A: Q_per_phase, B: Q_per_phase, C: Q_per_phase },
       umoy_init_V: Umoy_init,

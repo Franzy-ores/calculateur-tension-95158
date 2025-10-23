@@ -62,11 +62,21 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
       const borderColor = isSelected ? '#22c55e' : 'white';
       const borderWidth = isSelected ? 3 : 2;
       
+      // Ajouter un cercle jaune si le client a une production PV
+      const hasProduction = client.puissancePV_kVA > 0;
+      const iconSize = hasProduction ? 18 : 12;
+      const iconAnchor = hasProduction ? 9 : 6;
+      
       const icon = L.divIcon({
         className: 'client-marker',
-        html: `<div class="w-3 h-3 rounded-full shadow-lg ${isSelected ? 'animate-pulse' : 'hover:scale-125 transition-transform'}" style="background-color: ${color}; border: ${borderWidth}px solid ${borderColor}; cursor: grab;"></div>`,
-        iconSize: [12, 12],
-        iconAnchor: [6, 6]
+        html: hasProduction 
+          ? `<div class="relative ${isSelected ? 'animate-pulse' : 'hover:scale-125 transition-transform'}" style="width: 18px; height: 18px; cursor: grab;">
+               <div class="absolute inset-0 rounded-full border-2 border-yellow-400" style="box-shadow: 0 0 6px rgba(250, 204, 21, 0.6);"></div>
+               <div class="absolute" style="top: 3px; left: 3px; width: 12px; height: 12px; background-color: ${color}; border: ${borderWidth}px solid ${borderColor}; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>
+             </div>`
+          : `<div class="w-3 h-3 rounded-full shadow-lg ${isSelected ? 'animate-pulse' : 'hover:scale-125 transition-transform'}" style="background-color: ${color}; border: ${borderWidth}px solid ${borderColor}; cursor: grab;"></div>`,
+        iconSize: [iconSize, iconSize],
+        iconAnchor: [iconAnchor, iconAnchor]
       });
       
       const marker = L.marker([client.lat, client.lng], { 

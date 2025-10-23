@@ -14,7 +14,7 @@ export type CalculationScenario = "PRÉLÈVEMENT" | "MIXTE" | "PRODUCTION" | "FO
 
 export type LoadModel = 'monophase_reparti' | 'polyphase_equilibre';
 
-export type ClientCouplage = "TRI" | "MONO";
+export type ClientCouplage = string; // Valeur brute du champ "Couplage" depuis Excel
 
 // Import du type SRG2Config
 import { SRG2Config } from './srg2';
@@ -141,6 +141,8 @@ export interface Node {
     charges?: { A: number; B: number; C: number };
     productions?: { A: number; B: number; C: number };
   };
+  // Custom properties pour marqueurs temporaires (EQUI8, etc.)
+  customProps?: Record<string, any>;
 }
 
 export interface Cable {
@@ -201,7 +203,7 @@ export interface Project {
     east: number;
     west: number;
     center: { lat: number; lng: number };
-    zoom: number;
+    zoom?: number;
   };
   // Répartition manuelle des phases (charges et productions)
   manualPhaseDistribution?: {
@@ -215,6 +217,10 @@ export interface Project {
   // Clients importés et liaisons
   clientsImportes?: ClientImporte[];
   clientLinks?: ClientLink[];
+  // Option pour ajouter des nœuds vierges par défaut
+  addEmptyNodeByDefault?: boolean;
+  // Équipements de simulation (SRG2 et EQUI8)
+  simulationEquipment?: SimulationEquipment;
 }
 
 
@@ -283,6 +289,7 @@ export interface SimulationResult extends CalculationResult {
   equipment?: SimulationEquipment;
   baselineResult?: CalculationResult; // Résultats sans équipements pour comparaison
   convergenceStatus?: 'converged' | 'not_converged';
+  iterations?: number; // Nombre d'itérations pour convergence
 }
 
 export interface CalculationResult {
@@ -313,6 +320,7 @@ export interface CalculationResult {
   };
   // Propriétés spécifiques au mode forcé
   convergenceStatus?: 'converged' | 'not_converged';
+  iterations?: number; // Nombre d'itérations pour convergence
   finalLoadDistribution?: { A: number; B: number; C: number };
   finalProductionDistribution?: { A: number; B: number; C: number };
   calibratedFoisonnementCharges?: number;

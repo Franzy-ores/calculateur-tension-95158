@@ -84,7 +84,8 @@ export const EditPanel = () => {
           defaultChargeKVA: currentProject.defaultChargeKVA || 5,
           defaultProductionKVA: currentProject.defaultProductionKVA || 5,
           loadModel: currentProject.loadModel ?? 'polyphase_equilibre',
-          desequilibrePourcent: currentProject.desequilibrePourcent ?? 0
+          desequilibrePourcent: currentProject.desequilibrePourcent ?? 0,
+          addEmptyNodeByDefault: currentProject.addEmptyNodeByDefault || false
         });
       }
     }
@@ -752,6 +753,27 @@ export const EditPanel = () => {
                 />
                 <p className="text-xs text-muted-foreground">
                   Production PV appliquée par défaut aux nouveaux nœuds
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="empty-nodes"
+                    checked={formData.addEmptyNodeByDefault || false}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      addEmptyNodeByDefault: e.target.checked 
+                    })}
+                    className="rounded border-input"
+                  />
+                  <Label htmlFor="empty-nodes" className="cursor-pointer font-normal">
+                    Ajouter des nœuds vierges par défaut
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Si activé, les nouveaux nœuds n'auront ni charge ni production par défaut
                 </p>
               </div>
 

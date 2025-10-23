@@ -22,7 +22,7 @@ export const ClientEditPanel = () => {
   const [identifiantCircuit, setIdentifiantCircuit] = useState('');
   const [puissanceContractuelle, setPuissanceContractuelle] = useState(0);
   const [puissancePV, setPuissancePV] = useState(0);
-  const [couplage, setCouplage] = useState<ClientCouplage>('TRI');
+  const [couplage, setCouplage] = useState<ClientCouplage>('');
   const [tensionMin, setTensionMin] = useState<number | undefined>(undefined);
   const [tensionMax, setTensionMax] = useState<number | undefined>(undefined);
   const [tensionMinHiver, setTensionMinHiver] = useState<number | undefined>(undefined);
@@ -64,7 +64,6 @@ export const ClientEditPanel = () => {
       identifiantCircuit,
       puissanceContractuelle_kVA: puissanceContractuelle,
       puissancePV_kVA: puissancePV,
-      couplage,
       tensionMin_V: tensionMin,
       tensionMax_V: tensionMax,
       tensionMinHiver_V: tensionMinHiver,
@@ -104,15 +103,15 @@ export const ClientEditPanel = () => {
 
         <div>
           <Label htmlFor="couplage">Couplage</Label>
-          <Select value={couplage} onValueChange={(v: ClientCouplage) => setCouplage(v)}>
-            <SelectTrigger id="couplage">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="TRI">TRI</SelectItem>
-              <SelectItem value="MONO">MONO</SelectItem>
-            </SelectContent>
-          </Select>
+          <Input
+            id="couplage"
+            value={couplage}
+            readOnly
+            className="bg-muted cursor-not-allowed"
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            Valeur importée depuis Excel (lecture seule)
+          </p>
         </div>
 
         <div>

@@ -61,6 +61,16 @@ export const ExcelImporter = ({ onClose }: ExcelImporterProps) => {
     try {
       const clients = await parseExcelToClients(selectedFile);
       
+      // Vérifier la limite de 300 clients
+      if (clients.length > 300) {
+        toast.error('Clients trop nombreux, veuillez revoir votre fichier sources', {
+          description: `Le fichier contient ${clients.length} clients. Maximum autorisé : 300 clients.`
+        });
+        setIsLoading(false);
+        setFile(null);
+        return;
+      }
+      
       // Valider tous les clients
       const errors = new Map<string, string[]>();
       clients.forEach(client => {

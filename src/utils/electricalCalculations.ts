@@ -1,6 +1,6 @@
 import { Node, Cable, Project, CalculationResult, CalculationScenario, ConnectionType, CableType, TransformerConfig, VirtualBusbar, LoadModel, ClientImporte, ClientLink } from '@/types/network';
 import { getConnectedNodes } from '@/utils/networkConnectivity';
-import { Complex, C, add, sub, mul, div, conj, scale, abs, fromPolar } from '@/utils/complex';
+import { Complex, C, add, sub, mul, div, conj, scale, abs, fromPolar, arg } from '@/utils/complex';
 import { getNodeConnectionType } from '@/utils/nodeConnectionType';
 import { getLinkedClientsForNode, calculateNodePowersFromClients } from '@/utils/clientsUtils';
 
@@ -901,10 +901,30 @@ export class ElectricalCalculator {
               const Iuv = I_branch_phase.get(cab.id) || C(0, 0);
               const Vu = V_node_phase.get(u) || Vslack_phase_ph;
               // Calculer tension selon Kirchhoff : V_v = V_u - Z * I_uv
-              const Vv = sub(Vu, mul(Z, Iuv));
+              let Vv = sub(Vu, mul(Z, Iuv));
               
-              // Vérifier si le nœud de destination a un dispositif SRG2
+              // Vérifier si le nœud de destination a une injection EQUI8
               const vNode = nodeById.get(v);
+              if (vNode?.customProps?.['equi8_modified']) {
+                const I_equi8 = vNode.customProps['equi8_current_injection'];
+                if (I_equi8) {
+                  console.log(`🔍 Injection EQUI8 détectée sur nœud ${v} : ${abs(I_equi8).toFixed(1)}A ∠${(arg(I_equi8)*180/Math.PI).toFixed(0)}°`);
+                  
+                  // Calculer l'impédance de couplage neutre-phase
+                  // Approximation : Z_couplage ≈ Z_cable / 3 (couplage capacitif/inductif)
+                  const Z_couplage = scale(Z, 1/3);
+                  
+                  // Ajouter la contribution de l'injection EQUI8 à la tension
+                  // ΔV = Z_couplage × I_EQUI8
+                  const delta_V_equi8 = mul(Z_couplage, I_equi8);
+                  Vv = add(Vv, delta_V_equi8);
+                  
+                  console.log(`🔌 EQUI8 nœud ${v} (phase ${angleDeg}°): ΔV = ${abs(delta_V_equi8).toFixed(1)}V, V_final = ${abs(Vv).toFixed(1)}V ∠${(arg(Vv)*180/Math.PI).toFixed(0)}°`);
+                }
+              }
+              
+              V_node_phase.set(v, Vv);
+              
               if (vNode?.hasSRG2Device && vNode.srg2RegulationCoefficients) {
                 // Appliquer les coefficients de régulation SRG2 aux tensions calculées
                 let regulationCoeff = 0;
@@ -947,10 +967,6 @@ export class ElectricalCalculator {
                 }
                 V_node_phase.set(v, Vv_target);
                 console.log(`🎯 Nœud ${v} (phase ${angleDeg}°): tension cible par phase imposée ${abs(Vv_target).toFixed(1)}V`);
-              } else {
-                // Calcul normal pour les nœuds non-SRG2
-                const Vv = sub(Vu, mul(Z, Iuv));
-                V_node_phase.set(v, Vv);
               }
               stack2.push(v);
             }

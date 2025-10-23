@@ -69,7 +69,6 @@ export const MapView = () => {
     circuitColorMapping,
     generateCircuitColorMapping,
     showClientTensionLabels,
-    nodeDisplayMode,
   } = useNetworkStore();
 
   // Récupérer isSimulationActive du store
@@ -97,16 +96,32 @@ export const MapView = () => {
 
     const bounds = event?.detail || currentProject.geographicBounds;
     
-    if (bounds && bounds.center) {
-      // Utiliser les bounds sauvegardés du projet
-      map.setView([bounds.center.lat, bounds.center.lng], bounds.zoom);
+    if (bounds && bounds.north && bounds.south && bounds.east && bounds.west) {
+      // Créer des bounds Leaflet
+      const latLngBounds = L.latLngBounds(
+        [bounds.south, bounds.west], // coin sud-ouest
+        [bounds.north, bounds.east]  // coin nord-est
+      );
+      
+      // Si un zoom est défini dans les bounds (projet sauvegardé), l'utiliser
+      if (bounds.zoom && bounds.center) {
+        map.setView([bounds.center.lat, bounds.center.lng], bounds.zoom);
+      } else {
+        // Sinon, utiliser fitBounds pour un zoom adaptatif (import de clients)
+        map.fitBounds(latLngBounds, {
+          padding: [50, 50], // Marge de 50px
+          maxZoom: 16 // Limiter le zoom maximum
+        });
+      }
     } else if (currentProject.nodes.length > 0) {
       // Fallback : calculer à partir des nœuds
       const latLngBounds = L.latLngBounds(
         currentProject.nodes.map(node => [node.lat, node.lng])
       );
-      const paddedBounds = latLngBounds.pad(0.1);
-      map.fitBounds(paddedBounds);
+      map.fitBounds(latLngBounds, {
+        padding: [50, 50],
+        maxZoom: 16
+      });
     }
   };
 
@@ -125,11 +140,13 @@ export const MapView = () => {
       zoomControl: true,
       attributionControl: true,
       preferCanvas: true, // CRUCIAL: Force le rendu Canvas pour tous les éléments vectoriels
+      maxZoom: 22,
     });
 
     const initialTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors',
-      maxZoom: 18,
+      maxNativeZoom: 18,
+      maxZoom: 22,
       minZoom: 3,
     }).addTo(map);
 
@@ -202,13 +219,15 @@ export const MapView = () => {
     if (newType === 'osm') {
       tileLayerRef.current = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
-        maxZoom: 18,
+        maxNativeZoom: 18,
+        maxZoom: 22,
         minZoom: 3,
       }).addTo(map);
     } else {
       tileLayerRef.current = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         attribution: '© Esri, Maxar, Earthstar Geographics, and the GIS User Community',
-        maxZoom: 18,
+        maxNativeZoom: 18,
+        maxZoom: 22,
         minZoom: 3,
       }).addTo(map);
     }
@@ -647,39 +666,170 @@ export const MapView = () => {
       // Obtenir le numéro de circuit
       const circuitNumber = getNodeCircuit(node.id);
       
-      // Déterminer la taille et le contenu selon le mode d'affichage
-      let iconSize: [number, number];
-      let anchorPoint: [number, number];
-      let iconSizeClass: string;
-      let iconHtml: string;
+      // MODE RÉDUIT : Tensions désactivées → 24px sans texte ni icône
+      if (!showVoltages) {
+        const icon = L.divIcon({
+          className: 'custom-node-marker',
+          html: `<div class="rounded-full border-2 ${iconClass}" style="width: 24px; height: 24px;"></div>`,
+          iconSize: [24, 24],
+          iconAnchor: [12, 12]
+        });
+
+        const marker = L.marker([node.lat, node.lng], { 
+          icon,
+          draggable: selectedTool === 'move',
+          zIndexOffset: 0
+        })
+          .addTo(map)
+          .bindPopup(node.name);
+
+        // Gestionnaires d'événements complets
+        marker.on('click', (e) => {
+          L.DomEvent.stopPropagation(e);
+          
+          // MODE LIAISON CLIENT: Lier le client sélectionné à ce nœud
+          if (selectedTool === 'linkClient' && selectedClientForLinking) {
+            linkClientToNode(selectedClientForLinking, node.id);
+            setSelectedClient(null);
+            return;
+          }
+          
+          // MODE ROUTAGE ACTIF: Finaliser le tracé sur n'importe quel nœud
+          if (routingActive && routingFromNode) {
+            console.log('=== FINALIZING CABLE ON NODE CLICK ===');
+            console.log('Finalizing from', routingFromNode, 'to', node.id);
+            console.log('Routing points:', routingPointsRef.current);
+            
+            // VÉRIFICATION CRITIQUE : S'assurer qu'on a vraiment des points de routage
+            if (routingPointsRef.current.length === 0) {
+              console.log('ERROR: No routing points found, ignoring finalization');
+              return;
+            }
+            
+            // VÉRIFICATION : Empêcher la création d'un câble duplicate même en finalisation
+            if (cableExistsBetweenNodes(routingFromNode, node.id)) {
+              alert('Un câble existe déjà entre ces deux nœuds !');
+              clearRouting(); // Nettoyer le routage en cours
+              return;
+            }
+            
+            // Créer le tracé complet avec tous les points intermédiaires + point final
+            const finalCoords = [...routingPointsRef.current, { lat: node.lat, lng: node.lng }];
+            console.log('Final cable coordinates:', finalCoords);
+            
+            if (finalCoords.length >= 2) {
+              addCable(routingFromNode, node.id, selectedCableType, finalCoords);
+              clearRouting();
+            }
+            return;
+          }
+          
+          // MODE NORMAL: Sélection et début de tracé
+          if (selectedTool === 'select') {
+            setSelectedNode(node.id);
+            openEditPanel('node');
+          } else if (selectedTool === 'addCable') {
+            console.log('=== ADD CABLE TOOL CLICKED ON NODE ===');
+            console.log('Current selectedNodeId:', selectedNodeId);
+            console.log('Clicked node:', node.id);
+            console.log('routingActive:', routingActive);
+            
+            // Premier clic: sélectionner noeud de départ
+            if (!selectedNodeId) {
+              console.log('Selecting start node:', node.id);
+              setSelectedNode(node.id);
+              return;
+            }
+            
+            // Deuxième clic: démarrer ou terminer le câble
+            if (selectedNodeId !== node.id) {
+              console.log('Second click - start to end cable connection');
+              
+              // VÉRIFICATION : Empêcher la création d'un câble duplicate
+              if (cableExistsBetweenNodes(selectedNodeId, node.id)) {
+                alert('Un câble existe déjà entre ces deux nœuds !');
+                setSelectedNode(null); // Désélectionner
+                return;
+              }
+              
+              const cableType = currentProject?.cableTypes.find(ct => ct.id === selectedCableType);
+              const isUnderground = cableType?.posesPermises.includes('SOUTERRAIN') && !cableType?.posesPermises.includes('AÉRIEN');
+              console.log('Cable type:', cableType?.id, 'isUnderground:', isUnderground);
+              
+              if (isUnderground) {
+                // CÂBLE SOUTERRAIN: Démarrer le mode routage
+                const fromNode = currentProject.nodes.find(n => n.id === selectedNodeId);
+                if (fromNode) {
+                  console.log('=== STARTING UNDERGROUND CABLE ROUTING ===');
+                  console.log('From node:', selectedNodeId, 'To node:', node.id);
+                  
+                  setRoutingFromNode(selectedNodeId);
+                  setRoutingToNode(node.id);
+                  routingPointsRef.current = [{ lat: fromNode.lat, lng: fromNode.lng }];
+                  setRoutingActive(true);
+                  setSelectedNode(null); // Désélectionner pour éviter la confusion
+                  
+                  console.log('Routing activated, click on map to add intermediate points, then click on destination node to finish');
+                }
+              } else {
+                // CÂBLE AÉRIEN: Connexion directe
+                const fromNode = currentProject.nodes.find(n => n.id === selectedNodeId);
+                if (fromNode) {
+                  const coordinates = [
+                    { lat: fromNode.lat, lng: fromNode.lng },
+                    { lat: node.lat, lng: node.lng }
+                  ];
+                  addCable(selectedNodeId, node.id, selectedCableType, coordinates);
+                  setSelectedNode(null);
+                }
+              }
+            } else {
+              console.log('Same node clicked - ignoring');
+            }
+          } else if (selectedTool === 'linkClient' && selectedClientForLinking) {
+            // Mode liaison client : créer la liaison
+            console.log('🔗 Linking client', selectedClientForLinking, 'to node', node.id);
+            linkClientToNode(selectedClientForLinking, node.id);
+            // Le store réinitialise automatiquement selectedClientForLinking et linkingMode
+          } else if (selectedTool === 'edit') {
+            setSelectedNode(node.id);
+            openEditPanel('node');
+          } else if (selectedTool === 'delete') {
+            if (confirm(`Supprimer le nœud "${node.name}" ?`)) {
+              deleteNode(node.id);
+            }
+          } else if (selectedTool === 'move') {
+            setSelectedNode(node.id);
+          }
+        });
+
+        // Gestionnaire pour le drag & drop
+        marker.on('dragend', (e) => {
+          const newLatLng = e.target.getLatLng();
+          moveNode(node.id, newLatLng.lat, newLatLng.lng);
+        });
+
+        markersRef.current.set(node.id, marker);
+        return; // ⚠️ Sortir de l'itération pour ce nœud
+      }
       
-      if (nodeDisplayMode === 'proportional') {
-        // MODE PROPORTIONNEL : Taille = 2× nombre de clients (24px par client)
-        const baseSize = 24; // Taille minimale
-        const sizePerClient = 24; // 2× taille d'un client (12px × 2)
-        const calculatedSize = Math.max(baseSize, Math.min(200, baseSize + (linkedClients.length * sizePerClient)));
-        
-        iconSize = [calculatedSize, calculatedSize];
-        anchorPoint = [calculatedSize / 2, calculatedSize / 2];
-        
-        // PAS DE TEXTE en mode proportionnel
-        iconHtml = `<div class="rounded-full border-2 flex items-center justify-center ${iconClass}" style="width: ${calculatedSize}px; height: ${calculatedSize}px; font-size: 0;"></div>`;
-      } else {
-        // MODE NORMAL : Affichage actuel
-        // Déterminer si on affiche du texte (charge/production uniquement si > 0)
-        const hasDisplayableLoad = !node.isSource && totalCharge > 0;
-        const hasDisplayableProduction = !node.isSource && totalPV > 0;
-        const hasDisplayableText = showVoltages && (hasDisplayableLoad || hasDisplayableProduction || !node.isSource);
-        
-        // Taille adaptative : plus grande si du texte est affiché
-        iconSize = hasDisplayableText ? [70, 70] : [56, 56];
-        anchorPoint = hasDisplayableText ? [35, 35] : [28, 28];
-        iconSizeClass = hasDisplayableText ? 'w-[70px] h-[70px]' : 'w-14 h-14';
-        
-        iconHtml = `<div class="${iconSizeClass} rounded-full border-2 flex flex-col items-center justify-center text-xs font-bold ${iconClass} p-1">
+      // MODE NORMAL : Tensions activées → Affichage complet avec texte
+      // Déterminer si on affiche du texte (charge/production uniquement si > 0)
+      const hasDisplayableLoad = !node.isSource && totalCharge > 0;
+      const hasDisplayableProduction = !node.isSource && totalPV > 0;
+      const hasDisplayableText = hasDisplayableLoad || hasDisplayableProduction || !node.isSource;
+      
+      // Taille adaptative : plus grande si du texte est affiché
+      const iconSize: [number, number] = hasDisplayableText ? [70, 70] : [56, 56];
+      const anchorPoint: [number, number] = hasDisplayableText ? [35, 35] : [28, 28];
+      const iconSizeClass = hasDisplayableText ? 'w-[70px] h-[70px]' : 'w-14 h-14';
+
+      const icon = L.divIcon({
+        className: 'custom-node-marker',
+        html: `<div class="${iconSizeClass} rounded-full border-2 flex flex-col items-center justify-center text-xs font-bold ${iconClass} p-1">
           <div class="text-base">${iconContent}</div>
           ${circuitNumber ? `<div class="text-[9px] bg-black bg-opacity-50 rounded px-1">C${circuitNumber}</div>` : ''}
-          ${showVoltages ? `<div class="text-[9px] leading-tight text-center">
+          <div class="text-[9px] leading-tight text-center">
             ${(() => {
               // Afficher les 3 phases en mode monophasé réparti
               if (currentProject.loadModel === 'monophase_reparti') {
@@ -741,13 +891,8 @@ export const MapView = () => {
                 return displayText;
               }
             })()}
-          </div>` : ''}
-        </div>`;
-      }
-
-      const icon = L.divIcon({
-        className: 'custom-node-marker',
-        html: iconHtml,
+          </div>
+        </div>`,
         iconSize: iconSize,
         iconAnchor: anchorPoint
       });

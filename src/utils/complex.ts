@@ -18,3 +18,10 @@ export const arg = (a: Complex): number => Math.atan2(a.im, a.re);
 export const fromPolar = (mag: number, angleRad: number): Complex => C(mag * Math.cos(angleRad), mag * Math.sin(angleRad));
 
 export const nearlyEqual = (a: Complex, b: Complex, eps = 1e-6): boolean => abs(sub(a, b)) < eps;
+
+// Helper pour normaliser un phasor complexe (retourne vecteur unitaire)
+export const normalize = (a: Complex): Complex => {
+  const magnitude = abs(a);
+  if (magnitude < 1e-12) return C(1, 0); // fallback pour magnitude nulle
+  return scale(a, 1 / magnitude);
+};

@@ -16,9 +16,8 @@ export const parseExcelToClients = (file: File): Promise<ClientImporte[]> => {
         const jsonData = XLSX.utils.sheet_to_json(firstSheet);
         
         const clients: ClientImporte[] = jsonData.map((row: any, index: number) => {
-          // Parser le couplage
-          const couplageStr = String(row['Couplage'] || '').toUpperCase();
-          const couplage = couplageStr.startsWith('TRI') ? 'TRI' : 'MONO';
+          // Prendre la valeur brute du couplage sans interprétation
+          const couplage = String(row['Couplage'] || '').trim();
           
           return {
             id: `client-import-${Date.now()}-${index}`,
@@ -154,15 +153,29 @@ export const calculateTotalPowersForNodes = (
 
 /**
  * Détermine la couleur d'un marqueur client selon le mode sélectionné
+ * @param client - Client importé à colorer
+ * @param mode - Mode de coloration : 'couplage', 'circuit', 'tension', ou 'lien'
+ * @param circuitColorMapping - Mapping des couleurs par circuit (pour mode 'circuit')
+ * @param clientLinks - Liste des liens client-nœud (pour mode 'lien')
+ * @returns Code couleur hexadécimal
  */
 export const getClientMarkerColor = (
   client: ClientImporte, 
-  mode: 'couplage' | 'circuit' | 'tension',
-  circuitColorMapping?: Map<string, string>
+  mode: 'couplage' | 'circuit' | 'tension' | 'lien',
+  circuitColorMapping?: Map<string, string>,
+  clientLinks?: ClientLink[]
 ): string => {
   switch (mode) {
     case 'couplage':
-      return client.couplage === 'TRI' ? '#3b82f6' : '#f97316';
+      // Interpréter les valeurs brutes pour la coloration
+      const couplageUpper = client.couplage.toUpperCase();
+      const isTriphasé = (
+        couplageUpper.includes('TRI') || 
+        couplageUpper.includes('TETRA') || 
+        couplageUpper.includes('TÉTRA') ||
+        couplageUpper.includes('3P')
+      );
+      return isTriphasé ? '#3b82f6' : '#f97316';
     
     case 'circuit':
       // Utiliser le mapping si disponible, sinon couleur par défaut
@@ -172,9 +185,14 @@ export const getClientMarkerColor = (
       return '#6b7280'; // Gris par défaut si pas de mapping
     
     case 'tension':
-      if (!client.tensionMin_V && !client.tensionMax_V) return '#6b7280';
-      const avgTension = ((client.tensionMin_V || 0) + (client.tensionMax_V || 0)) / 2;
-      return avgTension < 300 ? '#06b6d4' : '#d946ef'; // Cyan pour 230V, Magenta pour 400V
+      // Utiliser uniquement tensionCircuit_V
+      if (client.tensionCircuit_V === undefined) return '#6b7280'; // Gris si pas de donnée
+      return client.tensionCircuit_V < 300 ? '#06b6d4' : '#d946ef'; // Cyan pour 230V, Magenta pour 400V
+    
+    case 'lien':
+      // Vérifier si le client est lié à un nœud
+      const isLinked = clientLinks?.some(link => link.clientId === client.id);
+      return isLinked ? '#22c55e' : '#ef4444'; // Vert si lié, Rouge sinon
     
     default:
       return '#3b82f6';

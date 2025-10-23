@@ -871,16 +871,16 @@ export const MapView = () => {
                   const vC = phaseMetrics.voltagesPerPhase.C.toFixed(1);
                   return `<span class="text-black">A:${vA}V</span><br><span class="text-black">B:${vB}V</span><br><span class="text-black">C:${vC}V</span>`;
                 } else {
-                  return `A:${nodeVoltage.toFixed(0)}V<br>B:${nodeVoltage.toFixed(0)}V<br>C:${nodeVoltage.toFixed(0)}V`;
+                  return `<span class="text-black">A:${nodeVoltage.toFixed(0)}V</span><br><span class="text-black">B:${nodeVoltage.toFixed(0)}V</span><br><span class="text-black">C:${nodeVoltage.toFixed(0)}V</span>`;
                 }
               } else {
                 // Mode normal : afficher une seule tension
-                let displayText = `${nodeVoltage.toFixed(0)}V`;
+                let displayText = `<span class="text-black">${nodeVoltage.toFixed(0)}V</span>`;
                 if (hasDisplayableLoad) {
-                  displayText += `<br>${(totalCharge * (currentProject.foisonnementCharges / 100)).toFixed(1)}kVA`;
+                  displayText += `<br><span class="text-black">${(totalCharge * (currentProject.foisonnementCharges / 100)).toFixed(1)}kVA</span>`;
                 }
                 if (hasDisplayableProduction) {
-                  displayText += `<br>PV: ${(totalPV * (currentProject.foisonnementProductions / 100)).toFixed(1)}kVA`;
+                  displayText += `<br><span class="text-black">PV: ${(totalPV * (currentProject.foisonnementProductions / 100)).toFixed(1)}kVA</span>`;
                 }
                 // Ajouter l'indicateur de conformité (± % signé)
                 if (!node.isSource && nominalDropPercent !== 0) {

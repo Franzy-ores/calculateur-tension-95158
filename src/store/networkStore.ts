@@ -16,7 +16,7 @@ import {
   SimulationEquipment
 } from '@/types/network';
 
-export type ClientColorMode = 'couplage' | 'circuit' | 'tension' | 'lien';
+export type ClientColorMode = 'couplage' | 'circuit' | 'tension';
 import { SRG2Config, DEFAULT_SRG2_400_CONFIG, DEFAULT_SRG2_230_CONFIG } from '@/types/srg2';
 import { NodeWithConnectionType, getNodeConnectionType, addConnectionTypeToNodes } from '@/utils/nodeConnectionType';
 import { defaultCableTypes } from '@/data/defaultCableTypes';
@@ -80,6 +80,7 @@ interface NetworkStoreState extends NetworkState {
   clientColorMode: ClientColorMode;
   circuitColorMapping: Map<string, string>;
   showClientTensionLabels: boolean;
+  nodeDisplayMode: 'normal' | 'proportional';
 }
 
 interface NetworkActions {
@@ -147,6 +148,7 @@ interface NetworkActions {
   toggleResultsPanelFullscreen: () => void;
   toggleFocusMode: () => void;
   toggleClientTensionLabels: () => void;
+  toggleNodeDisplayMode: () => void;
   changeVoltageSystem: () => void;
   setFoisonnementCharges: (value: number) => void;
   setFoisonnementProductions: (value: number) => void;
@@ -267,7 +269,6 @@ const createDefaultProject2 = (name: string, voltageSystem: VoltageSystem): Proj
   transformerConfig: createDefaultTransformerConfig(voltageSystem), // Configuration transformateur adaptée au système
   loadModel: 'polyphase_equilibre',
   desequilibrePourcent: 0,
-  addEmptyNodeByDefault: false, // Par défaut, on garde le comportement actuel
   manualPhaseDistribution: {
     charges: { A: 33.33, B: 33.33, C: 33.34 },
     productions: { A: 33.33, B: 33.33, C: 33.34 },
@@ -322,6 +323,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   clientColorMode: 'couplage',
   circuitColorMapping: new Map(),
   showClientTensionLabels: false,
+  nodeDisplayMode: 'normal',
 
   // Actions
   createNewProject: (name, voltageSystem) => {
@@ -383,11 +385,6 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       project.clientLinks = [];
     }
 
-    // Rétrocompatibilité: définir addEmptyNodeByDefault si non défini
-    if (project.addEmptyNodeByDefault === undefined) {
-      project.addEmptyNodeByDefault = false;
-    }
-
     // Calculer les bounds géographiques si pas encore définis
     if (!project.geographicBounds && project.nodes.length > 0) {
       project.geographicBounds = calculateProjectBounds(project.nodes);
@@ -423,7 +420,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         PRODUCTION: null,
         FORCÉ: null
       },
-      simulationEquipment: project.simulationEquipment || {
+      simulationEquipment: {
         srg2Devices: [],
         neutralCompensators: [],
         cableUpgrades: []
@@ -515,26 +512,23 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     // Déduire le type de connexion automatiquement selon le modèle de charge
     const connectionType = mapConnectionTypeForLoadModel(currentProject.voltageSystem, currentProject.loadModel || 'polyphase_equilibre', currentProject.nodes.length === 0);
 
-    const isSource = currentProject.nodes.length === 0;
-    const shouldAddDefaults = !isSource && !currentProject.addEmptyNodeByDefault;
-
     const newNode: Node = {
       id: `node-${Date.now()}`,
       name: `Nœud ${currentProject.nodes.length + 1}`,
       lat,
       lng,
       connectionType,
-      clients: shouldAddDefaults ? [{ 
+      clients: currentProject.nodes.length === 0 ? [] : [{ 
         id: `client-${Date.now()}`, 
         label: 'Charge 1', 
         S_kVA: currentProject.defaultChargeKVA || 10 
-      }] : [],
-      productions: shouldAddDefaults ? [{ 
+      }],
+      productions: currentProject.nodes.length === 0 ? [] : [{ 
         id: `prod-${Date.now()}`, 
         label: 'PV 1', 
         S_kVA: currentProject.defaultProductionKVA || 5
-      }] : [],
-      isSource
+      }],
+      isSource: currentProject.nodes.length === 0 // Premier nœud = source
     };
 
     const updatedNodes = [...currentProject.nodes, newNode];
@@ -778,18 +772,11 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         center: {
           lat: (Math.max(...lats) + Math.min(...lats)) / 2,
           lng: (Math.max(...lngs) + Math.min(...lngs)) / 2
-        }
+        },
+        zoom: 14
       };
       updatedProject.geographicBounds = bounds;
       set({ currentProject: updatedProject });
-      
-      // Déclencher le zoom exactement comme loadProject
-      setTimeout(() => {
-        const event = new CustomEvent('zoomToProject', { 
-          detail: bounds 
-        });
-        window.dispatchEvent(event);
-      }, 100);
     }
   },
 
@@ -1461,34 +1448,13 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       toast.error('Un compensateur de neutre existe déjà sur ce nœud');
       return;
     }
-    
-    // Récupérer le nœud concerné
-    const node = currentProject.nodes.find(n => n.id === nodeId);
-    if (!node) {
-      toast.error('Nœud introuvable');
-      return;
-    }
-    
-    // Vérifier les conditions d'éligibilité
-    const is400V = currentProject.voltageSystem === 'TÉTRAPHASÉ_400V';
-    const nodeConnectionType = getNodeConnectionType(
-      currentProject.voltageSystem,
-      currentProject.loadModel || 'polyphase_equilibre',
-      node.isSource
-    );
-    const isMonoPN = nodeConnectionType === 'MONO_230V_PN';
-    const hasDeseq = (currentProject.loadModel ?? 'polyphase_equilibre') === 'monophase_reparti' && 
-                     (currentProject.desequilibrePourcent ?? 0) > 0;
-    
-    const eligible = is400V && isMonoPN && hasDeseq;
-    
-    // Créer le nouveau compensateur
+
     const newCompensator: NeutralCompensator = {
       id: `compensator-${nodeId}-${Date.now()}`,
       nodeId,
       maxPower_kVA: 30,
       tolerance_A: 5,
-      enabled: eligible, // Actif uniquement si toutes les conditions sont remplies
+      enabled: true,
       Zph_Ohm: 0.5,  // Impédance câble phase (modèle EQUI8)
       Zn_Ohm: 0.2    // Impédance câble neutre (modèle EQUI8)
     };
@@ -1500,22 +1466,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       }
     });
     
-    // Message adapté selon l'éligibilité
-    if (eligible) {
-      toast.success(`Compensateur EQUI8 ajouté sur ${node.name}`);
-    } else {
-      const reasons = [];
-      if (!is400V) reasons.push('Réseau doit être 400V');
-      if (!isMonoPN) reasons.push(`Nœud doit être MONO_230V_PN (actuellement: ${nodeConnectionType})`);
-      if (!hasDeseq) reasons.push('Mode déséquilibré requis avec déséquilibre > 0%');
-      
-      toast.warning(
-        `Compensateur EQUI8 ajouté sur ${node.name} mais inactif`,
-        { 
-          description: reasons.join('. ')
-        }
-      );
-    }
+    toast.success('Compensateur de neutre ajouté');
     
     // Recalculer automatiquement la simulation
     get().runSimulation();
@@ -1675,6 +1626,10 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
 
   toggleClientTensionLabels: () => set(state => ({ 
     showClientTensionLabels: !state.showClientTensionLabels 
+  })),
+
+  toggleNodeDisplayMode: () => set(state => ({
+    nodeDisplayMode: state.nodeDisplayMode === 'normal' ? 'proportional' : 'normal'
   })),
 
   setClientColorMode: (mode) => set({ clientColorMode: mode }),

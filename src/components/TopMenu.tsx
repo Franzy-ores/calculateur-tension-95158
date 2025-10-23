@@ -175,7 +175,6 @@ export const TopMenu = ({
                   <SelectItem value="couplage">Par Couplage</SelectItem>
                   <SelectItem value="circuit">Par Circuit</SelectItem>
                   <SelectItem value="tension">Par Tension</SelectItem>
-                  <SelectItem value="lien">Par Lien</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -201,16 +200,8 @@ export const TopMenu = ({
             Câbles
           </Button>
           
-          <Button 
-            variant={editTarget === 'simulation' ? 'secondary' : 'ghost'} 
-            size="sm" 
-            onClick={onSimulation} 
-            className={`${editTarget === 'simulation' 
-              ? 'bg-white/20 text-primary-foreground font-semibold border border-white/30' 
-              : 'text-primary-foreground hover:bg-white/10 hover:text-primary-foreground'
-            }`}
-          >
-            <Zap className={`h-4 w-4 mr-1 ${editTarget === 'simulation' ? 'text-orange-400' : ''}`} />
+          <Button variant="ghost" size="sm" onClick={onSimulation} className="text-primary-foreground hover:bg-white/10 hover:text-primary-foreground">
+            <Zap className="h-4 w-4 mr-1" />
             Simulation
           </Button>
           

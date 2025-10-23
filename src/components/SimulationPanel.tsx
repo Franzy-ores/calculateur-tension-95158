@@ -1,8 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -17,10 +15,7 @@ import { toast } from "sonner";
 import { DocumentationPanel } from "@/components/DocumentationPanel";
 import { SRG2Panel } from "@/components/SRG2Panel";
 import { Settings, Play, RotateCcw, Trash2, Plus, AlertTriangle, CheckCircle, Cable } from "lucide-react";
-import { useState } from 'react';
-
 export const SimulationPanel = () => {
-  const [showNodeSelector, setShowNodeSelector] = useState(false);
   const {
     currentProject,
     simulationMode,
@@ -61,6 +56,7 @@ export const SimulationPanel = () => {
             </div>
             <div className="flex items-center gap-2">
               <Switch checked={compensator.enabled} onCheckedChange={enabled => {
+              if (!eligible) return;
               updateNeutralCompensator(compensator.id, {
                 enabled
               });
@@ -69,7 +65,7 @@ export const SimulationPanel = () => {
                 console.log('🔄 Auto-triggering simulation after compensator activation');
                 setTimeout(() => runSimulation(), 100);
               }
-            }} />
+            }} disabled={!eligible} />
               <Button variant="ghost" size="sm" onClick={() => removeNeutralCompensator(compensator.id)}>
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -113,7 +109,7 @@ export const SimulationPanel = () => {
               <Label className="text-xs">Puissance max (kVA)</Label>
               <Input type="number" value={compensator.maxPower_kVA} onChange={e => updateNeutralCompensator(compensator.id, {
               maxPower_kVA: Number(e.target.value)
-            })} className="h-8" />
+            })} className="h-8" disabled={!eligible} />
             </div>
             <div>
               <Label className="text-xs">Seuil I_N (A)</Label>
@@ -128,14 +124,14 @@ export const SimulationPanel = () => {
               <Label className="text-xs">Zph - Phase (Ω)</Label>
               <Input type="number" step="0.01" value={compensator.Zph_Ohm ?? 0.5} onChange={e => updateNeutralCompensator(compensator.id, {
               Zph_Ohm: Number(e.target.value)
-            })} className="h-8" />
+            })} className="h-8" disabled={!eligible} />
               {compensator.Zph_Ohm < 0.15 && <p className="text-xs text-yellow-500 mt-1">⚠️ Doit être &gt; 0,15 Ω</p>}
             </div>
             <div>
               <Label className="text-xs">Zn - Neutre (Ω)</Label>
               <Input type="number" step="0.01" value={compensator.Zn_Ohm ?? 0.2} onChange={e => updateNeutralCompensator(compensator.id, {
               Zn_Ohm: Number(e.target.value)
-            })} className="h-8" />
+            })} className="h-8" disabled={!eligible} />
               {compensator.Zn_Ohm < 0.15 && <p className="text-xs text-yellow-500 mt-1">⚠️ Doit être &gt; 0,15 Ω</p>}
             </div>
           </div>
@@ -256,7 +252,16 @@ export const SimulationPanel = () => {
             <TabsContent value="equi8" className="space-y-4 mt-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-medium">Compensateurs de neutre (EQUI8)</h3>
-                <Button size="sm" onClick={() => setShowNodeSelector(true)}>
+                <Button size="sm" onClick={() => {
+                  // Trouver le premier nœud qui n'a pas encore de compensateur
+                  const usedNodeIds = simulationEquipment.neutralCompensators.map(c => c.nodeId);
+                  const availableNode = nodes.find(n => !usedNodeIds.includes(n.id));
+                  if (availableNode) {
+                    addNeutralCompensator(availableNode.id);
+                  } else {
+                    toast.error('Aucun nœud disponible pour ajouter un compensateur');
+                  }
+                }}>
                   <Plus className="h-3 w-3 mr-1" />
                   Ajouter
                 </Button>
@@ -285,72 +290,6 @@ export const SimulationPanel = () => {
                   </div>
                 </>
               )}
-
-              {/* Dialogue de sélection du nœud pour compensateur EQUI8 */}
-              <Dialog open={showNodeSelector} onOpenChange={setShowNodeSelector}>
-                <DialogContent className="bg-background">
-                  <DialogHeader>
-                    <DialogTitle>Sélectionner un nœud pour le compensateur EQUI8</DialogTitle>
-                    <DialogDescription>
-                      Le compensateur EQUI8 nécessite les conditions suivantes :
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <ul className="text-xs space-y-1 text-muted-foreground list-disc pl-4">
-                      <li>Réseau 400V (TÉTRAPHASÉ)</li>
-                      <li>Nœud connecté en monophasé Phase-Neutre (MONO_230V_PN)</li>
-                      <li>Mode déséquilibré activé (déséquilibre &gt; 0%)</li>
-                    </ul>
-                    
-                    <Select 
-                      onValueChange={(nodeId) => {
-                        if (nodeId) {
-                          const usedNodeIds = simulationEquipment.neutralCompensators.map(c => c.nodeId);
-                          if (usedNodeIds.includes(nodeId)) {
-                            toast.error('Un compensateur existe déjà sur ce nœud');
-                            return;
-                          }
-                          addNeutralCompensator(nodeId);
-                          setShowNodeSelector(false);
-                        }
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choisir un nœud..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {nodes
-                          .filter(n => !simulationEquipment.neutralCompensators.some(c => c.nodeId === n.id))
-                          .map((node) => {
-                            const nodeConnectionType = getNodeConnectionType(
-                              currentProject.voltageSystem,
-                              currentProject.loadModel || 'polyphase_equilibre',
-                              node.isSource
-                            );
-                            return (
-                              <SelectItem key={node.id} value={node.id}>
-                                <div className="flex items-center justify-between w-full gap-2">
-                                  <span>{node.name}</span>
-                                  <Badge variant="outline" className="text-xs">
-                                    {nodeConnectionType}
-                                  </Badge>
-                                </div>
-                              </SelectItem>
-                            );
-                          })}
-                      </SelectContent>
-                    </Select>
-                    
-                    <Button 
-                      variant="outline" 
-                      onClick={() => setShowNodeSelector(false)}
-                      className="w-full"
-                    >
-                      Annuler
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
             </TabsContent>
 
             <TabsContent value="srg2" className="mt-4">

@@ -57,7 +57,7 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
 
     // Créer les marqueurs clients
     clients.forEach(client => {
-      const color = getClientMarkerColor(client, colorMode, circuitColorMapping, links);
+      const color = getClientMarkerColor(client, colorMode, circuitColorMapping);
       const isSelected = selectedClientId === client.id;
       const borderColor = isSelected ? '#22c55e' : 'white';
       const borderWidth = isSelected ? 3 : 2;
@@ -76,24 +76,23 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
         zIndexOffset: 1000
       });
 
-      // Tooltip au survol avec les informations du client
-      const tooltipContent = `
-        <div style="font-size: 11px; line-height: 1.4; white-space: nowrap;">
-          <strong>${client.nomCircuit || client.identifiantCircuit}</strong><br>
-          <span style="color: #666;">Couplage: ${client.couplage}</span><br>
-          <span style="color: #666;">Charge: ${client.puissanceContractuelle_kVA.toFixed(1)} kVA</span>
-          ${client.puissancePV_kVA > 0 ? `<br><span style="color: #666;">PV: ${client.puissancePV_kVA.toFixed(1)} kVA</span>` : ''}
-          ${showTensionLabels && (client.tensionMin_V || client.tensionMax_V) ? `<br><span style="color: #f59e0b;">Min: ${(client.tensionMin_V || 0).toFixed(1)}V / Max: ${(client.tensionMax_V || 0).toFixed(1)}V</span>` : ''}
-        </div>
-      `;
-
-      marker.bindTooltip(tooltipContent, {
-        permanent: false,
-        direction: 'top',
-        offset: [0, -10],
-        className: 'client-hover-tooltip',
-        opacity: 0.95
-      });
+      // Ajouter un tooltip permanent avec les tensions si disponibles et si activé
+      if (showTensionLabels && (client.tensionMin_V !== undefined || client.tensionMax_V !== undefined)) {
+        const tooltipContent = `
+          <div style="font-size: 10px; line-height: 1.3; white-space: nowrap;">
+            ${client.tensionMin_V !== undefined ? `<div><strong>Min:</strong> ${client.tensionMin_V.toFixed(1)}V</div>` : ''}
+            ${client.tensionMax_V !== undefined ? `<div><strong>Max:</strong> ${client.tensionMax_V.toFixed(1)}V</div>` : ''}
+          </div>
+        `;
+        
+        marker.bindTooltip(tooltipContent, {
+          permanent: true,
+          direction: 'right',
+          offset: [10, 0],
+          className: 'client-tension-label',
+          opacity: 0.95
+        });
+      }
 
       // Gestion du drag & drop
       let initialPosition: L.LatLng;
@@ -164,22 +163,14 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
           highlightCircleRef.current = null;
         }
         
-        // Vérifier si on a lâché sur un nœud (trouver le plus proche)
-        const closestNodeAtDrop = nodes.reduce<{ node: Node | null; distance: number }>(
-          (closest, node) => {
-            const distance = map.distance(
-              [node.lat, node.lng],
-              [dropLatLng.lat, dropLatLng.lng]
-            );
-            if (distance < 30 && distance < closest.distance) {
-              return { node, distance };
-            }
-            return closest;
-          },
-          { node: null, distance: Infinity }
-        );
-        
-        const droppedOnNode = closestNodeAtDrop.node;
+        // Vérifier si on a lâché sur un nœud
+        const droppedOnNode = nodes.find(node => {
+          const distance = map.distance(
+            [node.lat, node.lng],
+            [dropLatLng.lat, dropLatLng.lng]
+          );
+          return distance < 30;
+        });
         
         if (droppedOnNode && onClientDragToNode) {
           onClientDragToNode(client.id, droppedOnNode.id);

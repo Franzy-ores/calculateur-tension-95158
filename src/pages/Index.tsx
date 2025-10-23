@@ -42,14 +42,8 @@ const Index = () => {
 
   const handleSave = () => {
     if (currentProject) {
-      // Récupérer les équipements de simulation depuis le store
-      const { simulationEquipment } = useNetworkStore.getState();
-      
       // Calculer et inclure les bounds géographiques avant la sauvegarde
-      const projectToSave = { 
-        ...currentProject,
-        simulationEquipment // Inclure les équipements de simulation
-      };
+      const projectToSave = { ...currentProject };
       if (projectToSave.nodes.length > 0) {
         // Calculer les bounds géographiques
         const lats = projectToSave.nodes.map(n => n.lat);

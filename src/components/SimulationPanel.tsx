@@ -254,9 +254,27 @@ export const SimulationPanel = () => {
             </TabsList>
 
             <TabsContent value="equi8" className="space-y-4 mt-4">
+              {currentProject.voltageSystem !== 'TÉTRAPHASÉ_400V' && (
+                <Card className="bg-muted/50 mb-4">
+                  <CardContent className="p-4 text-sm">
+                    <div className="flex items-center gap-2 text-yellow-600">
+                      <AlertTriangle className="h-4 w-4" />
+                      <span className="font-medium">EQUI8 non disponible sur réseau 230V</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Le compensateur de neutre EQUI8 nécessite un réseau 400V (tétraphasé).
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+              
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-medium">Compensateurs de neutre (EQUI8)</h3>
-                <Button size="sm" onClick={() => setShowNodeSelector(true)}>
+                <Button 
+                  size="sm" 
+                  onClick={() => setShowNodeSelector(true)}
+                  disabled={currentProject.voltageSystem !== 'TÉTRAPHASÉ_400V'}
+                >
                   <Plus className="h-3 w-3 mr-1" />
                   Ajouter
                 </Button>

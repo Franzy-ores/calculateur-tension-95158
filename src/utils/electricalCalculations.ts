@@ -873,18 +873,7 @@ export class ElectricalCalculator {
             const Vn = V_node_phase.get(n.id) || Vslack_phase_ph;
             const Sph = S_map.get(n.id) || C(0, 0);
             const Vsafe = abs(Vn) > ElectricalCalculator.MIN_VOLTAGE_SAFETY ? Vn : Vslack_phase_ph;
-            let Iinj = conj(div(Sph, Vsafe));
-            
-            // AJOUT : injection EQUI8 par phase (KCL physique)
-            const vNode = nodeById.get(n.id);
-            const perPhase = vNode?.customProps?.['equi8_current_injection_perPhase'];
-            if (perPhase) {
-              const phaseKey = (angleDeg === 0 ? 'A' : (angleDeg === -120 ? 'B' : 'C'));
-              const I_eq = perPhase[phaseKey];
-              if (I_eq && abs(I_eq) > 1e-6) {
-                Iinj = add(Iinj, I_eq);
-              }
-            }
+            const Iinj = conj(div(Sph, Vsafe));
             
             I_inj_node_phase.set(n.id, Iinj);
           }
@@ -927,15 +916,16 @@ export class ElectricalCalculator {
               // Calculer tension selon Kirchhoff : V_v = V_u - Z * I_uv
               let Vv = sub(Vu, mul(Z, Iuv));
               
-              // DÉSACTIVÉ : Injection EQUI8 traitée en KCL. Fallback legacy si pas de per-phase
+              // ✅ Application correcte EQUI8 : impact sur potentiel du neutre
               const vNode = nodeById.get(v);
-              if (vNode?.customProps?.['equi8_modified'] && !vNode.customProps?.['equi8_current_injection_perPhase']) {
-                const I_equi8 = vNode.customProps['equi8_current_injection'];
-                if (I_equi8) {
-                  const Z_couplage = scale(Z, 1/3);
-                  const delta_V_equi8 = mul(Z_couplage, I_equi8);
-                  Vv = add(Vv, delta_V_equi8);
-                  console.warn(`⚠️ EQUI8 nœud ${v}: Fallback ΔV local (mode legacy)`);
+              if (vNode?.customProps?.['equi8_modified']) {
+                const I_EQUI8_neutre = vNode.customProps['equi8_current_neutral'];
+                if (I_EQUI8_neutre) {
+                  // L'EQUI8 modifie le potentiel du neutre, affectant toutes les phases identiquement
+                  const Z_neutre = C(0.15, 0); // Impédance du conducteur neutre
+                  const delta_V_neutre = mul(Z_neutre, I_EQUI8_neutre);
+                  // Correction identique sur toutes les phases (modification du point neutre)
+                  Vv = sub(Vv, delta_V_neutre);
                 }
               }
               

@@ -166,12 +166,6 @@ export interface Cable {
   voltageDropPerPhase_V?: { A: number; B: number; C: number };
 }
 
-export interface EQUI8PerPhaseInjection {
-  IA: Complex;  // Injection phase A (phasor)
-  IB: Complex;  // Injection phase B (phasor)
-  IC: Complex;  // Injection phase C (phasor)
-}
-
 export interface Project {
   id: string;
   name: string;

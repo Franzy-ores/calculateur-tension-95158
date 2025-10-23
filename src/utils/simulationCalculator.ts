@@ -11,7 +11,6 @@ import {
   SimulationEquipment,
   SimulationResult,
   CableUpgrade,
-  EQUI8PerPhaseInjection,
 } from '@/types/network';
 import { SRG2Config, SRG2SimulationResult, SRG2SwitchState, DEFAULT_SRG2_400_CONFIG, DEFAULT_SRG2_230_CONFIG } from '@/types/srg2';
 import { ElectricalCalculator } from '@/utils/electricalCalculations';
@@ -647,154 +646,9 @@ export class SimulationCalculator extends ElectricalCalculator {
    * Calcule les ratios de compensation EQUI8 basés sur les tensions naturelles
    * Ces ratios sont ensuite figés pour toutes les itérations
    * Conforme à la documentation officielle CME Transformateur
-   */
-  /**
-   * Décompose le courant de compensation EQUI8 en injections par phase
-   * basées sur les courants réels circulant dans chaque phase.
    * 
-   * Méthode : Pseudo-inverse 2×3 (LS complexe) avec correction de conservation vectorielle
-   * 
-   * @param I_EQUI8_complex - Courant total de compensation (phasor)
-   * @param I_A_total - Courant total phase A au nœud (phasor)
-   * @param I_B_total - Courant total phase B au nœud (phasor)
-   * @param I_C_total - Courant total phase C au nœud (phasor)
-   * @param I_max_per_phase - Limite de courant par phase (issu de maxPower_kVA / 3)
-   * @param project - Projet (pour accès aux flags debug)
-   * @param nodeId - ID du nœud (pour logs)
-   * @returns Décomposition par phase avec conservation vectorielle garantie
-   */
-  private decomposeEQUI8CurrentPerPhase(
-    I_EQUI8_complex: Complex,
-    I_A_total: Complex,
-    I_B_total: Complex,
-    I_C_total: Complex,
-    I_max_per_phase: number,
-    project: Project,
-    nodeId: string
-  ): { IA: Complex; IB: Complex; IC: Complex } {
-    const epsilon = 1e-6;
-    
-    // 1. Construire la base directionnelle à partir des courants réels
-    const mag_A = abs(I_A_total);
-    const mag_B = abs(I_B_total);
-    const mag_C = abs(I_C_total);
-    
-    // Vecteurs unitaires directionnels (ou fallback si phase inactive)
-    const u_A = mag_A > epsilon ? scale(I_A_total, 1 / mag_A) : fromPolar(1, 0);
-    const u_B = mag_B > epsilon ? scale(I_B_total, 1 / mag_B) : fromPolar(1, -2*Math.PI/3);
-    const u_C = mag_C > epsilon ? scale(I_C_total, 1 / mag_C) : fromPolar(1, 2*Math.PI/3);
-    
-    // Poids initiaux proportionnels aux magnitudes des courants
-    const total_mag = mag_A + mag_B + mag_C;
-    let w_A = total_mag > epsilon ? mag_A / total_mag : 1/3;
-    let w_B = total_mag > epsilon ? mag_B / total_mag : 1/3;
-    let w_C = total_mag > epsilon ? mag_C / total_mag : 1/3;
-    
-    // 2. Résolution par pseudo-inverse (moindres carrés 2×3)
-    // Matrice M = [u_A u_B u_C] en 2×3 (Re/Im)
-    const M00 = u_A.re, M01 = u_B.re, M02 = u_C.re;
-    const M10 = u_A.im, M11 = u_B.im, M12 = u_C.im;
-    
-    // M * M^T (2×2)
-    const a = M00*M00 + M01*M01 + M02*M02;
-    const b = M00*M10 + M01*M11 + M02*M12;
-    const d = M10*M10 + M11*M11 + M12*M12;
-    const det = a*d - b*b || epsilon;
-    
-    // (M * M^T)^-1
-    const inv00 =  d/det, inv01 = -b/det;
-    const inv10 = -b/det, inv11 =  a/det;
-    
-    // y = (M * M^T)^-1 * [Re(T); Im(T)]
-    const y0 = inv00 * I_EQUI8_complex.re + inv01 * I_EQUI8_complex.im;
-    const y1 = inv10 * I_EQUI8_complex.re + inv11 * I_EQUI8_complex.im;
-    
-    // w_ls = M^T * y (solution non contrainte)
-    let x_A = M00*y0 + M10*y1;
-    let x_B = M01*y0 + M11*y1;
-    let x_C = M02*y0 + M12*y1;
-    
-    // 3. Blending avec poids initiaux pour stabilité
-    x_A = 0.5 * w_A + 0.5 * Math.max(0, x_A);
-    x_B = 0.5 * w_B + 0.5 * Math.max(0, x_B);
-    x_C = 0.5 * w_C + 0.5 * Math.max(0, x_C);
-    
-    // Normalisation
-    const sum_x = x_A + x_B + x_C || epsilon;
-    x_A /= sum_x;
-    x_B /= sum_x;
-    x_C /= sum_x;
-    
-    // 4. Construction des phasors d'injection
-    let I_A_inj = scale(u_A, x_A);
-    let I_B_inj = scale(u_B, x_B);
-    let I_C_inj = scale(u_C, x_C);
-    
-    // Mise à l'échelle pour retrouver |I_EQUI8_complex|
-    const sum_vec = add(add(I_A_inj, I_B_inj), I_C_inj);
-    const scale_factor = abs(sum_vec) > epsilon ? abs(I_EQUI8_complex) / abs(sum_vec) : 0;
-    I_A_inj = scale(I_A_inj, scale_factor);
-    I_B_inj = scale(I_B_inj, scale_factor);
-    I_C_inj = scale(I_C_inj, scale_factor);
-    
-    // 5. Bornage par phase (limite de puissance)
-    const mag_A_inj = abs(I_A_inj);
-    const mag_B_inj = abs(I_B_inj);
-    const mag_C_inj = abs(I_C_inj);
-    
-    if (mag_A_inj > I_max_per_phase) I_A_inj = scale(I_A_inj, I_max_per_phase / mag_A_inj);
-    if (mag_B_inj > I_max_per_phase) I_B_inj = scale(I_B_inj, I_max_per_phase / mag_B_inj);
-    if (mag_C_inj > I_max_per_phase) I_C_inj = scale(I_C_inj, I_max_per_phase / mag_C_inj);
-    
-    // 6. Correction de conservation vectorielle après bornage
-    const sum_bounded = add(add(I_A_inj, I_B_inj), I_C_inj);
-    const error = sub(I_EQUI8_complex, sum_bounded);
-    const error_mag = abs(error);
-    
-    if (error_mag > epsilon) {
-      // Répartir l'erreur proportionnellement aux poids
-      const correction_A = scale(u_A, w_A * error_mag / 3);
-      const correction_B = scale(u_B, w_B * error_mag / 3);
-      const correction_C = scale(u_C, w_C * error_mag / 3);
-      
-      I_A_inj = add(I_A_inj, correction_A);
-      I_B_inj = add(I_B_inj, correction_B);
-      I_C_inj = add(I_C_inj, correction_C);
-    }
-    
-    // 7. Validation finale
-    const final_sum = add(add(I_A_inj, I_B_inj), I_C_inj);
-    const final_error = abs(sub(final_sum, I_EQUI8_complex));
-    const relative_error = final_error / (abs(I_EQUI8_complex) || epsilon);
-    
-    if (relative_error > 0.10) {
-      console.error(`❌ EQUI8 décomposition par phase invalide : erreur ${(relative_error*100).toFixed(1)}% > 10%`);
-      // Fallback : distribution uniforme
-      const uniform_mag = abs(I_EQUI8_complex) / 3;
-      I_A_inj = scale(u_A, uniform_mag);
-      I_B_inj = scale(u_B, uniform_mag);
-      I_C_inj = scale(u_C, uniform_mag);
-    }
-    
-    // Log de validation (si debug activé)
-    if (project.debug?.equi8?.logPerPhaseInjections) {
-      const sum_check = add(add(I_A_inj, I_B_inj), I_C_inj);
-      console.log(`🔬 EQUI8 décomposition par phase (nœud ${nodeId}):`, {
-        'I_EQUI8_total': `${abs(I_EQUI8_complex).toFixed(1)}A ∠${(arg(I_EQUI8_complex)*180/Math.PI).toFixed(0)}°`,
-        'IA_inj': `${abs(I_A_inj).toFixed(1)}A ∠${(arg(I_A_inj)*180/Math.PI).toFixed(0)}°`,
-        'IB_inj': `${abs(I_B_inj).toFixed(1)}A ∠${(arg(I_B_inj)*180/Math.PI).toFixed(0)}°`,
-        'IC_inj': `${abs(I_C_inj).toFixed(1)}A ∠${(arg(I_C_inj)*180/Math.PI).toFixed(0)}°`,
-        'Σ(IA+IB+IC)': `${abs(sum_check).toFixed(1)}A ∠${(arg(sum_check)*180/Math.PI).toFixed(0)}°`,
-        'Erreur relative': `${(abs(sub(sum_check, I_EQUI8_complex)) / (abs(I_EQUI8_complex) || 1) * 100).toFixed(2)}%`
-      });
-    }
-    
-    return { IA: I_A_inj, IB: I_B_inj, IC: I_C_inj };
-  }
-
-  /**
-   * Calcule les ratios fixes selon modèle EQUI8 (documentation CME Transformateur)
-   * Cette méthode doit être appelée UNE SEULE FOIS à l'itération 1
+   * Note: L'EQUI8 injecte un courant UNIQUE dans le neutre qui modifie le
+   * potentiel du neutre, affectant ainsi toutes les tensions phase-neutre.
    */
   private computeEQUI8CompensationRatio(
     Uinit_ph1: number,
@@ -892,7 +746,6 @@ export class SimulationCalculator extends ElectricalCalculator {
     UEQUI8_ph3_phasor: Complex; // ✅ Phasor complet avec phase
     I_EQUI8_A: number;
     I_EQUI8_complex: Complex;
-    I_EQUI8_perPhase?: { IA: Complex; IB: Complex; IC: Complex }; // NOUVEAU : décomposition par phase
     iN_initial_complex: Complex;
     reductionPercent: number;
     iN_initial_A: number;
@@ -1097,18 +950,6 @@ export class SimulationCalculator extends ElectricalCalculator {
     
     // Estimation des puissances réactives (pour affichage)
     const Q_per_phase = Math.min(estimatedPower_kVA, compensator.maxPower_kVA) / 3;
-    
-    // === NOUVEAU : Décomposition du courant de compensation par phase ===
-    const I_max_per_phase = I_EQUI8_effective / 1.5;
-    const perPhaseInjection = this.decomposeEQUI8CurrentPerPhase(
-      I_EQUI8_complex,
-      I_A_total,
-      I_B_total,
-      I_C_total,
-      I_max_per_phase,
-      { debug: { equi8: { logPerPhaseInjections: false } } } as Project,
-      compensator.nodeId
-    );
 
     console.log(`📐 EQUI8 au nœud ${compensator.nodeId} (formule officielle CME):`, {
       'Ratios (fixes)': `A=${ratio_ph1.toFixed(3)}, B=${ratio_ph2.toFixed(3)}, C=${ratio_ph3.toFixed(3)}`,
@@ -1130,7 +971,6 @@ export class SimulationCalculator extends ElectricalCalculator {
       UEQUI8_ph3_phasor,
       I_EQUI8_A: I_EQUI8_effective,
       I_EQUI8_complex,
-      I_EQUI8_perPhase: perPhaseInjection, // NOUVEAU
       iN_initial_complex: I_N_complex,
       reductionPercent,
       iN_initial_A: I_N_initial,
@@ -1485,21 +1325,20 @@ export class SimulationCalculator extends ElectricalCalculator {
       if (node.customProps?.['equi8_modified']) {
         delete node.customProps['equi8_modified'];
         delete node.customProps['equi8_voltages'];
-        delete node.customProps['equi8_current_injection'];
-        delete node.customProps['equi8_current_injection_perPhase'];
+        delete node.customProps['equi8_current_neutral'];
       }
     }
   }
   
   /**
    * Applique l'injection de courant EQUI8 au nœud
+   * Stocke uniquement le courant neutre qui modifie le potentiel du neutre
    */
   private applyEQUI8Voltages(
     nodes: Node[],
     compensator: NeutralCompensator,
     equi8Result: { 
       I_EQUI8_complex: Complex;
-      I_EQUI8_perPhase?: EQUI8PerPhaseInjection;
       UEQUI8_ph1_mag: number;
       UEQUI8_ph2_mag: number;
       UEQUI8_ph3_mag: number;
@@ -1511,26 +1350,10 @@ export class SimulationCalculator extends ElectricalCalculator {
     // Marquer le nœud comme ayant une injection EQUI8
     if (!node.customProps) node.customProps = {};
     node.customProps['equi8_modified'] = true;
-    node.customProps['equi8_current_injection'] = equi8Result.I_EQUI8_complex;
-    
-    // NOUVEAU : Stocker l'injection par phase pour intégration KCL
-    if (equi8Result.I_EQUI8_perPhase) {
-      node.customProps['equi8_current_injection_perPhase'] = {
-        A: equi8Result.I_EQUI8_perPhase.IA,
-        B: equi8Result.I_EQUI8_perPhase.IB,
-        C: equi8Result.I_EQUI8_perPhase.IC
-      };
-      
-      console.log(`🔋 EQUI8 injection par phase stockée au nœud ${compensator.nodeId}:`, {
-        'Total': `${abs(equi8Result.I_EQUI8_complex).toFixed(1)}A`,
-        'Phase A': `${abs(equi8Result.I_EQUI8_perPhase.IA).toFixed(1)}A ∠${(arg(equi8Result.I_EQUI8_perPhase.IA)*180/Math.PI).toFixed(0)}°`,
-        'Phase B': `${abs(equi8Result.I_EQUI8_perPhase.IB).toFixed(1)}A ∠${(arg(equi8Result.I_EQUI8_perPhase.IB)*180/Math.PI).toFixed(0)}°`,
-        'Phase C': `${abs(equi8Result.I_EQUI8_perPhase.IC).toFixed(1)}A ∠${(arg(equi8Result.I_EQUI8_perPhase.IC)*180/Math.PI).toFixed(0)}°`
-      });
-    }
+    node.customProps['equi8_current_neutral'] = equi8Result.I_EQUI8_complex;
     
     console.log(`✅ Injection EQUI8 appliquée sur nœud ${compensator.nodeId}:`, {
-      'I_inj': `${abs(equi8Result.I_EQUI8_complex).toFixed(1)}A ∠${(arg(equi8Result.I_EQUI8_complex)*180/Math.PI).toFixed(0)}°`,
+      'I_neutre': `${abs(equi8Result.I_EQUI8_complex).toFixed(1)}A ∠${(arg(equi8Result.I_EQUI8_complex)*180/Math.PI).toFixed(0)}°`,
       'V_cibles (affichage)': {
         A: `${equi8Result.UEQUI8_ph1_mag.toFixed(1)}V`,
         B: `${equi8Result.UEQUI8_ph2_mag.toFixed(1)}V`,

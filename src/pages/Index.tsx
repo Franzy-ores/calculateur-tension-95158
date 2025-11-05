@@ -38,6 +38,7 @@ const Index = () => {
 
   const handleNewNetwork = () => {
     createNewProject("Nouveau Réseau", "TÉTRAPHASÉ_400V");
+    handleSettings(); // Ouvrir automatiquement les paramètres après création
   };
 
   const handleSave = () => {

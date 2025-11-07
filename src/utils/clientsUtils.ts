@@ -152,6 +152,66 @@ export const calculateTotalPowersForNodes = (
 
 
 /**
+ * Regroupe les clients ayant des coordonnées identiques (avec tolérance)
+ * @param clients - Liste des clients à regrouper
+ * @returns Objet contenant les groupes et les clients isolés
+ */
+export const groupColocatedClients = (
+  clients: ClientImporte[]
+): { groupes: import('@/types/network').ClientGroupe[]; clientsIsoles: ClientImporte[] } => {
+  const TOLERANCE_DEGRES = 0.00001; // ~1 mètre
+  
+  // Créer un mapping coordonnées → clients
+  const coordMap = new Map<string, ClientImporte[]>();
+  
+  clients.forEach(client => {
+    // Arrondir les coordonnées pour la tolérance
+    const latKey = Math.round(client.lat / TOLERANCE_DEGRES);
+    const lngKey = Math.round(client.lng / TOLERANCE_DEGRES);
+    const key = `${latKey},${lngKey}`;
+    
+    if (!coordMap.has(key)) {
+      coordMap.set(key, []);
+    }
+    coordMap.get(key)!.push(client);
+  });
+  
+  const groupes: import('@/types/network').ClientGroupe[] = [];
+  const clientsIsoles: ClientImporte[] = [];
+  
+  coordMap.forEach((groupClients, coordKey) => {
+    if (groupClients.length > 1) {
+      // Créer un groupe
+      const avgLat = groupClients.reduce((sum, c) => sum + c.lat, 0) / groupClients.length;
+      const avgLng = groupClients.reduce((sum, c) => sum + c.lng, 0) / groupClients.length;
+      
+      // Récupérer les couplages et circuits uniques
+      const couplagesSet = new Set(groupClients.map(c => c.couplage));
+      const circuitsSet = new Set(groupClients.map(c => c.nomCircuit));
+      
+      groupes.push({
+        id: `groupe-${coordKey}`,
+        type: 'groupe',
+        lat: avgLat,
+        lng: avgLng,
+        clientIds: groupClients.map(c => c.id),
+        clients: groupClients,
+        puissanceContractuelle_kVA: groupClients.reduce((sum, c) => sum + c.puissanceContractuelle_kVA, 0),
+        puissancePV_kVA: groupClients.reduce((sum, c) => sum + c.puissancePV_kVA, 0),
+        couplages: Array.from(couplagesSet),
+        nombreClients: groupClients.length,
+        circuits: Array.from(circuitsSet),
+      });
+    } else {
+      // Client isolé
+      clientsIsoles.push(groupClients[0]);
+    }
+  });
+  
+  return { groupes, clientsIsoles };
+};
+
+/**
  * Détermine la couleur d'un marqueur client selon le mode sélectionné
  * @param client - Client importé à colorer
  * @param mode - Mode de coloration : 'couplage', 'circuit', 'tension', ou 'lien'

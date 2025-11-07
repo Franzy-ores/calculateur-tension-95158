@@ -61,6 +61,21 @@ export interface ClientLink {
   nodeId: string;    // ID du nœud lié
 }
 
+// Interface pour un groupe de clients co-localisés
+export interface ClientGroupe {
+  id: string; // ex: "groupe-451-567"
+  type: 'groupe';
+  lat: number;
+  lng: number;
+  clientIds: string[]; // IDs des clients individuels
+  clients: ClientImporte[]; // Références complètes
+  puissanceContractuelle_kVA: number; // Somme des charges
+  puissancePV_kVA: number; // Somme des productions
+  couplages: string[]; // Liste des couplages distincts
+  nombreClients: number;
+  circuits: string[]; // Liste des circuits distincts
+}
+
 // Types pour le transformateur HT1/BT
 export type TransformerRating = "160kVA" | "250kVA" | "400kVA" | "630kVA";
 

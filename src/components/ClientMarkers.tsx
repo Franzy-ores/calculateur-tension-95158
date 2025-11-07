@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
-import { ClientImporte, ClientLink, Node } from '@/types/network';
-import { getClientMarkerColor } from '@/utils/clientsUtils';
+import { ClientImporte, ClientLink, Node, ClientGroupe } from '@/types/network';
+import { getClientMarkerColor, groupColocatedClients } from '@/utils/clientsUtils';
 import type { ClientColorMode } from '@/store/networkStore';
 
 interface ClientMarkersProps {
@@ -19,6 +19,7 @@ interface ClientMarkersProps {
 
 export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId, onClientClick, onClientDragToNode, colorMode, circuitColorMapping, showTensionLabels = false }: ClientMarkersProps) => {
   const clientMarkersRef = useRef<Map<string, L.Marker>>(new Map());
+  const groupeMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   const linkLinesRef = useRef<Map<string, L.Polyline>>(new Map());
   const dragLineRef = useRef<L.Polyline | null>(null);
   const highlightCircleRef = useRef<L.Circle | null>(null);
@@ -51,12 +52,197 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
     // Nettoyer les marqueurs existants
     clientMarkersRef.current.forEach(marker => map.removeLayer(marker));
     clientMarkersRef.current.clear();
+    groupeMarkersRef.current.forEach(marker => map.removeLayer(marker));
+    groupeMarkersRef.current.clear();
     
     linkLinesRef.current.forEach(line => map.removeLayer(line));
     linkLinesRef.current.clear();
 
-    // Créer les marqueurs clients
-    clients.forEach(client => {
+    // Regrouper les clients co-localisés
+    const { groupes, clientsIsoles } = groupColocatedClients(clients);
+
+    // Créer les marqueurs pour les groupes
+    groupes.forEach(groupe => {
+      // Déterminer la couleur du groupe (prend la couleur du premier client pour simplicité)
+      const firstClient = groupe.clients[0];
+      const color = getClientMarkerColor(firstClient, colorMode, circuitColorMapping, links);
+      const hasProduction = groupe.puissancePV_kVA > 0;
+      
+      const icon = L.divIcon({
+        className: 'client-groupe-marker',
+        html: hasProduction 
+          ? `<div class="relative hover:scale-125 transition-transform" style="width: 24px; height: 24px; cursor: grab;">
+               <div class="absolute inset-0 rounded-full border-2 border-yellow-400" style="box-shadow: 0 0 8px rgba(250, 204, 21, 0.7);"></div>
+               <div class="absolute" style="top: 3px; left: 3px; width: 18px; height: 18px; background-color: ${color}; border: 2px solid white; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;">
+                 <span style="font-size: 10px; font-weight: bold; color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.5);">${groupe.nombreClients}</span>
+               </div>
+             </div>`
+          : `<div class="w-5 h-5 rounded-full shadow-lg hover:scale-125 transition-transform flex items-center justify-center" style="background-color: ${color}; border: 2px solid white; cursor: grab;">
+               <span style="font-size: 10px; font-weight: bold; color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.5);">${groupe.nombreClients}</span>
+             </div>`,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+      });
+      
+      const marker = L.marker([groupe.lat, groupe.lng], { 
+        icon,
+        draggable: true,
+        autoPan: true,
+        zIndexOffset: 2000 // Plus élevé que les clients isolés
+      });
+
+      // Popup détaillé pour le groupe
+      const popupContent = `
+        <div style="min-width: 280px; max-height: 400px; overflow-y: auto;">
+          <div style="position: sticky; top: 0; background: white; padding-bottom: 8px; border-bottom: 2px solid #3b82f6; margin-bottom: 8px;">
+            <strong style="font-size: 14px;">Groupe de ${groupe.nombreClients} clients</strong><br>
+            <div style="margin-top: 4px; font-size: 12px; color: #666;">
+              <strong>Charge totale:</strong> ${groupe.puissanceContractuelle_kVA.toFixed(1)} kVA<br>
+              <strong>PV total:</strong> ${groupe.puissancePV_kVA.toFixed(1)} kVA
+            </div>
+          </div>
+          ${groupe.clients.map((c, idx) => `
+            <div style="padding: 6px; margin: 4px 0; border: 1px solid #e5e7eb; border-radius: 4px; background: ${idx % 2 === 0 ? '#f9fafb' : 'white'};">
+              <div style="font-weight: 600; font-size: 12px; color: #111827;">${c.nomCircuit}</div>
+              <div style="font-size: 10px; color: #6b7280; margin-top: 2px;">
+                ${c.identifiantCircuit}<br>
+                <span style="color: #059669;">${c.couplage}</span> | 
+                <span style="color: #dc2626;">${c.puissanceContractuelle_kVA.toFixed(1)} kVA</span>
+                ${c.puissancePV_kVA > 0 ? ` | <span style="color: #f59e0b;">PV: ${c.puissancePV_kVA.toFixed(1)} kVA</span>` : ''}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+      
+      marker.bindPopup(popupContent, { maxWidth: 350 });
+      
+      // Tooltip au survol
+      const tooltipContent = `
+        <div style="font-size: 11px; line-height: 1.4; white-space: nowrap;">
+          <strong>Groupe (${groupe.nombreClients} clients)</strong><br>
+          <span style="color: #666;">Charge: ${groupe.puissanceContractuelle_kVA.toFixed(1)} kVA</span>
+          ${groupe.puissancePV_kVA > 0 ? `<br><span style="color: #666;">PV: ${groupe.puissancePV_kVA.toFixed(1)} kVA</span>` : ''}
+        </div>
+      `;
+      marker.bindTooltip(tooltipContent, {
+        permanent: false,
+        direction: 'top',
+        offset: [0, -12],
+        className: 'client-hover-tooltip',
+        opacity: 0.95
+      });
+
+      // Gestion du drag & drop pour le groupe
+      let initialPosition: L.LatLng;
+      
+      marker.on('dragstart', (e) => {
+        initialPosition = e.target.getLatLng();
+        map.dragging.disable();
+        const element = marker.getElement();
+        if (element) {
+          element.style.cursor = 'grabbing';
+        }
+      });
+
+      marker.on('drag', (e) => {
+        const currentLatLng = e.target.getLatLng();
+        
+        // Dessiner la ligne temporaire
+        if (!dragLineRef.current) {
+          dragLineRef.current = L.polyline(
+            [[initialPosition.lat, initialPosition.lng], [currentLatLng.lat, currentLatLng.lng]],
+            { color: '#8b5cf6', weight: 3, opacity: 0.6, dashArray: '5, 10' }
+          ).addTo(map);
+        } else {
+          dragLineRef.current.setLatLngs([
+            [initialPosition.lat, initialPosition.lng],
+            [currentLatLng.lat, currentLatLng.lng]
+          ]);
+        }
+        
+        // Trouver le nœud le plus proche
+        const closestNode = nodes.reduce<{ node: Node | null; distance: number }>(
+          (closest, node) => {
+            const distance = map.distance([node.lat, node.lng], [currentLatLng.lat, currentLatLng.lng]);
+            if (distance < 30 && distance < closest.distance) {
+              return { node, distance };
+            }
+            return closest;
+          },
+          { node: null, distance: Infinity }
+        );
+        
+        // Mettre en surbrillance le nœud proche
+        if (closestNode.node) {
+          if (!highlightCircleRef.current) {
+            highlightCircleRef.current = L.circle(
+              [closestNode.node.lat, closestNode.node.lng],
+              { radius: 30, color: '#8b5cf6', fillColor: '#8b5cf6', fillOpacity: 0.2, weight: 2 }
+            ).addTo(map);
+          } else {
+            highlightCircleRef.current.setLatLng([closestNode.node.lat, closestNode.node.lng]);
+          }
+        } else if (highlightCircleRef.current) {
+          map.removeLayer(highlightCircleRef.current);
+          highlightCircleRef.current = null;
+        }
+      });
+
+      marker.on('dragend', (e) => {
+        const dropLatLng = e.target.getLatLng();
+        
+        // Nettoyer les éléments visuels
+        if (dragLineRef.current) {
+          map.removeLayer(dragLineRef.current);
+          dragLineRef.current = null;
+        }
+        if (highlightCircleRef.current) {
+          map.removeLayer(highlightCircleRef.current);
+          highlightCircleRef.current = null;
+        }
+        
+        // Vérifier si on a lâché sur un nœud
+        const closestNodeAtDrop = nodes.reduce<{ node: Node | null; distance: number }>(
+          (closest, node) => {
+            const distance = map.distance(
+              [node.lat, node.lng],
+              [dropLatLng.lat, dropLatLng.lng]
+            );
+            if (distance < 30 && distance < closest.distance) {
+              return { node, distance };
+            }
+            return closest;
+          },
+          { node: null, distance: Infinity }
+        );
+        
+        const droppedOnNode = closestNodeAtDrop.node;
+        
+        if (droppedOnNode && onClientDragToNode) {
+          // Lier TOUS les clients du groupe automatiquement
+          groupe.clientIds.forEach(clientId => {
+            onClientDragToNode(clientId, droppedOnNode.id);
+          });
+        }
+        
+        // Toujours revenir à la position initiale
+        marker.setLatLng(initialPosition);
+        
+        const element = marker.getElement();
+        if (element) {
+          element.style.cursor = 'grab';
+        }
+        
+        map.dragging.enable();
+      });
+      
+      marker.addTo(map);
+      groupeMarkersRef.current.set(groupe.id, marker);
+    });
+
+    // Créer les marqueurs pour les clients isolés
+    clientsIsoles.forEach(client => {
       const color = getClientMarkerColor(client, colorMode, circuitColorMapping, links);
       const isSelected = selectedClientId === client.id;
       const borderColor = isSelected ? '#22c55e' : 'white';
@@ -275,11 +461,12 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
 
     return () => {
       clientMarkersRef.current.forEach(marker => map.removeLayer(marker));
+      groupeMarkersRef.current.forEach(marker => map.removeLayer(marker));
       linkLinesRef.current.forEach(line => map.removeLayer(line));
       if (dragLineRef.current) map.removeLayer(dragLineRef.current);
       if (highlightCircleRef.current) map.removeLayer(highlightCircleRef.current);
     };
   }, [map, clients, links, nodes, selectedClientId, onClientClick, onClientDragToNode, colorMode, circuitColorMapping, showTensionLabels]);
 
-  return { clientMarkersRef, linkLinesRef };
+  return { clientMarkersRef, groupeMarkersRef, linkLinesRef };
 };

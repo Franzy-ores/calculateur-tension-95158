@@ -239,18 +239,7 @@ const createDefaultProject = (): Project => ({
     productions: { A: 33.33, B: 33.33, C: 33.34 },
     constraints: { min: -20, max: 20, total: 100 }
   },
-  nodes: [
-    {
-      id: "source",
-      name: "Source",
-      lat: 46.6167,
-      lng: 6.8833,
-      connectionType: "TÉTRA_3P+N_230_400V",
-      clients: [],
-      productions: [],
-      isSource: true
-    }
-  ],
+  nodes: [],
   cables: [],
   cableTypes: defaultCableTypes
 });

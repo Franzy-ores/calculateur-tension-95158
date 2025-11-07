@@ -20,7 +20,10 @@ export const ExcelImporter = ({ onClose }: ExcelImporterProps) => {
   const [dragActive, setDragActive] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Map<string, string[]>>(new Map());
 
-  const { importClientsFromExcel } = useNetworkStore();
+  const { importClientsFromExcel, currentProject } = useNetworkStore();
+  
+  // Vérifier si des clients ont déjà été importés
+  const hasExistingClients = currentProject?.clientsImportes && currentProject.clientsImportes.length > 0;
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -117,7 +120,30 @@ export const ExcelImporter = ({ onClose }: ExcelImporterProps) => {
         </Button>
       </div>
 
-      {!file ? (
+      {hasExistingClients ? (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="space-y-3">
+            <p className="font-semibold">Importation bloquée</p>
+            <p>
+              Ce projet contient déjà <strong>{currentProject.clientsImportes.length} client(s)</strong> importé(s).
+              Pour des raisons de cohérence des données, vous ne pouvez pas importer de nouveaux clients dans un projet existant.
+            </p>
+            <p className="text-sm">
+              <strong>Solutions :</strong>
+            </p>
+            <ul className="text-sm list-disc list-inside space-y-1">
+              <li>Créez un nouveau projet pour importer ces clients</li>
+              <li>Ou supprimez les clients existants avant d'importer</li>
+            </ul>
+            <div className="flex justify-end pt-2">
+              <Button variant="outline" onClick={onClose}>
+                Fermer
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      ) : !file ? (
         <Card
           className={`p-8 border-2 border-dashed transition-colors ${
             dragActive ? 'border-primary bg-primary/5' : 'border-muted-foreground/25'

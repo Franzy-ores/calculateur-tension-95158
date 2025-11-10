@@ -404,8 +404,15 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       project.clientLinks = [];
     }
     
+    console.log(`🔍 DIAGNOSTIC loadProject:`);
+    console.log(`   - loadModel: ${project.loadModel}`);
+    console.log(`   - clientsImportes.length: ${project.clientsImportes.length}`);
+    console.log(`   - clientLinks.length: ${project.clientLinks?.length || 0}`);
+    console.log(`   - Condition répartition: ${project.loadModel === 'mixte_mono_poly' && project.clientsImportes.length > 0}`);
+    
     // === RÉPARTITION AUTOMATIQUE DES CLIENTS MONO ===
     if (project.loadModel === 'mixte_mono_poly' && project.clientsImportes.length > 0) {
+      console.log(`🔍 ===== DÉBUT RÉPARTITION AUTOMATIQUE =====`);
       console.log(`🔍 Vérification répartition MONO : ${project.clientsImportes.length} clients importés`);
       let assignedCount = 0;
       let monoClientsCount = 0;

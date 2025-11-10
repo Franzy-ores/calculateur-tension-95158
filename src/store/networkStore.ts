@@ -406,7 +406,10 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     
     // === RÉPARTITION AUTOMATIQUE DES CLIENTS MONO ===
     if (project.loadModel === 'mixte_mono_poly' && project.clientsImportes.length > 0) {
+      console.log(`🔍 Vérification répartition MONO : ${project.clientsImportes.length} clients importés`);
       let assignedCount = 0;
+      let monoClientsCount = 0;
+      let monoWithoutPhaseCount = 0;
       
       // Parcourir tous les nœuds
       project.nodes.forEach(node => {
@@ -414,26 +417,43 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
           project.clientLinks!.some(link => link.clientId === client.id && link.nodeId === node.id)
         );
         
+        console.log(`🔍 Nœud "${node.name}" : ${linkedClients.length} clients liés`);
+        
         linkedClients.forEach(client => {
-          // Si client MONO sans phase assignée
-          if (client.connectionType === 'MONO' && !client.assignedPhase) {
-            // Récupérer les clients déjà assignés sur ce nœud
-            const alreadyAssignedClients = project.clientsImportes!.filter(c =>
-              c.id !== client.id &&
-              project.clientLinks!.some(link => link.clientId === c.id && link.nodeId === node.id)
+          // Normaliser connectionType si manquant
+          if (!client.connectionType) {
+            client.connectionType = normalizeClientConnectionType(
+              client.couplage,
+              project.voltageSystem
             );
+            console.log(`🔧 Client "${client.nomCircuit}" : connectionType normalisé vers ${client.connectionType}`);
+          }
+          
+          if (client.connectionType === 'MONO') {
+            monoClientsCount++;
             
-            // Assigner automatiquement la phase
-            const assignedPhase = autoAssignPhaseForMonoClient(client, alreadyAssignedClients);
-            client.assignedPhase = assignedPhase;
-            assignedCount++;
-            
-            console.log(`✅ Phase ${assignedPhase} assignée au client MONO "${client.nomCircuit}"`);
+            if (!client.assignedPhase) {
+              monoWithoutPhaseCount++;
+              // Récupérer les clients déjà assignés sur ce nœud
+              const alreadyAssignedClients = project.clientsImportes!.filter(c =>
+                c.id !== client.id &&
+                project.clientLinks!.some(link => link.clientId === c.id && link.nodeId === node.id)
+              );
+              
+              // Assigner automatiquement la phase
+              const assignedPhase = autoAssignPhaseForMonoClient(client, alreadyAssignedClients);
+              client.assignedPhase = assignedPhase;
+              assignedCount++;
+              
+              console.log(`✅ Phase ${assignedPhase} assignée au client MONO "${client.nomCircuit}" (${client.puissanceContractuelle_kVA} kVA)`);
+            } else {
+              console.log(`ℹ️ Client MONO "${client.nomCircuit}" déjà sur phase ${client.assignedPhase}`);
+            }
           }
         });
         
         // Recalculer autoPhaseDistribution pour ce nœud
-        if (linkedClients.some(c => c.connectionType === 'MONO')) {
+        if (linkedClients.length > 0) {
           const distribution = calculateNodeAutoPhaseDistribution(
             node,
             linkedClients,
@@ -443,8 +463,12 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         }
       });
       
+      console.log(`📊 Statistiques répartition :`);
+      console.log(`   - Clients MONO : ${monoClientsCount}`);
+      console.log(`   - MONO sans phase : ${monoWithoutPhaseCount}`);
+      console.log(`   - Phases assignées : ${assignedCount}`);
+      
       if (assignedCount > 0) {
-        console.log(`📌 ${assignedCount} clients MONO répartis automatiquement`);
         toast.success(`${assignedCount} clients MONO répartis automatiquement sur les phases`);
         
         // Initialiser manualPhaseDistribution avec répartition réelle

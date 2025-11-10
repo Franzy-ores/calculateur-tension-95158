@@ -767,32 +767,9 @@ export class ElectricalCalculator {
     }
 
     if (isUnbalanced) {
-      // Répartition S_total -> S_A/S_B/S_C selon la répartition manuelle ou équilibré par défaut
+      // Répartition S_total -> S_A/S_B/S_C selon la répartition par nœud ou manuelle globale
       const globalAngle = 0; // Angle identique pour tous les circuits pour préserver la notion de circuit
       
-      // Utiliser la répartition manuelle si disponible, sinon répartition équitable par défaut
-      let pA_charges = 1/3, pB_charges = 1/3, pC_charges = 1/3;
-      let pA_productions = 1/3, pB_productions = 1/3, pC_productions = 1/3;
-      
-      if (manualPhaseDistribution) {
-        pA_charges = manualPhaseDistribution.charges.A / 100;
-        pB_charges = manualPhaseDistribution.charges.B / 100;
-        pC_charges = manualPhaseDistribution.charges.C / 100;
-        pA_productions = manualPhaseDistribution.productions.A / 100;
-        pB_productions = manualPhaseDistribution.productions.B / 100;
-        pC_productions = manualPhaseDistribution.productions.C / 100;
-      }
-      
-      // Vérification de cohérence
-      const totalCharges = pA_charges + pB_charges + pC_charges;
-      const totalProductions = pA_productions + pB_productions + pC_productions;
-      if (Math.abs(totalCharges - 1) > 1e-6) {
-        console.warn(`⚠️ Répartition des charges incohérente: pA=${pA_charges}, pB=${pB_charges}, pC=${pC_charges}, total=${totalCharges}`);
-      }
-      if (Math.abs(totalProductions - 1) > 1e-6) {
-        console.warn(`⚠️ Répartition des productions incohérente: pA=${pA_productions}, pB=${pB_productions}, pC=${pC_productions}, total=${totalProductions}`);
-      }
-
       const S_A_map = new Map<string, Complex>();
       const S_B_map = new Map<string, Complex>();
       const S_C_map = new Map<string, Complex>();
@@ -800,6 +777,55 @@ export class ElectricalCalculator {
       for (const n of nodes) {
         const S_kVA_tot = S_node_total_kVA.get(n.id) || 0; // signé
         const sign = Math.sign(S_kVA_tot) || 1;
+        
+        // ✅ PRIORITÉ À autoPhaseDistribution (mode mixte)
+        let pA_charges = 1/3, pB_charges = 1/3, pC_charges = 1/3;
+        let pA_productions = 1/3, pB_productions = 1/3, pC_productions = 1/3;
+        
+        if (n.autoPhaseDistribution) {
+          // Mode mixte : utiliser la distribution réelle du nœud
+          const totalCharges = n.autoPhaseDistribution.charges.total.A + 
+                               n.autoPhaseDistribution.charges.total.B + 
+                               n.autoPhaseDistribution.charges.total.C;
+          const totalProds = n.autoPhaseDistribution.productions.total.A + 
+                             n.autoPhaseDistribution.productions.total.B + 
+                             n.autoPhaseDistribution.productions.total.C;
+          
+          if (totalCharges > 0.001) {
+            pA_charges = n.autoPhaseDistribution.charges.total.A / totalCharges;
+            pB_charges = n.autoPhaseDistribution.charges.total.B / totalCharges;
+            pC_charges = n.autoPhaseDistribution.charges.total.C / totalCharges;
+          }
+          
+          if (totalProds > 0.001) {
+            pA_productions = n.autoPhaseDistribution.productions.total.A / totalProds;
+            pB_productions = n.autoPhaseDistribution.productions.total.B / totalProds;
+            pC_productions = n.autoPhaseDistribution.productions.total.C / totalProds;
+          }
+          
+          console.log(`📊 Nœud ${n.name || n.id}: utilise autoPhaseDistribution`);
+          console.log(`   Charges: A=${(pA_charges*100).toFixed(1)}%, B=${(pB_charges*100).toFixed(1)}%, C=${(pC_charges*100).toFixed(1)}%`);
+        } else if (manualPhaseDistribution) {
+          // Fallback : mode monophase_reparti
+          pA_charges = manualPhaseDistribution.charges.A / 100;
+          pB_charges = manualPhaseDistribution.charges.B / 100;
+          pC_charges = manualPhaseDistribution.charges.C / 100;
+          pA_productions = manualPhaseDistribution.productions.A / 100;
+          pB_productions = manualPhaseDistribution.productions.B / 100;
+          pC_productions = manualPhaseDistribution.productions.C / 100;
+          
+          console.log(`📊 Nœud ${n.name || n.id}: utilise manualPhaseDistribution`);
+        }
+        
+        // Vérification de cohérence
+        const totalCharges = pA_charges + pB_charges + pC_charges;
+        const totalProductions = pA_productions + pB_productions + pC_productions;
+        if (Math.abs(totalCharges - 1) > 1e-6) {
+          console.warn(`⚠️ Répartition des charges incohérente pour nœud ${n.id}: total=${totalCharges}`);
+        }
+        if (Math.abs(totalProductions - 1) > 1e-6) {
+          console.warn(`⚠️ Répartition des productions incohérente pour nœud ${n.id}: total=${totalProductions}`);
+        }
         
         // Séparer charges et productions pour appliquer des répartitions différentes
         let S_A_kVA = 0, S_B_kVA = 0, S_C_kVA = 0;

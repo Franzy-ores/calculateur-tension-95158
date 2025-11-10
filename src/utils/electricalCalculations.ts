@@ -640,7 +640,7 @@ export class ElectricalCalculator {
 
     // ---- Détection des équipements SRG2 actifs et mode déséquilibré ----
     const hasSRG2Active = nodes.some(n => n.hasSRG2Device === true);
-    const isUnbalanced = loadModel === 'monophase_reparti' || hasSRG2Active;
+    const isUnbalanced = loadModel === 'monophase_reparti' || loadModel === 'mixte_mono_poly' || hasSRG2Active;
     
     console.log(`🔍 Mode calculation decision: loadModel=${loadModel}, hasSRG2Active=${hasSRG2Active}, isUnbalanced=${isUnbalanced}`);
     if (hasSRG2Active) {

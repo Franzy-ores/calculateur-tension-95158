@@ -403,6 +403,66 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     if (!project.clientLinks) {
       project.clientLinks = [];
     }
+    
+    // === RÉPARTITION AUTOMATIQUE DES CLIENTS MONO ===
+    if (project.loadModel === 'mixte_mono_poly' && project.clientsImportes.length > 0) {
+      let assignedCount = 0;
+      
+      // Parcourir tous les nœuds
+      project.nodes.forEach(node => {
+        const linkedClients = project.clientsImportes!.filter(client =>
+          project.clientLinks!.some(link => link.clientId === client.id && link.nodeId === node.id)
+        );
+        
+        linkedClients.forEach(client => {
+          // Si client MONO sans phase assignée
+          if (client.connectionType === 'MONO' && !client.assignedPhase) {
+            // Récupérer les clients déjà assignés sur ce nœud
+            const alreadyAssignedClients = project.clientsImportes!.filter(c =>
+              c.id !== client.id &&
+              project.clientLinks!.some(link => link.clientId === c.id && link.nodeId === node.id)
+            );
+            
+            // Assigner automatiquement la phase
+            const assignedPhase = autoAssignPhaseForMonoClient(client, alreadyAssignedClients);
+            client.assignedPhase = assignedPhase;
+            assignedCount++;
+            
+            console.log(`✅ Phase ${assignedPhase} assignée au client MONO "${client.nomCircuit}"`);
+          }
+        });
+        
+        // Recalculer autoPhaseDistribution pour ce nœud
+        if (linkedClients.some(c => c.connectionType === 'MONO')) {
+          const distribution = calculateNodeAutoPhaseDistribution(
+            node,
+            linkedClients,
+            project.manualPhaseDistribution!.charges
+          );
+          node.autoPhaseDistribution = distribution;
+        }
+      });
+      
+      if (assignedCount > 0) {
+        console.log(`📌 ${assignedCount} clients MONO répartis automatiquement`);
+        toast.success(`${assignedCount} clients MONO répartis automatiquement sur les phases`);
+        
+        // Initialiser manualPhaseDistribution avec répartition réelle
+        const realDistribution = calculateRealMonoDistributionPercents(
+          project.nodes,
+          project.clientsImportes,
+          project.clientLinks
+        );
+        
+        project.manualPhaseDistribution = {
+          ...project.manualPhaseDistribution,
+          charges: realDistribution,
+          productions: realDistribution
+        };
+        
+        console.log(`📊 Curseurs initialisés : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
+      }
+    }
 
     // Rétrocompatibilité: définir addEmptyNodeByDefault si non défini
     if (project.addEmptyNodeByDefault === undefined) {

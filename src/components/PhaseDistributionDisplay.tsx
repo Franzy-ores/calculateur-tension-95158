@@ -29,61 +29,60 @@ export const PhaseDistributionDisplay = () => {
     else if (client.connectionType === 'TETRA') clientStats.tetra++;
   });
   
-  // Badge de statut
+  // Badge de statut avec couleurs sémantiques
   const statusBadge = {
-    normal: { variant: 'default' as const, label: '✓ Normal', color: 'text-green-600' },
-    warning: { variant: 'secondary' as const, label: '⚠️ Attention', color: 'text-yellow-600' },
-    critical: { variant: 'destructive' as const, label: '🔴 Critique', color: 'text-red-600' }
+    normal: { variant: 'default' as const, label: '✓ Normal', color: 'text-success' },
+    warning: { variant: 'secondary' as const, label: '⚠️ Attention', color: 'text-accent' },
+    critical: { variant: 'destructive' as const, label: '🔴 Critique', color: 'text-destructive' }
   }[status];
 
   return (
-    <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
-      <div className="flex items-center justify-between">
-        <Label className="text-base font-semibold">
-          📊 Distribution de phase (mode mixte)
+    <div className="flex items-center gap-3 p-2 bg-white/5 rounded border border-white/10">
+      {/* Titre et badge */}
+      <div className="flex items-center gap-2 min-w-[200px]">
+        <Label className="text-xs font-medium text-primary-foreground">
+          📊 Distribution de phase
         </Label>
-        <Badge variant={statusBadge.variant}>
+        <Badge variant={statusBadge.variant} className="text-xs px-1.5 py-0">
           {statusBadge.label}
         </Badge>
       </div>
       
-      {/* Statistiques clients */}
-      <div className="grid grid-cols-3 gap-2 text-sm">
-        <div className="p-2 bg-background rounded border">
-          <div className="text-xs text-muted-foreground">Clients MONO</div>
-          <div className="text-lg font-bold">{clientStats.mono}</div>
+      {/* Statistiques clients compactes */}
+      <div className="flex items-center gap-2 text-xs">
+        <div className="flex items-center gap-1">
+          <span className="text-primary-foreground/60">MONO:</span>
+          <span className="font-bold text-primary-foreground">{clientStats.mono}</span>
         </div>
-        <div className="p-2 bg-background rounded border">
-          <div className="text-xs text-muted-foreground">Clients TRI</div>
-          <div className="text-lg font-bold">{clientStats.tri}</div>
+        <div className="flex items-center gap-1">
+          <span className="text-primary-foreground/60">TRI:</span>
+          <span className="font-bold text-primary-foreground">{clientStats.tri}</span>
         </div>
-        <div className="p-2 bg-background rounded border">
-          <div className="text-xs text-muted-foreground">Clients TÉTRA</div>
-          <div className="text-lg font-bold">{clientStats.tetra}</div>
+        <div className="flex items-center gap-1">
+          <span className="text-primary-foreground/60">TÉTRA:</span>
+          <span className="font-bold text-primary-foreground">{clientStats.tetra}</span>
         </div>
       </div>
       
-      {/* Distribution par phase */}
-      <div className="space-y-2">
-        <Label className="text-sm">Charges totales par phase</Label>
-        
+      {/* Distribution par phase compacte */}
+      <div className="flex items-center gap-3 ml-auto">
         {['A', 'B', 'C'].map(phase => {
           const load = phaseLoads[phase as 'A' | 'B' | 'C'];
           const moyenne = (phaseLoads.A + phaseLoads.B + phaseLoads.C) / 3;
           const ecart = moyenne > 0 ? ((load - moyenne) / moyenne * 100) : 0;
           
           return (
-            <div key={phase} className="flex items-center justify-between p-2 bg-background rounded border">
-              <span className="font-medium">Phase {phase}</span>
+            <div key={phase} className="flex items-center gap-1.5">
+              <span className="text-xs font-medium text-primary-foreground/80">Ph{phase}:</span>
               <div className="text-right">
-                <div className="font-bold">{load.toFixed(1)} kVA</div>
-                <div className={`text-xs ${
-                  Math.abs(ecart) < 10 ? 'text-green-600' : 
-                  Math.abs(ecart) < 20 ? 'text-yellow-600' : 
-                  'text-red-600'
+                <span className="text-xs font-bold text-primary-foreground">{load.toFixed(1)}kVA</span>
+                <span className={`text-xs ml-1 ${
+                  Math.abs(ecart) < 10 ? 'text-success' : 
+                  Math.abs(ecart) < 20 ? 'text-accent' : 
+                  'text-destructive'
                 }`}>
-                  {ecart > 0 ? '+' : ''}{ecart.toFixed(1)}%
-                </div>
+                  ({ecart > 0 ? '+' : ''}{ecart.toFixed(0)}%)
+                </span>
               </div>
             </div>
           );
@@ -91,16 +90,11 @@ export const PhaseDistributionDisplay = () => {
       </div>
       
       {/* Déséquilibre global */}
-      <div className="pt-2 border-t">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium">Déséquilibre maximal</span>
-          <span className={`text-lg font-bold ${statusBadge.color}`}>
-            {unbalancePercent.toFixed(1)}%
-          </span>
-        </div>
-        <p className="text-xs text-muted-foreground mt-1">
-          Seuils : Normal &lt;10%, Attention 10-20%, Critique &gt;20%
-        </p>
+      <div className="flex items-center gap-1.5 pl-3 border-l border-white/10">
+        <span className="text-xs text-primary-foreground/60">Déséq.:</span>
+        <span className={`text-sm font-bold ${statusBadge.color}`}>
+          {unbalancePercent.toFixed(1)}%
+        </span>
       </div>
     </div>
   );

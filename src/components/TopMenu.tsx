@@ -16,6 +16,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { ExcelImporter } from '@/components/ExcelImporter';
 import { calculateTotalPowersForNodes } from '@/utils/clientsUtils';
 import { getConnectedNodes } from '@/utils/networkConnectivity';
+import type { LoadModel } from '@/types/network';
 interface TopMenuProps {
   onNewNetwork: () => void;
   onSave: () => void;
@@ -303,7 +304,7 @@ export const TopMenu = ({
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-2">
                   <Label className="text-sm font-medium">Modèle:</Label>
-                  <Select value={currentProject.loadModel || 'polyphase_equilibre'} onValueChange={(value: 'monophase_reparti' | 'polyphase_equilibre') => updateProjectConfig({
+                  <Select value={currentProject.loadModel || 'polyphase_equilibre'} onValueChange={(value: LoadModel) => updateProjectConfig({
               loadModel: value
             })}>
                     <SelectTrigger className="w-[140px] bg-white/10 border-white/20 text-primary-foreground">
@@ -312,6 +313,7 @@ export const TopMenu = ({
                     <SelectContent className="bg-background border z-[10000]">
                       <SelectItem value="polyphase_equilibre">Polyphasé équilibré</SelectItem>
                       <SelectItem value="monophase_reparti">Monophasé réparti</SelectItem>
+                      <SelectItem value="mixte_mono_poly">Mixte mono/polyphasé ✨</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

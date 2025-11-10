@@ -789,24 +789,28 @@ export const EditPanel = () => {
                   <div className="space-y-2">
                     <Label htmlFor="load-model">Type de modèle</Label>
                     <Select
-                      value={formData.loadModel || 'polyphase_equilibre'}
+                      value={formData.loadModel || 'mixte_mono_poly'}
                       onValueChange={(value: LoadModel) => setFormData({ ...formData, loadModel: value })}
                     >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="polyphase_equilibre">
-                          Polyphasé équilibré
-                        </SelectItem>
-                        <SelectItem value="monophase_reparti">
-                          Monophasé réparti
-                        </SelectItem>
+                        <SelectItem value="polyphase_equilibre">Polyphasé équilibré (ancien)</SelectItem>
+                        <SelectItem value="monophase_reparti">Monophasé réparti (ancien)</SelectItem>
+                        <SelectItem value="mixte_mono_poly">Mixte mono/polyphasé ✨ (recommandé)</SelectItem>
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">
-                      Mode équilibré: calcul simplifié triphasé. Mode réparti: calcul complet par phase avec déséquilibre possible.
-                    </p>
+                    {formData.loadModel === 'mixte_mono_poly' && (
+                      <p className="text-xs text-muted-foreground">
+                        Les clients MONO sont répartis automatiquement sur les phases. Le déséquilibre manuel s'applique aux clients MONO + charges manuelles.
+                      </p>
+                    )}
+                    {formData.loadModel !== 'mixte_mono_poly' && (
+                      <p className="text-xs text-muted-foreground">
+                        Mode équilibré: calcul simplifié triphasé. Mode réparti: calcul complet par phase avec déséquilibre possible.
+                      </p>
+                    )}
                   </div>
 
                   {formData.loadModel === 'monophase_reparti' && (

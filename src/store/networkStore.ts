@@ -13,7 +13,9 @@ import {
   VirtualBusbar,
   NeutralCompensator,
   CableUpgrade,
-  SimulationEquipment
+  SimulationEquipment,
+  ClientLink,
+  LoadModel
 } from '@/types/network';
 
 export type ClientColorMode = 'couplage' | 'circuit' | 'tension' | 'lien';
@@ -23,6 +25,13 @@ import { defaultCableTypes } from '@/data/defaultCableTypes';
 import { ElectricalCalculator } from '@/utils/electricalCalculations';
 import { SimulationCalculator } from '@/utils/simulationCalculator';
 import { toast } from 'sonner';
+import {
+  normalizeClientConnectionType,
+  validateAndConvertConnectionType,
+  autoAssignPhaseForMonoClient,
+  calculateNodeAutoPhaseDistribution
+} from '@/utils/phaseDistributionCalculator';
+import { getLinkedClientsForNode } from '@/utils/clientsUtils';
 
 // Fonction pour calculer les bounds géographiques d'un projet
 const calculateProjectBounds = (nodes: Node[]) => {
@@ -116,6 +125,7 @@ interface NetworkActions {
   deleteClientImporte: (clientId: string) => void;
   linkClientToNode: (clientId: string, nodeId: string) => void;
   unlinkClient: (clientId: string) => void;
+  updateNodePhaseDistribution: (nodeId: string) => void;
   
   // Calculations
   calculateAll: () => void;
@@ -207,11 +217,16 @@ const mapConnectionTypeForVoltageSystem = (
 // Mapping pour adapter les types de connexion selon le modèle de charge
 const mapConnectionTypeForLoadModel = (
   voltageSystem: VoltageSystem,
-  loadModel: 'monophase_reparti' | 'polyphase_equilibre',
+  loadModel: LoadModel,
   isSource = false
 ): ConnectionType => {
   // Les sources gardent toujours leur type par défaut selon le système de tension
   if (isSource) {
+    return voltageSystem === 'TRIPHASÉ_230V' ? 'TRI_230V_3F' : 'TÉTRA_3P+N_230_400V';
+  }
+  
+  // Mode mixte : même logique que polyphase_equilibre (connexions poly par défaut)
+  if (loadModel === 'mixte_mono_poly') {
     return voltageSystem === 'TRIPHASÉ_230V' ? 'TRI_230V_3F' : 'TÉTRA_3P+N_230_400V';
   }
 
@@ -232,7 +247,7 @@ const createDefaultProject = (): Project => ({
   defaultChargeKVA: 10,
   defaultProductionKVA: 5,
   transformerConfig: createDefaultTransformerConfig("TÉTRAPHASÉ_400V"), // Configuration transformateur par défaut
-  loadModel: 'polyphase_equilibre',
+  loadModel: 'mixte_mono_poly', // NOUVEAU : mode mixte par défaut
   desequilibrePourcent: 0,
   manualPhaseDistribution: {
     charges: { A: 33.33, B: 33.33, C: 33.34 },
@@ -254,7 +269,7 @@ const createDefaultProject2 = (name: string, voltageSystem: VoltageSystem): Proj
   defaultChargeKVA: 10,
   defaultProductionKVA: 5,
   transformerConfig: createDefaultTransformerConfig(voltageSystem), // Configuration transformateur adaptée au système
-  loadModel: 'polyphase_equilibre',
+  loadModel: 'mixte_mono_poly', // NOUVEAU : mode mixte par défaut
   desequilibrePourcent: 0,
   addEmptyNodeByDefault: false, // Par défaut, on garde le comportement actuel
   manualPhaseDistribution: {
@@ -348,6 +363,12 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   loadProject: (project) => {
     console.log('🔄 Store.loadProject called with:', project.name);
     
+    // Migration automatique: si pas de loadModel, définir polyphase_equilibre
+    if (!project.loadModel) {
+      project.loadModel = 'polyphase_equilibre';
+      console.log('📦 Projet ancien migré vers loadModel: polyphase_equilibre');
+    }
+    
     // Vérifier que le projet a la structure minimale requise
     if (!project.transformerConfig) {
       console.log('⚠️ Projet sans transformerConfig, ajout de la config par défaut');
@@ -362,6 +383,16 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         productions: { A: 33.33, B: 33.33, C: 33.34 },
         constraints: { min: -20, max: 20, total: 100 }
       };
+    }
+    
+    // Valider que manualPhaseDistribution existe pour mode mixte
+    if (project.loadModel === 'mixte_mono_poly' && !project.manualPhaseDistribution) {
+      project.manualPhaseDistribution = {
+        charges: { A: 33.33, B: 33.33, C: 33.34 },
+        productions: { A: 33.33, B: 33.33, C: 33.34 },
+        constraints: { min: -20, max: 20, total: 100 }
+      };
+      console.log('📦 Configuration manualPhaseDistribution initialisée pour mode mixte');
     }
 
     // Initialiser les clients importés et liaisons si pas définis
@@ -844,45 +875,136 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       return;
     }
     
-    const currentLinks = currentProject.clientLinks || [];
-    const existingLink = currentLinks.find(l => l.clientId === clientId);
-    
-    let updatedLinks;
-    if (existingLink) {
-      // Mettre à jour la liaison existante
-      updatedLinks = currentLinks.map(l =>
-        l.clientId === clientId ? { ...l, nodeId } : l
+    // === NOUVEAU : Mode mixte ===
+    if (currentProject.loadModel === 'mixte_mono_poly') {
+      console.log('🔗 === LIAISON CLIENT (Mode Mixte) ===');
+      console.log(`   Client: ${client.nomCircuit} (${client.couplage})`);
+      console.log(`   Nœud: ${node.name}`);
+      
+      // 1. Normaliser le type de connexion
+      const rawConnectionType = normalizeClientConnectionType(
+        client.couplage,
+        currentProject.voltageSystem
       );
-      const client = currentProject.clientsImportes?.find(c => c.id === clientId);
-      toast.success(`✅ Client "${client?.nomCircuit || clientId}" relié à ${node.name}`);
+      
+      // 2. Valider et convertir si nécessaire
+      const { correctedType, warning } = validateAndConvertConnectionType(
+        rawConnectionType,
+        currentProject.voltageSystem,
+        client.nomCircuit
+      );
+      
+      // Afficher l'avertissement si conversion nécessaire
+      if (warning) {
+        toast.warning(warning);
+      }
+      
+      // 3. Assigner phase si MONO
+      let assignedPhase: 'A' | 'B' | 'C' | undefined;
+      if (correctedType === 'MONO') {
+        const linkedClients = currentProject.clientsImportes?.filter(c => 
+          currentProject!.clientLinks?.some(link => 
+            link.clientId === c.id && link.nodeId === nodeId
+          )
+        ) || [];
+        
+        assignedPhase = autoAssignPhaseForMonoClient(client, linkedClients);
+        
+        console.log(`✅ Client MONO "${client.nomCircuit}" lié au nœud "${node.name}" sur phase ${assignedPhase}`);
+      }
+      
+      console.log(`   Type final: ${correctedType}`);
+      console.log('================================');
+      
+      // Mettre à jour le client avec connectionType et assignedPhase
+      const updatedClientsImportes = currentProject.clientsImportes?.map(c => 
+        c.id === clientId 
+          ? { ...c, connectionType: correctedType, assignedPhase }
+          : c
+      );
+      
+      // Gérer les liens (nouveau ou mise à jour)
+      const currentLinks = currentProject.clientLinks || [];
+      const existingLink = currentLinks.find(l => l.clientId === clientId);
+      let updatedLinks: ClientLink[];
+      
+      if (existingLink) {
+        // Mettre à jour la liaison existante
+        updatedLinks = currentLinks.map(l =>
+          l.clientId === clientId ? { ...l, nodeId } : l
+        );
+      } else {
+        // Créer une nouvelle liaison
+        const newLink: ClientLink = {
+          id: `link-${clientId}-${nodeId}`,
+          clientId,
+          nodeId
+        };
+        updatedLinks = [...currentLinks, newLink];
+      }
+      
+      // Mettre à jour le projet
+      set({
+        currentProject: {
+          ...currentProject,
+          clientsImportes: updatedClientsImportes,
+          clientLinks: updatedLinks
+        },
+        selectedClientForLinking: null,
+        linkingMode: false,
+        selectedTool: 'select'
+      });
+      
+      // Recalculer autoPhaseDistribution pour le nœud concerné
+      get().updateNodePhaseDistribution(nodeId);
+      
+      toast.success(`✅ Client "${client.nomCircuit}" lié au nœud "${node.name}"`);
+      updateAllCalculations();
+      
     } else {
-      // Créer une nouvelle liaison
-      const newLink = {
-        id: `link-${Date.now()}`,
-        clientId,
-        nodeId
-      };
-      updatedLinks = [...currentLinks, newLink];
-      const client = currentProject.clientsImportes?.find(c => c.id === clientId);
-      toast.success(`✅ Client "${client?.nomCircuit || clientId}" lié à ${node.name}`);
+      // === CODE EXISTANT pour anciens modes ===
+      const currentLinks = currentProject.clientLinks || [];
+      const existingLink = currentLinks.find(l => l.clientId === clientId);
+      
+      let updatedLinks;
+      if (existingLink) {
+        // Mettre à jour la liaison existante
+        updatedLinks = currentLinks.map(l =>
+          l.clientId === clientId ? { ...l, nodeId } : l
+        );
+        toast.success(`✅ Client "${client.nomCircuit}" relié à ${node.name}`);
+      } else {
+        // Créer une nouvelle liaison
+        const newLink: ClientLink = {
+          id: `link-${Date.now()}`,
+          clientId,
+          nodeId
+        };
+        updatedLinks = [...currentLinks, newLink];
+        toast.success(`✅ Client "${client.nomCircuit}" lié à ${node.name}`);
+      }
+      
+      set({
+        currentProject: {
+          ...currentProject,
+          clientLinks: updatedLinks
+        },
+        selectedClientForLinking: null,
+        linkingMode: false,
+        selectedTool: 'select'
+      });
+      
+      updateAllCalculations();
     }
-    
-    set({
-      currentProject: {
-        ...currentProject,
-        clientLinks: updatedLinks
-      },
-      selectedClientForLinking: null,
-      linkingMode: false,
-      selectedTool: 'select'
-    });
-    
-    updateAllCalculations();
   },
 
   unlinkClient: (clientId) => {
     const { currentProject, updateAllCalculations } = get();
     if (!currentProject) return;
+    
+    // Récupérer le nodeId avant de supprimer le lien
+    const link = currentProject.clientLinks?.find(l => l.clientId === clientId);
+    const nodeId = link?.nodeId;
     
     set({
       currentProject: {
@@ -891,8 +1013,51 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       }
     });
     
+    // Recalculer distribution du nœud si mode mixte
+    if (currentProject.loadModel === 'mixte_mono_poly' && nodeId) {
+      get().updateNodePhaseDistribution(nodeId);
+    }
+    
     toast.success('Client délié');
     updateAllCalculations();
+  },
+  
+  updateNodePhaseDistribution: (nodeId: string) => {
+    const state = get();
+    if (!state.currentProject || state.currentProject.loadModel !== 'mixte_mono_poly') {
+      return;
+    }
+    
+    const node = state.currentProject.nodes.find(n => n.id === nodeId);
+    if (!node) return;
+    
+    // Récupérer clients liés
+    const linkedClients = getLinkedClientsForNode(
+      nodeId,
+      state.currentProject.clientsImportes || [],
+      state.currentProject.clientLinks || []
+    );
+    
+    // Calculer distribution
+    const distribution = calculateNodeAutoPhaseDistribution(
+      node,
+      linkedClients,
+      state.currentProject.manualPhaseDistribution?.charges || { A: 33.33, B: 33.33, C: 33.34 }
+    );
+    
+    // Mettre à jour le nœud
+    const updatedNodes = state.currentProject.nodes.map(n => 
+      n.id === nodeId 
+        ? { ...n, autoPhaseDistribution: distribution }
+        : n
+    );
+    
+    set({
+      currentProject: {
+        ...state.currentProject,
+        nodes: updatedNodes
+      }
+    });
   },
 
   openEditPanel: (target) => {

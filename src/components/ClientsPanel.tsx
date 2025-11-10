@@ -235,13 +235,23 @@ export const ClientsPanel = () => {
 
                 return (
                   <Card key={client.id} className="p-3 space-y-2">
-                    <div className="flex items-start justify-between">
+                     <div key={client.id} className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <h4 className="font-semibold">{client.nomCircuit}</h4>
                           <Badge variant={client.couplage === 'TRI' ? 'default' : 'secondary'}>
                             {client.couplage}
                           </Badge>
+                          {client.connectionType === 'MONO' && client.assignedPhase && (
+                            <Badge variant="outline" className="text-xs">
+                              Phase {client.assignedPhase}
+                            </Badge>
+                          )}
+                          {client.connectionType && client.connectionType !== 'MONO' && (
+                            <Badge variant="outline" className="text-xs">
+                              {client.connectionType}
+                            </Badge>
+                          )}
                           {link && (
                             <Badge variant="outline" className="text-green-600 border-green-600">
                               Lié

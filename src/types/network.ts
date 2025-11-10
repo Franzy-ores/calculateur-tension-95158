@@ -12,9 +12,14 @@ export type CablePose = "AÉRIEN" | "SOUTERRAIN";
 
 export type CalculationScenario = "PRÉLÈVEMENT" | "MIXTE" | "PRODUCTION" | "FORCÉ";
 
-export type LoadModel = 'monophase_reparti' | 'polyphase_equilibre';
+export type LoadModel = 
+  | 'polyphase_equilibre'      // Ancien mode (tout équilibré)
+  | 'monophase_reparti'        // Ancien mode (tout déséquilibré)
+  | 'mixte_mono_poly';         // NOUVEAU : clients MONO + TRI/TÉTRA mixtes
 
 export type ClientCouplage = string; // Valeur brute du champ "Couplage" depuis Excel
+
+export type ClientConnectionType = 'MONO' | 'TRI' | 'TETRA'; // Type de connexion normalisé
 
 // Import du type SRG2Config
 import { SRG2Config } from './srg2';
@@ -50,6 +55,10 @@ export interface ClientImporte {
   
   // Liaison avec un nœud
   linkedNodeId?: string;  // ID du nœud auquel ce client est lié (optionnel)
+  
+  // NOUVEAU : Mode mixte mono/polyphasé
+  assignedPhase?: 'A' | 'B' | 'C';  // Phase assignée automatiquement pour clients MONO
+  connectionType?: ClientConnectionType; // Type de raccordement normalisé
   
   // Métadonnées Excel brutes (pour conserver toutes les colonnes)
   rawData?: Record<string, any>;
@@ -157,6 +166,24 @@ export interface Node {
     charges?: { A: number; B: number; C: number };
     productions?: { A: number; B: number; C: number };
   };
+  // NOUVEAU : Distribution automatique calculée pour mode mixte
+  autoPhaseDistribution?: {
+    charges: {
+      mono: { A: number; B: number; C: number };  // kVA MONO par phase
+      poly: { A: number; B: number; C: number };  // kVA TRI/TÉTRA par phase
+      total: { A: number; B: number; C: number }; // Somme MONO + POLY
+    };
+    productions: {
+      mono: { A: number; B: number; C: number };
+      poly: { A: number; B: number; C: number };
+      total: { A: number; B: number; C: number };
+    };
+    monoClientsCount: { A: number; B: number; C: number }; // Nombre de clients MONO par phase
+    polyClientsCount: number; // Nombre total de clients TRI/TÉTRA
+    unbalancePercent?: number; // Déséquilibre mesuré (max écart vs moyenne)
+  };
+  // NOUVEAU : Type pour charges manuelles (si applicable)
+  manualLoadType?: 'MONO' | 'POLY'; // Par défaut POLY
   // Custom properties pour marqueurs temporaires (EQUI8, etc.)
   customProps?: Record<string, any>;
 }
@@ -179,6 +206,8 @@ export interface Cable {
   // Résultats détaillés par phase (optionnels, si déséquilibré)
   currentsPerPhase_A?: { A: number; B: number; C: number; N?: number };
   voltageDropPerPhase_V?: { A: number; B: number; C: number };
+  // NOUVEAU : Courant de neutre pour réseaux 400V (mode mixte)
+  currentNeutral_A?: number;
 }
 
 export interface Project {

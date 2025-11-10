@@ -410,6 +410,19 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     console.log(`   - clientLinks.length: ${project.clientLinks?.length || 0}`);
     console.log(`   - Condition répartition: ${project.loadModel === 'mixte_mono_poly' && project.clientsImportes.length > 0}`);
     
+    // === BASCULEMENT AUTOMATIQUE EN MODE MIXTE SI CLIENTS MONO DÉTECTÉS ===
+    if (project.loadModel === 'monophase_reparti' && project.clientsImportes.length > 0) {
+      const monoClientsCount = project.clientsImportes.filter(c => {
+        const normalizedType = normalizeClientConnectionType(c.couplage, project.voltageSystem);
+        return normalizedType === 'MONO';
+      }).length;
+      
+      if (monoClientsCount > 0) {
+        console.log(`🔄 Basculement automatique: ${monoClientsCount} clients MONO détectés, passage en mode mixte_mono_poly`);
+        project.loadModel = 'mixte_mono_poly';
+      }
+    }
+    
     // === RÉPARTITION AUTOMATIQUE DES CLIENTS MONO ===
     if (project.loadModel === 'mixte_mono_poly' && project.clientsImportes.length > 0) {
       console.log(`🔍 ===== DÉBUT RÉPARTITION AUTOMATIQUE =====`);

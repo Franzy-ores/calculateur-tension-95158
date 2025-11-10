@@ -66,7 +66,8 @@ export const EditPanel = () => {
           clients: [...(selectedNode.clients || [])],
           productions: [...(selectedNode.productions || [])],
           tensionCible: selectedNode.tensionCible || '',
-          transformerConfig: selectedNode.isSource ? currentProject?.transformerConfig : undefined
+          transformerConfig: selectedNode.isSource ? currentProject?.transformerConfig : undefined,
+          manualLoadType: selectedNode.manualLoadType || 'POLY'
         });
       } else if (editTarget === 'cable' && selectedCable) {
         setFormData({
@@ -464,7 +465,91 @@ export const EditPanel = () => {
                      )}
                    </CardContent>
                  </Card>
-               )}
+              )}
+
+              {/* NOUVEAU : Mode mixte mono/polyphasé */}
+              {currentProject?.loadModel === 'mixte_mono_poly' && (
+                <Card className="bg-purple-50 dark:bg-purple-950 border-purple-200 dark:border-purple-800">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">⚡ Mode mixte</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Checkbox charges manuelles MONO */}
+                    <div className="flex items-start space-x-2">
+                      <input
+                        type="checkbox"
+                        id="manualLoadTypeMono"
+                        checked={formData.manualLoadType === 'MONO'}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          manualLoadType: e.target.checked ? 'MONO' : 'POLY'
+                        })}
+                        className="mt-1 rounded border-gray-300"
+                      />
+                      <div className="flex-1">
+                        <Label htmlFor="manualLoadTypeMono" className="text-sm font-medium cursor-pointer">
+                          Charges manuelles monophasées
+                        </Label>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Les charges/productions manuelles suivront le déséquilibre défini dans la configuration du projet.
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {/* Distribution de phase (lecture seule) */}
+                    {selectedNode?.autoPhaseDistribution && (
+                      <div className="space-y-2 pt-2 border-t">
+                        <Label className="text-sm font-medium">📊 Analyse de phase (automatique)</Label>
+                        
+                        <div className="text-xs space-y-2 p-3 bg-background rounded border">
+                          <div>
+                            <div className="font-medium text-purple-700 dark:text-purple-300 mb-1">Charges:</div>
+                            <div className="ml-2 space-y-0.5 font-mono">
+                              <div className="text-muted-foreground">
+                                MONO: A={selectedNode.autoPhaseDistribution.charges.mono.A.toFixed(1)} kVA, 
+                                B={selectedNode.autoPhaseDistribution.charges.mono.B.toFixed(1)} kVA, 
+                                C={selectedNode.autoPhaseDistribution.charges.mono.C.toFixed(1)} kVA
+                              </div>
+                              <div className="text-muted-foreground">
+                                TRI/TÉTRA: A={selectedNode.autoPhaseDistribution.charges.poly.A.toFixed(1)} kVA, 
+                                B={selectedNode.autoPhaseDistribution.charges.poly.B.toFixed(1)} kVA, 
+                                C={selectedNode.autoPhaseDistribution.charges.poly.C.toFixed(1)} kVA
+                              </div>
+                              <div className="font-semibold text-foreground">
+                                Total: A={selectedNode.autoPhaseDistribution.charges.total.A.toFixed(1)} kVA, 
+                                B={selectedNode.autoPhaseDistribution.charges.total.B.toFixed(1)} kVA, 
+                                C={selectedNode.autoPhaseDistribution.charges.total.C.toFixed(1)} kVA
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="pt-2 border-t">
+                            <div className="font-medium text-purple-700 dark:text-purple-300 mb-1">Clients MONO par phase:</div>
+                            <div className="ml-2 font-mono text-muted-foreground">
+                              A: {selectedNode.autoPhaseDistribution.monoClientsCount.A}, 
+                              B: {selectedNode.autoPhaseDistribution.monoClientsCount.B}, 
+                              C: {selectedNode.autoPhaseDistribution.monoClientsCount.C}
+                            </div>
+                          </div>
+                          
+                          <div className="pt-2 border-t">
+                            <div className="flex justify-between items-center">
+                              <span className="font-medium text-purple-700 dark:text-purple-300">Déséquilibre nœud:</span>
+                              <span className={`font-bold ${
+                                (selectedNode.autoPhaseDistribution.unbalancePercent || 0) < 10 ? 'text-green-600 dark:text-green-400' :
+                                (selectedNode.autoPhaseDistribution.unbalancePercent || 0) < 20 ? 'text-yellow-600 dark:text-yellow-400' :
+                                'text-red-600 dark:text-red-400'
+                              }`}>
+                                {(selectedNode.autoPhaseDistribution.unbalancePercent || 0).toFixed(1)}%
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
 
                  {/* Configuration Transformateur et Tension Source */}
                  {selectedNode?.isSource && (

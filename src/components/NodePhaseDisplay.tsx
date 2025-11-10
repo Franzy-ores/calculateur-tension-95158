@@ -8,7 +8,7 @@ interface NodePhaseDisplayProps {
 export const NodePhaseDisplay = ({ nodeId }: NodePhaseDisplayProps) => {
   const { calculationResults, simulationResults, selectedScenario, currentProject, simulationEquipment, isSimulationActive } = useNetworkStore();
   
-  if (!currentProject || currentProject.loadModel !== 'monophase_reparti') {
+  if (!currentProject || (currentProject.loadModel !== 'monophase_reparti' && currentProject.loadModel !== 'mixte_mono_poly')) {
     return null;
   }
 

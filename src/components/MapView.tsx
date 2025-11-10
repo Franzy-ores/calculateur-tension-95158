@@ -860,14 +860,16 @@ export const MapView = () => {
       const hasDisplayableProduction = !node.isSource && totalPV > 0;
       const hasDisplayableText = hasDisplayableLoad || hasDisplayableProduction || !node.isSource;
       
-      // Taille adaptative : plus grande si du texte est affiché
-      const iconSize: [number, number] = hasDisplayableText ? [70, 70] : [56, 56];
-      const anchorPoint: [number, number] = hasDisplayableText ? [35, 35] : [28, 28];
-      const iconSizeClass = hasDisplayableText ? 'w-[70px] h-[70px]' : 'w-14 h-14';
+      // Taille adaptative : plus grande pour mode phase, moyenne si du texte, petite sinon
+      const isPhaseDisplayMode = (currentProject.loadModel === 'monophase_reparti' || currentProject.loadModel === 'mixte_mono_poly');
+      const iconSize: [number, number] = isPhaseDisplayMode ? [90, 90] : (hasDisplayableText ? [70, 70] : [56, 56]);
+      const anchorPoint: [number, number] = isPhaseDisplayMode ? [45, 45] : (hasDisplayableText ? [35, 35] : [28, 28]);
+      const iconSizeClass = isPhaseDisplayMode ? 'w-[90px] h-[90px]' : (hasDisplayableText ? 'w-[70px] h-[70px]' : 'w-14 h-14');
 
+      const shapeClass = isPhaseDisplayMode ? 'rounded-md' : 'rounded-full';
       const icon = L.divIcon({
         className: 'custom-node-marker',
-        html: `<div class="${iconSizeClass} rounded-full border-2 flex flex-col items-center justify-center text-xs font-bold ${iconClass} p-1">
+        html: `<div class="${iconSizeClass} ${shapeClass} border-2 flex flex-col items-center justify-center text-xs font-bold ${iconClass} p-1">
           <div class="text-base">${iconContent}</div>
           ${circuitNumber ? `<div class="text-[9px] bg-black bg-opacity-50 rounded px-1">C${circuitNumber}</div>` : ''}
           ${(() => {
@@ -886,10 +888,10 @@ export const MapView = () => {
             }
             return '';
           })()}
-          <div class="text-[9px] leading-tight text-center">
+          <div class="${isPhaseDisplayMode ? 'text-[10px]' : 'text-[9px]'} leading-tight text-center">
             ${(() => {
-              // Afficher les 3 phases en mode monophasé réparti
-              if (currentProject.loadModel === 'monophase_reparti') {
+              // Afficher les 3 phases en mode monophasé réparti OU mixte
+              if (currentProject.loadModel === 'monophase_reparti' || currentProject.loadModel === 'mixte_mono_poly') {
                 const results = resultsToUse[selectedScenario];
                 const phaseMetrics = results?.nodeMetricsPerPhase?.find(n => n.nodeId === node.id);
                 
@@ -923,10 +925,18 @@ export const MapView = () => {
                 }
                 
                 if (phaseMetrics) {
-                  const vA = phaseMetrics.voltagesPerPhase.A.toFixed(1);
-                  const vB = phaseMetrics.voltagesPerPhase.B.toFixed(1);
-                  const vC = phaseMetrics.voltagesPerPhase.C.toFixed(1);
-                  return `<span class="text-black">A:${vA}V</span><br><span class="text-black">B:${vB}V</span><br><span class="text-black">C:${vC}V</span>`;
+                  // Couleurs de conformité par phase
+                  const colorA = phaseMetrics.compliancePerPhase?.A === 'critical' ? 'text-red-600' : 
+                                 phaseMetrics.compliancePerPhase?.A === 'warning' ? 'text-orange-500' : 'text-black';
+                  const colorB = phaseMetrics.compliancePerPhase?.B === 'critical' ? 'text-red-600' : 
+                                 phaseMetrics.compliancePerPhase?.B === 'warning' ? 'text-orange-500' : 'text-black';
+                  const colorC = phaseMetrics.compliancePerPhase?.C === 'critical' ? 'text-red-600' : 
+                                 phaseMetrics.compliancePerPhase?.C === 'warning' ? 'text-orange-500' : 'text-black';
+                  
+                  const vA = phaseMetrics.voltagesPerPhase.A.toFixed(0);
+                  const vB = phaseMetrics.voltagesPerPhase.B.toFixed(0);
+                  const vC = phaseMetrics.voltagesPerPhase.C.toFixed(0);
+                  return `<span class="${colorA} font-semibold">A:${vA}</span><br><span class="${colorB} font-semibold">B:${vB}</span><br><span class="${colorC} font-semibold">C:${vC}</span>`;
                 } else {
                   return `<span class="text-black">A:${nodeVoltage.toFixed(0)}V</span><br><span class="text-black">B:${nodeVoltage.toFixed(0)}V</span><br><span class="text-black">C:${nodeVoltage.toFixed(0)}V</span>`;
                 }

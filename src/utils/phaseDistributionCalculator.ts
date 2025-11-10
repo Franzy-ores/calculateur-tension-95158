@@ -86,11 +86,13 @@ export function autoAssignPhaseForMonoClient(
   // Puissance du nouveau client
   const clientTotalPower = client.puissanceContractuelle_kVA + client.puissancePV_kVA;
   
-  // Trouver la phase avec la plus faible charge
+  // Trouver la/les phase(s) avec la plus faible charge
   const phases: Array<'A' | 'B' | 'C'> = ['A', 'B', 'C'];
-  const sortedPhases = phases.sort((a, b) => phaseLoads[a] - phaseLoads[b]);
+  const minLoad = Math.min(phaseLoads.A, phaseLoads.B, phaseLoads.C);
+  const minPhases = phases.filter(p => phaseLoads[p] === minLoad);
   
-  const assignedPhase = sortedPhases[0];
+  // Si plusieurs phases ont la même charge minimale, choisir aléatoirement
+  const assignedPhase = minPhases[Math.floor(Math.random() * minPhases.length)];
   
   console.log(`📌 Client MONO "${client.nomCircuit}" assigné à phase ${assignedPhase}`);
   console.log(`   Charges avant: A=${phaseLoads.A.toFixed(1)} kVA, B=${phaseLoads.B.toFixed(1)} kVA, C=${phaseLoads.C.toFixed(1)} kVA`);

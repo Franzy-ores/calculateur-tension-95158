@@ -40,7 +40,8 @@ describe('phaseDistributionCalculator', () => {
       };
       
       const phase = autoAssignPhaseForMonoClient(newClient, []);
-      expect(phase).toBe('A');
+      // Avec la randomisation, n'importe quelle phase peut être assignée quand toutes sont vides
+      expect(['A', 'B', 'C']).toContain(phase);
     });
     
     it('should assign to least loaded phase', () => {
@@ -85,6 +86,10 @@ describe('phaseDistributionCalculator', () => {
       
       const phase = autoAssignPhaseForMonoClient(newClient, existingClients);
       // Phase C est vide (0 kVA), donc devrait être assignée
+      // Avec la randomisation, si plusieurs phases ont la même charge minimale,
+      // n'importe laquelle peut être choisie, donc on vérifie juste que c'est une phase valide
+      expect(['A', 'B', 'C']).toContain(phase);
+      // Phase C a la charge minimale (0 kVA), donc devrait être la plus probable
       expect(phase).toBe('C');
     });
     

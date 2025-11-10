@@ -1,11 +1,13 @@
 import React from 'react';
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useNetworkStore } from "@/store/networkStore";
 import { calculateProjectUnbalance } from "@/utils/phaseDistributionCalculator";
+import { RefreshCw } from "lucide-react";
 
 export const PhaseDistributionDisplay = () => {
-  const { currentProject } = useNetworkStore();
+  const { currentProject, rebalanceAllMonoClients } = useNetworkStore();
   
   if (!currentProject || currentProject.loadModel !== 'mixte_mono_poly') {
     return null;
@@ -89,12 +91,22 @@ export const PhaseDistributionDisplay = () => {
         })}
       </div>
       
-      {/* Déséquilibre global */}
-      <div className="flex items-center gap-1.5 pl-3 border-l border-white/10">
+      {/* Déséquilibre global et bouton re-balance */}
+      <div className="flex items-center gap-2 pl-3 border-l border-white/10">
         <span className="text-xs text-primary-foreground/60">Déséq.:</span>
         <span className={`text-sm font-bold ${statusBadge.color}`}>
           {unbalancePercent.toFixed(1)}%
         </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={rebalanceAllMonoClients}
+          className="h-6 px-2 text-xs"
+          title="Re-balancer les clients MONO"
+        >
+          <RefreshCw className="h-3 w-3 mr-1" />
+          Re-balancer
+        </Button>
       </div>
     </div>
   );

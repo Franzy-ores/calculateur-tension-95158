@@ -30,7 +30,8 @@ import {
   validateAndConvertConnectionType,
   autoAssignPhaseForMonoClient,
   calculateNodeAutoPhaseDistribution,
-  calculateRealMonoDistributionPercents
+  calculateRealMonoDistributionPercents,
+  calculateProjectUnbalance
 } from '@/utils/phaseDistributionCalculator';
 import { getLinkedClientsForNode } from '@/utils/clientsUtils';
 
@@ -127,6 +128,7 @@ interface NetworkActions {
   linkClientToNode: (clientId: string, nodeId: string) => void;
   unlinkClient: (clientId: string) => void;
   updateNodePhaseDistribution: (nodeId: string) => void;
+  rebalanceAllMonoClients: () => void;
   
   // Calculations
   calculateAll: () => void;
@@ -454,10 +456,11 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
             
             if (!client.assignedPhase) {
               monoWithoutPhaseCount++;
-              // Récupérer les clients déjà assignés sur ce nœud
+              // Récupérer TOUS les clients MONO déjà assignés dans le projet (équilibrage global)
               const alreadyAssignedClients = project.clientsImportes!.filter(c =>
                 c.id !== client.id &&
-                project.clientLinks!.some(link => link.clientId === c.id && link.nodeId === node.id)
+                c.connectionType === 'MONO' &&
+                c.assignedPhase !== undefined
               );
               
               // Assigner automatiquement la phase
@@ -1046,16 +1049,16 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         toast.warning(warning);
       }
       
-      // 3. Assigner phase si MONO
+      // 3. Assigner phase si MONO (équilibrage global)
       let assignedPhase: 'A' | 'B' | 'C' | undefined;
       if (correctedType === 'MONO') {
-        const linkedClients = currentProject.clientsImportes?.filter(c => 
-          currentProject!.clientLinks?.some(link => 
-            link.clientId === c.id && link.nodeId === nodeId
-          )
+        // Récupérer TOUS les clients MONO déjà assignés dans le projet (équilibrage global)
+        const allAssignedMonoClients = currentProject.clientsImportes?.filter(c =>
+          c.connectionType === 'MONO' &&
+          c.assignedPhase !== undefined
         ) || [];
         
-        assignedPhase = autoAssignPhaseForMonoClient(client, linkedClients);
+        assignedPhase = autoAssignPhaseForMonoClient(client, allAssignedMonoClients);
         
         console.log(`✅ Client MONO "${client.nomCircuit}" lié au nœud "${node.name}" sur phase ${assignedPhase}`);
       }
@@ -1205,6 +1208,58 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         nodes: updatedNodes
       }
     });
+  },
+
+  rebalanceAllMonoClients: () => {
+    const { currentProject } = get();
+    if (!currentProject || currentProject.loadModel !== 'mixte_mono_poly') {
+      toast.error('❌ Le re-balancing n\'est disponible qu\'en mode mixte');
+      return;
+    }
+    
+    console.log('🔄 Re-balancing global des clients MONO...');
+    
+    // Récupérer tous les clients MONO liés
+    const monoClients = currentProject.clientsImportes?.filter(c => 
+      c.connectionType === 'MONO' &&
+      currentProject.clientLinks?.some(link => link.clientId === c.id)
+    ) || [];
+    
+    if (monoClients.length === 0) {
+      toast.info('ℹ️ Aucun client MONO à re-balancer');
+      return;
+    }
+    
+    // Trier par puissance décroissante pour meilleur équilibrage
+    monoClients.sort((a, b) => 
+      (b.puissanceContractuelle_kVA + b.puissancePV_kVA) - 
+      (a.puissanceContractuelle_kVA + a.puissancePV_kVA)
+    );
+    
+    // Réassigner séquentiellement
+    const alreadyAssigned: import('@/types/network').ClientImporte[] = [];
+    monoClients.forEach(client => {
+      client.assignedPhase = autoAssignPhaseForMonoClient(client, alreadyAssigned);
+      alreadyAssigned.push(client);
+    });
+    
+    // Mettre à jour le projet
+    set({ 
+      currentProject: { 
+        ...currentProject,
+        clientsImportes: currentProject.clientsImportes 
+      } 
+    });
+    
+    // Recalculer les distributions de tous les nœuds
+    currentProject.nodes.forEach(node => {
+      get().updateNodePhaseDistribution(node.id);
+    });
+    
+    get().updateAllCalculations();
+    
+    const { unbalancePercent } = calculateProjectUnbalance(currentProject.nodes);
+    toast.success(`✅ Re-balancing terminé : déséquilibre = ${unbalancePercent.toFixed(1)}%`);
   },
 
   openEditPanel: (target) => {

@@ -209,12 +209,45 @@ export const EditPanel = () => {
 
               {linkedClients.length > 0 && (
                 <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded text-sm">
-                  <div className="font-medium text-blue-900 dark:text-blue-100 mb-1">
+                  <div className="font-medium text-blue-900 dark:text-blue-100 mb-2">
                     ℹ️ Clients importés liés
                   </div>
-                  <div className="text-blue-700 dark:text-blue-300">
-                    Ce nœud a {linkedClients.length} client(s) importé(s) lié(s). 
-                    Leurs puissances sont automatiquement incluses dans les calculs.
+                  <div className="text-blue-700 dark:text-blue-300 space-y-1">
+                    <div>Ce nœud a {linkedClients.length} client(s) importé(s) lié(s).</div>
+                    {currentProject?.loadModel === 'mixte_mono_poly' && selectedNode?.autoPhaseDistribution && (
+                      <div className="mt-2 pt-2 border-t border-blue-300 dark:border-blue-700">
+                        <div className="font-semibold mb-1">Répartition par type :</div>
+                        {(() => {
+                          const totalMono = selectedNode.autoPhaseDistribution.monoClientsCount.A + 
+                                          selectedNode.autoPhaseDistribution.monoClientsCount.B + 
+                                          selectedNode.autoPhaseDistribution.monoClientsCount.C;
+                          const totalPoly = selectedNode.autoPhaseDistribution.polyClientsCount;
+                          return (
+                            <div className="space-y-1">
+                              {totalMono > 0 && (
+                                <div>
+                                  🔌 <span className="font-medium">{totalMono} clients MONO</span>
+                                  <div className="ml-4 text-xs">
+                                    Phase A: {selectedNode.autoPhaseDistribution.monoClientsCount.A} • 
+                                    Phase B: {selectedNode.autoPhaseDistribution.monoClientsCount.B} • 
+                                    Phase C: {selectedNode.autoPhaseDistribution.monoClientsCount.C}
+                                  </div>
+                                </div>
+                              )}
+                              {totalPoly > 0 && (
+                                <div>⚡ <span className="font-medium">{totalPoly} clients TRI/TÉTRA</span></div>
+                              )}
+                              {selectedNode.autoPhaseDistribution.unbalancePercent > 5 && (
+                                <div className={`font-semibold ${selectedNode.autoPhaseDistribution.unbalancePercent > 20 ? 'text-red-600 dark:text-red-400' : 'text-orange-600 dark:text-orange-400'}`}>
+                                  ⚠️ Déséquilibre: {selectedNode.autoPhaseDistribution.unbalancePercent.toFixed(1)}%
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+                    <div className="mt-2">Leurs puissances sont automatiquement incluses dans les calculs.</div>
                   </div>
                 </div>
               )}

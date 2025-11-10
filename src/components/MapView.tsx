@@ -681,7 +681,48 @@ export const MapView = () => {
           zIndexOffset: 0
         })
           .addTo(map)
-          .bindPopup(node.name);
+          .bindPopup(() => {
+            // Construire le contenu du popup enrichi
+            let popupContent = `<div class="font-bold mb-2">${node.name}</div>`;
+            
+            // En mode mixte, afficher le résumé des clients
+            if (currentProject.loadModel === 'mixte_mono_poly' && node.autoPhaseDistribution) {
+              const totalMono = node.autoPhaseDistribution.monoClientsCount.A + 
+                                node.autoPhaseDistribution.monoClientsCount.B + 
+                                node.autoPhaseDistribution.monoClientsCount.C;
+              const totalPoly = node.autoPhaseDistribution.polyClientsCount;
+              
+              if (totalMono > 0 || totalPoly > 0) {
+                popupContent += `<div class="text-sm mt-2 space-y-1" style="line-height: 1.4;">`;
+                popupContent += `<div class="font-semibold" style="color: hsl(var(--primary));">Clients liés:</div>`;
+                
+                if (totalMono > 0) {
+                  popupContent += `<div>🔌 <span class="font-medium">${totalMono} MONO</span>`;
+                  popupContent += ` (A:${node.autoPhaseDistribution.monoClientsCount.A}, `;
+                  popupContent += `B:${node.autoPhaseDistribution.monoClientsCount.B}, `;
+                  popupContent += `C:${node.autoPhaseDistribution.monoClientsCount.C})</div>`;
+                }
+                
+                if (totalPoly > 0) {
+                  popupContent += `<div>⚡ <span class="font-medium">${totalPoly} TRI/TÉTRA</span></div>`;
+                }
+                
+                // Afficher le déséquilibre si significatif
+                if (node.autoPhaseDistribution.unbalancePercent > 5) {
+                  const color = node.autoPhaseDistribution.unbalancePercent > 20 ? 'red' : 'orange';
+                  popupContent += `<div style="color: ${color}; font-weight: 600;">`;
+                  popupContent += `⚠️ Déséquilibre: ${node.autoPhaseDistribution.unbalancePercent.toFixed(1)}%</div>`;
+                }
+                
+                popupContent += `</div>`;
+              }
+            }
+            
+            return popupContent;
+          }, { 
+            className: 'custom-node-popup',
+            maxWidth: 280
+          });
 
         // Gestionnaires d'événements complets
         marker.on('click', (e) => {
@@ -829,6 +870,22 @@ export const MapView = () => {
         html: `<div class="${iconSizeClass} rounded-full border-2 flex flex-col items-center justify-center text-xs font-bold ${iconClass} p-1">
           <div class="text-base">${iconContent}</div>
           ${circuitNumber ? `<div class="text-[9px] bg-black bg-opacity-50 rounded px-1">C${circuitNumber}</div>` : ''}
+          ${(() => {
+            // Badge pour le mode mixte
+            if (currentProject.loadModel === 'mixte_mono_poly' && node.autoPhaseDistribution) {
+              const totalMono = node.autoPhaseDistribution.monoClientsCount.A + 
+                                node.autoPhaseDistribution.monoClientsCount.B + 
+                                node.autoPhaseDistribution.monoClientsCount.C;
+              const totalPoly = node.autoPhaseDistribution.polyClientsCount;
+              
+              if (totalMono > 0 || totalPoly > 0) {
+                return `<div class="text-[8px] bg-purple-600 bg-opacity-90 rounded px-1 text-white mt-0.5">
+                  ${totalMono}M${totalPoly > 0 ? '+' + totalPoly + 'T' : ''}
+                </div>`;
+              }
+            }
+            return '';
+          })()}
           <div class="text-[9px] leading-tight text-center">
             ${(() => {
               // Afficher les 3 phases en mode monophasé réparti
@@ -903,7 +960,48 @@ export const MapView = () => {
         zIndexOffset: 0
       })
         .addTo(map)
-        .bindPopup(node.name);
+        .bindPopup(() => {
+          // Construire le contenu du popup enrichi
+          let popupContent = `<div class="font-bold mb-2">${node.name}</div>`;
+          
+          // En mode mixte, afficher le résumé des clients
+          if (currentProject.loadModel === 'mixte_mono_poly' && node.autoPhaseDistribution) {
+            const totalMono = node.autoPhaseDistribution.monoClientsCount.A + 
+                              node.autoPhaseDistribution.monoClientsCount.B + 
+                              node.autoPhaseDistribution.monoClientsCount.C;
+            const totalPoly = node.autoPhaseDistribution.polyClientsCount;
+            
+            if (totalMono > 0 || totalPoly > 0) {
+              popupContent += `<div class="text-sm mt-2 space-y-1" style="line-height: 1.4;">`;
+              popupContent += `<div class="font-semibold" style="color: hsl(var(--primary));">Clients liés:</div>`;
+              
+              if (totalMono > 0) {
+                popupContent += `<div>🔌 <span class="font-medium">${totalMono} MONO</span>`;
+                popupContent += ` (A:${node.autoPhaseDistribution.monoClientsCount.A}, `;
+                popupContent += `B:${node.autoPhaseDistribution.monoClientsCount.B}, `;
+                popupContent += `C:${node.autoPhaseDistribution.monoClientsCount.C})</div>`;
+              }
+              
+              if (totalPoly > 0) {
+                popupContent += `<div>⚡ <span class="font-medium">${totalPoly} TRI/TÉTRA</span></div>`;
+              }
+              
+              // Afficher le déséquilibre si significatif
+              if (node.autoPhaseDistribution.unbalancePercent > 5) {
+                const color = node.autoPhaseDistribution.unbalancePercent > 20 ? 'red' : 'orange';
+                popupContent += `<div style="color: ${color}; font-weight: 600;">`;
+                popupContent += `⚠️ Déséquilibre: ${node.autoPhaseDistribution.unbalancePercent.toFixed(1)}%</div>`;
+              }
+              
+              popupContent += `</div>`;
+            }
+          }
+          
+          return popupContent;
+        }, { 
+          className: 'custom-node-popup',
+          maxWidth: 280
+        });
 
       marker.on('click', (e) => {
         L.DomEvent.stopPropagation(e);

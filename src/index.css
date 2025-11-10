@@ -168,6 +168,19 @@ All colors MUST be HSL.
   .cable-custom-tooltip .leaflet-tooltip-content {
     margin: 0 !important;
   }
+
+  /* Custom node popup styles */
+  .custom-node-popup .leaflet-popup-content {
+    margin: 10px 14px !important;
+    line-height: 1.5 !important;
+  }
+
+  .custom-node-popup .leaflet-popup-content-wrapper {
+    border-radius: 8px !important;
+    box-shadow: var(--shadow-lg) !important;
+    background: hsl(var(--popover)) !important;
+    color: hsl(var(--popover-foreground)) !important;
+  }
 }
 
 /* Forcer les marqueurs clients au premier plan */

@@ -2,8 +2,10 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, RefreshCw } from "lucide-react";
 import { useNetworkStore } from "@/store/networkStore";
+import { calculateRealMonoDistributionPercents } from "@/utils/phaseDistributionCalculator";
+import { toast } from "sonner";
 
 interface PhaseDistributionSlidersProps {
   type: 'charges' | 'productions';
@@ -29,6 +31,25 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
         }
       }
     });
+  };
+  
+  const initializeToRealDistribution = () => {
+    if (!currentProject) return;
+    
+    const realDistribution = calculateRealMonoDistributionPercents(
+      currentProject.nodes,
+      currentProject.clientsImportes || [],
+      currentProject.clientLinks || []
+    );
+    
+    updateProjectConfig({
+      manualPhaseDistribution: {
+        ...currentProject.manualPhaseDistribution,
+        [type]: realDistribution
+      }
+    });
+    
+    toast.success(`Réinitialisé : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
   };
   
   // Calcul des valeurs kVA par phase
@@ -150,9 +171,27 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Reset Equilibre</p>
+                <p>Reset à 33.33% (équilibré)</p>
               </TooltipContent>
             </Tooltip>
+            
+            {currentProject.loadModel === 'mixte_mono_poly' && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={initializeToRealDistribution}
+                    className="h-6 w-6"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Réinitialiser avec répartition réelle</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
           </TooltipProvider>
         )}
       </div>

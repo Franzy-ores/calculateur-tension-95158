@@ -29,7 +29,8 @@ import {
   normalizeClientConnectionType,
   validateAndConvertConnectionType,
   autoAssignPhaseForMonoClient,
-  calculateNodeAutoPhaseDistribution
+  calculateNodeAutoPhaseDistribution,
+  calculateRealMonoDistributionPercents
 } from '@/utils/phaseDistributionCalculator';
 import { getLinkedClientsForNode } from '@/utils/clientsUtils';
 
@@ -475,6 +476,23 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     
     let updatedProject = { ...currentProject, ...updates } as Project;
 
+    // Si passage vers mode mixte, initialiser avec répartition réelle
+    if (updates.loadModel === 'mixte_mono_poly' && currentProject.loadModel !== 'mixte_mono_poly') {
+      const realDistribution = calculateRealMonoDistributionPercents(
+        currentProject.nodes,
+        currentProject.clientsImportes || [],
+        currentProject.clientLinks || []
+      );
+      
+      updatedProject.manualPhaseDistribution = {
+        ...updatedProject.manualPhaseDistribution,
+        charges: realDistribution,
+        productions: realDistribution
+      };
+      
+      toast.success(`Mode mixte activé. Curseurs initialisés avec répartition réelle : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
+    }
+
     // Si le système de tension change, harmoniser tout le projet
     if (updates.voltageSystem && updates.voltageSystem !== currentProject.voltageSystem) {
       const newVS: VoltageSystem = updates.voltageSystem;
@@ -787,6 +805,24 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     
     set({ currentProject: updatedProject });
     toast.success(`${clients.length} clients importés avec succès`);
+    
+    // Initialiser manualPhaseDistribution avec répartition réelle en mode mixte
+    if (currentProject.loadModel === 'mixte_mono_poly') {
+      const realDistribution = calculateRealMonoDistributionPercents(
+        updatedProject.nodes,
+        updatedProject.clientsImportes || [],
+        updatedProject.clientLinks || []
+      );
+      
+      updatedProject.manualPhaseDistribution = {
+        ...updatedProject.manualPhaseDistribution,
+        charges: realDistribution,
+        productions: realDistribution
+      };
+      
+      set({ currentProject: updatedProject });
+      toast.success(`Curseurs initialisés : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
+    }
     
     // Recalculer les bounds pour inclure les nouveaux clients
     const allPoints = [

@@ -241,6 +241,55 @@ export function calculateNodeAutoPhaseDistribution(
 }
 
 /**
+ * Calcule les pourcentages de répartition réelle des clients MONO
+ * basé sur leur assignedPhase (ou équilibré pour charges manuelles)
+ * Utilisé pour initialiser les curseurs automatiquement
+ */
+export function calculateRealMonoDistributionPercents(
+  nodes: Node[],
+  clientsImportes: ClientImporte[],
+  clientLinks: { clientId: string; nodeId: string }[]
+): { A: number; B: number; C: number } {
+  const totalMonoPerPhase = { A: 0, B: 0, C: 0 };
+  
+  nodes.forEach(node => {
+    // 1. Clients importés MONO avec leur phase assignée
+    const linkedClients = clientsImportes.filter(client =>
+      clientLinks.some(link => link.clientId === client.id && link.nodeId === node.id)
+    );
+    
+    linkedClients.forEach(client => {
+      if (client.connectionType === 'MONO' && client.assignedPhase) {
+        totalMonoPerPhase[client.assignedPhase] += client.puissanceContractuelle_kVA;
+      }
+    });
+    
+    // 2. Charges manuelles MONO du nœud (réparties équitablement par défaut)
+    if (node.manualLoadType === 'MONO') {
+      const manualTotal = node.clients.reduce((sum, c) => sum + c.S_kVA, 0);
+      // Pour les charges manuelles, on considère une répartition équilibrée initiale
+      totalMonoPerPhase.A += manualTotal / 3;
+      totalMonoPerPhase.B += manualTotal / 3;
+      totalMonoPerPhase.C += manualTotal / 3;
+    }
+  });
+  
+  const total = totalMonoPerPhase.A + totalMonoPerPhase.B + totalMonoPerPhase.C;
+  
+  // Si pas de charges MONO, retourner équilibré
+  if (total === 0) {
+    return { A: 33.33, B: 33.33, C: 33.34 };
+  }
+  
+  // Convertir en pourcentages
+  return {
+    A: (totalMonoPerPhase.A / total) * 100,
+    B: (totalMonoPerPhase.B / total) * 100,
+    C: (totalMonoPerPhase.C / total) * 100
+  };
+}
+
+/**
  * Calcule le déséquilibre global du projet en mode mixte
  */
 export function calculateProjectUnbalance(

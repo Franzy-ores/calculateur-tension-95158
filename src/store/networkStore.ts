@@ -524,6 +524,13 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     
     set({ currentProject: updatedProject });
 
+    // Si manualPhaseDistribution change en mode mixte, recalculer toutes les distributions
+    if (updates.manualPhaseDistribution && updatedProject.loadModel === 'mixte_mono_poly') {
+      updatedProject.nodes.forEach(node => {
+        get().updateNodePhaseDistribution(node.id);
+      });
+    }
+
     // Recalculs après mise à jour de la config
     updateAllCalculations();
   },

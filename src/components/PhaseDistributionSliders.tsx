@@ -16,7 +16,7 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
   if (!currentProject || !currentProject.manualPhaseDistribution) return null;
   
   const distribution = currentProject.manualPhaseDistribution[type];
-  const isMonophaseMode = currentProject.loadModel === 'monophase_reparti';
+  const showResetButton = currentProject.loadModel === 'monophase_reparti' || currentProject.loadModel === 'mixte_mono_poly';
   
   const initializeToBalance = () => {
     updateProjectConfig({
@@ -35,17 +35,47 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
   const calculateKVAValues = () => {
     let totalValue = 0;
     
-    currentProject.nodes.forEach(node => {
-      if (type === 'charges' && node.clients && node.clients.length > 0) {
-        node.clients.forEach(client => {
-          totalValue += (client.S_kVA || 0) * (currentProject.foisonnementCharges / 100);
-        });
-      } else if (type === 'productions' && node.productions && node.productions.length > 0) {
-        node.productions.forEach(production => {
-          totalValue += (production.S_kVA || 0) * (currentProject.foisonnementProductions / 100);
-        });
-      }
-    });
+    if (currentProject.loadModel === 'mixte_mono_poly') {
+      // MODE MIXTE : ne compter que les charges MONO
+      currentProject.nodes.forEach(node => {
+        // Charges manuelles MONO
+        if (type === 'charges' && node.manualLoadType === 'MONO' && node.clients.length > 0) {
+          node.clients.forEach(client => {
+            totalValue += (client.S_kVA || 0) * (currentProject.foisonnementCharges / 100);
+          });
+        } else if (type === 'productions' && node.manualLoadType === 'MONO' && node.productions.length > 0) {
+          node.productions.forEach(production => {
+            totalValue += (production.S_kVA || 0) * (currentProject.foisonnementProductions / 100);
+          });
+        }
+        
+        // Clients importés MONO
+        if (node.autoPhaseDistribution) {
+          if (type === 'charges') {
+            totalValue += node.autoPhaseDistribution.charges.mono.A + 
+                         node.autoPhaseDistribution.charges.mono.B + 
+                         node.autoPhaseDistribution.charges.mono.C;
+          } else {
+            totalValue += node.autoPhaseDistribution.productions.mono.A + 
+                         node.autoPhaseDistribution.productions.mono.B + 
+                         node.autoPhaseDistribution.productions.mono.C;
+          }
+        }
+      });
+    } else {
+      // MODE MONOPHASE_REPARTI : compter toutes les charges comme avant
+      currentProject.nodes.forEach(node => {
+        if (type === 'charges' && node.clients && node.clients.length > 0) {
+          node.clients.forEach(client => {
+            totalValue += (client.S_kVA || 0) * (currentProject.foisonnementCharges / 100);
+          });
+        } else if (type === 'productions' && node.productions && node.productions.length > 0) {
+          node.productions.forEach(production => {
+            totalValue += (production.S_kVA || 0) * (currentProject.foisonnementProductions / 100);
+          });
+        }
+      });
+    }
     
     return {
       A: totalValue * (distribution.A / 100),
@@ -106,7 +136,7 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
     <div className="flex flex-col gap-3 p-3 bg-white/5 rounded border border-white/10">
       <div className="flex items-center justify-center gap-2">
         <Label className="text-xs font-medium text-primary-foreground text-center">{title}</Label>
-        {isMonophaseMode && (
+        {showResetButton && (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -126,6 +156,11 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
           </TooltipProvider>
         )}
       </div>
+      {currentProject.loadModel === 'mixte_mono_poly' && (
+        <p className="text-xs text-center text-primary-foreground/60 px-2">
+          Appliqué aux clients MONO uniquement
+        </p>
+      )}
       <div className="flex justify-center gap-4">
         {(['A', 'B', 'C'] as const).map((phase) => (
           <div key={phase} className="flex flex-col items-center gap-2">

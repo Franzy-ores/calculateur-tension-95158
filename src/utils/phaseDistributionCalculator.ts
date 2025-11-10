@@ -141,12 +141,19 @@ export function calculateNodeAutoPhaseDistribution(
   };
   
   // === 1. CLIENTS IMPORTÉS ===
+  let totalMonoCharges = 0;
+  let totalMonoProductions = 0;
+
   linkedClients.forEach(client => {
-    if (client.connectionType === 'MONO' && client.assignedPhase) {
-      // Client MONO : ajouter à la phase assignée
-      result.charges.mono[client.assignedPhase] += client.puissanceContractuelle_kVA;
-      result.productions.mono[client.assignedPhase] += client.puissancePV_kVA;
-      result.monoClientsCount[client.assignedPhase]++;
+    if (client.connectionType === 'MONO') {
+      // Accumuler les totaux MONO (on ignorera assignedPhase pour la répartition)
+      totalMonoCharges += client.puissanceContractuelle_kVA;
+      totalMonoProductions += client.puissancePV_kVA;
+      
+      // Compter les clients (gardé pour statistiques)
+      if (client.assignedPhase) {
+        result.monoClientsCount[client.assignedPhase]++;
+      }
     } else {
       // Client TRI/TÉTRA : répartir équitablement (33.33% par phase)
       const chargePerPhase = client.puissanceContractuelle_kVA / 3;
@@ -163,6 +170,19 @@ export function calculateNodeAutoPhaseDistribution(
       result.polyClientsCount++;
     }
   });
+
+  // Appliquer manualPhaseDistribution aux clients MONO importés
+  const ratioA = manualPhaseDistribution.A / 100;
+  const ratioB = manualPhaseDistribution.B / 100;
+  const ratioC = manualPhaseDistribution.C / 100;
+
+  result.charges.mono.A = totalMonoCharges * ratioA;
+  result.charges.mono.B = totalMonoCharges * ratioB;
+  result.charges.mono.C = totalMonoCharges * ratioC;
+
+  result.productions.mono.A = totalMonoProductions * ratioA;
+  result.productions.mono.B = totalMonoProductions * ratioB;
+  result.productions.mono.C = totalMonoProductions * ratioC;
   
   // === 2. CHARGES/PRODUCTIONS MANUELLES DU NŒUD ===
   const manualChargeTotal = node.clients.reduce((sum, c) => sum + c.S_kVA, 0);

@@ -385,7 +385,7 @@ export const TopMenu = ({
                 </div>
 
               {/* Phase Distribution Sliders */}
-              {currentProject.loadModel === 'monophase_reparti' && <div className="flex items-center gap-4">
+              {(currentProject.loadModel === 'monophase_reparti' || currentProject.loadModel === 'mixte_mono_poly') && <div className="flex items-center gap-4">
                   <div className="flex gap-4">
                     <PhaseDistributionSliders type="charges" title="Charges" />
                     <PhaseDistributionSliders type="productions" title="Productions" />

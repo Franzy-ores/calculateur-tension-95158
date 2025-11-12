@@ -647,6 +647,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       updatedProject.geographicBounds = calculateProjectBounds(updatedProject.nodes);
     }
     
+    // Mettre à jour le state AVANT les recalculs
     set({ currentProject: updatedProject });
 
     // Si manualPhaseDistribution change en mode mixte, recalculer toutes les distributions
@@ -656,7 +657,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       });
     }
 
-    // Recalculs après mise à jour de la config
+    // Recalculs après mise à jour de la config (déclenche aussi le recalcul des tensions)
     updateAllCalculations();
   },
 

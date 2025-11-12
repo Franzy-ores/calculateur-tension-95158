@@ -1580,29 +1580,33 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   },
 
   setFoisonnementCharges: (value: number) => {
-    const { currentProject, updateAllCalculations } = get();
+    const { currentProject } = get();
     if (!currentProject) return;
 
-    set({
-      currentProject: {
-        ...currentProject,
-        foisonnementCharges: Math.max(0, Math.min(100, value))
-      }
-    });
-    updateAllCalculations();
+    const updatedProject = {
+      ...currentProject,
+      foisonnementCharges: Math.max(0, Math.min(100, value))
+    };
+    
+    set({ currentProject: updatedProject });
+    
+    // Recalculer après mise à jour du state
+    get().updateAllCalculations();
   },
 
   setFoisonnementProductions: (value: number) => {
-    const { currentProject, updateAllCalculations } = get();
+    const { currentProject } = get();
     if (!currentProject) return;
 
-    set({
-      currentProject: {
-        ...currentProject,
-        foisonnementProductions: Math.max(0, Math.min(100, value))
-      }
-    });
-    updateAllCalculations();
+    const updatedProject = {
+      ...currentProject,
+      foisonnementProductions: Math.max(0, Math.min(100, value))
+    };
+    
+    set({ currentProject: updatedProject });
+    
+    // Recalculer après mise à jour du state
+    get().updateAllCalculations();
   },
 
   calculateWithTargetVoltage: (nodeId: string, targetVoltage: number) => {

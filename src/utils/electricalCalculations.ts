@@ -1071,8 +1071,10 @@ export class ElectricalCalculator {
             // Chute de tension dans le neutre (phasor)
             const dVn = mul(Z_neutral, IN_phasor);
             
-            // ✅ CORRECTION CRITIQUE : Propagation cohérente du neutre (sub au lieu de add)
-            const Vn_child = sub(Vn_parent, dVn);
+            // ✅ CORRECTION CRITIQUE : Le courant neutre circule en retour (opposé aux phases)
+            // Dans un système déséquilibré, IN = IA + IB + IC représente le déséquilibre
+            // Ce courant crée une élévation du potentiel du neutre, pas une diminution
+            const Vn_child = add(Vn_parent, dVn);
             V_neutral.set(v, Vn_child);
             
             stack3.push(v);

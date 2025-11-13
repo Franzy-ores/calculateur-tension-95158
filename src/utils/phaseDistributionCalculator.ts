@@ -123,7 +123,8 @@ interface NodePhaseDistributionResult {
 export function calculateNodeAutoPhaseDistribution(
   node: Node,
   linkedClients: ClientImporte[],
-  manualPhaseDistribution: { A: number; B: number; C: number } // Répartition manuelle (%)
+  manualPhaseDistributionCharges: { A: number; B: number; C: number }, // Répartition manuelle charges (%)
+  manualPhaseDistributionProductions: { A: number; B: number; C: number } // Répartition manuelle productions (%)
 ): NodePhaseDistributionResult {
   // Initialisation des résultats
   const result: NodePhaseDistributionResult = {
@@ -179,18 +180,23 @@ export function calculateNodeAutoPhaseDistribution(
   const manualProdTotal = node.productions.reduce((sum, p) => sum + p.S_kVA, 0);
   
   if (node.manualLoadType === 'MONO') {
-    // Charges manuelles MONO : appliquer répartition manuelle (%)
-    const ratioA = manualPhaseDistribution.A / 100;
-    const ratioB = manualPhaseDistribution.B / 100;
-    const ratioC = manualPhaseDistribution.C / 100;
+    // Charges manuelles MONO : appliquer répartition manuelle charges (%)
+    const ratioChargesA = manualPhaseDistributionCharges.A / 100;
+    const ratioChargesB = manualPhaseDistributionCharges.B / 100;
+    const ratioChargesC = manualPhaseDistributionCharges.C / 100;
     
-    result.charges.mono.A += manualChargeTotal * ratioA;
-    result.charges.mono.B += manualChargeTotal * ratioB;
-    result.charges.mono.C += manualChargeTotal * ratioC;
+    result.charges.mono.A += manualChargeTotal * ratioChargesA;
+    result.charges.mono.B += manualChargeTotal * ratioChargesB;
+    result.charges.mono.C += manualChargeTotal * ratioChargesC;
     
-    result.productions.mono.A += manualProdTotal * ratioA;
-    result.productions.mono.B += manualProdTotal * ratioB;
-    result.productions.mono.C += manualProdTotal * ratioC;
+    // Productions manuelles MONO : appliquer répartition manuelle productions (%)
+    const ratioProdsA = manualPhaseDistributionProductions.A / 100;
+    const ratioProdsB = manualPhaseDistributionProductions.B / 100;
+    const ratioProdsC = manualPhaseDistributionProductions.C / 100;
+    
+    result.productions.mono.A += manualProdTotal * ratioProdsA;
+    result.productions.mono.B += manualProdTotal * ratioProdsB;
+    result.productions.mono.C += manualProdTotal * ratioProdsC;
   } else {
     // Charges manuelles POLY : répartir équitablement
     result.charges.poly.A += manualChargeTotal / 3;

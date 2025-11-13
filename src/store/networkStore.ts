@@ -480,8 +480,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
           const distribution = calculateNodeAutoPhaseDistribution(
             node,
             linkedClients,
-            project.manualPhaseDistribution!.charges,
-            project.manualPhaseDistribution!.productions
+            project.manualPhaseDistribution!.charges
           );
           node.autoPhaseDistribution = distribution;
         }
@@ -1194,8 +1193,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     const distribution = calculateNodeAutoPhaseDistribution(
       node,
       linkedClients,
-      state.currentProject.manualPhaseDistribution?.charges || { A: 33.33, B: 33.33, C: 33.34 },
-      state.currentProject.manualPhaseDistribution?.productions || { A: 33.33, B: 33.33, C: 33.34 }
+      state.currentProject.manualPhaseDistribution?.charges || { A: 33.33, B: 33.33, C: 33.34 }
     );
     
     // Mettre à jour le nœud

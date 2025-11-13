@@ -775,116 +775,82 @@ export class ElectricalCalculator {
       const S_C_map = new Map<string, Complex>();
 
       for (const n of nodes) {
+        const S_kVA_tot = S_node_total_kVA.get(n.id) || 0; // signé
+        const sign = Math.sign(S_kVA_tot) || 1;
+        
         // ✅ PRIORITÉ À autoPhaseDistribution (mode mixte)
-        // Si le nœud a autoPhaseDistribution, les valeurs par phase sont déjà calculées
+        let pA_charges = 1/3, pB_charges = 1/3, pC_charges = 1/3;
+        let pA_productions = 1/3, pB_productions = 1/3, pC_productions = 1/3;
+        
         if (n.autoPhaseDistribution) {
-          // Mode mixte : utiliser directement les valeurs calculées par phase
-          let S_A_kVA = 0, S_B_kVA = 0, S_C_kVA = 0;
+          // Mode mixte : utiliser la distribution réelle du nœud
+          const totalCharges = n.autoPhaseDistribution.charges.total.A + 
+                               n.autoPhaseDistribution.charges.total.B + 
+                               n.autoPhaseDistribution.charges.total.C;
+          const totalProds = n.autoPhaseDistribution.productions.total.A + 
+                             n.autoPhaseDistribution.productions.total.B + 
+                             n.autoPhaseDistribution.productions.total.C;
           
-          if (scenario === 'PRÉLÈVEMENT') {
-            // Uniquement les charges
-            S_A_kVA = n.autoPhaseDistribution.charges.total.A;
-            S_B_kVA = n.autoPhaseDistribution.charges.total.B;
-            S_C_kVA = n.autoPhaseDistribution.charges.total.C;
-          } else if (scenario === 'PRODUCTION') {
-            // Uniquement les productions (négatives)
-            S_A_kVA = -n.autoPhaseDistribution.productions.total.A;
-            S_B_kVA = -n.autoPhaseDistribution.productions.total.B;
-            S_C_kVA = -n.autoPhaseDistribution.productions.total.C;
-          } else {
-            // Bilan net par phase (charges - productions)
-            S_A_kVA = n.autoPhaseDistribution.charges.total.A - n.autoPhaseDistribution.productions.total.A;
-            S_B_kVA = n.autoPhaseDistribution.charges.total.B - n.autoPhaseDistribution.productions.total.B;
-            S_C_kVA = n.autoPhaseDistribution.charges.total.C - n.autoPhaseDistribution.productions.total.C;
+          if (totalCharges > 0.001) {
+            pA_charges = n.autoPhaseDistribution.charges.total.A / totalCharges;
+            pB_charges = n.autoPhaseDistribution.charges.total.B / totalCharges;
+            pC_charges = n.autoPhaseDistribution.charges.total.C / totalCharges;
           }
           
-          console.log(`📊 Nœud ${n.name || n.id}: utilise autoPhaseDistribution directement`);
-          console.log(`   Phase A: ${S_A_kVA.toFixed(2)} kVA, Phase B: ${S_B_kVA.toFixed(2)} kVA, Phase C: ${S_C_kVA.toFixed(2)} kVA`);
-          
-          // Convertir en P+jQ par phase
-          const convertToComplex = (S_kVA: number) => {
-            const sign = Math.sign(S_kVA) || 1;
-            const P_kW = S_kVA * cosPhi_eff;
-            const Q_kVAr = Math.abs(S_kVA) * sinPhi * sign;
-            return C(P_kW * 1000, Q_kVAr * 1000);
-          };
-          
-          S_A_map.set(n.id, convertToComplex(S_A_kVA));
-          S_B_map.set(n.id, convertToComplex(S_B_kVA));
-          S_C_map.set(n.id, convertToComplex(S_C_kVA));
-        } else {
-          // ❌ Pas d'autoPhaseDistribution : calculer manuellement
-          // Calculer les charges brutes et productions brutes du nœud
-          let grossCharges_kVA = 0, grossProductions_kVA = 0;
-          
-          if (clientsImportes && clientLinks) {
-            const linkedClients = getLinkedClientsForNode(n.id, clientsImportes, clientLinks);
-            const { totalCharge_kVA, totalProduction_kVA } = calculateNodePowersFromClients(n, linkedClients);
-            grossCharges_kVA = totalCharge_kVA * (foisonnementCharges / 100);
-            grossProductions_kVA = totalProduction_kVA * (foisonnementProductions / 100);
-          } else {
-            // Fallback : charges/productions manuelles uniquement
-            grossCharges_kVA = (n.clients || []).reduce((s, c) => s + (c.S_kVA || 0), 0) * (foisonnementCharges / 100);
-            grossProductions_kVA = (n.productions || []).reduce((s, p) => s + (p.S_kVA || 0), 0) * (foisonnementProductions / 100);
+          if (totalProds > 0.001) {
+            pA_productions = n.autoPhaseDistribution.productions.total.A / totalProds;
+            pB_productions = n.autoPhaseDistribution.productions.total.B / totalProds;
+            pC_productions = n.autoPhaseDistribution.productions.total.C / totalProds;
           }
           
-          // Appliquer les répartitions manuelles séparément aux charges et productions
-          let pA_charges = 1/3, pB_charges = 1/3, pC_charges = 1/3;
-          let pA_productions = 1/3, pB_productions = 1/3, pC_productions = 1/3;
+          console.log(`📊 Nœud ${n.name || n.id}: utilise autoPhaseDistribution`);
+          console.log(`   Charges: A=${(pA_charges*100).toFixed(1)}%, B=${(pB_charges*100).toFixed(1)}%, C=${(pC_charges*100).toFixed(1)}%`);
+        } else if (manualPhaseDistribution) {
+          // Fallback : mode monophase_reparti
+          pA_charges = manualPhaseDistribution.charges.A / 100;
+          pB_charges = manualPhaseDistribution.charges.B / 100;
+          pC_charges = manualPhaseDistribution.charges.C / 100;
+          pA_productions = manualPhaseDistribution.productions.A / 100;
+          pB_productions = manualPhaseDistribution.productions.B / 100;
+          pC_productions = manualPhaseDistribution.productions.C / 100;
           
-          if (manualPhaseDistribution) {
-            pA_charges = manualPhaseDistribution.charges.A / 100;
-            pB_charges = manualPhaseDistribution.charges.B / 100;
-            pC_charges = manualPhaseDistribution.charges.C / 100;
-            pA_productions = manualPhaseDistribution.productions.A / 100;
-            pB_productions = manualPhaseDistribution.productions.B / 100;
-            pC_productions = manualPhaseDistribution.productions.C / 100;
-            
-            console.log(`📊 Nœud ${n.name || n.id}: utilise manualPhaseDistribution`);
-          }
-          
-          // Calculer les charges et productions par phase
-          let chargesA_kVA = 0, chargesB_kVA = 0, chargesC_kVA = 0;
-          let prodsA_kVA = 0, prodsB_kVA = 0, prodsC_kVA = 0;
-          
-          if (scenario === 'PRÉLÈVEMENT') {
-            chargesA_kVA = grossCharges_kVA * pA_charges;
-            chargesB_kVA = grossCharges_kVA * pB_charges;
-            chargesC_kVA = grossCharges_kVA * pC_charges;
-          } else if (scenario === 'PRODUCTION') {
-            prodsA_kVA = grossProductions_kVA * pA_productions;
-            prodsB_kVA = grossProductions_kVA * pB_productions;
-            prodsC_kVA = grossProductions_kVA * pC_productions;
-          } else {
-            // Bilan : appliquer les deux distributions séparément
-            chargesA_kVA = grossCharges_kVA * pA_charges;
-            chargesB_kVA = grossCharges_kVA * pB_charges;
-            chargesC_kVA = grossCharges_kVA * pC_charges;
-            prodsA_kVA = grossProductions_kVA * pA_productions;
-            prodsB_kVA = grossProductions_kVA * pB_productions;
-            prodsC_kVA = grossProductions_kVA * pC_productions;
-          }
-          
-          // Bilan net par phase
-          const S_A_kVA = chargesA_kVA - prodsA_kVA;
-          const S_B_kVA = chargesB_kVA - prodsB_kVA;
-          const S_C_kVA = chargesC_kVA - prodsC_kVA;
-          
-          console.log(`📊 Nœud ${n.name || n.id}: charges brutes=${grossCharges_kVA.toFixed(2)} kVA, prods brutes=${grossProductions_kVA.toFixed(2)} kVA`);
-          console.log(`   Phase A: ${S_A_kVA.toFixed(2)} kVA, Phase B: ${S_B_kVA.toFixed(2)} kVA, Phase C: ${S_C_kVA.toFixed(2)} kVA`);
-          
-          // Convertir en P+jQ par phase
-          const convertToComplex = (S_kVA: number) => {
-            const sign = Math.sign(S_kVA) || 1;
-            const P_kW = S_kVA * cosPhi_eff;
-            const Q_kVAr = Math.abs(S_kVA) * sinPhi * sign;
-            return C(P_kW * 1000, Q_kVAr * 1000);
-          };
-          
-          S_A_map.set(n.id, convertToComplex(S_A_kVA));
-          S_B_map.set(n.id, convertToComplex(S_B_kVA));
-          S_C_map.set(n.id, convertToComplex(S_C_kVA));
+          console.log(`📊 Nœud ${n.name || n.id}: utilise manualPhaseDistribution`);
         }
+        
+        // Vérification de cohérence
+        const totalCharges = pA_charges + pB_charges + pC_charges;
+        const totalProductions = pA_productions + pB_productions + pC_productions;
+        if (Math.abs(totalCharges - 1) > 1e-6) {
+          console.warn(`⚠️ Répartition des charges incohérente pour nœud ${n.id}: total=${totalCharges}`);
+        }
+        if (Math.abs(totalProductions - 1) > 1e-6) {
+          console.warn(`⚠️ Répartition des productions incohérente pour nœud ${n.id}: total=${totalProductions}`);
+        }
+        
+        // Séparer charges et productions pour appliquer des répartitions différentes
+        let S_A_kVA = 0, S_B_kVA = 0, S_C_kVA = 0;
+        
+        if (S_kVA_tot > 0) {
+          // Charges positives - utiliser la répartition des charges
+          S_A_kVA = S_kVA_tot * pA_charges;
+          S_B_kVA = S_kVA_tot * pB_charges;
+          S_C_kVA = S_kVA_tot * pC_charges;
+        } else {
+          // Productions négatives - utiliser la répartition des productions
+          S_A_kVA = S_kVA_tot * pA_productions;
+          S_B_kVA = S_kVA_tot * pB_productions;
+          S_C_kVA = S_kVA_tot * pC_productions;
+        }
+        
+        const P_A_kW = S_A_kVA * cosPhi_eff;
+        const Q_A_kVAr = Math.abs(S_A_kVA) * sinPhi * sign;
+        const P_B_kW = S_B_kVA * cosPhi_eff;
+        const Q_B_kVAr = Math.abs(S_B_kVA) * sinPhi * sign;
+        const P_C_kW = S_C_kVA * cosPhi_eff;
+        const Q_C_kVAr = Math.abs(S_C_kVA) * sinPhi * sign;
+        S_A_map.set(n.id, C(P_A_kW * 1000, Q_A_kVAr * 1000));
+        S_B_map.set(n.id, C(P_B_kW * 1000, Q_B_kVAr * 1000));
+        S_C_map.set(n.id, C(P_C_kW * 1000, Q_C_kVAr * 1000));
 
         // Intégrer les contributions explicites P/Q (équipements virtuels)
         const addExtra = (items: any[], sign: 1 | -1) => {

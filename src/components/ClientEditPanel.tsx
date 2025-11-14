@@ -31,6 +31,7 @@ export const ClientEditPanel = () => {
   const [tensionCircuit, setTensionCircuit] = useState<number | undefined>(undefined);
   const [identifiantCabine, setIdentifiantCabine] = useState<string>('');
   const [identifiantPosteSource, setIdentifiantPosteSource] = useState<string>('');
+  const [assignedPhase, setAssignedPhase] = useState<'A' | 'B' | 'C' | undefined>(undefined);
 
   useEffect(() => {
     if (client) {
@@ -47,6 +48,7 @@ export const ClientEditPanel = () => {
       setTensionCircuit(client.tensionCircuit_V);
       setIdentifiantCabine(client.identifiantCabine || '');
       setIdentifiantPosteSource(client.identifiantPosteSource || '');
+      setAssignedPhase(client.assignedPhase);
     }
   }, [client]);
 
@@ -72,6 +74,7 @@ export const ClientEditPanel = () => {
       tensionCircuit_V: tensionCircuit,
       identifiantCabine,
       identifiantPosteSource,
+      assignedPhase,
     });
     
     toast.success('Client mis à jour');
@@ -113,6 +116,30 @@ export const ClientEditPanel = () => {
             Valeur importée depuis Excel (lecture seule)
           </p>
         </div>
+
+        {currentProject?.loadModel === 'mixte_mono_poly' && 
+         client.connectionType === 'MONO' && 
+         clientLink && (
+          <div>
+            <Label htmlFor="assignedPhase">Phase assignée</Label>
+            <Select 
+              value={assignedPhase} 
+              onValueChange={(v: 'A' | 'B' | 'C') => setAssignedPhase(v)}
+            >
+              <SelectTrigger id="assignedPhase">
+                <SelectValue placeholder="Sélectionner une phase" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="A">Phase A</SelectItem>
+                <SelectItem value="B">Phase B</SelectItem>
+                <SelectItem value="C">Phase C</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Modification manuelle de la phase (mode mixte)
+            </p>
+          </div>
+        )}
 
         <div>
           <Label htmlFor="puissanceContractuelle">Puissance contractuelle (kVA)</Label>

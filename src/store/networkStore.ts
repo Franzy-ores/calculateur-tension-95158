@@ -97,7 +97,7 @@ interface NetworkActions {
   // Project actions
   createNewProject: (name: string, voltageSystem: VoltageSystem) => void;
   loadProject: (project: Project) => void;
-  updateProjectConfig: (updates: Partial<Pick<Project, 'name' | 'voltageSystem' | 'cosPhi' | 'foisonnementCharges' | 'foisonnementProductions' | 'defaultChargeKVA' | 'defaultProductionKVA' | 'loadModel' | 'desequilibrePourcent' | 'forcedModeConfig' | 'manualPhaseDistribution'>>) => void;
+  updateProjectConfig: (updates: Partial<Pick<Project, 'name' | 'voltageSystem' | 'cosPhi' | 'foisonnementCharges' | 'foisonnementProductions' | 'defaultChargeKVA' | 'defaultProductionKVA' | 'loadModel' | 'desequilibrePourcent' | 'forcedModeConfig' | 'manualPhaseDistribution' | 'phaseDistributionMode'>>) => void;
   
   // Node actions
   addNode: (lat: number, lng: number) => void;
@@ -257,6 +257,7 @@ const createDefaultProject = (): Project => ({
     productions: { A: 33.33, B: 33.33, C: 33.34 },
     constraints: { min: -20, max: 20, total: 100 }
   },
+  phaseDistributionMode: 'mono_only', // Mode conservateur par défaut
   nodes: [],
   cables: [],
   cableTypes: defaultCableTypes
@@ -280,6 +281,7 @@ const createDefaultProject2 = (name: string, voltageSystem: VoltageSystem): Proj
     productions: { A: 33.33, B: 33.33, C: 33.34 },
     constraints: { min: -20, max: 20, total: 100 }
   },
+  phaseDistributionMode: 'mono_only', // Mode conservateur par défaut
   nodes: [],
   cables: [],
   cableTypes: [...defaultCableTypes]
@@ -480,7 +482,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
           const distribution = calculateNodeAutoPhaseDistribution(
             node,
             linkedClients,
-            project.manualPhaseDistribution!.charges
+            project.manualPhaseDistribution!.charges,
+            project.phaseDistributionMode || 'mono_only'
           );
           node.autoPhaseDistribution = distribution;
         }
@@ -650,8 +653,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     // Mettre à jour le state AVANT les recalculs
     set({ currentProject: updatedProject });
 
-    // Si manualPhaseDistribution change en mode mixte, recalculer toutes les distributions
-    if (updates.manualPhaseDistribution && updatedProject.loadModel === 'mixte_mono_poly') {
+    // Si manualPhaseDistribution ou phaseDistributionMode change en mode mixte, recalculer toutes les distributions
+    if ((updates.manualPhaseDistribution || updates.phaseDistributionMode) && updatedProject.loadModel === 'mixte_mono_poly') {
       updatedProject.nodes.forEach(node => {
         get().updateNodePhaseDistribution(node.id);
       });
@@ -1199,7 +1202,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     const distribution = calculateNodeAutoPhaseDistribution(
       node,
       linkedClients,
-      state.currentProject.manualPhaseDistribution?.charges || { A: 33.33, B: 33.33, C: 33.34 }
+      state.currentProject.manualPhaseDistribution?.charges || { A: 33.33, B: 33.33, C: 33.34 },
+      state.currentProject.phaseDistributionMode || 'mono_only'
     );
     
     // Mettre à jour le nœud

@@ -1,6 +1,7 @@
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { RotateCcw, RefreshCw } from "lucide-react";
 import { useNetworkStore } from "@/store/networkStore";
@@ -19,6 +20,7 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
   
   const distribution = currentProject.manualPhaseDistribution[type];
   const showResetButton = currentProject.loadModel === 'monophase_reparti' || currentProject.loadModel === 'mixte_mono_poly';
+  const phaseDistributionMode = currentProject.phaseDistributionMode || 'mono_only';
   
   const initializeToBalance = () => {
     updateProjectConfig({
@@ -50,6 +52,13 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
     });
     
     toast.success(`Réinitialisé : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
+  };
+  
+  const handleModeChange = (newMode: 'mono_only' | 'all_clients') => {
+    updateProjectConfig({
+      phaseDistributionMode: newMode
+    });
+    toast.success(newMode === 'mono_only' ? 'Répartition appliquée aux MONO uniquement' : 'Répartition appliquée à tous les clients');
   };
   
   // Calcul des valeurs kVA par phase
@@ -196,9 +205,33 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
         )}
       </div>
       {currentProject.loadModel === 'mixte_mono_poly' && (
-        <p className="text-xs text-center text-primary-foreground/60 px-2">
-          Appliqué aux clients MONO uniquement
-        </p>
+        <div className="flex flex-col gap-2">
+          <Label className="text-xs text-center text-primary-foreground/80">Appliquer à :</Label>
+          <RadioGroup 
+            value={phaseDistributionMode} 
+            onValueChange={handleModeChange}
+            className="flex justify-center gap-4"
+          >
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="mono_only" id={`${type}-mono_only`} />
+              <Label 
+                htmlFor={`${type}-mono_only`} 
+                className="text-xs text-primary-foreground cursor-pointer"
+              >
+                MONO uniquement
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="all_clients" id={`${type}-all_clients`} />
+              <Label 
+                htmlFor={`${type}-all_clients`} 
+                className="text-xs text-primary-foreground cursor-pointer"
+              >
+                Tous les clients
+              </Label>
+            </div>
+          </RadioGroup>
+        </div>
       )}
       <div className="flex justify-center gap-4">
         {(['A', 'B', 'C'] as const).map((phase) => (

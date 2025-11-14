@@ -256,6 +256,8 @@ export interface Project {
     productions: { A: number; B: number; C: number };
     constraints: { min: number; max: number; total: number };
   };
+  // Mode d'application de la répartition manuelle ('mono_only' = MONO uniquement, 'all_clients' = tous les clients)
+  phaseDistributionMode?: 'mono_only' | 'all_clients';
   nodes: Node[];
   cables: Cable[];
   cableTypes: CableType[];

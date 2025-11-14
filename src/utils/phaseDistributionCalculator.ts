@@ -123,7 +123,8 @@ interface NodePhaseDistributionResult {
 export function calculateNodeAutoPhaseDistribution(
   node: Node,
   linkedClients: ClientImporte[],
-  manualPhaseDistribution: { A: number; B: number; C: number } // Répartition manuelle (%)
+  manualPhaseDistribution: { A: number; B: number; C: number }, // Répartition manuelle (%)
+  phaseDistributionMode: 'mono_only' | 'all_clients' = 'mono_only' // Mode d'application
 ): NodePhaseDistributionResult {
   // Initialisation des résultats
   const result: NodePhaseDistributionResult = {
@@ -150,25 +151,88 @@ export function calculateNodeAutoPhaseDistribution(
     if (client.connectionType === 'MONO') {
       // ✅ CORRECTION : Utiliser assignedPhase réelle du client MONO
       if (client.assignedPhase) {
-        result.charges.mono[client.assignedPhase] += client.puissanceContractuelle_kVA;
-        result.productions.mono[client.assignedPhase] += client.puissancePV_kVA;
-        result.monoClientsCount[client.assignedPhase]++;
+        const chargeKVA = client.puissanceContractuelle_kVA;
+        const prodKVA = client.puissancePV_kVA;
+        
+        if (phaseDistributionMode === 'all_clients') {
+          // MODE "TOUS LES CLIENTS" : Appliquer coefficients de correction sur MONO
+          const ratioA = manualPhaseDistribution.A / 100;
+          const ratioB = manualPhaseDistribution.B / 100;
+          const ratioC = manualPhaseDistribution.C / 100;
+          
+          result.charges.mono.A += chargeKVA * ratioA;
+          result.charges.mono.B += chargeKVA * ratioB;
+          result.charges.mono.C += chargeKVA * ratioC;
+          
+          result.productions.mono.A += prodKVA * ratioA;
+          result.productions.mono.B += prodKVA * ratioB;
+          result.productions.mono.C += prodKVA * ratioC;
+          
+          // Compter dans toutes les phases (distribution forcée)
+          result.monoClientsCount.A += ratioA;
+          result.monoClientsCount.B += ratioB;
+          result.monoClientsCount.C += ratioC;
+        } else {
+          // MODE "MONO UNIQUEMENT" : Respecter assignedPhase + appliquer correction
+          const baseChargeA = client.assignedPhase === 'A' ? chargeKVA : 0;
+          const baseChargeB = client.assignedPhase === 'B' ? chargeKVA : 0;
+          const baseChargeC = client.assignedPhase === 'C' ? chargeKVA : 0;
+          
+          const baseProdA = client.assignedPhase === 'A' ? prodKVA : 0;
+          const baseProdB = client.assignedPhase === 'B' ? prodKVA : 0;
+          const baseProdC = client.assignedPhase === 'C' ? prodKVA : 0;
+          
+          // Appliquer coefficients de correction
+          const ratioA = manualPhaseDistribution.A / 100;
+          const ratioB = manualPhaseDistribution.B / 100;
+          const ratioC = manualPhaseDistribution.C / 100;
+          
+          result.charges.mono.A += baseChargeA * ratioA;
+          result.charges.mono.B += baseChargeB * ratioB;
+          result.charges.mono.C += baseChargeC * ratioC;
+          
+          result.productions.mono.A += baseProdA * ratioA;
+          result.productions.mono.B += baseProdB * ratioB;
+          result.productions.mono.C += baseProdC * ratioC;
+          
+          result.monoClientsCount[client.assignedPhase]++;
+        }
       } else {
         // Fallback si pas de phase assignée (ne devrait pas arriver en mode mixte)
         console.warn(`⚠️ Client MONO ${client.nomCircuit} sans assignedPhase`);
       }
     } else {
-      // Client TRI/TÉTRA : répartir équitablement (33.33% par phase)
+      // Client TRI/TÉTRA
       const chargePerPhase = client.puissanceContractuelle_kVA / 3;
       const prodPerPhase = client.puissancePV_kVA / 3;
       
-      result.charges.poly.A += chargePerPhase;
-      result.charges.poly.B += chargePerPhase;
-      result.charges.poly.C += chargePerPhase;
-      
-      result.productions.poly.A += prodPerPhase;
-      result.productions.poly.B += prodPerPhase;
-      result.productions.poly.C += prodPerPhase;
+      if (phaseDistributionMode === 'all_clients') {
+        // MODE "TOUS LES CLIENTS" : Appliquer coefficients de correction sur POLY aussi
+        const ratioA = manualPhaseDistribution.A / 100;
+        const ratioB = manualPhaseDistribution.B / 100;
+        const ratioC = manualPhaseDistribution.C / 100;
+        
+        // Redistribuer selon coefficients (au lieu de 33.33% équilibré)
+        const totalCharge = client.puissanceContractuelle_kVA;
+        const totalProd = client.puissancePV_kVA;
+        
+        result.charges.poly.A += totalCharge * ratioA;
+        result.charges.poly.B += totalCharge * ratioB;
+        result.charges.poly.C += totalCharge * ratioC;
+        
+        result.productions.poly.A += totalProd * ratioA;
+        result.productions.poly.B += totalProd * ratioB;
+        result.productions.poly.C += totalProd * ratioC;
+      } else {
+        // MODE "MONO UNIQUEMENT" : Répartir équitablement (33.33% par phase)
+        result.charges.poly.A += chargePerPhase;
+        result.charges.poly.B += chargePerPhase;
+        result.charges.poly.C += chargePerPhase;
+        
+        result.productions.poly.A += prodPerPhase;
+        result.productions.poly.B += prodPerPhase;
+        result.productions.poly.C += prodPerPhase;
+      }
       
       result.polyClientsCount++;
     }

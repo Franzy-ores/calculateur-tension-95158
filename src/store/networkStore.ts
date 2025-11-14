@@ -965,24 +965,30 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   },
 
   updateClientImporte: (clientId, updates) => {
-    const { currentProject, updateAllCalculations } = get();
+    const { currentProject } = get();
     if (!currentProject) return;
     
     const updatedClients = (currentProject.clientsImportes || []).map(client =>
       client.id === clientId ? { ...client, ...updates } : client
     );
     
-    set({
-      currentProject: {
-        ...currentProject,
-        clientsImportes: updatedClients
-      }
-    });
+    const updatedProject = {
+      ...currentProject,
+      clientsImportes: updatedClients
+    };
     
-    // Recalculer si le client est lié à un nœud
-    const isLinked = currentProject.clientLinks?.some(l => l.clientId === clientId);
-    if (isLinked) {
-      updateAllCalculations();
+    // ✅ 1. Mettre à jour le state AVANT les recalculs
+    set({ currentProject: updatedProject });
+    
+    // ✅ 2. Recalculer distribution du nœud si client lié en mode mixte
+    const clientLink = currentProject.clientLinks?.find(l => l.clientId === clientId);
+    if (clientLink && currentProject.loadModel === 'mixte_mono_poly') {
+      get().updateNodePhaseDistribution(clientLink.nodeId);
+    }
+    
+    // ✅ 3. Recalculer les tensions si le client est lié
+    if (clientLink) {
+      get().updateAllCalculations();
     }
   },
 

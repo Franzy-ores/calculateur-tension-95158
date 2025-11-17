@@ -303,6 +303,9 @@ export function calculateNodeAutoPhaseDistribution(
  * basé sur leur assignedPhase (ou équilibré pour charges manuelles)
  * Utilisé pour initialiser les curseurs automatiquement
  */
+/**
+ * Calcule la répartition réelle des CHARGES MONO par phase
+ */
 export function calculateRealMonoDistributionPercents(
   nodes: Node[],
   clientsImportes: ClientImporte[],
@@ -335,6 +338,54 @@ export function calculateRealMonoDistributionPercents(
   const total = totalMonoPerPhase.A + totalMonoPerPhase.B + totalMonoPerPhase.C;
   
   // Si pas de charges MONO, retourner équilibré
+  if (total === 0) {
+    return { A: 33.33, B: 33.33, C: 33.34 };
+  }
+  
+  // Convertir en pourcentages
+  return {
+    A: (totalMonoPerPhase.A / total) * 100,
+    B: (totalMonoPerPhase.B / total) * 100,
+    C: (totalMonoPerPhase.C / total) * 100
+  };
+}
+
+/**
+ * Calcule la répartition réelle des PRODUCTIONS MONO par phase
+ */
+export function calculateRealMonoProductionDistributionPercents(
+  nodes: Node[],
+  clientsImportes: ClientImporte[],
+  clientLinks: { clientId: string; nodeId: string }[]
+): { A: number; B: number; C: number } {
+  const totalMonoPerPhase = { A: 0, B: 0, C: 0 };
+  
+  nodes.forEach(node => {
+    // 1. Productions PV des clients importés MONO avec leur phase assignée
+    const linkedClients = clientsImportes.filter(client =>
+      clientLinks.some(link => link.clientId === client.id && link.nodeId === node.id)
+    );
+    
+    linkedClients.forEach(client => {
+      if (client.connectionType === 'MONO' && client.assignedPhase && client.puissancePV_kVA) {
+        totalMonoPerPhase[client.assignedPhase] += client.puissancePV_kVA;
+      }
+    });
+    
+    // 2. Productions manuelles du nœud
+    // Note: On ne peut pas déterminer si les productions manuelles sont MONO ou POLY
+    // On les répartit équitablement si le nœud a un type de charge manuel MONO
+    if (node.manualLoadType === 'MONO' && node.productions.length > 0) {
+      const manualTotal = node.productions.reduce((sum, p) => sum + p.S_kVA, 0);
+      totalMonoPerPhase.A += manualTotal / 3;
+      totalMonoPerPhase.B += manualTotal / 3;
+      totalMonoPerPhase.C += manualTotal / 3;
+    }
+  });
+  
+  const total = totalMonoPerPhase.A + totalMonoPerPhase.B + totalMonoPerPhase.C;
+  
+  // Si pas de productions MONO, retourner équilibré
   if (total === 0) {
     return { A: 33.33, B: 33.33, C: 33.34 };
   }

@@ -173,29 +173,24 @@ export function calculateNodeAutoPhaseDistribution(
           result.monoClientsCount.B += ratioB;
           result.monoClientsCount.C += ratioC;
         } else {
-          // MODE "MONO UNIQUEMENT" : Respecter assignedPhase + appliquer correction
-          const baseChargeA = client.assignedPhase === 'A' ? chargeKVA : 0;
-          const baseChargeB = client.assignedPhase === 'B' ? chargeKVA : 0;
-          const baseChargeC = client.assignedPhase === 'C' ? chargeKVA : 0;
-          
-          const baseProdA = client.assignedPhase === 'A' ? prodKVA : 0;
-          const baseProdB = client.assignedPhase === 'B' ? prodKVA : 0;
-          const baseProdC = client.assignedPhase === 'C' ? prodKVA : 0;
-          
-          // Appliquer coefficients de correction
+          // MODE "MONO UNIQUEMENT" : Redistribuer la charge MONO totale selon les %
           const ratioA = manualPhaseDistribution.A / 100;
           const ratioB = manualPhaseDistribution.B / 100;
           const ratioC = manualPhaseDistribution.C / 100;
-          
-          result.charges.mono.A += baseChargeA * ratioA;
-          result.charges.mono.B += baseChargeB * ratioB;
-          result.charges.mono.C += baseChargeC * ratioC;
-          
-          result.productions.mono.A += baseProdA * ratioA;
-          result.productions.mono.B += baseProdB * ratioB;
-          result.productions.mono.C += baseProdC * ratioC;
-          
-          result.monoClientsCount[client.assignedPhase]++;
+
+          // ✅ Redistribuer sur les 3 phases (conservation de l'énergie)
+          result.charges.mono.A += chargeKVA * ratioA;
+          result.charges.mono.B += chargeKVA * ratioB;
+          result.charges.mono.C += chargeKVA * ratioC;
+
+          result.productions.mono.A += prodKVA * ratioA;
+          result.productions.mono.B += prodKVA * ratioB;
+          result.productions.mono.C += prodKVA * ratioC;
+
+          // Compter le client dans toutes les phases (proportionnellement)
+          result.monoClientsCount.A += ratioA;
+          result.monoClientsCount.B += ratioB;
+          result.monoClientsCount.C += ratioC;
         }
       } else {
         // Fallback si pas de phase assignée (ne devrait pas arriver en mode mixte)
@@ -274,6 +269,15 @@ export function calculateNodeAutoPhaseDistribution(
   result.productions.total.A = result.productions.mono.A + result.productions.poly.A;
   result.productions.total.B = result.productions.mono.B + result.productions.poly.B;
   result.productions.total.C = result.productions.mono.C + result.productions.poly.C;
+  
+  // 🔍 Logs de débogage détaillés
+  console.log(`🔍 Distribution nœud "${node.name}" (mode: ${phaseDistributionMode})`);
+  console.log(`   Curseurs: A=${manualPhaseDistribution.A.toFixed(1)}%, B=${manualPhaseDistribution.B.toFixed(1)}%, C=${manualPhaseDistribution.C.toFixed(1)}%`);
+  console.log(`   Charges MONO: A=${result.charges.mono.A.toFixed(1)}kVA, B=${result.charges.mono.B.toFixed(1)}kVA, C=${result.charges.mono.C.toFixed(1)}kVA`);
+  console.log(`   Charges POLY: A=${result.charges.poly.A.toFixed(1)}kVA, B=${result.charges.poly.B.toFixed(1)}kVA, C=${result.charges.poly.C.toFixed(1)}kVA`);
+  console.log(`   Prod MONO: A=${result.productions.mono.A.toFixed(1)}kVA, B=${result.productions.mono.B.toFixed(1)}kVA, C=${result.productions.mono.C.toFixed(1)}kVA`);
+  console.log(`   Prod POLY: A=${result.productions.poly.A.toFixed(1)}kVA, B=${result.productions.poly.B.toFixed(1)}kVA, C=${result.productions.poly.C.toFixed(1)}kVA`);
+  console.log(`   TOTAL Charges: A=${result.charges.total.A.toFixed(1)}kVA, B=${result.charges.total.B.toFixed(1)}kVA, C=${result.charges.total.C.toFixed(1)}kVA`);
   
   // === 4. CALCUL DÉSÉQUILIBRE ===
   const totalCharges = [

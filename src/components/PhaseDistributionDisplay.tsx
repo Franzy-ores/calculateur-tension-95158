@@ -5,6 +5,34 @@ import { Button } from "@/components/ui/button";
 import { useNetworkStore } from "@/store/networkStore";
 import { calculateProjectUnbalance } from "@/utils/phaseDistributionCalculator";
 import { RefreshCw } from "lucide-react";
+import type { Node } from "@/types/network";
+
+// Helper pour calculer le détail MONO/POLY par phase
+function calculatePhaseBreakdown(
+  nodes: Node[], 
+  phase: 'A' | 'B' | 'C'
+): { monoKVA: number; polyKVA: number; totalKVA: number } {
+  let monoKVA = 0;
+  let polyKVA = 0;
+  
+  nodes.forEach(node => {
+    if (node.autoPhaseDistribution) {
+      // Charges
+      monoKVA += node.autoPhaseDistribution.charges.mono[phase];
+      polyKVA += node.autoPhaseDistribution.charges.poly[phase];
+      
+      // Soustraire les productions (bilan net)
+      monoKVA -= node.autoPhaseDistribution.productions.mono[phase];
+      polyKVA -= node.autoPhaseDistribution.productions.poly[phase];
+    }
+  });
+  
+  return {
+    monoKVA,
+    polyKVA,
+    totalKVA: monoKVA + polyKVA
+  };
+}
 
 export const PhaseDistributionDisplay = () => {
   const { currentProject, rebalanceAllMonoClients } = useNetworkStore();
@@ -66,18 +94,27 @@ export const PhaseDistributionDisplay = () => {
         </div>
       </div>
       
-      {/* Distribution par phase compacte */}
-      <div className="flex items-center gap-3 ml-auto">
+      {/* Distribution par phase avec détail MONO/POLY */}
+      <div className="flex items-center gap-4 ml-auto">
         {['A', 'B', 'C'].map(phase => {
-          const load = phaseLoads[phase as 'A' | 'B' | 'C'];
+          const phaseName = phase as 'A' | 'B' | 'C';
+          const load = phaseLoads[phaseName];
           const moyenne = (phaseLoads.A + phaseLoads.B + phaseLoads.C) / 3;
           const ecart = moyenne > 0 ? ((load - moyenne) / moyenne * 100) : 0;
           
+          // Calculer MONO et POLY par phase
+          const { monoKVA, polyKVA, totalKVA } = calculatePhaseBreakdown(
+            currentProject.nodes, 
+            phaseName
+          );
+          
           return (
-            <div key={phase} className="flex items-center gap-1.5">
-              <span className="text-xs font-medium text-primary-foreground/80">Ph{phase}:</span>
+            <div key={phase} className="flex flex-col gap-0.5">
+              <span className="text-xs font-medium text-primary-foreground/80">Ph{phase}</span>
+              
+              {/* Ligne 1 : Total */}
               <div className="text-right">
-                <span className="text-xs font-bold text-primary-foreground">{load.toFixed(1)}kVA</span>
+                <span className="text-xs font-bold text-primary-foreground">{totalKVA.toFixed(1)}kVA</span>
                 <span className={`text-xs ml-1 ${
                   Math.abs(ecart) < 10 ? 'text-success' : 
                   Math.abs(ecart) < 20 ? 'text-accent' : 
@@ -85,6 +122,16 @@ export const PhaseDistributionDisplay = () => {
                 }`}>
                   ({ecart > 0 ? '+' : ''}{ecart.toFixed(0)}%)
                 </span>
+              </div>
+              
+              {/* Ligne 2 : MONO */}
+              <div className="text-right text-xs" style={{ color: 'hsl(210, 100%, 60%)' }}>
+                ⚡ {monoKVA.toFixed(1)}kVA
+              </div>
+              
+              {/* Ligne 3 : TRI/TETRA */}
+              <div className="text-right text-xs" style={{ color: 'hsl(280, 70%, 65%)' }}>
+                🔺 {polyKVA.toFixed(1)}kVA
               </div>
             </div>
           );

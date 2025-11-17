@@ -31,6 +31,7 @@ import {
   autoAssignPhaseForMonoClient,
   calculateNodeAutoPhaseDistribution,
   calculateRealMonoDistributionPercents,
+  calculateRealMonoProductionDistributionPercents,
   calculateProjectUnbalance
 } from '@/utils/phaseDistributionCalculator';
 import { getLinkedClientsForNode } from '@/utils/clientsUtils';
@@ -497,8 +498,14 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       if (assignedCount > 0) {
         toast.success(`${assignedCount} clients MONO répartis automatiquement sur les phases`);
         
-        // Initialiser manualPhaseDistribution avec répartition réelle
-        const realDistribution = calculateRealMonoDistributionPercents(
+        // Initialiser manualPhaseDistribution avec répartition réelle (charges ET productions)
+        const realChargesDistribution = calculateRealMonoDistributionPercents(
+          project.nodes,
+          project.clientsImportes,
+          project.clientLinks
+        );
+        
+        const realProductionsDistribution = calculateRealMonoProductionDistributionPercents(
           project.nodes,
           project.clientsImportes,
           project.clientLinks
@@ -506,11 +513,12 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         
         project.manualPhaseDistribution = {
           ...project.manualPhaseDistribution,
-          charges: realDistribution,
-          productions: realDistribution
+          charges: realChargesDistribution,
+          productions: realProductionsDistribution
         };
         
-        console.log(`📊 Curseurs initialisés : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
+        console.log(`📊 Curseurs charges initialisés : A=${realChargesDistribution.A.toFixed(1)}%, B=${realChargesDistribution.B.toFixed(1)}%, C=${realChargesDistribution.C.toFixed(1)}%`);
+        console.log(`📊 Curseurs productions initialisés : A=${realProductionsDistribution.A.toFixed(1)}%, B=${realProductionsDistribution.B.toFixed(1)}%, C=${realProductionsDistribution.C.toFixed(1)}%`);
       }
     }
 
@@ -588,7 +596,13 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
 
     // Si passage vers mode mixte, initialiser avec répartition réelle
     if (updates.loadModel === 'mixte_mono_poly' && currentProject.loadModel !== 'mixte_mono_poly') {
-      const realDistribution = calculateRealMonoDistributionPercents(
+      const realChargesDistribution = calculateRealMonoDistributionPercents(
+        currentProject.nodes,
+        currentProject.clientsImportes || [],
+        currentProject.clientLinks || []
+      );
+      
+      const realProductionsDistribution = calculateRealMonoProductionDistributionPercents(
         currentProject.nodes,
         currentProject.clientsImportes || [],
         currentProject.clientLinks || []
@@ -596,11 +610,11 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       
       updatedProject.manualPhaseDistribution = {
         ...updatedProject.manualPhaseDistribution,
-        charges: realDistribution,
-        productions: realDistribution
+        charges: realChargesDistribution,
+        productions: realProductionsDistribution
       };
       
-      toast.success(`Mode mixte activé. Curseurs initialisés avec répartition réelle : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
+      toast.success(`Mode mixte activé. Curseurs charges/productions initialisés avec répartition réelle.`);
     }
 
     // Si le système de tension change, harmoniser tout le projet
@@ -919,7 +933,13 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     
     // Initialiser manualPhaseDistribution avec répartition réelle en mode mixte
     if (currentProject.loadModel === 'mixte_mono_poly') {
-      const realDistribution = calculateRealMonoDistributionPercents(
+      const realChargesDistribution = calculateRealMonoDistributionPercents(
+        updatedProject.nodes,
+        updatedProject.clientsImportes || [],
+        updatedProject.clientLinks || []
+      );
+      
+      const realProductionsDistribution = calculateRealMonoProductionDistributionPercents(
         updatedProject.nodes,
         updatedProject.clientsImportes || [],
         updatedProject.clientLinks || []
@@ -927,12 +947,12 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       
       updatedProject.manualPhaseDistribution = {
         ...updatedProject.manualPhaseDistribution,
-        charges: realDistribution,
-        productions: realDistribution
+        charges: realChargesDistribution,
+        productions: realProductionsDistribution
       };
       
       set({ currentProject: updatedProject });
-      toast.success(`Curseurs initialisés : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
+      toast.success(`Curseurs charges/productions initialisés avec répartition réelle.`);
     }
     
     // Recalculer les bounds pour inclure les nouveaux clients

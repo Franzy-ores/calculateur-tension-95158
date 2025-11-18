@@ -5,7 +5,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { RotateCcw, RefreshCw } from "lucide-react";
 import { useNetworkStore } from "@/store/networkStore";
-import { calculateRealMonoDistributionPercents } from "@/utils/phaseDistributionCalculator";
+import { calculateRealMonoDistributionPercents, calculateRealMonoProductionDistributionPercents } from "@/utils/phaseDistributionCalculator";
 import { toast } from "sonner";
 
 interface PhaseDistributionSlidersProps {
@@ -38,11 +38,23 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
   const initializeToRealDistribution = () => {
     if (!currentProject) return;
     
-    const realDistribution = calculateRealMonoDistributionPercents(
-      currentProject.nodes,
-      currentProject.clientsImportes || [],
-      currentProject.clientLinks || []
-    );
+    let realDistribution: { A: number; B: number; C: number };
+    
+    if (type === 'charges') {
+      // Calculer la répartition réelle des CHARGES MONO
+      realDistribution = calculateRealMonoDistributionPercents(
+        currentProject.nodes,
+        currentProject.clientsImportes || [],
+        currentProject.clientLinks || []
+      );
+    } else {
+      // Calculer la répartition réelle des PRODUCTIONS MONO
+      realDistribution = calculateRealMonoProductionDistributionPercents(
+        currentProject.nodes,
+        currentProject.clientsImportes || [],
+        currentProject.clientLinks || []
+      );
+    }
     
     updateProjectConfig({
       manualPhaseDistribution: {
@@ -51,7 +63,7 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
       }
     });
     
-    toast.success(`Réinitialisé : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
+    toast.success(`${type === 'charges' ? 'Charges' : 'Productions'} réinitialisées : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
   };
   
   const handleModeChange = (newMode: 'mono_only' | 'all_clients') => {

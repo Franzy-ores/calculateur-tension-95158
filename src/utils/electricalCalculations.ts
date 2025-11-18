@@ -1296,11 +1296,11 @@ export class ElectricalCalculator {
           U_ref = 230;
           
         } else if (n.connectionType === 'TÉTRA_3P+N_230_400V') {
-          // Triphasé 400V : afficher tensions composées (√3 × phase)
-          Va_display = Va_phase * Math.sqrt(3);
-          Vb_display = Vb_phase * Math.sqrt(3);
-          Vc_display = Vc_phase * Math.sqrt(3);
-          U_ref = 400;
+          // Réseau 400V : afficher tensions PHASE-NEUTRE (230V)
+          Va_display = Va_phase;
+          Vb_display = Vb_phase;
+          Vc_display = Vc_phase;
+          U_ref = 230;
           
         } else {
           // Autres cas : logique avec scaling

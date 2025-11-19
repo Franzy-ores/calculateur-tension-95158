@@ -261,6 +261,7 @@ export const MapView = () => {
     colorMode: clientColorMode,
     circuitColorMapping: circuitColorMapping,
     showTensionLabels: showClientTensionLabels,
+    voltageSystem: currentProject?.voltageSystem,
   });
 
   // Gérer le changement de type de carte

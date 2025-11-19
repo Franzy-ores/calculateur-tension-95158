@@ -162,12 +162,6 @@ export const PhaseDistributionDisplay = () => {
     currentProject.voltageSystem
   );
   
-  // Regrouper les clients par couplage
-  const clientsByCoupling = groupClientsByCoupling(
-    currentProject.clientsImportes,
-    currentProject.voltageSystem
-  );
-  
   // Badge de statut avec couleurs sémantiques
   const statusBadge = {
     normal: { variant: 'default' as const, label: '✓ Normal', color: 'text-success' },
@@ -333,7 +327,7 @@ export const PhaseDistributionDisplay = () => {
             💡 Cliquez sur "Rééquilibrer MONO" pour optimiser la distribution
           </div>
         </div>
-      </div>
+      )}
 
       {/* Récapitulatif par couplage avec courant de neutre */}
       <div className="p-3 bg-primary/5 border border-primary/20 rounded">

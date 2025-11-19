@@ -430,17 +430,17 @@ export const PhaseDistributionDisplay = () => {
             {/* 230V Phase-à-phase */}
             {currentProject.voltageSystem === 'TRIPHASÉ_230V' && (
               <div className="space-y-1">
-                <div className="font-medium text-white mb-1 text-[10px]">230V Phase-à-phase</div>
+                <div className="font-medium text-white mb-1">230V Phase-à-phase</div>
                 {['A-B', 'B-C', 'A-C'].map(coupling => {
                   const group = clientsByCoupling[coupling];
                   if (!group) return null;
                   return (
-                    <div key={coupling} className="flex items-center justify-between p-1 bg-blue-500/10 rounded">
-                      <span className="font-medium text-white text-[10px]">Ph {coupling}</span>
+                    <div key={coupling} className="flex items-center justify-between p-1.5 bg-blue-500/10 rounded">
+                      <span className="font-medium text-white">Phase {coupling}</span>
                       <div className="text-right">
-                        <div className="font-bold text-white text-[10px]">{group.clients.length} cl.</div>
-                        <div className="text-white text-[9px]">Ch: {group.totalKVA.toFixed(1)}</div>
-                        <div className="text-white text-[9px]">Pr: {group.totalProdKVA.toFixed(1)}</div>
+                        <div className="font-bold text-white">{group.clients.length} client{group.clients.length > 1 ? 's' : ''}</div>
+                        <div className="text-white">Ch: {group.totalKVA.toFixed(1)} kVA</div>
+                        <div className="text-white">Pr: {group.totalProdKVA.toFixed(1)} kVA</div>
                       </div>
                     </div>
                   );
@@ -451,18 +451,18 @@ export const PhaseDistributionDisplay = () => {
             {/* 400V Phase-neutre */}
             {currentProject.voltageSystem === 'TÉTRAPHASÉ_400V' && (
               <div className="space-y-1">
-                <div className="font-medium text-white mb-1 text-[10px]">400V Phase-neutre</div>
+                <div className="font-medium text-white mb-1">400V Phase-neutre</div>
                 {['A', 'B', 'C'].map(coupling => {
                   const group = clientsByCoupling[coupling];
                   if (!group) return null;
                   const bgClass = coupling === 'A' ? 'bg-blue-500/10' : coupling === 'B' ? 'bg-green-500/10' : 'bg-red-500/10';
                   return (
-                    <div key={coupling} className={`flex items-center justify-between p-1 ${bgClass} rounded`}>
-                      <span className="font-medium text-white text-[10px]">Ph {coupling}</span>
+                    <div key={coupling} className={`flex items-center justify-between p-1.5 ${bgClass} rounded`}>
+                      <span className="font-medium text-white">Phase {coupling}</span>
                       <div className="text-right">
-                        <div className="font-bold text-white text-[10px]">{group.clients.length} cl.</div>
-                        <div className="text-white text-[9px]">Ch: {group.totalKVA.toFixed(1)}</div>
-                        <div className="text-white text-[9px]">Pr: {group.totalProdKVA.toFixed(1)}</div>
+                        <div className="font-bold text-white">{group.clients.length} client{group.clients.length > 1 ? 's' : ''}</div>
+                        <div className="text-white">Ch: {group.totalKVA.toFixed(1)} kVA</div>
+                        <div className="text-white">Pr: {group.totalProdKVA.toFixed(1)} kVA</div>
                       </div>
                     </div>
                   );
@@ -472,7 +472,7 @@ export const PhaseDistributionDisplay = () => {
           </div>
           
           {currentProject.voltageSystem === 'TRIPHASÉ_230V' && (
-            <div className="mt-2 text-[9px] text-white/70">
+            <div className="mt-2 text-[10px] text-white/70">
               💡 Sans neutre
             </div>
           )}

@@ -7,10 +7,10 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { useNetworkStore } from '@/store/networkStore';
 import { ClientCouplage } from '@/types/network';
 import { toast } from 'sonner';
-import { MapPin, Unlink } from 'lucide-react';
+import { MapPin, Unlink, Target } from 'lucide-react';
 
 export const ClientEditPanel = () => {
-  const { currentProject, selectedClientId, updateClientImporte, closeEditPanel, unlinkClient } = useNetworkStore();
+  const { currentProject, selectedClientId, updateClientImporte, closeEditPanel, unlinkClient, linkClientToNode } = useNetworkStore();
   
   const client = currentProject?.clientsImportes?.find(c => c.id === selectedClientId);
   const clientLink = currentProject?.clientLinks?.find(link => link.clientId === selectedClientId);
@@ -32,6 +32,7 @@ export const ClientEditPanel = () => {
   const [identifiantCabine, setIdentifiantCabine] = useState<string>('');
   const [identifiantPosteSource, setIdentifiantPosteSource] = useState<string>('');
   const [assignedPhase, setAssignedPhase] = useState<'A' | 'B' | 'C' | undefined>(undefined);
+  const [isSelectingNode, setIsSelectingNode] = useState(false);
 
   useEffect(() => {
     if (client) {
@@ -51,6 +52,39 @@ export const ClientEditPanel = () => {
       setAssignedPhase(client.assignedPhase);
     }
   }, [client]);
+
+  // Écouter l'événement de sélection de nœud
+  useEffect(() => {
+    if (!isSelectingNode) return;
+    
+    const handleNodeSelected = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const { nodeId } = customEvent.detail;
+      
+      // Lier le client au nœud sélectionné
+      linkClientToNode(client.id, nodeId);
+      
+      // Désactiver le mode sélection
+      setIsSelectingNode(false);
+      
+      toast.success('Client lié au nœud');
+    };
+    
+    window.addEventListener('nodeSelectedForClient', handleNodeSelected);
+    
+    return () => {
+      window.removeEventListener('nodeSelectedForClient', handleNodeSelected);
+    };
+  }, [isSelectingNode, client.id, linkClientToNode]);
+  
+  // Nettoyer le mode sélection si on ferme le panneau
+  useEffect(() => {
+    return () => {
+      if (isSelectingNode) {
+        window.dispatchEvent(new CustomEvent('cancelNodeSelection'));
+      }
+    };
+  }, [isSelectingNode]);
 
   if (!client) {
     return (
@@ -312,17 +346,58 @@ export const ClientEditPanel = () => {
                   Position: {linkedNode.lat.toFixed(6)}, {linkedNode.lng.toFixed(6)}
                 </p>
               </div>
-              <Button 
-                variant="destructive" 
-                size="sm"
-                onClick={() => {
-                  unlinkClient(client.id);
-                }}
-              >
-                <Unlink className="w-4 h-4 mr-2" />
-                Délier
-              </Button>
+              <div className="flex flex-col gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    setIsSelectingNode(true);
+                    window.dispatchEvent(new CustomEvent('startNodeSelection'));
+                  }}
+                  disabled={isSelectingNode}
+                >
+                  <Target className="w-4 h-4 mr-2" />
+                  {isSelectingNode ? 'Cliquez...' : 'Changer'}
+                </Button>
+                <Button 
+                  variant="destructive" 
+                  size="sm"
+                  onClick={() => {
+                    unlinkClient(client.id);
+                  }}
+                >
+                  <Unlink className="w-4 h-4 mr-2" />
+                  Délier
+                </Button>
+              </div>
             </div>
+          </div>
+        )}
+        
+        {!linkedNode && (
+          <div className="border-t pt-3 mt-3">
+            <Label className="text-sm font-medium mb-2 block">Point d'insertion</Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Ce client n'est pas encore lié à un nœud du réseau
+            </p>
+            <Button 
+              variant="outline" 
+              size="sm"
+              className="w-full"
+              onClick={() => {
+                setIsSelectingNode(true);
+                window.dispatchEvent(new CustomEvent('startNodeSelection'));
+              }}
+              disabled={isSelectingNode}
+            >
+              <Target className="w-4 h-4 mr-2" />
+              {isSelectingNode ? 'Cliquez sur un nœud...' : 'Sélectionner un point d\'insertion'}
+            </Button>
+            {isSelectingNode && (
+              <p className="text-xs text-amber-600 mt-2">
+                ⚡ Cliquez sur un nœud de la carte pour lier ce client. Appuyez sur ESC pour annuler.
+              </p>
+            )}
           </div>
         )}
 

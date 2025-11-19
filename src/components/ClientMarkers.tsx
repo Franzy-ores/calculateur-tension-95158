@@ -91,18 +91,41 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
         zIndexOffset: 2000 // Plus élevé que les clients isolés
       });
 
-      // Popup détaillé pour le groupe
-      const popupContent = `
-        <div style="min-width: 280px; max-height: 400px; overflow-y: auto;">
-          <div style="position: sticky; top: 0; background: white; padding-bottom: 8px; border-bottom: 2px solid #3b82f6; margin-bottom: 8px;">
-            <strong style="font-size: 14px;">Groupe de ${groupe.nombreClients} clients</strong><br>
-            <div style="margin-top: 4px; font-size: 12px; color: #666;">
-              <strong>Charge totale:</strong> ${groupe.puissanceContractuelle_kVA.toFixed(1)} kVA<br>
-              <strong>PV total:</strong> ${groupe.puissancePV_kVA.toFixed(1)} kVA
-            </div>
-          </div>
-          ${groupe.clients.map((c, idx) => `
-            <div style="padding: 6px; margin: 4px 0; border: 1px solid #e5e7eb; border-radius: 4px; background: ${idx % 2 === 0 ? '#f9fafb' : 'white'};">
+      // Popup détaillé pour le groupe avec boutons Éditer
+      const popupElement = document.createElement('div');
+      popupElement.style.minWidth = '280px';
+      popupElement.style.maxHeight = '400px';
+      popupElement.style.overflowY = 'auto';
+      
+      // Header du groupe
+      const header = document.createElement('div');
+      header.style.position = 'sticky';
+      header.style.top = '0';
+      header.style.background = 'white';
+      header.style.paddingBottom = '8px';
+      header.style.borderBottom = '2px solid #3b82f6';
+      header.style.marginBottom = '8px';
+      header.innerHTML = `
+        <strong style="font-size: 14px;">Groupe de ${groupe.nombreClients} clients</strong><br>
+        <div style="margin-top: 4px; font-size: 12px; color: #666;">
+          <strong>Charge totale:</strong> ${groupe.puissanceContractuelle_kVA.toFixed(1)} kVA<br>
+          <strong>PV total:</strong> ${groupe.puissancePV_kVA.toFixed(1)} kVA
+        </div>
+      `;
+      popupElement.appendChild(header);
+      
+      // Liste des clients avec boutons "Éditer"
+      groupe.clients.forEach((c, idx) => {
+        const clientRow = document.createElement('div');
+        clientRow.style.padding = '6px';
+        clientRow.style.margin = '4px 0';
+        clientRow.style.border = '1px solid #e5e7eb';
+        clientRow.style.borderRadius = '4px';
+        clientRow.style.background = idx % 2 === 0 ? '#f9fafb' : 'white';
+        
+        clientRow.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: start; gap: 8px;">
+            <div style="flex: 1; min-width: 0;">
               <div style="font-weight: 600; font-size: 12px; color: #111827;">${c.nomCircuit}</div>
               <div style="font-size: 10px; color: #6b7280; margin-top: 2px;">
                 ${c.identifiantCircuit}<br>
@@ -111,11 +134,56 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
                 ${c.puissancePV_kVA > 0 ? ` | <span style="color: #f59e0b;">PV: ${c.puissancePV_kVA.toFixed(1)} kVA</span>` : ''}
               </div>
             </div>
-          `).join('')}
-        </div>
-      `;
+            <button 
+              class="edit-client-btn" 
+              data-client-id="${c.id}"
+              style="
+                padding: 4px 8px; 
+                background: #3b82f6; 
+                color: white; 
+                border: none; 
+                border-radius: 4px; 
+                cursor: pointer; 
+                font-size: 10px;
+                font-weight: 600;
+                white-space: nowrap;
+                flex-shrink: 0;
+              "
+            >
+              Éditer
+            </button>
+          </div>
+        `;
+        
+        popupElement.appendChild(clientRow);
+      });
       
-      marker.bindPopup(popupContent, { maxWidth: 350 });
+      marker.bindPopup(popupElement, { maxWidth: 350 });
+      
+      // Attacher les événements click aux boutons après l'ouverture de la popup
+      marker.on('popupopen', () => {
+        const editButtons = popupElement.querySelectorAll('.edit-client-btn');
+        editButtons.forEach(btn => {
+          const handleClick = (e: Event) => {
+            e.stopPropagation();
+            const clientId = (btn as HTMLElement).dataset.clientId;
+            if (clientId && onClientClick) {
+              onClientClick(clientId);
+              marker.closePopup();
+            }
+          };
+          
+          btn.addEventListener('click', handleClick);
+          
+          // Effets hover
+          btn.addEventListener('mouseenter', () => {
+            (btn as HTMLElement).style.background = '#2563eb';
+          });
+          btn.addEventListener('mouseleave', () => {
+            (btn as HTMLElement).style.background = '#3b82f6';
+          });
+        });
+      });
       
       // Tooltip au survol
       const tooltipContent = `

@@ -156,30 +156,30 @@ export function calculateNodeAutoPhaseDistribution(
         const chargeKVA = client.puissanceContractuelle_kVA;
         const prodKVA = client.puissancePV_kVA;
         
-      // ✅ Calculer les ratios pour les charges (selon le mode charges)
-      const ratioChargesA = manualPhaseDistributionCharges.A / 100;
-      const ratioChargesB = manualPhaseDistributionCharges.B / 100;
-      const ratioChargesC = manualPhaseDistributionCharges.C / 100;
-      
-      // ✅ Calculer les ratios pour les productions (selon le mode productions)
-      const ratioProdsA = manualPhaseDistributionProductions.A / 100;
-      const ratioProdsB = manualPhaseDistributionProductions.B / 100;
-      const ratioProdsC = manualPhaseDistributionProductions.C / 100;
-      
-      // Charges → utiliser le mode charges
-      result.charges.mono.A += chargeKVA * ratioChargesA;
-      result.charges.mono.B += chargeKVA * ratioChargesB;
-      result.charges.mono.C += chargeKVA * ratioChargesC;
-      
-      // Productions → utiliser le mode productions
-      result.productions.mono.A += prodKVA * ratioProdsA;
-      result.productions.mono.B += prodKVA * ratioProdsB;
-      result.productions.mono.C += prodKVA * ratioProdsC;
-      
-      // Compter le client (moyenne des deux répartitions)
-      result.monoClientsCount.A += (ratioChargesA + ratioProdsA) / 2;
-      result.monoClientsCount.B += (ratioChargesB + ratioProdsB) / 2;
-      result.monoClientsCount.C += (ratioChargesC + ratioProdsC) / 2;
+        // ✅ CHARGES : Vérifier le mode charges
+        if (phaseDistributionModeCharges === 'all_clients') {
+          // Mode "TOUS LES CLIENTS" : Garder sur la phase assignée
+          result.charges.mono[client.assignedPhase] += chargeKVA;
+        } else {
+          // Mode "MONO UNIQUEMENT" : Répartir selon les pourcentages manuels
+          result.charges.mono.A += chargeKVA * (manualPhaseDistributionCharges.A / 100);
+          result.charges.mono.B += chargeKVA * (manualPhaseDistributionCharges.B / 100);
+          result.charges.mono.C += chargeKVA * (manualPhaseDistributionCharges.C / 100);
+        }
+        
+        // ✅ PRODUCTIONS : Vérifier le mode productions
+        if (phaseDistributionModeProductions === 'all_clients') {
+          // Mode "TOUS LES CLIENTS" : Garder sur la phase assignée
+          result.productions.mono[client.assignedPhase] += prodKVA;
+        } else {
+          // Mode "MONO UNIQUEMENT" : Répartir selon les pourcentages manuels
+          result.productions.mono.A += prodKVA * (manualPhaseDistributionProductions.A / 100);
+          result.productions.mono.B += prodKVA * (manualPhaseDistributionProductions.B / 100);
+          result.productions.mono.C += prodKVA * (manualPhaseDistributionProductions.C / 100);
+        }
+        
+        // Compter le client sur sa phase assignée
+        result.monoClientsCount[client.assignedPhase] += 1;
       } else {
         // Fallback si pas de phase assignée (ne devrait pas arriver en mode mixte)
         console.warn(`⚠️ Client MONO ${client.nomCircuit} sans assignedPhase`);

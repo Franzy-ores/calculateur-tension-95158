@@ -119,7 +119,7 @@ export const PhaseDistributionDisplay = () => {
         <Button
           onClick={rebalanceAllMonoClients}
           size="sm"
-          variant="outline"
+          variant="warning"
           className="h-7 text-xs"
         >
           <RefreshCw className="h-3 w-3 mr-1" />

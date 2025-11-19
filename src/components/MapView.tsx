@@ -384,7 +384,7 @@ export const MapView = () => {
       map.off('click', handleMapClick);
       map.off('dblclick', handleMapDoubleClick);
     };
-  }, [selectedTool, addNode, routingActive, routingFromNode, routingToNode, selectedCableType, addCable]);
+  }, [selectedTool, addNode, routingActive, routingFromNode, routingToNode, selectedCableType, addCable, movingClient, selectingNodeForClient, linkClientToNode, setSelectedNode, openEditPanel]);
 
   // Gérer les touches clavier pendant le routage
   useEffect(() => {

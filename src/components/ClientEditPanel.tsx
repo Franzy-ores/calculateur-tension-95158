@@ -7,7 +7,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { useNetworkStore } from '@/store/networkStore';
 import { ClientCouplage } from '@/types/network';
 import { toast } from 'sonner';
-import { MapPin, Unlink, Target } from 'lucide-react';
+import { MapPin, Unlink, Target, Move } from 'lucide-react';
 
 export const ClientEditPanel = () => {
   const { currentProject, selectedClientId, updateClientImporte, closeEditPanel, unlinkClient, linkClientToNode } = useNetworkStore();
@@ -33,6 +33,7 @@ export const ClientEditPanel = () => {
   const [identifiantPosteSource, setIdentifiantPosteSource] = useState<string>('');
   const [assignedPhase, setAssignedPhase] = useState<'A' | 'B' | 'C' | undefined>(undefined);
   const [isSelectingNode, setIsSelectingNode] = useState(false);
+  const [isMovingClient, setIsMovingClient] = useState(false);
 
   useEffect(() => {
     if (client) {
@@ -77,14 +78,41 @@ export const ClientEditPanel = () => {
     };
   }, [isSelectingNode, client.id, linkClientToNode]);
   
-  // Nettoyer le mode sélection si on ferme le panneau
+  // Écouter l'événement de déplacement de client
+  useEffect(() => {
+    if (!isMovingClient) return;
+    
+    const handleLocationSelected = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const { lat, lng } = customEvent.detail;
+      
+      // Mettre à jour les coordonnées du client
+      updateClientImporte(client.id, { lat, lng });
+      
+      // Désactiver le mode déplacement
+      setIsMovingClient(false);
+      
+      toast.success('Position du client mise à jour');
+    };
+    
+    window.addEventListener('locationSelectedForClient', handleLocationSelected);
+    
+    return () => {
+      window.removeEventListener('locationSelectedForClient', handleLocationSelected);
+    };
+  }, [isMovingClient, client.id, updateClientImporte]);
+  
+  // Nettoyer les modes sélection/déplacement si on ferme le panneau
   useEffect(() => {
     return () => {
       if (isSelectingNode) {
         window.dispatchEvent(new CustomEvent('cancelNodeSelection'));
       }
+      if (isMovingClient) {
+        window.dispatchEvent(new CustomEvent('cancelClientMove'));
+      }
     };
-  }, [isSelectingNode]);
+  }, [isSelectingNode, isMovingClient]);
 
   if (!client) {
     return (
@@ -332,6 +360,26 @@ export const ClientEditPanel = () => {
             <MapPin className="w-4 h-4 mr-2" />
             Centrer la carte
           </Button>
+          
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="mt-2 w-full"
+            onClick={() => {
+              setIsMovingClient(true);
+              window.dispatchEvent(new CustomEvent('startClientMove'));
+            }}
+            disabled={isMovingClient}
+          >
+            <Move className="w-4 h-4 mr-2" />
+            {isMovingClient ? 'Cliquez sur la carte...' : 'Déplacer sur la carte'}
+          </Button>
+          
+          {isMovingClient && (
+            <p className="text-xs text-amber-600 mt-2">
+              ⚡ Cliquez sur la carte pour définir la nouvelle position du client. Appuyez sur ESC pour annuler.
+            </p>
+          )}
         </div>
 
         {linkedNode && (

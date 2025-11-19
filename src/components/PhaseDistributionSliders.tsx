@@ -26,51 +26,50 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
     ? (currentProject.phaseDistributionModeCharges || 'mono_only')
     : (currentProject.phaseDistributionModeProductions || 'mono_only');
   
-  // Nouvelle fonction pour calculer la répartition en mode "Tous les clients"
-  // MONO : gardent leur répartition selon assignedPhase
-  // POLY (TRI + TETRA) : équilibrés à 33.3% par phase
-  const calculateBalancedPolyPlusRealMono = (): { A: number; B: number; C: number } => {
-    if (!currentProject.clientsImportes || !currentProject.clientLinks) {
+  // ✅ Lit la répartition réelle directement depuis le tableau général (autoPhaseDistribution)
+  const calculateRealDistributionFromTable = (): { A: number; B: number; C: number } => {
+    if (!currentProject?.nodes) {
       return { A: 33.33, B: 33.33, C: 33.34 };
     }
-
-    let monoA = 0, monoB = 0, monoC = 0;
-    let polyTotal = 0;
-
-    // Parcourir tous les clients liés
-    currentProject.clientLinks.forEach(link => {
-      const client = currentProject.clientsImportes?.find(c => c.id === link.clientId);
-      if (!client) return;
-
-      const power = type === 'charges' 
-        ? client.puissanceContractuelle_kVA 
-        : client.puissancePV_kVA;
-
-      if (client.connectionType === 'MONO' && client.assignedPhase) {
-        // MONO : additionner sur la phase assignée
-        if (client.assignedPhase === 'A') monoA += power;
-        else if (client.assignedPhase === 'B') monoB += power;
-        else if (client.assignedPhase === 'C') monoC += power;
-      } else if (client.connectionType === 'TRI' || client.connectionType === 'TETRA') {
-        // POLY : accumuler pour répartition équilibrée
-        polyTotal += power;
+    
+    let totalA = 0, totalB = 0, totalC = 0;
+    
+    // Parcourir tous les nodes et additionner selon le mode actif
+    currentProject.nodes.forEach(node => {
+      if (node.autoPhaseDistribution) {
+        if (currentMode === 'mono_only') {
+          // MODE MONO : lire uniquement les valeurs MONO du tableau
+          if (type === 'charges') {
+            totalA += node.autoPhaseDistribution.charges.mono.A;
+            totalB += node.autoPhaseDistribution.charges.mono.B;
+            totalC += node.autoPhaseDistribution.charges.mono.C;
+          } else {
+            totalA += node.autoPhaseDistribution.productions.mono.A;
+            totalB += node.autoPhaseDistribution.productions.mono.B;
+            totalC += node.autoPhaseDistribution.productions.mono.C;
+          }
+        } else {
+          // MODE ALL_CLIENTS : lire les valeurs TOTALES (MONO + POLY) du tableau
+          if (type === 'charges') {
+            totalA += node.autoPhaseDistribution.charges.total.A;
+            totalB += node.autoPhaseDistribution.charges.total.B;
+            totalC += node.autoPhaseDistribution.charges.total.C;
+          } else {
+            totalA += node.autoPhaseDistribution.productions.total.A;
+            totalB += node.autoPhaseDistribution.productions.total.B;
+            totalC += node.autoPhaseDistribution.productions.total.C;
+          }
+        }
       }
     });
-
-    // Répartir les POLY équitablement à 33.3% par phase
-    const polyPerPhase = polyTotal / 3;
-
-    // Totaux par phase : MONO + POLY équilibré
-    const totalA = monoA + polyPerPhase;
-    const totalB = monoB + polyPerPhase;
-    const totalC = monoC + polyPerPhase;
+    
     const grandTotal = totalA + totalB + totalC;
-
+    
     // Éviter division par zéro
     if (grandTotal === 0) {
       return { A: 33.33, B: 33.33, C: 33.34 };
     }
-
+    
     return {
       A: (totalA / grandTotal) * 100,
       B: (totalB / grandTotal) * 100,
@@ -81,29 +80,8 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
   const initializeToRealDistribution = () => {
     if (!currentProject) return;
     
-    // ✅ RESPECTER le mode actuel au lieu de forcer mono_only
-    let realDistribution: { A: number; B: number; C: number };
-    
-    // Calculer selon le mode actuel
-    if (currentMode === 'all_clients') {
-      // Mode "tous les clients" : POLY équilibrés + MONO répartition réelle
-      realDistribution = calculateBalancedPolyPlusRealMono();
-    } else {
-      // Mode "MONO uniquement" : répartition réelle des MONO seulement
-      if (type === 'charges') {
-        realDistribution = calculateRealMonoDistributionPercents(
-          currentProject.nodes,
-          currentProject.clientsImportes || [],
-          currentProject.clientLinks || []
-        );
-      } else {
-        realDistribution = calculateRealMonoProductionDistributionPercents(
-          currentProject.nodes,
-          currentProject.clientsImportes || [],
-          currentProject.clientLinks || []
-        );
-      }
-    }
+    // ✅ TOUJOURS lire les valeurs du tableau général
+    const realDistribution = calculateRealDistributionFromTable();
     
     // Mettre à jour les curseurs SANS changer le mode
     updateProjectConfig({
@@ -113,7 +91,7 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
       }
     });
     
-    const modeLabel = currentMode === 'all_clients' ? 'TOUS les clients (poly équilibrés + mono répartis)' : 'MONO uniquement';
+    const modeLabel = currentMode === 'all_clients' ? 'TOUS les clients (MONO + POLY du tableau)' : 'MONO uniquement (du tableau)';
     toast.success(`${type === 'charges' ? 'Charges' : 'Productions'} réinitialisées (${modeLabel}) : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
   };
   
@@ -129,49 +107,60 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
       });
     }
     
-    // 2. Recalculer automatiquement les pourcentages en fonction du mode
-    if (newMode === 'all_clients') {
-      // Passer en mode "tous les clients" : POLY équilibrés + MONO répartition réelle
-      const realDistribution = calculateBalancedPolyPlusRealMono();
-      
-      updateProjectConfig({
-        manualPhaseDistribution: {
-          ...currentProject.manualPhaseDistribution,
-          [type]: realDistribution  // ✅ Seulement le type actuel
+    // 2. Lire les valeurs du tableau général selon le nouveau mode
+    // Note: On doit attendre que le mode soit mis à jour dans le store
+    // donc on calcule directement avec le newMode
+    let totalA = 0, totalB = 0, totalC = 0;
+    
+    if (currentProject?.nodes) {
+      currentProject.nodes.forEach(node => {
+        if (node.autoPhaseDistribution) {
+          if (newMode === 'mono_only') {
+            // MODE MONO : lire uniquement les valeurs MONO du tableau
+            if (type === 'charges') {
+              totalA += node.autoPhaseDistribution.charges.mono.A;
+              totalB += node.autoPhaseDistribution.charges.mono.B;
+              totalC += node.autoPhaseDistribution.charges.mono.C;
+            } else {
+              totalA += node.autoPhaseDistribution.productions.mono.A;
+              totalB += node.autoPhaseDistribution.productions.mono.B;
+              totalC += node.autoPhaseDistribution.productions.mono.C;
+            }
+          } else {
+            // MODE ALL_CLIENTS : lire les valeurs TOTALES (MONO + POLY) du tableau
+            if (type === 'charges') {
+              totalA += node.autoPhaseDistribution.charges.total.A;
+              totalB += node.autoPhaseDistribution.charges.total.B;
+              totalC += node.autoPhaseDistribution.charges.total.C;
+            } else {
+              totalA += node.autoPhaseDistribution.productions.total.A;
+              totalB += node.autoPhaseDistribution.productions.total.B;
+              totalC += node.autoPhaseDistribution.productions.total.C;
+            }
+          }
         }
       });
-      
-      const typeLabel = type === 'charges' ? 'charges' : 'productions';
-      toast.success(`Répartition ${typeLabel} appliquée à TOUS les clients (poly équilibrés + mono répartition réelle) : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
-      
-    } else {
-      // Revenir en mode "mono uniquement" : recalculer avec MONO seulement
-      let realDistribution: { A: number; B: number; C: number };
-      
-      if (type === 'charges') {
-        realDistribution = calculateRealMonoDistributionPercents(
-          currentProject.nodes,
-          currentProject.clientsImportes || [],
-          currentProject.clientLinks || []
-        );
-      } else {
-        realDistribution = calculateRealMonoProductionDistributionPercents(
-          currentProject.nodes,
-          currentProject.clientsImportes || [],
-          currentProject.clientLinks || []
-        );
-      }
-      
-      updateProjectConfig({
-        manualPhaseDistribution: {
-          ...currentProject.manualPhaseDistribution,
-          [type]: realDistribution  // ✅ Seulement le type actuel
-        }
-      });
-      
-      const typeLabel = type === 'charges' ? 'charges' : 'productions';
-      toast.success(`Répartition ${typeLabel} appliquée aux MONO uniquement : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
     }
+    
+    const grandTotal = totalA + totalB + totalC;
+    const realDistribution = grandTotal === 0 
+      ? { A: 33.33, B: 33.33, C: 33.34 }
+      : {
+          A: (totalA / grandTotal) * 100,
+          B: (totalB / grandTotal) * 100,
+          C: (totalC / grandTotal) * 100
+        };
+    
+    updateProjectConfig({
+      manualPhaseDistribution: {
+        ...currentProject.manualPhaseDistribution,
+        [type]: realDistribution
+      }
+    });
+    
+    const typeLabel = type === 'charges' ? 'charges' : 'productions';
+    const modeLabel = newMode === 'all_clients' ? 'TOUS les clients (MONO + POLY du tableau)' : 'MONO uniquement (du tableau)';
+    toast.success(`Répartition ${typeLabel} appliquée : ${modeLabel} - A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
   };
   
   // Calcul des valeurs kVA par phase

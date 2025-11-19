@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { parseExcelToClients, validateClient } from '@/utils/clientsUtils';
+import { Progress } from '@/components/ui/progress';
+import { parseExcelToClients, validateClient, GeocodingReport } from '@/utils/clientsUtils';
 import { ClientImporte } from '@/types/network';
 import { useNetworkStore } from '@/store/networkStore';
 import { toast } from 'sonner';
@@ -19,6 +20,11 @@ export const ExcelImporter = ({ onClose }: ExcelImporterProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Map<string, string[]>>(new Map());
+  const [geocodingProgress, setGeocodingProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
+  const [geocodingReport, setGeocodingReport] = useState<GeocodingReport | null>(null);
 
   const { importClientsFromExcel, currentProject } = useNetworkStore();
   
@@ -60,9 +66,16 @@ export const ExcelImporter = ({ onClose }: ExcelImporterProps) => {
     setFile(selectedFile);
     setIsLoading(true);
     setValidationErrors(new Map());
+    setGeocodingProgress(null);
+    setGeocodingReport(null);
 
     try {
-      const clients = await parseExcelToClients(selectedFile);
+      const { clients, geocodingReport } = await parseExcelToClients(
+        selectedFile,
+        (current, total) => {
+          setGeocodingProgress({ current, total });
+        }
+      );
       
       // Vérifier la limite de 300 clients
       if (clients.length > 300) {
@@ -85,12 +98,19 @@ export const ExcelImporter = ({ onClose }: ExcelImporterProps) => {
 
       setValidationErrors(errors);
       setPreviewData(clients);
-      toast.success(`${clients.length} clients chargés depuis le fichier`);
+      setGeocodingReport(geocodingReport);
+      
+      const successMessage = geocodingReport.geocoded > 0 
+        ? `${clients.length} clients chargés (${geocodingReport.geocoded} géocodés automatiquement)`
+        : `${clients.length} clients chargés depuis le fichier`;
+      
+      toast.success(successMessage);
     } catch (error) {
       console.error('Erreur lors du parsing Excel:', error);
       toast.error('Erreur lors de la lecture du fichier Excel');
     } finally {
       setIsLoading(false);
+      setGeocodingProgress(null);
     }
   };
 
@@ -188,17 +208,61 @@ export const ExcelImporter = ({ onClose }: ExcelImporterProps) => {
               setFile(null);
               setPreviewData([]);
               setValidationErrors(new Map());
+              setGeocodingReport(null);
             }}>
               Changer de fichier
             </Button>
           </div>
 
           {isLoading ? (
-            <div className="flex items-center justify-center p-8">
+            <div className="flex flex-col items-center justify-center p-8 space-y-4">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <p className="text-sm text-muted-foreground">
+                {geocodingProgress 
+                  ? `Géocodage en cours... (${geocodingProgress.current}/${geocodingProgress.total})`
+                  : 'Chargement du fichier...'}
+              </p>
+              {geocodingProgress && (
+                <div className="w-full max-w-md">
+                  <Progress 
+                    value={(geocodingProgress.current / geocodingProgress.total) * 100} 
+                  />
+                </div>
+              )}
             </div>
           ) : (
             <>
+              {geocodingReport && (
+                <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 space-y-2">
+                  <h3 className="font-semibold text-blue-900 dark:text-blue-100 flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4" />
+                    Rapport d'import
+                  </h3>
+                  <ul className="text-sm space-y-1 text-blue-800 dark:text-blue-200">
+                    <li className="flex items-center gap-2">
+                      <Check className="h-3 w-3" />
+                      {geocodingReport.withGPS} clients avec GPS d'origine
+                    </li>
+                    {geocodingReport.geocoded > 0 && (
+                      <li className="flex items-center gap-2 font-medium">
+                        🔍 {geocodingReport.geocoded} clients géocodés automatiquement
+                      </li>
+                    )}
+                    {geocodingReport.ambiguous > 0 && (
+                      <li className="flex items-center gap-2 text-orange-600 dark:text-orange-400">
+                        ⚠️ {geocodingReport.ambiguous} adresses ambiguës (à vérifier)
+                      </li>
+                    )}
+                    {geocodingReport.failed > 0 && (
+                      <li className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                        <X className="h-3 w-3" />
+                        {geocodingReport.failed} échecs de géocodage
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              )}
+              
               <div className="flex items-center gap-4">
                 <Badge variant="default" className="bg-green-600">
                   <Check className="h-3 w-3 mr-1" />

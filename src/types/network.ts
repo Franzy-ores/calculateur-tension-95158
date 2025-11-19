@@ -62,6 +62,12 @@ export interface ClientImporte {
   
   // Métadonnées Excel brutes (pour conserver toutes les colonnes)
   rawData?: Record<string, any>;
+  
+  // Géocodage automatique
+  adresse?: string;              // Adresse complète reconstituée
+  geocoded?: boolean;           // True si géocodé automatiquement
+  geocodingStatus?: 'success' | 'failed' | 'ambiguous' | 'manual'; // État du géocodage
+  geocodingConfidence?: number; // Score de confiance (0-1)
 }
 
 export interface ClientLink {

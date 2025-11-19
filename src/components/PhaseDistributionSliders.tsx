@@ -49,15 +49,39 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
             totalC += node.autoPhaseDistribution.productions.mono.C;
           }
         } else {
-          // MODE ALL_CLIENTS : lire les valeurs TOTALES (MONO + POLY) du tableau
+          // MODE ALL_CLIENTS : MONO réel du tableau + POLY total réparti 1/3-1/3-1/3
           if (type === 'charges') {
-            totalA += node.autoPhaseDistribution.charges.total.A;
-            totalB += node.autoPhaseDistribution.charges.total.B;
-            totalC += node.autoPhaseDistribution.charges.total.C;
+            // Lire les MONO
+            const monoA = node.autoPhaseDistribution.charges.mono.A;
+            const monoB = node.autoPhaseDistribution.charges.mono.B;
+            const monoC = node.autoPhaseDistribution.charges.mono.C;
+            
+            // Lire les POLY et calculer le total POLY invariant des curseurs
+            const polyA = node.autoPhaseDistribution.charges.poly.A;
+            const polyB = node.autoPhaseDistribution.charges.poly.B;
+            const polyC = node.autoPhaseDistribution.charges.poly.C;
+            const polyTotal = polyA + polyB + polyC;
+            const polyPerPhase = polyTotal / 3;
+            
+            // Ajouter MONO + POLY équi-réparti
+            totalA += monoA + polyPerPhase;
+            totalB += monoB + polyPerPhase;
+            totalC += monoC + polyPerPhase;
           } else {
-            totalA += node.autoPhaseDistribution.productions.total.A;
-            totalB += node.autoPhaseDistribution.productions.total.B;
-            totalC += node.autoPhaseDistribution.productions.total.C;
+            // Même logique pour les productions
+            const monoA = node.autoPhaseDistribution.productions.mono.A;
+            const monoB = node.autoPhaseDistribution.productions.mono.B;
+            const monoC = node.autoPhaseDistribution.productions.mono.C;
+            
+            const polyA = node.autoPhaseDistribution.productions.poly.A;
+            const polyB = node.autoPhaseDistribution.productions.poly.B;
+            const polyC = node.autoPhaseDistribution.productions.poly.C;
+            const polyTotal = polyA + polyB + polyC;
+            const polyPerPhase = polyTotal / 3;
+            
+            totalA += monoA + polyPerPhase;
+            totalB += monoB + polyPerPhase;
+            totalC += monoC + polyPerPhase;
           }
         }
       }
@@ -127,15 +151,39 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
               totalC += node.autoPhaseDistribution.productions.mono.C;
             }
           } else {
-            // MODE ALL_CLIENTS : lire les valeurs TOTALES (MONO + POLY) du tableau
+            // MODE ALL_CLIENTS : MONO réel du tableau + POLY total réparti 1/3-1/3-1/3
             if (type === 'charges') {
-              totalA += node.autoPhaseDistribution.charges.total.A;
-              totalB += node.autoPhaseDistribution.charges.total.B;
-              totalC += node.autoPhaseDistribution.charges.total.C;
+              // Lire les MONO
+              const monoA = node.autoPhaseDistribution.charges.mono.A;
+              const monoB = node.autoPhaseDistribution.charges.mono.B;
+              const monoC = node.autoPhaseDistribution.charges.mono.C;
+              
+              // Lire les POLY et calculer le total POLY invariant des curseurs
+              const polyA = node.autoPhaseDistribution.charges.poly.A;
+              const polyB = node.autoPhaseDistribution.charges.poly.B;
+              const polyC = node.autoPhaseDistribution.charges.poly.C;
+              const polyTotal = polyA + polyB + polyC;
+              const polyPerPhase = polyTotal / 3;
+              
+              // Ajouter MONO + POLY équi-réparti
+              totalA += monoA + polyPerPhase;
+              totalB += monoB + polyPerPhase;
+              totalC += monoC + polyPerPhase;
             } else {
-              totalA += node.autoPhaseDistribution.productions.total.A;
-              totalB += node.autoPhaseDistribution.productions.total.B;
-              totalC += node.autoPhaseDistribution.productions.total.C;
+              // Même logique pour les productions
+              const monoA = node.autoPhaseDistribution.productions.mono.A;
+              const monoB = node.autoPhaseDistribution.productions.mono.B;
+              const monoC = node.autoPhaseDistribution.productions.mono.C;
+              
+              const polyA = node.autoPhaseDistribution.productions.poly.A;
+              const polyB = node.autoPhaseDistribution.productions.poly.B;
+              const polyC = node.autoPhaseDistribution.productions.poly.C;
+              const polyTotal = polyA + polyB + polyC;
+              const polyPerPhase = polyTotal / 3;
+              
+              totalA += monoA + polyPerPhase;
+              totalB += monoB + polyPerPhase;
+              totalC += monoC + polyPerPhase;
             }
           }
         }

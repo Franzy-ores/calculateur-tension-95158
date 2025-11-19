@@ -60,14 +60,25 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
       );
     }
     
-    updateProjectConfig({
+    // Pour les productions : forcer le mode "mono_only" pour que les polyphasés restent à 33.3%
+    const updatedConfig: any = {
       manualPhaseDistribution: {
         ...currentProject.manualPhaseDistribution,
         [type]: realDistribution
       }
-    });
+    };
     
-    toast.success(`${type === 'charges' ? 'Charges' : 'Productions'} réinitialisées : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
+    if (type === 'productions') {
+      updatedConfig.phaseDistributionModeProductions = 'mono_only';
+    }
+    
+    updateProjectConfig(updatedConfig);
+    
+    const modeMessage = type === 'productions' 
+      ? ' (polyphasés restent à 33.3%, monos suivent la répartition réelle)'
+      : '';
+    
+    toast.success(`${type === 'charges' ? 'Charges' : 'Productions'} réinitialisées : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%${modeMessage}`);
   };
   
   // Nouvelle fonction pour calculer la distribution réelle MONO + POLY

@@ -2,7 +2,6 @@ import React from 'react';
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { useNetworkStore } from "@/store/networkStore";
 import { calculateProjectUnbalance } from "@/utils/phaseDistributionCalculator";
 import { RefreshCw } from "lucide-react";
@@ -53,13 +52,7 @@ function calculatePhaseProductions(
 }
 
 export const PhaseDistributionDisplay = () => {
-  const { 
-    currentProject, 
-    rebalanceAllMonoClients, 
-    showVoltages, 
-    setShowVoltages, 
-    changeVoltageSystem 
-  } = useNetworkStore();
+  const { currentProject, rebalanceAllMonoClients } = useNetworkStore();
   
   if (!currentProject || currentProject.loadModel !== 'mixte_mono_poly') {
     return null;
@@ -131,32 +124,6 @@ export const PhaseDistributionDisplay = () => {
         >
           <RefreshCw className="h-3 w-3 mr-1" />
           Rééquilibrer MONO
-        </Button>
-      </div>
-
-      {/* Ligne 1.5: Contrôles de tension */}
-      <div className="flex items-center gap-4 px-2">
-        {/* Voltage Display Switch */}
-        <div className="flex items-center gap-2">
-          <Switch 
-            id="voltage-display" 
-            checked={showVoltages} 
-            onCheckedChange={setShowVoltages} 
-            className="data-[state=checked]:bg-primary/50" 
-          />
-          <Label htmlFor="voltage-display" className="text-xs font-medium text-primary-foreground">
-            Tensions
-          </Label>
-        </div>
-
-        {/* Change Voltage System Button */}
-        <Button 
-          onClick={changeVoltageSystem} 
-          variant="ghost" 
-          size="sm" 
-          className="h-7 text-xs text-primary-foreground hover:bg-white/10 hover:text-primary-foreground"
-        >
-          {currentProject?.voltageSystem === 'TRIPHASÉ_230V' ? '230V → 400V' : '400V → 230V'}
         </Button>
       </div>
 

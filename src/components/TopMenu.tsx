@@ -279,8 +279,6 @@ export const TopMenu = ({
         })()}
             </div>}
 
-          {/* Phase Distribution Display */}
-          <PhaseDistributionDisplay />
 
           {/* Voltage Controls Row */}
           <div className="flex items-center gap-4">
@@ -384,11 +382,12 @@ export const TopMenu = ({
                   </div>
                 </div>
 
-              {/* Phase Distribution Sliders */}
+              {/* Phase Distribution Sliders and Display */}
               {(currentProject.loadModel === 'monophase_reparti' || currentProject.loadModel === 'mixte_mono_poly') && <div className="flex items-center gap-4">
-                  <div className="flex gap-4">
+                  <div className="flex gap-4 items-start">
                     <PhaseDistributionSliders type="charges" title="Charges" />
                     <PhaseDistributionSliders type="productions" title="Productions" />
+                    <PhaseDistributionDisplay />
                   </div>
                 </div>}
             </div>

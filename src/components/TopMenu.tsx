@@ -186,6 +186,13 @@ export const TopMenu = ({
 
         {/* Right: Actions Buttons (compact) */}
         <div className="flex items-center gap-0.5">
+          {/* Voltage System Switch */}
+          {currentProject && (
+            <Button onClick={changeVoltageSystem} variant="ghost" size="sm" className="text-white hover:bg-white/20 h-7 px-2 text-xs mr-1">
+              {currentProject.voltageSystem === 'TRIPHASÉ_230V' ? '230→400V' : '400→230V'}
+            </Button>
+          )}
+          
           <Button variant="ghost" size="sm" onClick={handleExportPDF} disabled={!currentProject || !calculationResults[selectedScenario]} className="text-white hover:bg-white/20 disabled:opacity-50 h-7 px-2 text-xs">
             <FileDown className="h-3.5 w-3.5" />
           </Button>
@@ -251,14 +258,10 @@ export const TopMenu = ({
       {/* ROW 2 - Controls (~50px, visible if project exists) */}
       {currentProject && (
         <div className="flex items-center px-4 py-2 gap-1 border-t border-white/10">
-          {/* Groupe 1: System Controls */}
+          {/* Groupe 1: Voltage Display Toggle */}
           <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded border-r border-white/20">
             <Switch id="voltage-display" checked={showVoltages} onCheckedChange={setShowVoltages} className="data-[state=checked]:bg-white/20 scale-75" />
             <Label htmlFor="voltage-display" className="text-xs font-medium text-white drop-shadow-sm">Tensions</Label>
-            
-            <Button onClick={changeVoltageSystem} variant="ghost" size="sm" className="text-white hover:bg-white/20 h-6 px-2 text-xs ml-2">
-              {currentProject?.voltageSystem === 'TRIPHASÉ_230V' ? '230→400V' : '400→230V'}
-            </Button>
           </div>
 
           {/* Groupe 2: Configuration */}

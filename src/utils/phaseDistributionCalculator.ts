@@ -153,7 +153,8 @@ export function calculateNodeAutoPhaseDistribution(
   manualPhaseDistributionCharges: { A: number; B: number; C: number }, // Répartition manuelle CHARGES (%)
   manualPhaseDistributionProductions: { A: number; B: number; C: number }, // Répartition manuelle PRODUCTIONS (%)
   phaseDistributionModeCharges: 'mono_only' | 'all_clients' = 'mono_only', // Mode d'application pour les charges
-  phaseDistributionModeProductions: 'mono_only' | 'all_clients' = 'mono_only' // Mode d'application pour les productions
+  phaseDistributionModeProductions: 'mono_only' | 'all_clients' = 'mono_only', // Mode d'application pour les productions
+  networkVoltage: 'TRIPHASÉ_230V' | 'TÉTRAPHASÉ_400V' = 'TÉTRAPHASÉ_400V' // Système de tension du réseau
 ): NodePhaseDistributionResult {
   // Initialisation des résultats
   const result: NodePhaseDistributionResult = {
@@ -178,20 +179,54 @@ export function calculateNodeAutoPhaseDistribution(
 
   linkedClients.forEach(client => {
     if (client.connectionType === 'MONO') {
-      // ✅ OPTION A : Les MONO suivent TOUJOURS les curseurs (quel que soit le mode)
       if (client.assignedPhase) {
         const chargeKVA = client.puissanceContractuelle_kVA;
         const prodKVA = client.puissancePV_kVA;
         
-        // ✅ CHARGES : Toujours appliquer les % des curseurs
-        result.charges.mono.A += chargeKVA * (manualPhaseDistributionCharges.A / 100);
-        result.charges.mono.B += chargeKVA * (manualPhaseDistributionCharges.B / 100);
-        result.charges.mono.C += chargeKVA * (manualPhaseDistributionCharges.C / 100);
-        
-        // ✅ PRODUCTIONS : Toujours appliquer les % des curseurs
-        result.productions.mono.A += prodKVA * (manualPhaseDistributionProductions.A / 100);
-        result.productions.mono.B += prodKVA * (manualPhaseDistributionProductions.B / 100);
-        result.productions.mono.C += prodKVA * (manualPhaseDistributionProductions.C / 100);
+        // Distribuer selon le phaseCoupling physique
+        if (client.phaseCoupling) {
+          // 230V phase-à-phase : distribuer entre 2 phases (50% chaque)
+          if (networkVoltage === 'TRIPHASÉ_230V') {
+            if (client.phaseCoupling === 'A-B') {
+              result.charges.mono.A += chargeKVA / 2;
+              result.charges.mono.B += chargeKVA / 2;
+              result.productions.mono.A += prodKVA / 2;
+              result.productions.mono.B += prodKVA / 2;
+            } else if (client.phaseCoupling === 'B-C') {
+              result.charges.mono.B += chargeKVA / 2;
+              result.charges.mono.C += chargeKVA / 2;
+              result.productions.mono.B += prodKVA / 2;
+              result.productions.mono.C += prodKVA / 2;
+            } else if (client.phaseCoupling === 'A-C') {
+              result.charges.mono.A += chargeKVA / 2;
+              result.charges.mono.C += chargeKVA / 2;
+              result.productions.mono.A += prodKVA / 2;
+              result.productions.mono.C += prodKVA / 2;
+            }
+          } 
+          // 400V phase-neutre : toute la charge sur une phase
+          else {
+            if (client.phaseCoupling === 'A') {
+              result.charges.mono.A += chargeKVA;
+              result.productions.mono.A += prodKVA;
+            } else if (client.phaseCoupling === 'B') {
+              result.charges.mono.B += chargeKVA;
+              result.productions.mono.B += prodKVA;
+            } else if (client.phaseCoupling === 'C') {
+              result.charges.mono.C += chargeKVA;
+              result.productions.mono.C += prodKVA;
+            }
+          }
+        } else {
+          // Fallback : utiliser les curseurs si pas de phaseCoupling
+          result.charges.mono.A += chargeKVA * (manualPhaseDistributionCharges.A / 100);
+          result.charges.mono.B += chargeKVA * (manualPhaseDistributionCharges.B / 100);
+          result.charges.mono.C += chargeKVA * (manualPhaseDistributionCharges.C / 100);
+          
+          result.productions.mono.A += prodKVA * (manualPhaseDistributionProductions.A / 100);
+          result.productions.mono.B += prodKVA * (manualPhaseDistributionProductions.B / 100);
+          result.productions.mono.C += prodKVA * (manualPhaseDistributionProductions.C / 100);
+        }
         
         // Compter le client sur sa phase assignée (pour référence uniquement)
         result.monoClientsCount[client.assignedPhase] += 1;

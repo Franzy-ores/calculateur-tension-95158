@@ -488,7 +488,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
             project.manualPhaseDistribution!.charges,
             project.manualPhaseDistribution!.productions,
             project.phaseDistributionModeCharges || 'mono_only',
-            project.phaseDistributionModeProductions || 'mono_only'
+            project.phaseDistributionModeProductions || 'mono_only',
+            project.voltageSystem
           );
           node.autoPhaseDistribution = distribution;
         }
@@ -1229,7 +1230,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       state.currentProject.manualPhaseDistribution?.charges || { A: 33.33, B: 33.33, C: 33.34 },
       state.currentProject.manualPhaseDistribution?.productions || { A: 33.33, B: 33.33, C: 33.34 },
       state.currentProject.phaseDistributionModeCharges || 'mono_only',
-      state.currentProject.phaseDistributionModeProductions || 'mono_only'
+      state.currentProject.phaseDistributionModeProductions || 'mono_only',
+      state.currentProject.voltageSystem
     );
     
     // Mettre à jour le nœud

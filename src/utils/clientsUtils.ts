@@ -1,46 +1,140 @@
 import * as XLSX from 'xlsx';
 import { ClientImporte, Node, ClientLink } from '@/types/network';
+import { geocodeAddress, delay } from './geocodingService';
 
 /**
- * Parse un fichier Excel et retourne un tableau de clients importés
+ * Construit une adresse complète à partir des composants
  */
-export const parseExcelToClients = (file: File): Promise<ClientImporte[]> => {
+export const buildFullAddress = (
+  localite?: string | number,
+  rue?: string | number,
+  numero?: string | number
+): string | null => {
+  const parts = [
+    numero ? String(numero).trim() : null,
+    rue ? String(rue).trim() : null,
+    localite ? String(localite).trim() : null
+  ].filter(Boolean);
+  
+  return parts.length >= 2 ? parts.join(', ') : null;
+};
+
+export interface GeocodingReport {
+  total: number;
+  withGPS: number;
+  geocoded: number;
+  ambiguous: number;
+  failed: number;
+}
+
+/**
+ * Parse un fichier Excel et retourne un tableau de clients importés avec géocodage automatique
+ */
+export const parseExcelToClients = (
+  file: File,
+  onProgress?: (current: number, total: number) => void
+): Promise<{ clients: ClientImporte[]; geocodingReport: GeocodingReport }> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const data = new Uint8Array(e.target!.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json(firstSheet);
         
-        const clients: ClientImporte[] = jsonData.map((row: any, index: number) => {
+        const clients: ClientImporte[] = [];
+        const report: GeocodingReport = { 
+          total: 0, 
+          withGPS: 0, 
+          geocoded: 0, 
+          ambiguous: 0, 
+          failed: 0 
+        };
+        
+        for (let index = 0; index < jsonData.length; index++) {
+          const row: any = jsonData[index];
+          report.total++;
+          
           // Prendre la valeur brute du couplage sans interprétation
           const couplage = String(row['Couplage'] || '').trim();
           
-          return {
+          // Extraire les coordonnées GPS
+          let lat = parseFloat(row['E_CLIENT.N_WGS84_Y']) || 0;
+          let lng = parseFloat(row['E_CLIENT.N_WGS84_X']) || 0;
+          
+          // Extraire les composants d'adresse
+          const localite = row['Localité'];
+          const rue = row['Rue'];
+          const numero = row['Numéro de rue'];
+          const fullAddress = buildFullAddress(localite, rue, numero);
+          
+          let geocoded = false;
+          let geocodingStatus: 'success' | 'failed' | 'ambiguous' | undefined;
+          let geocodingConfidence: number | undefined;
+          
+          // Si pas de GPS mais adresse disponible → géocoder
+          if ((!lat || !lng) && fullAddress) {
+            onProgress?.(index + 1, jsonData.length);
+            
+            console.log(`🔍 Géocodage de "${fullAddress}"...`);
+            const result = await geocodeAddress(fullAddress);
+            
+            if (result && result.status !== 'failed') {
+              lat = result.lat;
+              lng = result.lng;
+              geocoded = true;
+              geocodingStatus = result.status;
+              geocodingConfidence = result.confidence;
+              
+              if (result.status === 'success') {
+                report.geocoded++;
+                console.log(`✅ Géocodé: ${result.displayName}`);
+              } else if (result.status === 'ambiguous') {
+                report.ambiguous++;
+                console.log(`⚠️ Géocodage ambigu: ${result.displayName}`);
+              }
+            } else {
+              report.failed++;
+              console.warn(`❌ Échec du géocodage pour "${fullAddress}"`);
+              // On continue quand même avec lat/lng à 0 pour permettre la correction manuelle
+            }
+            
+            // Respecter le rate limiting de Nominatim (1 req/sec)
+            await delay(1000);
+          } else if (lat && lng) {
+            report.withGPS++;
+          }
+          
+          const client: ClientImporte = {
             id: `client-import-${Date.now()}-${index}`,
             identifiantCircuit: String(row['Identifiant circuit (Circuit)'] || ''),
             nomCircuit: String(row['Nom (Circuit)'] || ''),
-            lat: parseFloat(row['E_CLIENT.N_WGS84_Y']) || 0,
-            lng: parseFloat(row['E_CLIENT.N_WGS84_X']) || 0,
+            lat,
+            lng,
             puissanceContractuelle_kVA: parseFloat(row['Puissance contractuelle']) || 0,
             puissancePV_kVA: parseFloat(row['Puissance PV en kVA']) || 0,
             couplage,
-          tensionMin_V: parseFloat(row['Min Tension']) || undefined,
-          tensionMax_V: parseFloat(row['Max Tension']) || undefined,
-          tensionMinHiver_V: parseFloat(row['Min Tension hiver']) || undefined,
-          tensionMaxEte_V: parseFloat(row['Max Tension été']) || undefined,
-          ecartTension15jours_V: parseFloat(row['Ecart de tension sur les 15 derniers jours']) || undefined,
-          tensionCircuit_V: parseFloat(row['Tension (Circuit)']) || undefined,
-          identifiantCabine: String(row['Identifiant cabine'] || ''),
-          identifiantPosteSource: String(row['Identifiant poste source'] || ''),
-            rawData: row
+            tensionMin_V: parseFloat(row['Min Tension']) || undefined,
+            tensionMax_V: parseFloat(row['Max Tension']) || undefined,
+            tensionMinHiver_V: parseFloat(row['Min Tension hiver']) || undefined,
+            tensionMaxEte_V: parseFloat(row['Max Tension été']) || undefined,
+            ecartTension15jours_V: parseFloat(row['Ecart de tension sur les 15 derniers jours']) || undefined,
+            tensionCircuit_V: parseFloat(row['Tension (Circuit)']) || undefined,
+            identifiantCabine: String(row['Identifiant cabine'] || ''),
+            identifiantPosteSource: String(row['Identifiant poste source'] || ''),
+            rawData: row,
+            adresse: fullAddress || undefined,
+            geocoded,
+            geocodingStatus,
+            geocodingConfidence
           };
-        });
+          
+          clients.push(client);
+        }
         
-        resolve(clients);
+        resolve({ clients, geocodingReport: report });
       } catch (error) {
         reject(error);
       }

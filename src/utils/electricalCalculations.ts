@@ -536,6 +536,9 @@ export class ElectricalCalculator {
     }
 
     const S_eq = new Map<string, number>();
+    const S_prel_map = new Map<string, number>(); // Charges brutes par nœud
+    const S_pv_map = new Map<string, number>();   // Productions brutes par nœud
+    
     for (const n of nodes) {
       let S_prel = 0;
       let S_pv = 0;
@@ -551,6 +554,10 @@ export class ElectricalCalculator {
         S_prel = (n.clients || []).reduce((s, c) => s + (c.S_kVA || 0), 0) * (foisonnementCharges / 100);
         S_pv = (n.productions || []).reduce((s, p) => s + (p.S_kVA || 0), 0) * (foisonnementProductions / 100);
       }
+      
+      // Sauvegarder les valeurs brutes
+      S_prel_map.set(n.id, S_prel);
+      S_pv_map.set(n.id, S_pv);
       
       let val = 0;
       if (scenario === 'PRÉLÈVEMENT') val = S_prel;
@@ -827,20 +834,44 @@ export class ElectricalCalculator {
           console.warn(`⚠️ Répartition des productions incohérente pour nœud ${n.id}: total=${totalProductions}`);
         }
         
-        // Séparer charges et productions pour appliquer des répartitions différentes
+        // Récupérer les charges et productions brutes (AVANT NET)
+        const S_prel_kVA = S_prel_map.get(n.id) || 0;
+        const S_pv_kVA = S_pv_map.get(n.id) || 0;
+        
+        // 1. Calculer les CHARGES par phase
+        const S_A_charges_kVA = S_prel_kVA * pA_charges;
+        const S_B_charges_kVA = S_prel_kVA * pB_charges;
+        const S_C_charges_kVA = S_prel_kVA * pC_charges;
+        
+        // 2. Calculer les PRODUCTIONS par phase
+        const S_A_prod_kVA = S_pv_kVA * pA_productions;
+        const S_B_prod_kVA = S_pv_kVA * pB_productions;
+        const S_C_prod_kVA = S_pv_kVA * pC_productions;
+        
+        // 3. Calculer le NET par phase selon le scénario
         let S_A_kVA = 0, S_B_kVA = 0, S_C_kVA = 0;
         
-        if (S_kVA_tot > 0) {
-          // Charges positives - utiliser la répartition des charges
-          S_A_kVA = S_kVA_tot * pA_charges;
-          S_B_kVA = S_kVA_tot * pB_charges;
-          S_C_kVA = S_kVA_tot * pC_charges;
+        if (scenario === 'PRÉLÈVEMENT') {
+          // Scénario prélèvement : charges uniquement
+          S_A_kVA = S_A_charges_kVA;
+          S_B_kVA = S_B_charges_kVA;
+          S_C_kVA = S_C_charges_kVA;
+        } else if (scenario === 'PRODUCTION') {
+          // Scénario production : productions uniquement (négatives)
+          S_A_kVA = -S_A_prod_kVA;
+          S_B_kVA = -S_B_prod_kVA;
+          S_C_kVA = -S_C_prod_kVA;
         } else {
-          // Productions négatives - utiliser la répartition des productions
-          S_A_kVA = S_kVA_tot * pA_productions;
-          S_B_kVA = S_kVA_tot * pB_productions;
-          S_C_kVA = S_kVA_tot * pC_productions;
+          // Scénario simultané : NET par phase
+          S_A_kVA = S_A_charges_kVA - S_A_prod_kVA;
+          S_B_kVA = S_B_charges_kVA - S_B_prod_kVA;
+          S_C_kVA = S_C_charges_kVA - S_C_prod_kVA;
         }
+        
+        console.log(`📊 Nœud ${n.name || n.id} - Calcul par phase:`);
+        console.log(`   Charges: A=${S_A_charges_kVA.toFixed(2)}kVA, B=${S_B_charges_kVA.toFixed(2)}kVA, C=${S_C_charges_kVA.toFixed(2)}kVA`);
+        console.log(`   Prod:    A=${S_A_prod_kVA.toFixed(2)}kVA, B=${S_B_prod_kVA.toFixed(2)}kVA, C=${S_C_prod_kVA.toFixed(2)}kVA`);
+        console.log(`   NET:     A=${S_A_kVA.toFixed(2)}kVA, B=${S_B_kVA.toFixed(2)}kVA, C=${S_C_kVA.toFixed(2)}kVA`);
         
         const P_A_kW = S_A_kVA * cosPhi_eff;
         const Q_A_kVAr = Math.abs(S_A_kVA) * sinPhi * sign;

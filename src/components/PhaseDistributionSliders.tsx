@@ -44,15 +44,26 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
     
     let realDistribution: { A: number; B: number; C: number };
     
+    // Déterminer le mode actif pour ce type
+    const activeMode = type === 'charges' 
+      ? (currentProject.phaseDistributionModeCharges || 'mono_only')
+      : (currentProject.phaseDistributionModeProductions || 'mono_only');
+    
     if (type === 'charges') {
-      // Calculer la répartition réelle des CHARGES MONO
-      realDistribution = calculateRealMonoDistributionPercents(
-        currentProject.nodes,
-        currentProject.clientsImportes || [],
-        currentProject.clientLinks || []
-      );
+      // Calculer selon le mode actif
+      if (activeMode === 'mono_only') {
+        // MONO uniquement : utiliser les valeurs M
+        realDistribution = calculateRealMonoDistributionPercents(
+          currentProject.nodes,
+          currentProject.clientsImportes || [],
+          currentProject.clientLinks || []
+        );
+      } else {
+        // TOUS LES CLIENTS : utiliser les valeurs PhA, PhB, PhC
+        realDistribution = calculateRealDistributionForAllClients();
+      }
     } else {
-      // Calculer la répartition réelle des PRODUCTIONS MONO
+      // Productions : toujours calculer les MONO uniquement
       realDistribution = calculateRealMonoProductionDistributionPercents(
         currentProject.nodes,
         currentProject.clientsImportes || [],
@@ -76,7 +87,9 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
     
     const modeMessage = type === 'productions' 
       ? ' (polyphasés restent à 33.3%, monos suivent la répartition réelle)'
-      : '';
+      : activeMode === 'all_clients' 
+        ? ' (tous les clients : mono + poly)'
+        : ' (mono uniquement)';
     
     toast.success(`${type === 'charges' ? 'Charges' : 'Productions'} réinitialisées : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%${modeMessage}`);
   };

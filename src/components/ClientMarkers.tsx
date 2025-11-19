@@ -318,7 +318,7 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
       const borderWidth = isSelected ? 3 : 2;
       
       // Analyser le niveau de puissance pour adapter la taille du marqueur
-      const powerAnalysis = analyzeClientPower(client);
+      const powerAnalysis = analyzeClientPower(client, currentProject?.voltageSystem);
       
       // Ajouter un cercle jaune si le client a une production PV
       const hasProduction = client.puissancePV_kVA > 0;

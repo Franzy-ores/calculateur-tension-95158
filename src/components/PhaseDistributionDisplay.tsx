@@ -7,6 +7,48 @@ import { calculateProjectUnbalance } from "@/utils/phaseDistributionCalculator";
 import { RefreshCw } from "lucide-react";
 import type { Node, ClientImporte } from "@/types/network";
 import { analyzeClientPower } from "@/utils/clientsUtils";
+import * as Complex from "@/utils/complex";
+
+// Helper pour calculer le courant de neutre (400V uniquement)
+function calculateNeutralCurrent(Ia: number, Ib: number, Ic: number): number {
+  // Calcul vectoriel du courant de neutre avec déphasage 120°
+  // In = Ia + Ib*e^(j*120°) + Ic*e^(j*240°)
+  const Ia_complex = Complex.C(Ia, 0);
+  const Ib_complex = Complex.fromPolar(Ib, (120 * Math.PI) / 180);
+  const Ic_complex = Complex.fromPolar(Ic, (240 * Math.PI) / 180);
+  
+  const In_complex = Complex.add(Complex.add(Ia_complex, Ib_complex), Ic_complex);
+  return Complex.abs(In_complex);
+}
+
+// Helper pour regrouper les clients par couplage
+function groupClientsByCoupling(
+  clients: ClientImporte[] | undefined,
+  voltageSystem: 'TRIPHASÉ_230V' | 'TÉTRAPHASÉ_400V'
+): Record<string, { clients: ClientImporte[]; totalKVA: number; totalCurrent: number }> {
+  const groups: Record<string, { clients: ClientImporte[]; totalKVA: number; totalCurrent: number }> = {};
+  
+  if (!clients) return groups;
+  
+  clients.forEach(client => {
+    if (client.connectionType === 'MONO') {
+      const coupling = client.phaseCoupling || client.assignedPhase || 'Non assigné';
+      
+      if (!groups[coupling]) {
+        groups[coupling] = { clients: [], totalKVA: 0, totalCurrent: 0 };
+      }
+      
+      groups[coupling].clients.push(client);
+      groups[coupling].totalKVA += client.puissanceContractuelle_kVA;
+      
+      // Calculer le courant (I = S / V)
+      const voltage = voltageSystem === 'TRIPHASÉ_230V' ? 230 : 230; // Toujours 230V pour MONO
+      groups[coupling].totalCurrent += (client.puissanceContractuelle_kVA * 1000) / voltage;
+    }
+  });
+  
+  return groups;
+}
 
 // Helper pour calculer les charges par phase
 function calculatePhaseCharges(
@@ -86,7 +128,7 @@ export const PhaseDistributionDisplay = () => {
 
   currentProject.clientsImportes?.forEach(client => {
     if (client.connectionType === 'MONO') {
-      const analysis = analyzeClientPower(client);
+      const analysis = analyzeClientPower(client, currentProject.voltageSystem);
       if (analysis && (analysis.level === 'high' || analysis.level === 'critical')) {
         // Trouver la phase du client
         if (client.assignedPhase) {
@@ -102,6 +144,29 @@ export const PhaseDistributionDisplay = () => {
     B: highPowerClientsPerPhase.B.reduce((sum, c) => sum + c.puissanceContractuelle_kVA, 0),
     C: highPowerClientsPerPhase.C.reduce((sum, c) => sum + c.puissanceContractuelle_kVA, 0)
   };
+  
+  // Calculer le courant de neutre pour 400V
+  let neutralCurrent = 0;
+  if (currentProject.voltageSystem === 'TÉTRAPHASÉ_400V') {
+    // Calculer les courants par phase (I = S / V)
+    const voltage = 230; // Phase-neutre
+    const Ia = (phaseLoads.A * 1000) / voltage;
+    const Ib = (phaseLoads.B * 1000) / voltage;
+    const Ic = (phaseLoads.C * 1000) / voltage;
+    neutralCurrent = calculateNeutralCurrent(Ia, Ib, Ic);
+  }
+  
+  // Regrouper les clients par couplage
+  const clientsByCoupling = groupClientsByCoupling(
+    currentProject.clientsImportes,
+    currentProject.voltageSystem
+  );
+  
+  // Regrouper les clients par couplage
+  const clientsByCoupling = groupClientsByCoupling(
+    currentProject.clientsImportes,
+    currentProject.voltageSystem
+  );
   
   // Badge de statut avec couleurs sémantiques
   const statusBadge = {
@@ -177,10 +242,11 @@ export const PhaseDistributionDisplay = () => {
                   </div>
                   <div className="mt-1 space-y-0.5">
                     {highPowerClientsPerPhase.A.slice(0, 3).map(client => {
-                      const analysis = analyzeClientPower(client);
+                      const analysis = analyzeClientPower(client, currentProject.voltageSystem);
                       return (
                         <div key={client.id} className="text-[10px] truncate" title={client.nomCircuit}>
                           <span style={{ color: analysis?.color }}>{analysis?.label.split(' ')[0]}</span> {client.nomCircuit.substring(0, 15)} ({client.puissanceContractuelle_kVA.toFixed(1)}kVA)
+                          {analysis?.phaseCoupling && <div className="text-muted-foreground">{analysis.phaseCoupling}</div>}
                         </div>
                       );
                     })}
@@ -209,10 +275,11 @@ export const PhaseDistributionDisplay = () => {
                   </div>
                   <div className="mt-1 space-y-0.5">
                     {highPowerClientsPerPhase.B.slice(0, 3).map(client => {
-                      const analysis = analyzeClientPower(client);
+                      const analysis = analyzeClientPower(client, currentProject.voltageSystem);
                       return (
                         <div key={client.id} className="text-[10px] truncate" title={client.nomCircuit}>
                           <span style={{ color: analysis?.color }}>{analysis?.label.split(' ')[0]}</span> {client.nomCircuit.substring(0, 15)} ({client.puissanceContractuelle_kVA.toFixed(1)}kVA)
+                          {analysis?.phaseCoupling && <div className="text-muted-foreground">{analysis.phaseCoupling}</div>}
                         </div>
                       );
                     })}
@@ -241,10 +308,11 @@ export const PhaseDistributionDisplay = () => {
                   </div>
                   <div className="mt-1 space-y-0.5">
                     {highPowerClientsPerPhase.C.slice(0, 3).map(client => {
-                      const analysis = analyzeClientPower(client);
+                      const analysis = analyzeClientPower(client, currentProject.voltageSystem);
                       return (
                         <div key={client.id} className="text-[10px] truncate" title={client.nomCircuit}>
                           <span style={{ color: analysis?.color }}>{analysis?.label.split(' ')[0]}</span> {client.nomCircuit.substring(0, 15)} ({client.puissanceContractuelle_kVA.toFixed(1)}kVA)
+                          {analysis?.phaseCoupling && <div className="text-muted-foreground">{analysis.phaseCoupling}</div>}
                         </div>
                       );
                     })}
@@ -265,7 +333,74 @@ export const PhaseDistributionDisplay = () => {
             💡 Cliquez sur "Rééquilibrer MONO" pour optimiser la distribution
           </div>
         </div>
-      )}
+      </div>
+
+      {/* Récapitulatif par couplage avec courant de neutre */}
+      <div className="p-3 bg-primary/5 border border-primary/20 rounded">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xs font-bold text-primary">📋 RÉCAPITULATIF PAR COUPLAGE</span>
+          {currentProject.voltageSystem === 'TÉTRAPHASÉ_400V' && (
+            <Badge variant="outline" className="text-xs">
+              Courant neutre: {neutralCurrent.toFixed(1)} A
+            </Badge>
+          )}
+        </div>
+        
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          {/* 230V Phase-à-phase */}
+          {currentProject.voltageSystem === 'TRIPHASÉ_230V' && (
+            <div className="col-span-2 space-y-1">
+              <div className="font-medium text-primary mb-1">230V Phase-à-phase (sans neutre)</div>
+              {['A-B', 'B-C', 'A-C'].map(coupling => {
+                const group = clientsByCoupling[coupling];
+                if (!group) return null;
+                return (
+                  <div key={coupling} className="flex items-center justify-between p-1.5 bg-blue-500/10 rounded">
+                    <span className="font-medium text-blue-400">Phase {coupling}</span>
+                    <div className="text-right">
+                      <div className="font-bold text-foreground">{group.clients.length} client{group.clients.length > 1 ? 's' : ''}</div>
+                      <div className="text-muted-foreground">{group.totalKVA.toFixed(1)} kVA · {group.totalCurrent.toFixed(1)} A</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          
+          {/* 400V Phase-neutre */}
+          {currentProject.voltageSystem === 'TÉTRAPHASÉ_400V' && (
+            <div className="col-span-2 space-y-1">
+              <div className="font-medium text-primary mb-1">400V Phase-neutre</div>
+              {['A', 'B', 'C'].map(coupling => {
+                const group = clientsByCoupling[coupling];
+                if (!group) return null;
+                const bgClass = coupling === 'A' ? 'bg-blue-500/10' : coupling === 'B' ? 'bg-green-500/10' : 'bg-red-500/10';
+                const textClass = coupling === 'A' ? 'text-blue-400' : coupling === 'B' ? 'text-green-400' : 'text-red-400';
+                return (
+                  <div key={coupling} className={`flex items-center justify-between p-1.5 ${bgClass} rounded`}>
+                    <span className={`font-medium ${textClass}`}>Phase {coupling}</span>
+                    <div className="text-right">
+                      <div className="font-bold text-foreground">{group.clients.length} client{group.clients.length > 1 ? 's' : ''}</div>
+                      <div className="text-muted-foreground">{group.totalKVA.toFixed(1)} kVA · {group.totalCurrent.toFixed(1)} A</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        
+        {currentProject.voltageSystem === 'TÉTRAPHASÉ_400V' && (
+          <div className="mt-2 text-[10px] text-muted-foreground">
+            💡 Le courant de neutre est calculé vectoriellement à partir des charges par phase
+          </div>
+        )}
+        {currentProject.voltageSystem === 'TRIPHASÉ_230V' && (
+          <div className="mt-2 text-[10px] text-muted-foreground">
+            💡 Réseau 230V sans neutre : les clients MONO sont connectés entre 2 phases
+          </div>
+        )}
+      </div>
 
       {/* Ligne 2: Tableau compact Charges / Productions */}
       <div className="grid grid-cols-2 gap-3">

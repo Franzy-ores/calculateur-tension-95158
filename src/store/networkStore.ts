@@ -469,7 +469,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
               );
               
               // Assigner automatiquement la phase
-              const assignedPhase = autoAssignPhaseForMonoClient(client, alreadyAssignedClients);
+              const assignedPhase = autoAssignPhaseForMonoClient(client, alreadyAssignedClients, project.voltageSystem);
               client.assignedPhase = assignedPhase;
               assignedCount++;
               
@@ -1092,7 +1092,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
           c.assignedPhase !== undefined
         ) || [];
         
-        assignedPhase = autoAssignPhaseForMonoClient(client, allAssignedMonoClients);
+        assignedPhase = autoAssignPhaseForMonoClient(client, allAssignedMonoClients, currentProject.voltageSystem);
         
         console.log(`✅ Client MONO "${client.nomCircuit}" lié au nœud "${node.name}" sur phase ${assignedPhase}`);
       }
@@ -1276,7 +1276,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     // Réassigner séquentiellement
     const alreadyAssigned: import('@/types/network').ClientImporte[] = [];
     monoClients.forEach(client => {
-      client.assignedPhase = autoAssignPhaseForMonoClient(client, alreadyAssigned);
+      client.assignedPhase = autoAssignPhaseForMonoClient(client, alreadyAssigned, currentProject.voltageSystem);
       alreadyAssigned.push(client);
     });
     

@@ -228,17 +228,12 @@ export function calculateNodeAutoPhaseDistribution(
           result.monoClientsCount[client.assignedPhase] += 1;
         }
       } 
-      // EN 400V : COMPORTEMENT ACTUEL CONSERVÉ (curseurs manuels)
+      // EN 400V : utiliser la phase assignée directement (phase-neutre)
+      // Les clients MONO en 400V sont connectés phase-neutre, donc 100% de leur puissance va à leur phase assignée
       else if (client.assignedPhase) {
-        // CHARGES : appliquer les % des curseurs
-        result.charges.mono.A += chargeKVA * (manualPhaseDistributionCharges.A / 100);
-        result.charges.mono.B += chargeKVA * (manualPhaseDistributionCharges.B / 100);
-        result.charges.mono.C += chargeKVA * (manualPhaseDistributionCharges.C / 100);
-        
-        // PRODUCTIONS : appliquer les % des curseurs
-        result.productions.mono.A += prodKVA * (manualPhaseDistributionProductions.A / 100);
-        result.productions.mono.B += prodKVA * (manualPhaseDistributionProductions.B / 100);
-        result.productions.mono.C += prodKVA * (manualPhaseDistributionProductions.C / 100);
+        // Attribuer toute la charge à la phase assignée
+        result.charges.mono[client.assignedPhase] += chargeKVA;
+        result.productions.mono[client.assignedPhase] += prodKVA;
         
         // Compter le client sur sa phase assignée
         result.monoClientsCount[client.assignedPhase] += 1;

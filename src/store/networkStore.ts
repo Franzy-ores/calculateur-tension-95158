@@ -1295,6 +1295,9 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     
     get().updateAllCalculations();
     
+    // Relancer le calcul de tension
+    get().calculateAll();
+    
     // Mettre à jour les curseurs de distribution manuelle après rééquilibrage
     const realChargesDistribution = calculateRealMonoDistributionPercents(
       currentProject.nodes,

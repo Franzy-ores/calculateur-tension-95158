@@ -159,12 +159,12 @@ export const PhaseDistributionDisplay = () => {
                   </div>
                   
                   {/* MONO */}
-                  <div className="text-[10px] text-blue-300/80">
+                  <div className="text-xs text-blue-300/80">
                     M: {monoKVA.toFixed(1)}
                   </div>
                   
                   {/* POLY */}
-                  <div className="text-[10px] text-purple-300/80">
+                  <div className="text-xs text-purple-300/80">
                     P: {polyKVA.toFixed(1)}
                   </div>
                 </div>
@@ -194,12 +194,12 @@ export const PhaseDistributionDisplay = () => {
                   </div>
                   
                   {/* MONO */}
-                  <div className="text-[10px] text-orange-300/80">
+                  <div className="text-xs text-orange-300/80">
                     M: {monoKVA.toFixed(1)}
                   </div>
                   
                   {/* POLY */}
-                  <div className="text-[10px] text-purple-300/80">
+                  <div className="text-xs text-purple-300/80">
                     P: {polyKVA.toFixed(1)}
                   </div>
                 </div>

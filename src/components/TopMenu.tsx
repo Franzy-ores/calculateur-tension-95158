@@ -186,6 +186,21 @@ export const TopMenu = ({
 
         {/* Right: Actions Buttons (compact) */}
         <div className="flex items-center gap-0.5">
+          {/* Node Voltage Display Button */}
+          {currentProject && (
+            <Button 
+              onClick={() => setShowVoltages(!showVoltages)} 
+              variant={showVoltages ? "secondary" : "ghost"}
+              size="sm" 
+              className={`h-7 px-2 text-xs mr-1 ${showVoltages 
+                ? 'bg-white/20 text-white font-semibold border border-white/30' 
+                : 'text-white hover:bg-white/20'
+              }`}
+            >
+              Noeud
+            </Button>
+          )}
+          
           {/* Voltage System Switch */}
           {currentProject && (
             <Button onClick={changeVoltageSystem} variant="ghost" size="sm" className="text-white hover:bg-white/20 h-7 px-2 text-xs mr-1">
@@ -258,13 +273,7 @@ export const TopMenu = ({
       {/* ROW 2 - Controls (~50px, visible if project exists) */}
       {currentProject && (
         <div className="flex items-center px-4 py-2 gap-1 border-t border-white/10">
-          {/* Groupe 1: Voltage Display Toggle */}
-          <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded border-r border-white/20">
-            <Switch id="voltage-display" checked={showVoltages} onCheckedChange={setShowVoltages} className="data-[state=checked]:bg-white/20 scale-75" />
-            <Label htmlFor="voltage-display" className="text-xs font-medium text-white drop-shadow-sm">Tensions</Label>
-          </div>
-
-          {/* Groupe 2: Configuration */}
+          {/* Groupe 1: Configuration */}
           <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded border-r border-white/20">
             <Label className="text-xs font-medium text-white drop-shadow-sm">Modèle:</Label>
             <Select value={currentProject.loadModel || 'polyphase_equilibre'} onValueChange={(value: LoadModel) => updateProjectConfig({ loadModel: value })}>

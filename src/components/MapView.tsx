@@ -5,11 +5,12 @@ import { useNetworkStore } from '@/store/networkStore';
 import { CableTypeSelector } from './CableTypeSelector';
 import { AddressSearch } from './AddressSearch';
 import { Button } from './ui/button';
-import { Globe, Map as MapIcon } from 'lucide-react';
+import { Globe, Map as MapIcon, Target } from 'lucide-react';
 import { getConnectedNodes } from '@/utils/networkConnectivity';
 import { getNodeConnectionType } from '@/utils/nodeConnectionType';
 import { useClientMarkers } from './ClientMarkers';
 import { getLinkedClientsForNode, calculateNodePowersFromClients } from '@/utils/clientsUtils';
+import { toast } from 'sonner';
 
 // Configuration des icônes Leaflet
 const configureLeafletIcons = () => {
@@ -36,6 +37,7 @@ export const MapView = () => {
   const routingPointsRef = useRef<{ lat: number; lng: number }[]>([]);
   const tempMarkersRef = useRef<L.Marker[]>([]);
   const tempLineRef = useRef<L.Polyline | null>(null);
+  const [selectingNodeForClient, setSelectingNodeForClient] = useState(false);
   
   const {
     currentProject,
@@ -187,6 +189,39 @@ export const MapView = () => {
       generateCircuitColorMapping();
     }
   }, [currentProject?.clientsImportes, generateCircuitColorMapping]);
+
+  // Gérer les événements custom pour la sélection de nœud depuis le ClientEditPanel
+  useEffect(() => {
+    const handleStartSelection = () => {
+      setSelectingNodeForClient(true);
+    };
+    
+    const handleCancelSelection = () => {
+      setSelectingNodeForClient(false);
+    };
+    
+    window.addEventListener('startNodeSelection', handleStartSelection);
+    window.addEventListener('cancelNodeSelection', handleCancelSelection);
+    
+    return () => {
+      window.removeEventListener('startNodeSelection', handleStartSelection);
+      window.removeEventListener('cancelNodeSelection', handleCancelSelection);
+    };
+  }, []);
+  
+  // Gérer ESC pour annuler la sélection de nœud
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectingNodeForClient) {
+        setSelectingNodeForClient(false);
+        window.dispatchEvent(new CustomEvent('cancelNodeSelection'));
+        toast.info('Sélection annulée');
+      }
+    };
+    
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [selectingNodeForClient]);
 
   // Afficher les marqueurs clients sur la carte
   useClientMarkers({
@@ -727,6 +762,15 @@ export const MapView = () => {
         // Gestionnaires d'événements complets
         marker.on('click', (e) => {
           L.DomEvent.stopPropagation(e);
+          
+          // MODE SÉLECTION DE NŒUD POUR CLIENT: Émettre l'événement avec le nodeId
+          if (selectingNodeForClient) {
+            window.dispatchEvent(new CustomEvent('nodeSelectedForClient', { 
+              detail: { nodeId: node.id } 
+            }));
+            setSelectingNodeForClient(false);
+            return;
+          }
           
           // MODE LIAISON CLIENT: Lier le client sélectionné à ce nœud
           if (selectedTool === 'linkClient' && selectedClientForLinking) {
@@ -1359,6 +1403,19 @@ export const MapView = () => {
           <button onClick={clearRouting} className="hover:bg-red-600 px-2 py-1 rounded">
             ❌ Annuler (ESC) | ✅ Finir (Enter/Double-clic)
           </button>
+        </div>
+      )}
+      
+      {/* Indicateur de sélection de nœud pour client */}
+      {selectingNodeForClient && (
+        <div 
+          className="absolute top-20 left-1/2 transform -translate-x-1/2 z-[1000] bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg pointer-events-none"
+        >
+          <div className="flex items-center gap-2">
+            <Target className="w-5 h-5 animate-pulse" />
+            <span className="font-semibold">Cliquez sur un nœud pour lier le client</span>
+          </div>
+          <p className="text-xs mt-1 opacity-90">Appuyez sur ESC pour annuler</p>
         </div>
       )}
     </div>

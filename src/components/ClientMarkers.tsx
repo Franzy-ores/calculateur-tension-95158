@@ -129,6 +129,7 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
               <div style="font-weight: 600; font-size: 12px; color: #111827;">${c.nomCircuit}</div>
               <div style="font-size: 10px; color: #6b7280; margin-top: 2px;">
                 ${c.identifiantCircuit}<br>
+                ${c.rawData?.['Rue'] || c.rawData?.['Numéro de rue'] ? `${c.rawData?.['Rue'] || ''} ${c.rawData?.['Numéro de rue'] || ''}<br>` : ''}
                 <span style="color: #059669;">${c.couplage}</span> | 
                 <span style="color: #dc2626;">${c.puissanceContractuelle_kVA.toFixed(1)} kVA</span>
                 ${c.puissancePV_kVA > 0 ? ` | <span style="color: #f59e0b;">PV: ${c.puissancePV_kVA.toFixed(1)} kVA</span>` : ''}
@@ -490,6 +491,7 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
         <div style="min-width: 200px;">
           <strong>${client.nomCircuit}</strong><br>
           <strong>ID:</strong> ${client.identifiantCircuit}<br>
+          ${client.rawData?.['Rue'] || client.rawData?.['Numéro de rue'] ? `<strong>Adresse:</strong> ${client.rawData?.['Rue'] || ''} ${client.rawData?.['Numéro de rue'] || ''}<br>` : ''}
           <strong>Couplage:</strong> ${client.couplage}<br>
           <strong>Charge:</strong> ${client.puissanceContractuelle_kVA.toFixed(1)} kVA<br>
           <strong>PV:</strong> ${client.puissancePV_kVA.toFixed(1)} kVA<br>

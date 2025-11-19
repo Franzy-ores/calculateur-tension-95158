@@ -68,10 +68,13 @@ export function validateAndConvertConnectionType(
 /**
  * Assigne automatiquement une phase à un client MONO
  * Algorithme : équilibrage par puissance totale (charge + production)
+ * Pour 230V : retourne un couplage phase-phase (A-B, B-C, A-C)
+ * Pour 400V : retourne une phase simple (A, B, C)
  */
 export function autoAssignPhaseForMonoClient(
   client: ClientImporte,
-  existingClients: ClientImporte[]
+  existingClients: ClientImporte[],
+  networkVoltage: 'TRIPHASÉ_230V' | 'TÉTRAPHASÉ_400V' = 'TÉTRAPHASÉ_400V'
 ): 'A' | 'B' | 'C' {
   // Calculer la puissance totale par phase des clients déjà assignés
   const phaseLoads = { A: 0, B: 0, C: 0 };
@@ -94,9 +97,33 @@ export function autoAssignPhaseForMonoClient(
   // Si plusieurs phases ont la même charge minimale, choisir aléatoirement
   const assignedPhase = minPhases[Math.floor(Math.random() * minPhases.length)];
   
-  console.log(`📌 Client MONO "${client.nomCircuit}" assigné à phase ${assignedPhase}`);
+  // Déterminer le couplage selon le type de réseau
+  let phaseCoupling: 'A' | 'B' | 'C' | 'A-B' | 'B-C' | 'A-C';
+  
+  if (networkVoltage === 'TRIPHASÉ_230V') {
+    // 230V : couplage phase-à-phase
+    const couplings: Array<'A-B' | 'B-C' | 'A-C'> = ['A-B', 'B-C', 'A-C'];
+    const couplingLoads = {
+      'A-B': phaseLoads.A + phaseLoads.B,
+      'B-C': phaseLoads.B + phaseLoads.C,
+      'A-C': phaseLoads.A + phaseLoads.C
+    };
+    const minCouplingLoad = Math.min(...Object.values(couplingLoads));
+    const minCouplings = couplings.filter(c => couplingLoads[c] === minCouplingLoad);
+    phaseCoupling = minCouplings[Math.floor(Math.random() * minCouplings.length)];
+    
+    console.log(`📌 Client MONO "${client.nomCircuit}" assigné au couplage ${phaseCoupling} (230V phase-phase)`);
+  } else {
+    // 400V : phase-neutre simple
+    phaseCoupling = assignedPhase;
+    console.log(`📌 Client MONO "${client.nomCircuit}" assigné à phase ${assignedPhase} (400V phase-neutre)`);
+  }
+  
   console.log(`   Charges avant: A=${phaseLoads.A.toFixed(1)} kVA, B=${phaseLoads.B.toFixed(1)} kVA, C=${phaseLoads.C.toFixed(1)} kVA`);
   console.log(`   Puissance client: ${clientTotalPower.toFixed(1)} kVA`);
+  
+  // Stocker le couplage dans le client
+  client.phaseCoupling = phaseCoupling;
   
   return assignedPhase;
 }

@@ -58,6 +58,7 @@ export interface ClientImporte {
   
   // NOUVEAU : Mode mixte mono/polyphasé
   assignedPhase?: 'A' | 'B' | 'C';  // Phase assignée automatiquement pour clients MONO
+  phaseCoupling?: 'A' | 'B' | 'C' | 'A-B' | 'B-C' | 'A-C';  // Couplage précis: phase-neutre (400V) ou phase-phase (230V)
   connectionType?: ClientConnectionType; // Type de raccordement normalisé
   
   // Métadonnées Excel brutes (pour conserver toutes les colonnes)

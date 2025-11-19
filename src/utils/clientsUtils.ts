@@ -11,13 +11,15 @@ export interface ClientPowerAnalysis {
   markerSize: number;
   shouldPulse: boolean;
   badgeVariant: 'default' | 'warning' | 'destructive';
+  phaseCoupling?: string; // Ex: "A-B (230V)" ou "A (400V)"
 }
 
 /**
  * Analyse le niveau de risque d'un client MONO selon sa puissance contractuelle
  */
 export const analyzeClientPower = (
-  client: ClientImporte
+  client: ClientImporte,
+  networkVoltage?: 'TRIPHASÉ_230V' | 'TÉTRAPHASÉ_400V'
 ): ClientPowerAnalysis | null => {
   // Seulement pour les clients MONO
   if (client.connectionType !== 'MONO') {
@@ -25,6 +27,19 @@ export const analyzeClientPower = (
   }
 
   const power = client.puissanceContractuelle_kVA;
+  
+  // Déterminer le couplage (phase-phase pour 230V, phase-neutre pour 400V)
+  let phaseCoupling = '';
+  if (client.phaseCoupling) {
+    phaseCoupling = networkVoltage === 'TRIPHASÉ_230V' 
+      ? `${client.phaseCoupling} (230V)` 
+      : `${client.phaseCoupling} (400V)`;
+  } else if (client.assignedPhase) {
+    // Fallback si phaseCoupling n'est pas défini
+    phaseCoupling = networkVoltage === 'TRIPHASÉ_230V'
+      ? `${client.assignedPhase}-? (230V)`
+      : `${client.assignedPhase} (400V)`;
+  }
 
   if (power >= 36) {
     return {
@@ -33,7 +48,8 @@ export const analyzeClientPower = (
       color: '#ef4444', // red-500
       markerSize: 32,
       shouldPulse: true,
-      badgeVariant: 'destructive'
+      badgeVariant: 'destructive',
+      phaseCoupling
     };
   } else if (power >= 20) {
     return {
@@ -42,7 +58,8 @@ export const analyzeClientPower = (
       color: '#f97316', // orange-500
       markerSize: 28,
       shouldPulse: false,
-      badgeVariant: 'destructive'
+      badgeVariant: 'destructive',
+      phaseCoupling
     };
   } else if (power >= 10) {
     return {
@@ -51,7 +68,8 @@ export const analyzeClientPower = (
       color: '#f59e0b', // amber-500
       markerSize: 24,
       shouldPulse: false,
-      badgeVariant: 'warning'
+      badgeVariant: 'warning',
+      phaseCoupling
     };
   }
 
@@ -61,7 +79,8 @@ export const analyzeClientPower = (
     color: '#10b981', // green-500
     markerSize: 20,
     shouldPulse: false,
-    badgeVariant: 'default'
+    badgeVariant: 'default',
+    phaseCoupling
   };
 };
 

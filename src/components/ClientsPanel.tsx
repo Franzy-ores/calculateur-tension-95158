@@ -291,16 +291,16 @@ export const ClientsPanel = () => {
                             {client.couplage}
                           </Badge>
                           {(() => {
-                            const powerAnalysis = analyzeClientPower(client);
+                            const powerAnalysis = analyzeClientPower(client, currentProject?.voltageSystem);
                             return powerAnalysis && powerAnalysis.level !== 'normal' && (
                               <Badge variant={powerAnalysis.badgeVariant} className="text-xs">
                                 {powerAnalysis.label}
                               </Badge>
                             );
                           })()}
-                          {client.connectionType === 'MONO' && client.assignedPhase && (
+                          {client.connectionType === 'MONO' && powerAnalysis?.phaseCoupling && (
                             <Badge variant="outline" className="text-xs">
-                              Phase {client.assignedPhase}
+                              {powerAnalysis.phaseCoupling}
                             </Badge>
                           )}
                           {client.connectionType && client.connectionType !== 'MONO' && (

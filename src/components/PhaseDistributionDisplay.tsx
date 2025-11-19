@@ -332,7 +332,7 @@ export const PhaseDistributionDisplay = () => {
       {/* Récapitulatif par couplage avec courant de neutre */}
       <div className="p-3 bg-primary/5 border border-primary/20 rounded">
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs font-bold text-primary">📋 RÉCAPITULATIF PAR COUPLAGE</span>
+          <span className="text-xs font-bold text-white">📋 RÉCAPITULATIF PAR COUPLAGE</span>
           {currentProject.voltageSystem === 'TÉTRAPHASÉ_400V' && (
             <Badge variant="outline" className="text-xs">
               Courant neutre: {neutralCurrent.toFixed(1)} A
@@ -344,16 +344,16 @@ export const PhaseDistributionDisplay = () => {
           {/* 230V Phase-à-phase */}
           {currentProject.voltageSystem === 'TRIPHASÉ_230V' && (
             <div className="col-span-2 space-y-1">
-              <div className="font-medium text-primary mb-1">230V Phase-à-phase (sans neutre)</div>
+              <div className="font-medium text-white mb-1">230V Phase-à-phase (sans neutre)</div>
               {['A-B', 'B-C', 'A-C'].map(coupling => {
                 const group = clientsByCoupling[coupling];
                 if (!group) return null;
                 return (
                   <div key={coupling} className="flex items-center justify-between p-1.5 bg-blue-500/10 rounded">
-                    <span className="font-medium text-blue-400">Phase {coupling}</span>
+                    <span className="font-medium text-white">Phase {coupling}</span>
                     <div className="text-right">
-                      <div className="font-bold text-foreground">{group.clients.length} client{group.clients.length > 1 ? 's' : ''}</div>
-                      <div className="text-muted-foreground">{group.totalKVA.toFixed(1)} kVA · {group.totalCurrent.toFixed(1)} A</div>
+                      <div className="font-bold text-white">{group.clients.length} client{group.clients.length > 1 ? 's' : ''}</div>
+                      <div className="text-white">{group.totalKVA.toFixed(1)} kVA · {group.totalCurrent.toFixed(1)} A</div>
                     </div>
                   </div>
                 );
@@ -364,18 +364,17 @@ export const PhaseDistributionDisplay = () => {
           {/* 400V Phase-neutre */}
           {currentProject.voltageSystem === 'TÉTRAPHASÉ_400V' && (
             <div className="col-span-2 space-y-1">
-              <div className="font-medium text-primary mb-1">400V Phase-neutre</div>
+              <div className="font-medium text-white mb-1">400V Phase-neutre</div>
               {['A', 'B', 'C'].map(coupling => {
                 const group = clientsByCoupling[coupling];
                 if (!group) return null;
                 const bgClass = coupling === 'A' ? 'bg-blue-500/10' : coupling === 'B' ? 'bg-green-500/10' : 'bg-red-500/10';
-                const textClass = coupling === 'A' ? 'text-blue-400' : coupling === 'B' ? 'text-green-400' : 'text-red-400';
                 return (
                   <div key={coupling} className={`flex items-center justify-between p-1.5 ${bgClass} rounded`}>
-                    <span className={`font-medium ${textClass}`}>Phase {coupling}</span>
+                    <span className="font-medium text-white">Phase {coupling}</span>
                     <div className="text-right">
-                      <div className="font-bold text-foreground">{group.clients.length} client{group.clients.length > 1 ? 's' : ''}</div>
-                      <div className="text-muted-foreground">{group.totalKVA.toFixed(1)} kVA · {group.totalCurrent.toFixed(1)} A</div>
+                      <div className="font-bold text-white">{group.clients.length} client{group.clients.length > 1 ? 's' : ''}</div>
+                      <div className="text-white">{group.totalKVA.toFixed(1)} kVA · {group.totalCurrent.toFixed(1)} A</div>
                     </div>
                   </div>
                 );
@@ -385,12 +384,12 @@ export const PhaseDistributionDisplay = () => {
         </div>
         
         {currentProject.voltageSystem === 'TÉTRAPHASÉ_400V' && (
-          <div className="mt-2 text-[10px] text-muted-foreground">
+          <div className="mt-2 text-[10px] text-white">
             💡 Le courant de neutre est calculé vectoriellement à partir des charges par phase
           </div>
         )}
         {currentProject.voltageSystem === 'TRIPHASÉ_230V' && (
-          <div className="mt-2 text-[10px] text-muted-foreground">
+          <div className="mt-2 text-[10px] text-white">
             💡 Réseau 230V sans neutre : les clients MONO sont connectés entre 2 phases
           </div>
         )}

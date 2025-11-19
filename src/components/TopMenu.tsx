@@ -154,7 +154,8 @@ export const TopMenu = ({
                   const sourceMetrics = sourceNode && result.nodeMetricsPerPhase?.find(m => m.nodeId === sourceNode.id);
 
                   if (currentProject.voltageSystem === 'TÉTRAPHASÉ_400V' && currentProject.loadModel === 'monophase_reparti' && sourceMetrics) {
-                    const phaseNeutralA = sourceMetrics.voltagesPerPhase.A / Math.sqrt(3);
+                    // ✅ voltagesPerPhase.A est déjà en phase-neutre (230V) pour un réseau 400V
+                    const phaseNeutralA = sourceMetrics.voltagesPerPhase.A;
                     return <>VA: {phaseNeutralA.toFixed(0)}V · {typeof busbar.current_A === 'number' ? Math.abs(busbar.current_A).toFixed(0) : '0'}A · ΔU: {typeof busbar.deltaU_V === 'number' ? (busbar.deltaU_V >= 0 ? '+' : '') + busbar.deltaU_V.toFixed(1) : '0.0'}V</>;
                   }
 

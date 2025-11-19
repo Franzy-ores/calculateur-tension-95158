@@ -179,19 +179,15 @@ export const EditPanel = () => {
     : undefined;
 
   return (
-    <Sheet open={editPanelOpen && editTarget !== 'simulation'} onOpenChange={closeEditPanel}>
+    <Sheet open={editPanelOpen && editTarget !== 'simulation' && editTarget !== 'client'} onOpenChange={closeEditPanel}>
       <SheetContent className="w-96 overflow-y-auto" side="right">
         <SheetHeader>
           <SheetTitle>
             {editTarget === 'node' && 'Éditer le nœud'}
             {editTarget === 'cable' && 'Éditer le câble'}
             {editTarget === 'project' && 'Paramètres du projet'}
-            {editTarget === 'client' && 'Éditer le Client'}
           </SheetTitle>
         </SheetHeader>
-
-        {/* Client editing - use dedicated component */}
-        {editTarget === 'client' && <ClientEditPanel />}
 
         {/* Other panels */}
         <div className="space-y-6 py-6">

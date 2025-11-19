@@ -370,6 +370,7 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
         const tooltipContent = `
           <div style="font-size: 11px; line-height: 1.4; white-space: nowrap;">
             <strong>${client.nomCircuit || client.identifiantCircuit}</strong><br>
+            ${client.rawData?.['Rue'] || client.rawData?.['Numéro de rue'] ? `<span style="color: #666;">${client.rawData?.['Rue'] || ''} ${client.rawData?.['Numéro de rue'] || ''}</span><br>` : ''}
             <span style="color: #666;">Couplage: ${client.couplage}</span><br>
             <span style="color: #666;">Charge: ${client.puissanceContractuelle_kVA.toFixed(1)} kVA</span>
             ${client.puissancePV_kVA > 0 ? `<br><span style="color: #666;">PV: ${client.puissancePV_kVA.toFixed(1)} kVA</span>` : ''}

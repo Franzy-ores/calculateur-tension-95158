@@ -38,6 +38,7 @@ export const MapView = () => {
   const tempMarkersRef = useRef<L.Marker[]>([]);
   const tempLineRef = useRef<L.Polyline | null>(null);
   const [selectingNodeForClient, setSelectingNodeForClient] = useState(false);
+  const [movingClient, setMovingClient] = useState(false);
   
   const {
     currentProject,
@@ -200,28 +201,46 @@ export const MapView = () => {
       setSelectingNodeForClient(false);
     };
     
+    const handleStartMove = () => {
+      setMovingClient(true);
+    };
+    
+    const handleCancelMove = () => {
+      setMovingClient(false);
+    };
+    
     window.addEventListener('startNodeSelection', handleStartSelection);
     window.addEventListener('cancelNodeSelection', handleCancelSelection);
+    window.addEventListener('startClientMove', handleStartMove);
+    window.addEventListener('cancelClientMove', handleCancelMove);
     
     return () => {
       window.removeEventListener('startNodeSelection', handleStartSelection);
       window.removeEventListener('cancelNodeSelection', handleCancelSelection);
+      window.removeEventListener('startClientMove', handleStartMove);
+      window.removeEventListener('cancelClientMove', handleCancelMove);
     };
   }, []);
   
-  // Gérer ESC pour annuler la sélection de nœud
+  // Gérer ESC pour annuler la sélection de nœud ou le déplacement de client
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && selectingNodeForClient) {
-        setSelectingNodeForClient(false);
-        window.dispatchEvent(new CustomEvent('cancelNodeSelection'));
-        toast.info('Sélection annulée');
+      if (e.key === 'Escape') {
+        if (selectingNodeForClient) {
+          setSelectingNodeForClient(false);
+          window.dispatchEvent(new CustomEvent('cancelNodeSelection'));
+          toast.info('Sélection annulée');
+        } else if (movingClient) {
+          setMovingClient(false);
+          window.dispatchEvent(new CustomEvent('cancelClientMove'));
+          toast.info('Déplacement annulé');
+        }
       }
     };
     
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [selectingNodeForClient]);
+  }, [selectingNodeForClient, movingClient]);
 
   // Afficher les marqueurs clients sur la carte
   useClientMarkers({
@@ -301,6 +320,15 @@ export const MapView = () => {
     if (!map) return;
 
     const handleMapClick = (e: L.LeafletMouseEvent) => {
+      if (movingClient) {
+        // Mode déplacement de client : émettre l'événement avec les nouvelles coordonnées
+        window.dispatchEvent(new CustomEvent('locationSelectedForClient', {
+          detail: { lat: e.latlng.lat, lng: e.latlng.lng }
+        }));
+        setMovingClient(false);
+        return;
+      }
+      
       if (selectedTool === 'addNode' && !routingActive) {
         addNode(e.latlng.lat, e.latlng.lng);
       } else if (selectedTool === 'linkClient' && selectedClientForLinking) {
@@ -1414,6 +1442,19 @@ export const MapView = () => {
           <div className="flex items-center gap-2">
             <Target className="w-5 h-5 animate-pulse" />
             <span className="font-semibold">Cliquez sur un nœud pour lier le client</span>
+          </div>
+          <p className="text-xs mt-1 opacity-90">Appuyez sur ESC pour annuler</p>
+        </div>
+      )}
+      
+      {/* Indicateur de déplacement de client */}
+      {movingClient && (
+        <div 
+          className="absolute top-20 left-1/2 transform -translate-x-1/2 z-[1000] bg-amber-500 text-white px-4 py-2 rounded-lg shadow-lg pointer-events-none"
+        >
+          <div className="flex items-center gap-2">
+            <Target className="w-5 h-5 animate-pulse" />
+            <span className="font-semibold">Cliquez sur la carte pour définir la nouvelle position du client</span>
           </div>
           <p className="text-xs mt-1 opacity-90">Appuyez sur ESC pour annuler</p>
         </div>

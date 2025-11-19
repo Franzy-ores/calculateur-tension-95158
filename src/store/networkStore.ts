@@ -1311,7 +1311,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       currentProject.clientLinks || []
     );
     
-    // Mettre à jour la configuration du projet
+    // Mettre à jour la configuration du projet et forcer le mode MONO uniquement
     set({
       currentProject: {
         ...get().currentProject!,
@@ -1319,7 +1319,9 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
           charges: realChargesDistribution,
           productions: realProductionsDistribution,
           constraints: get().currentProject!.manualPhaseDistribution.constraints
-        }
+        },
+        phaseDistributionModeCharges: 'mono_only',
+        phaseDistributionModeProductions: 'mono_only'
       }
     });
     

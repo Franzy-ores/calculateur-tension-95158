@@ -6,10 +6,11 @@ import { ResultsPanel } from "@/components/ResultsPanel";
 import { EditPanel } from "@/components/EditPanel";
 import { ClientsPanel } from "@/components/ClientsPanel";
 import { SimulationPanel } from "@/components/SimulationPanel";
+import { ClientEditPanel } from "@/components/ClientEditPanel";
 import { useNetworkStore } from "@/store/networkStore";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Users } from "lucide-react";
+import { Users, X } from "lucide-react";
 
 const Index = () => {
   const [clientsPanelOpen, setClientsPanelOpen] = useState(false);
@@ -23,6 +24,7 @@ const Index = () => {
     createNewProject,
     loadProject,
     openEditPanel,
+    closeEditPanel,
     editTarget,
     resultsPanelOpen,
     resultsPanelFullscreen,
@@ -184,6 +186,25 @@ const Index = () => {
       </Sheet>
       
       <EditPanel />
+
+      {/* Client Edit Panel - Panneau fixe non-modal pour permettre l'interaction avec la carte */}
+      {editTarget === 'client' && (
+        <div className="fixed right-4 top-24 bottom-4 w-96 bg-background border border-border rounded-lg shadow-xl z-[500] overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between p-4 border-b">
+            <h2 className="text-lg font-semibold">Propriétés du Client</h2>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => closeEditPanel()}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4">
+            <ClientEditPanel />
+          </div>
+        </div>
+      )}
 
       {(() => {
         console.log('🐛 Current editTarget:', editTarget);

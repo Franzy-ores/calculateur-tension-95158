@@ -25,8 +25,8 @@ function calculateNeutralCurrent(Ia: number, Ib: number, Ic: number): number {
 function groupClientsByCoupling(
   clients: ClientImporte[] | undefined,
   voltageSystem: 'TRIPHASÉ_230V' | 'TÉTRAPHASÉ_400V'
-): Record<string, { clients: ClientImporte[]; totalKVA: number; totalCurrent: number }> {
-  const groups: Record<string, { clients: ClientImporte[]; totalKVA: number; totalCurrent: number }> = {};
+): Record<string, { clients: ClientImporte[]; totalKVA: number; totalProdKVA: number; totalCurrent: number }> {
+  const groups: Record<string, { clients: ClientImporte[]; totalKVA: number; totalProdKVA: number; totalCurrent: number }> = {};
   
   if (!clients) return groups;
   
@@ -35,11 +35,12 @@ function groupClientsByCoupling(
       const coupling = client.phaseCoupling || client.assignedPhase || 'Non assigné';
       
       if (!groups[coupling]) {
-        groups[coupling] = { clients: [], totalKVA: 0, totalCurrent: 0 };
+        groups[coupling] = { clients: [], totalKVA: 0, totalProdKVA: 0, totalCurrent: 0 };
       }
       
       groups[coupling].clients.push(client);
       groups[coupling].totalKVA += client.puissanceContractuelle_kVA;
+      groups[coupling].totalProdKVA += client.puissancePV_kVA || 0;
       
       // Calculer le courant (I = S / V)
       const voltage = voltageSystem === 'TRIPHASÉ_230V' ? 230 : 230; // Toujours 230V pour MONO
@@ -353,7 +354,8 @@ export const PhaseDistributionDisplay = () => {
                     <span className="font-medium text-white">Phase {coupling}</span>
                     <div className="text-right">
                       <div className="font-bold text-white">{group.clients.length} client{group.clients.length > 1 ? 's' : ''}</div>
-                      <div className="text-white">{group.totalKVA.toFixed(1)} kVA · {group.totalCurrent.toFixed(1)} A</div>
+                      <div className="text-white">Ch: {group.totalKVA.toFixed(1)} kVA · Pr: {group.totalProdKVA.toFixed(1)} kVA</div>
+                      <div className="text-white/70 text-[10px]">{group.totalCurrent.toFixed(1)} A</div>
                     </div>
                   </div>
                 );
@@ -374,7 +376,8 @@ export const PhaseDistributionDisplay = () => {
                     <span className="font-medium text-white">Phase {coupling}</span>
                     <div className="text-right">
                       <div className="font-bold text-white">{group.clients.length} client{group.clients.length > 1 ? 's' : ''}</div>
-                      <div className="text-white">{group.totalKVA.toFixed(1)} kVA · {group.totalCurrent.toFixed(1)} A</div>
+                      <div className="text-white">Ch: {group.totalKVA.toFixed(1)} kVA · Pr: {group.totalProdKVA.toFixed(1)} kVA</div>
+                      <div className="text-white/70 text-[10px]">{group.totalCurrent.toFixed(1)} A</div>
                     </div>
                   </div>
                 );

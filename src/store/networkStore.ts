@@ -1565,7 +1565,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   setShowVoltages: (show) => set({ showVoltages: show }),
 
   changeVoltageSystem: () => {
-    const { currentProject, updateAllCalculations, simulationEquipment } = get();
+    const { currentProject, updateAllCalculations, simulationEquipment, rebalanceAllMonoClients } = get();
     if (!currentProject) return;
 
     const newVoltageSystem: VoltageSystem = 
@@ -1623,6 +1623,12 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         neutralCompensators: updatedNeutralCompensators
       }
     });
+
+    // Rééquilibrage automatique des clients MONO
+    if (currentProject.loadModel === 'mixte_mono_poly') {
+      rebalanceAllMonoClients();
+      toast.success(`Rééquilibrage MONO automatique effectué pour le réseau ${newVoltageSystem === 'TRIPHASÉ_230V' ? '230V' : '400V'}`);
+    }
 
     // Recalcul automatique
     updateAllCalculations();

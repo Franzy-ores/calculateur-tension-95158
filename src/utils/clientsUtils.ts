@@ -315,7 +315,7 @@ export const groupColocatedClients = (
  */
 export const getClientMarkerColor = (
   client: ClientImporte, 
-  mode: 'couplage' | 'circuit' | 'tension' | 'lien',
+  mode: 'couplage' | 'circuit' | 'tension' | 'lien' | 'gps',
   circuitColorMapping?: Map<string, string>,
   clientLinks?: ClientLink[]
 ): string => {
@@ -342,6 +342,14 @@ export const getClientMarkerColor = (
       // Utiliser uniquement tensionCircuit_V
       if (client.tensionCircuit_V === undefined) return '#6b7280'; // Gris si pas de donnée
       return client.tensionCircuit_V < 300 ? '#06b6d4' : '#d946ef'; // Cyan pour 230V, Magenta pour 400V
+    
+    case 'gps':
+      // Distinguer GPS d'origine vs géocodé
+      if (client.geocoded === true) {
+        return '#f97316'; // Orange pour géocodé automatiquement
+      } else {
+        return '#22c55e'; // Vert pour GPS d'origine (présent dans Excel)
+      }
     
     case 'lien':
       // Vérifier si le client est lié à un nœud

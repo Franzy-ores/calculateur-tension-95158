@@ -18,7 +18,7 @@ import {
   LoadModel
 } from '@/types/network';
 
-export type ClientColorMode = 'couplage' | 'circuit' | 'tension' | 'lien';
+export type ClientColorMode = 'couplage' | 'circuit' | 'tension' | 'lien' | 'gps';
 import { SRG2Config, DEFAULT_SRG2_400_CONFIG, DEFAULT_SRG2_230_CONFIG } from '@/types/srg2';
 import { NodeWithConnectionType, getNodeConnectionType, addConnectionTypeToNodes } from '@/utils/nodeConnectionType';
 import { defaultCableTypes } from '@/data/defaultCableTypes';

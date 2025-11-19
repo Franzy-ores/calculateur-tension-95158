@@ -105,6 +105,8 @@ export const ClientsPanel = () => {
               {clientColorMode === 'couplage' && 'Par Couplage'}
               {clientColorMode === 'circuit' && 'Par Circuit'}
               {clientColorMode === 'tension' && 'Par Tension'}
+              {clientColorMode === 'lien' && 'Par Lien'}
+              {clientColorMode === 'gps' && 'Par Origine GPS'}
             </span>
           </div>
           
@@ -153,6 +155,32 @@ export const ClientsPanel = () => {
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded-full bg-[#6b7280]"></div>
                 <span>Non renseigné</span>
+              </div>
+            </div>
+          )}
+          
+          {clientColorMode === 'lien' && (
+            <div className="flex gap-4 mt-1.5 text-xs">
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-[#22c55e]"></div>
+                <span>Lié à un nœud</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-[#ef4444]"></div>
+                <span>Non lié</span>
+              </div>
+            </div>
+          )}
+          
+          {clientColorMode === 'gps' && (
+            <div className="flex gap-4 mt-1.5 text-xs">
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-[#22c55e]"></div>
+                <span>GPS d'origine (fichier Excel)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-[#f97316]"></div>
+                <span>GPS géocodé automatiquement</span>
               </div>
             </div>
           )}

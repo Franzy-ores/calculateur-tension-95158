@@ -76,13 +76,35 @@ export function autoAssignPhaseForMonoClient(
   existingClients: ClientImporte[],
   networkVoltage: 'TRIPHASÉ_230V' | 'TÉTRAPHASÉ_400V' = 'TÉTRAPHASÉ_400V'
 ): 'A' | 'B' | 'C' {
-  // Calculer la puissance totale par phase des clients déjà assignés
+  // Calculer la puissance totale par phase et par couplage des clients déjà assignés
   const phaseLoads = { A: 0, B: 0, C: 0 };
+  const couplingLoads = { 'A-B': 0, 'B-C': 0, 'A-C': 0 } as const;
   
   existingClients.forEach(c => {
-    if (c.connectionType === 'MONO' && c.assignedPhase) {
+    if (c.connectionType === 'MONO') {
       const totalPower = c.puissanceContractuelle_kVA + c.puissancePV_kVA;
-      phaseLoads[c.assignedPhase] += totalPower;
+      
+      if (networkVoltage === 'TRIPHASÉ_230V' && c.phaseCoupling) {
+        // 230V : répartir la puissance sur les 2 phases du couplage
+        if (c.phaseCoupling === 'A-B') {
+          // Mise à jour couplage
+          (couplingLoads as any)['A-B'] += totalPower;
+          // Charges par phase (50% / 50%)
+          phaseLoads.A += totalPower / 2;
+          phaseLoads.B += totalPower / 2;
+        } else if (c.phaseCoupling === 'B-C') {
+          (couplingLoads as any)['B-C'] += totalPower;
+          phaseLoads.B += totalPower / 2;
+          phaseLoads.C += totalPower / 2;
+        } else if (c.phaseCoupling === 'A-C') {
+          (couplingLoads as any)['A-C'] += totalPower;
+          phaseLoads.A += totalPower / 2;
+          phaseLoads.C += totalPower / 2;
+        }
+      } else if (c.assignedPhase) {
+        // 400V ou absence de phaseCoupling : tout sur la phase assignée
+        phaseLoads[c.assignedPhase] += totalPower;
+      }
     }
   });
   
@@ -101,15 +123,16 @@ export function autoAssignPhaseForMonoClient(
   let phaseCoupling: 'A' | 'B' | 'C' | 'A-B' | 'B-C' | 'A-C';
   
   if (networkVoltage === 'TRIPHASÉ_230V') {
-    // 230V : couplage phase-à-phase
+    // 230V : couplage phase-à-phase, équilibré sur les 3 couplages possibles
     const couplings: Array<'A-B' | 'B-C' | 'A-C'> = ['A-B', 'B-C', 'A-C'];
-    const couplingLoads = {
-      'A-B': phaseLoads.A + phaseLoads.B,
-      'B-C': phaseLoads.B + phaseLoads.C,
-      'A-C': phaseLoads.A + phaseLoads.C
+    // Si aucun historique (premier client), les charges de couplage sont à 0 par défaut
+    const currentCouplingLoads: Record<'A-B' | 'B-C' | 'A-C', number> = {
+      'A-B': (couplingLoads as any)['A-B'] || 0,
+      'B-C': (couplingLoads as any)['B-C'] || 0,
+      'A-C': (couplingLoads as any)['A-C'] || 0,
     };
-    const minCouplingLoad = Math.min(...Object.values(couplingLoads));
-    const minCouplings = couplings.filter(c => couplingLoads[c] === minCouplingLoad);
+    const minCouplingLoad = Math.min(...Object.values(currentCouplingLoads));
+    const minCouplings = couplings.filter(c => currentCouplingLoads[c] === minCouplingLoad);
     phaseCoupling = minCouplings[Math.floor(Math.random() * minCouplings.length)];
     
     console.log(`📌 Client MONO "${client.nomCircuit}" assigné au couplage ${phaseCoupling} (230V phase-phase)`);

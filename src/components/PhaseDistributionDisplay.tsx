@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { useNetworkStore } from "@/store/networkStore";
 import { calculateProjectUnbalance } from "@/utils/phaseDistributionCalculator";
 import { RefreshCw } from "lucide-react";
-import type { Node } from "@/types/network";
+import type { Node, ClientImporte } from "@/types/network";
+import { analyzeClientPower } from "@/utils/clientsUtils";
 
 // Helper pour calculer les charges par phase
 function calculatePhaseCharges(
@@ -76,6 +77,32 @@ export const PhaseDistributionDisplay = () => {
     else if (client.connectionType === 'TETRA') clientStats.tetra++;
   });
   
+  // Identifier les clients MONO à forte puissance par phase
+  const highPowerClientsPerPhase: {
+    A: ClientImporte[];
+    B: ClientImporte[];
+    C: ClientImporte[];
+  } = { A: [], B: [], C: [] };
+
+  currentProject.clientsImportes?.forEach(client => {
+    if (client.connectionType === 'MONO') {
+      const analysis = analyzeClientPower(client);
+      if (analysis && (analysis.level === 'high' || analysis.level === 'critical')) {
+        // Trouver la phase du client
+        if (client.assignedPhase) {
+          highPowerClientsPerPhase[client.assignedPhase as 'A' | 'B' | 'C'].push(client);
+        }
+      }
+    }
+  });
+
+  // Calculer le total de puissance à risque par phase
+  const riskPowerPerPhase = {
+    A: highPowerClientsPerPhase.A.reduce((sum, c) => sum + c.puissanceContractuelle_kVA, 0),
+    B: highPowerClientsPerPhase.B.reduce((sum, c) => sum + c.puissanceContractuelle_kVA, 0),
+    C: highPowerClientsPerPhase.C.reduce((sum, c) => sum + c.puissanceContractuelle_kVA, 0)
+  };
+  
   // Badge de statut avec couleurs sémantiques
   const statusBadge = {
     normal: { variant: 'default' as const, label: '✓ Normal', color: 'text-success' },
@@ -127,6 +154,119 @@ export const PhaseDistributionDisplay = () => {
         </Button>
       </div>
 
+      {/* Section d'alertes pour les clients à forte puissance */}
+      {(highPowerClientsPerPhase.A.length > 0 || 
+        highPowerClientsPerPhase.B.length > 0 || 
+        highPowerClientsPerPhase.C.length > 0) && (
+        <div className="p-3 bg-orange-500/10 border border-orange-500/30 rounded">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs font-bold text-orange-600">⚠️ CLIENTS À FORTE PUISSANCE MONO</span>
+          </div>
+          
+          <div className="grid grid-cols-3 gap-2 text-xs">
+            {/* Phase A */}
+            <div className={`p-2 rounded ${highPowerClientsPerPhase.A.length > 0 ? 'bg-blue-500/20 border border-blue-500/40' : 'bg-white/5'}`}>
+              <div className="font-medium text-blue-400 mb-1">Phase A</div>
+              {highPowerClientsPerPhase.A.length > 0 ? (
+                <>
+                  <div className="text-destructive font-bold">
+                    {highPowerClientsPerPhase.A.length} client{highPowerClientsPerPhase.A.length > 1 ? 's' : ''}
+                  </div>
+                  <div className="text-foreground">
+                    {riskPowerPerPhase.A.toFixed(1)} kVA
+                  </div>
+                  <div className="mt-1 space-y-0.5">
+                    {highPowerClientsPerPhase.A.slice(0, 3).map(client => {
+                      const analysis = analyzeClientPower(client);
+                      return (
+                        <div key={client.id} className="text-[10px] truncate" title={client.nomCircuit}>
+                          <span style={{ color: analysis?.color }}>{analysis?.label.split(' ')[0]}</span> {client.nomCircuit.substring(0, 15)} ({client.puissanceContractuelle_kVA.toFixed(1)}kVA)
+                        </div>
+                      );
+                    })}
+                    {highPowerClientsPerPhase.A.length > 3 && (
+                      <div className="text-[10px] text-muted-foreground">
+                        +{highPowerClientsPerPhase.A.length - 3} autre{highPowerClientsPerPhase.A.length - 3 > 1 ? 's' : ''}
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="text-muted-foreground">Aucun</div>
+              )}
+            </div>
+            
+            {/* Phase B */}
+            <div className={`p-2 rounded ${highPowerClientsPerPhase.B.length > 0 ? 'bg-green-500/20 border border-green-500/40' : 'bg-white/5'}`}>
+              <div className="font-medium text-green-400 mb-1">Phase B</div>
+              {highPowerClientsPerPhase.B.length > 0 ? (
+                <>
+                  <div className="text-destructive font-bold">
+                    {highPowerClientsPerPhase.B.length} client{highPowerClientsPerPhase.B.length > 1 ? 's' : ''}
+                  </div>
+                  <div className="text-foreground">
+                    {riskPowerPerPhase.B.toFixed(1)} kVA
+                  </div>
+                  <div className="mt-1 space-y-0.5">
+                    {highPowerClientsPerPhase.B.slice(0, 3).map(client => {
+                      const analysis = analyzeClientPower(client);
+                      return (
+                        <div key={client.id} className="text-[10px] truncate" title={client.nomCircuit}>
+                          <span style={{ color: analysis?.color }}>{analysis?.label.split(' ')[0]}</span> {client.nomCircuit.substring(0, 15)} ({client.puissanceContractuelle_kVA.toFixed(1)}kVA)
+                        </div>
+                      );
+                    })}
+                    {highPowerClientsPerPhase.B.length > 3 && (
+                      <div className="text-[10px] text-muted-foreground">
+                        +{highPowerClientsPerPhase.B.length - 3} autre{highPowerClientsPerPhase.B.length - 3 > 1 ? 's' : ''}
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="text-muted-foreground">Aucun</div>
+              )}
+            </div>
+            
+            {/* Phase C */}
+            <div className={`p-2 rounded ${highPowerClientsPerPhase.C.length > 0 ? 'bg-red-500/20 border border-red-500/40' : 'bg-white/5'}`}>
+              <div className="font-medium text-red-400 mb-1">Phase C</div>
+              {highPowerClientsPerPhase.C.length > 0 ? (
+                <>
+                  <div className="text-destructive font-bold">
+                    {highPowerClientsPerPhase.C.length} client{highPowerClientsPerPhase.C.length > 1 ? 's' : ''}
+                  </div>
+                  <div className="text-foreground">
+                    {riskPowerPerPhase.C.toFixed(1)} kVA
+                  </div>
+                  <div className="mt-1 space-y-0.5">
+                    {highPowerClientsPerPhase.C.slice(0, 3).map(client => {
+                      const analysis = analyzeClientPower(client);
+                      return (
+                        <div key={client.id} className="text-[10px] truncate" title={client.nomCircuit}>
+                          <span style={{ color: analysis?.color }}>{analysis?.label.split(' ')[0]}</span> {client.nomCircuit.substring(0, 15)} ({client.puissanceContractuelle_kVA.toFixed(1)}kVA)
+                        </div>
+                      );
+                    })}
+                    {highPowerClientsPerPhase.C.length > 3 && (
+                      <div className="text-[10px] text-muted-foreground">
+                        +{highPowerClientsPerPhase.C.length - 3} autre{highPowerClientsPerPhase.C.length - 3 > 1 ? 's' : ''}
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="text-muted-foreground">Aucun</div>
+              )}
+            </div>
+          </div>
+          
+          <div className="mt-2 text-[10px] text-muted-foreground">
+            💡 Cliquez sur "Rééquilibrer MONO" pour optimiser la distribution
+          </div>
+        </div>
+      )}
+
       {/* Ligne 2: Tableau compact Charges / Productions */}
       <div className="grid grid-cols-2 gap-3">
         {/* CHARGES */}
@@ -143,10 +283,14 @@ export const PhaseDistributionDisplay = () => {
               const moyenne = (phaseLoads.A + phaseLoads.B + phaseLoads.C) / 3;
               const ecart = moyenne > 0 ? ((phaseLoads[phaseName] - moyenne) / moyenne * 100) : 0;
               const ecartColor = Math.abs(ecart) < 5 ? 'text-green-400' : Math.abs(ecart) < 10 ? 'text-yellow-400' : 'text-red-400';
+              const hasRisk = highPowerClientsPerPhase[phaseName].length > 0;
               
               return (
-                <div key={phase} className="flex flex-col gap-0.5 text-center">
-                  <span className="text-xs font-bold text-blue-300">Ph{phase}</span>
+                <div key={phase} className={`flex flex-col gap-0.5 text-center ${hasRisk ? 'bg-blue-500/10 border-l-2 border-blue-500' : ''}`}>
+                  <div className="flex items-center justify-center gap-1">
+                    <span className="text-xs font-bold text-blue-300">Ph{phase}</span>
+                    {hasRisk && <span className="text-orange-500 text-xs">⚠️</span>}
+                  </div>
                   
                   {/* Total */}
                   <div className="flex flex-col">

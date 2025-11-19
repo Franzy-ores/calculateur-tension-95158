@@ -7,11 +7,13 @@ import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useNetworkStore } from '@/store/networkStore';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { analyzeClientPower } from '@/utils/clientsUtils';
 
 export const ClientsPanel = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCouplage, setFilterCouplage] = useState<'ALL' | 'TRI' | 'MONO'>('ALL');
   const [filterLinked, setFilterLinked] = useState<'ALL' | 'LINKED' | 'UNLINKED'>('ALL');
+  const [filterPower, setFilterPower] = useState<'ALL' | 'HIGH_POWER'>('ALL');
 
   const {
     currentProject,
@@ -56,6 +58,14 @@ export const ClientsPanel = () => {
     const isLinked = links.some(link => link.clientId === client.id);
     if (filterLinked === 'LINKED' && !isLinked) return false;
     if (filterLinked === 'UNLINKED' && isLinked) return false;
+
+    // Filtre puissance
+    if (filterPower === 'HIGH_POWER') {
+      const analysis = analyzeClientPower(client);
+      if (!analysis || analysis.level === 'normal') {
+        return false;
+      }
+    }
 
     return true;
   });
@@ -247,6 +257,16 @@ export const ClientsPanel = () => {
               </SelectContent>
             </Select>
           </div>
+          
+          <Select value={filterPower} onValueChange={(v: any) => setFilterPower(v)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Toutes puissances</SelectItem>
+              <SelectItem value="HIGH_POWER">⚡ Forte puissance (≥10 kVA MONO)</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </Card>
 
@@ -270,6 +290,14 @@ export const ClientsPanel = () => {
                           <Badge variant={client.couplage === 'TRI' ? 'default' : 'secondary'}>
                             {client.couplage}
                           </Badge>
+                          {(() => {
+                            const powerAnalysis = analyzeClientPower(client);
+                            return powerAnalysis && powerAnalysis.level !== 'normal' && (
+                              <Badge variant={powerAnalysis.badgeVariant} className="text-xs">
+                                {powerAnalysis.label}
+                              </Badge>
+                            );
+                          })()}
                           {client.connectionType === 'MONO' && client.assignedPhase && (
                             <Badge variant="outline" className="text-xs">
                               Phase {client.assignedPhase}

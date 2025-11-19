@@ -2,6 +2,69 @@ import * as XLSX from 'xlsx';
 import { ClientImporte, Node, ClientLink } from '@/types/network';
 import { geocodeAddress, delay } from './geocodingService';
 
+export type ClientPowerLevel = 'normal' | 'medium' | 'high' | 'critical';
+
+export interface ClientPowerAnalysis {
+  level: ClientPowerLevel;
+  label: string;
+  color: string;
+  markerSize: number;
+  shouldPulse: boolean;
+  badgeVariant: 'default' | 'warning' | 'destructive';
+}
+
+/**
+ * Analyse le niveau de risque d'un client MONO selon sa puissance contractuelle
+ */
+export const analyzeClientPower = (
+  client: ClientImporte
+): ClientPowerAnalysis | null => {
+  // Seulement pour les clients MONO
+  if (client.connectionType !== 'MONO') {
+    return null;
+  }
+
+  const power = client.puissanceContractuelle_kVA;
+
+  if (power >= 36) {
+    return {
+      level: 'critical',
+      label: '🔴 CRITIQUE',
+      color: '#ef4444', // red-500
+      markerSize: 32,
+      shouldPulse: true,
+      badgeVariant: 'destructive'
+    };
+  } else if (power >= 20) {
+    return {
+      level: 'high',
+      label: '⚡ FORTE CHARGE',
+      color: '#f97316', // orange-500
+      markerSize: 28,
+      shouldPulse: false,
+      badgeVariant: 'destructive'
+    };
+  } else if (power >= 10) {
+    return {
+      level: 'medium',
+      label: '⚠️ MOYENNE',
+      color: '#f59e0b', // amber-500
+      markerSize: 24,
+      shouldPulse: false,
+      badgeVariant: 'warning'
+    };
+  }
+
+  return {
+    level: 'normal',
+    label: '',
+    color: '#10b981', // green-500
+    markerSize: 20,
+    shouldPulse: false,
+    badgeVariant: 'default'
+  };
+};
+
 /**
  * Construit une adresse complète à partir des composants
  */

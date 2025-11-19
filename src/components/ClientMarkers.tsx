@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { ClientImporte, ClientLink, Node, ClientGroupe } from '@/types/network';
-import { getClientMarkerColor, groupColocatedClients } from '@/utils/clientsUtils';
+import { getClientMarkerColor, groupColocatedClients, analyzeClientPower } from '@/utils/clientsUtils';
 import type { ClientColorMode } from '@/store/networkStore';
 
 interface ClientMarkersProps {
@@ -317,19 +317,30 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
       const borderColor = isSelected ? '#22c55e' : 'white';
       const borderWidth = isSelected ? 3 : 2;
       
+      // Analyser le niveau de puissance pour adapter la taille du marqueur
+      const powerAnalysis = analyzeClientPower(client);
+      
       // Ajouter un cercle jaune si le client a une production PV
       const hasProduction = client.puissancePV_kVA > 0;
-      const iconSize = hasProduction ? 18 : 12;
-      const iconAnchor = hasProduction ? 9 : 6;
+      
+      // Déterminer la taille du marqueur
+      const baseSize = powerAnalysis?.markerSize || 20;
+      const shouldPulse = powerAnalysis?.shouldPulse || false;
+      const iconSize = hasProduction ? baseSize + 6 : baseSize;
+      const iconAnchor = iconSize / 2;
+      const innerSize = hasProduction ? baseSize : baseSize;
+      
+      const pulseClass = shouldPulse ? 'animate-pulse' : '';
+      const hoverClass = isSelected ? 'animate-pulse' : 'hover:scale-125 transition-transform';
       
       const icon = L.divIcon({
         className: 'client-marker',
         html: hasProduction 
-          ? `<div class="relative ${isSelected ? 'animate-pulse' : 'hover:scale-125 transition-transform'}" style="width: 18px; height: 18px; cursor: grab;">
-               <div class="absolute inset-0 rounded-full border-2 border-yellow-400" style="box-shadow: 0 0 6px rgba(250, 204, 21, 0.6);"></div>
-               <div class="absolute" style="top: 3px; left: 3px; width: 12px; height: 12px; background-color: ${color}; border: ${borderWidth}px solid ${borderColor}; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>
+          ? `<div class="relative ${hoverClass} ${pulseClass}" style="width: ${iconSize}px; height: ${iconSize}px; cursor: grab;">
+               <div class="absolute inset-0 rounded-full border-2 border-yellow-400" style="box-shadow: 0 0 8px rgba(250, 204, 21, 0.7);"></div>
+               <div class="absolute" style="top: 3px; left: 3px; width: ${innerSize}px; height: ${innerSize}px; background-color: ${color}; border: ${borderWidth}px solid ${borderColor}; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>
              </div>`
-          : `<div class="w-3 h-3 rounded-full shadow-lg ${isSelected ? 'animate-pulse' : 'hover:scale-125 transition-transform'}" style="background-color: ${color}; border: ${borderWidth}px solid ${borderColor}; cursor: grab;"></div>`,
+          : `<div class="rounded-full shadow-lg ${hoverClass} ${pulseClass}" style="width: ${iconSize}px; height: ${iconSize}px; background-color: ${color}; border: ${borderWidth}px solid ${borderColor}; cursor: grab;"></div>`,
         iconSize: [iconSize, iconSize],
         iconAnchor: [iconAnchor, iconAnchor]
       });
@@ -442,7 +453,7 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
           highlightCircleRef.current = null;
         }
       });
-
+      
       marker.on('dragend', (e) => {
         const dropLatLng = e.target.getLatLng();
         
@@ -456,7 +467,7 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
           highlightCircleRef.current = null;
         }
         
-        // Vérifier si on a lâché sur un nœud (trouver le plus proche)
+        // Vérifier si on a lâché sur un nœud
         const closestNodeAtDrop = nodes.reduce<{ node: Node | null; distance: number }>(
           (closest, node) => {
             const distance = map.distance(
@@ -488,9 +499,21 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
         map.dragging.enable();
       });
       
+      const clientPowerAnalysis = analyzeClientPower(client);
+      
       const popupContent = `
-        <div style="min-width: 200px;">
-          <strong>${client.nomCircuit}</strong><br>
+        <div style="font-family: system-ui, -apple-system, sans-serif; font-size: 12px; line-height: 1.5; min-width: 200px;">
+          <div style="font-weight: 600; font-size: 14px; margin-bottom: 8px; color: #1f2937;">
+            ${client.nomCircuit}
+          </div>
+          ${clientPowerAnalysis && clientPowerAnalysis.level !== 'normal' ? `
+            <div style="background: ${clientPowerAnalysis.color}20; border-left: 3px solid ${clientPowerAnalysis.color}; padding: 6px 8px; margin-bottom: 8px; border-radius: 4px;">
+              <span style="font-weight: 700; color: ${clientPowerAnalysis.color};">${clientPowerAnalysis.label}</span>
+              <div style="font-size: 11px; color: #4b5563; margin-top: 2px;">
+                Puissance mono élevée : ${client.puissanceContractuelle_kVA.toFixed(1)} kVA
+              </div>
+            </div>
+          ` : ''}
           <strong>ID:</strong> ${client.identifiantCircuit}<br>
           ${client.rawData?.['Rue'] || client.rawData?.['Numéro de rue'] ? `<strong>Adresse:</strong> ${client.rawData?.['Rue'] || ''} ${client.rawData?.['Numéro de rue'] || ''}<br>` : ''}
           <strong>Couplage:</strong> ${client.couplage}<br>

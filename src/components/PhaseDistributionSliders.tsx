@@ -81,42 +81,40 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
   const initializeToRealDistribution = () => {
     if (!currentProject) return;
     
-    // FORCER le mode MONO uniquement
+    // ✅ RESPECTER le mode actuel au lieu de forcer mono_only
     let realDistribution: { A: number; B: number; C: number };
     
-    // Calculer la répartition réelle des MONO
-    if (type === 'charges') {
-      realDistribution = calculateRealMonoDistributionPercents(
-        currentProject.nodes,
-        currentProject.clientsImportes || [],
-        currentProject.clientLinks || []
-      );
+    // Calculer selon le mode actuel
+    if (currentMode === 'all_clients') {
+      // Mode "tous les clients" : POLY équilibrés + MONO répartition réelle
+      realDistribution = calculateBalancedPolyPlusRealMono();
     } else {
-      realDistribution = calculateRealMonoProductionDistributionPercents(
-        currentProject.nodes,
-        currentProject.clientsImportes || [],
-        currentProject.clientLinks || []
-      );
+      // Mode "MONO uniquement" : répartition réelle des MONO seulement
+      if (type === 'charges') {
+        realDistribution = calculateRealMonoDistributionPercents(
+          currentProject.nodes,
+          currentProject.clientsImportes || [],
+          currentProject.clientLinks || []
+        );
+      } else {
+        realDistribution = calculateRealMonoProductionDistributionPercents(
+          currentProject.nodes,
+          currentProject.clientsImportes || [],
+          currentProject.clientLinks || []
+        );
+      }
     }
     
-    // Mettre à jour les curseurs ET forcer le mode mono_only
-    const updatedConfig: any = {
+    // Mettre à jour les curseurs SANS changer le mode
+    updateProjectConfig({
       manualPhaseDistribution: {
         ...currentProject.manualPhaseDistribution,
         [type]: realDistribution
       }
-    };
+    });
     
-    // Forcer le passage en mode MONO uniquement
-    if (type === 'charges') {
-      updatedConfig.phaseDistributionModeCharges = 'mono_only';
-    } else {
-      updatedConfig.phaseDistributionModeProductions = 'mono_only';
-    }
-    
-    updateProjectConfig(updatedConfig);
-    
-    toast.success(`${type === 'charges' ? 'Charges' : 'Productions'} réinitialisées en mode MONO uniquement : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
+    const modeLabel = currentMode === 'all_clients' ? 'TOUS les clients (poly équilibrés + mono répartis)' : 'MONO uniquement';
+    toast.success(`${type === 'charges' ? 'Charges' : 'Productions'} réinitialisées (${modeLabel}) : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
   };
   
   const handleModeChange = (newMode: 'mono_only' | 'all_clients') => {

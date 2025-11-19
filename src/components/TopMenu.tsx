@@ -184,6 +184,35 @@ export const TopMenu = ({
           </div>
         )}
 
+        {/* Model and Scenario Selectors */}
+        {currentProject && (
+          <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded ml-2">
+            <Label className="text-xs font-medium text-white drop-shadow-sm">Modèle:</Label>
+            <Select value={currentProject.loadModel || 'polyphase_equilibre'} onValueChange={(value: LoadModel) => updateProjectConfig({ loadModel: value })}>
+              <SelectTrigger className="w-[130px] bg-white/10 border-white/20 text-white text-xs h-6">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-background border z-[10000]">
+                <SelectItem value="polyphase_equilibre">Polyphasé équilibré</SelectItem>
+                <SelectItem value="monophase_reparti">Monophasé réparti</SelectItem>
+                <SelectItem value="mixte_mono_poly">Mixte mono/poly ✨</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Label className="text-xs font-medium text-white drop-shadow-sm ml-2">Scénario:</Label>
+            <Select value={selectedScenario || 'PRÉLÈVEMENT'} onValueChange={setSelectedScenario}>
+              <SelectTrigger className="w-[110px] bg-white/10 border-white/20 text-white text-xs h-6">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-background border z-[10000]">
+                <SelectItem value="PRÉLÈVEMENT">Prélèvement</SelectItem>
+                <SelectItem value="MIXTE">Mixte</SelectItem>
+                <SelectItem value="PRODUCTION">Production</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         {/* Right: Actions Buttons (compact) */}
         <div className="flex items-center gap-0.5">
           {/* Node Voltage Display Button */}
@@ -273,34 +302,7 @@ export const TopMenu = ({
       {/* ROW 2 - Controls (~50px, visible if project exists) */}
       {currentProject && (
         <div className="flex items-center px-4 py-2 gap-1 border-t border-white/10">
-          {/* Groupe 1: Configuration */}
-          <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded border-r border-white/20">
-            <Label className="text-xs font-medium text-white drop-shadow-sm">Modèle:</Label>
-            <Select value={currentProject.loadModel || 'polyphase_equilibre'} onValueChange={(value: LoadModel) => updateProjectConfig({ loadModel: value })}>
-              <SelectTrigger className="w-[130px] bg-white/10 border-white/20 text-white text-xs h-6">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-background border z-[10000]">
-                <SelectItem value="polyphase_equilibre">Polyphasé équilibré</SelectItem>
-                <SelectItem value="monophase_reparti">Monophasé réparti</SelectItem>
-                <SelectItem value="mixte_mono_poly">Mixte mono/poly ✨</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Label className="text-xs font-medium text-white drop-shadow-sm ml-2">Scénario:</Label>
-            <Select value={selectedScenario || 'PRÉLÈVEMENT'} onValueChange={setSelectedScenario}>
-              <SelectTrigger className="w-[110px] bg-white/10 border-white/20 text-white text-xs h-6">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-background border z-[10000]">
-                <SelectItem value="PRÉLÈVEMENT">Prélèvement</SelectItem>
-                <SelectItem value="MIXTE">Mixte</SelectItem>
-                <SelectItem value="PRODUCTION">Production</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Groupe 3: Foisonnement Sliders */}
+          {/* Groupe 1: Foisonnement Sliders */}
           <div className="flex items-center gap-4 bg-white/5 px-3 py-2 rounded border-r border-white/20">
             {/* Charges Slider */}
             <div className="flex flex-col items-center gap-1">

@@ -66,11 +66,87 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
     toast.success(`${type === 'charges' ? 'Charges' : 'Productions'} réinitialisées : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
   };
   
+  // Nouvelle fonction pour calculer la distribution réelle MONO + POLY
+  const calculateRealDistributionForAllClients = (): { A: number; B: number; C: number } => {
+    let totalA = 0, totalB = 0, totalC = 0;
+    
+    currentProject.nodes.forEach(node => {
+      if (!node.autoPhaseDistribution) return;
+      
+      if (type === 'charges') {
+        // Somme MONO + POLY pour les charges
+        totalA += node.autoPhaseDistribution.charges.mono.A + node.autoPhaseDistribution.charges.poly.A;
+        totalB += node.autoPhaseDistribution.charges.mono.B + node.autoPhaseDistribution.charges.poly.B;
+        totalC += node.autoPhaseDistribution.charges.mono.C + node.autoPhaseDistribution.charges.poly.C;
+      } else {
+        // Somme MONO + POLY pour les productions
+        totalA += node.autoPhaseDistribution.productions.mono.A + node.autoPhaseDistribution.productions.poly.A;
+        totalB += node.autoPhaseDistribution.productions.mono.B + node.autoPhaseDistribution.productions.poly.B;
+        totalC += node.autoPhaseDistribution.productions.mono.C + node.autoPhaseDistribution.productions.poly.C;
+      }
+    });
+    
+    const total = totalA + totalB + totalC;
+    
+    // Éviter division par zéro
+    if (total === 0) {
+      return { A: 33.33, B: 33.33, C: 33.34 };
+    }
+    
+    return {
+      A: (totalA / total) * 100,
+      B: (totalB / total) * 100,
+      C: (totalC / total) * 100
+    };
+  };
+
   const handleModeChange = (newMode: 'mono_only' | 'all_clients') => {
+    // 1. Mettre à jour le mode
     updateProjectConfig({
       phaseDistributionMode: newMode
     });
-    toast.success(newMode === 'mono_only' ? 'Répartition appliquée aux MONO uniquement' : 'Répartition appliquée à tous les clients');
+    
+    // 2. Recalculer automatiquement les pourcentages en fonction du mode
+    if (newMode === 'all_clients') {
+      // Passer en mode "tous les clients" : recalculer avec MONO + POLY
+      const realDistribution = calculateRealDistributionForAllClients();
+      
+      updateProjectConfig({
+        manualPhaseDistribution: {
+          ...currentProject.manualPhaseDistribution,
+          [type]: realDistribution
+        }
+      });
+      
+      toast.success(`Répartition appliquée à TOUS les clients : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
+      
+    } else {
+      // Revenir en mode "mono uniquement" : recalculer avec MONO seulement
+      let realDistribution: { A: number; B: number; C: number };
+      
+      if (type === 'charges') {
+        realDistribution = calculateRealMonoDistributionPercents(
+          currentProject.nodes,
+          currentProject.clientsImportes || [],
+          currentProject.clientLinks || []
+        );
+      } else {
+        realDistribution = calculateRealMonoProductionDistributionPercents(
+          currentProject.nodes,
+          currentProject.clientsImportes || [],
+          currentProject.clientLinks || []
+        );
+      }
+      
+      updateProjectConfig({
+        manualPhaseDistribution: {
+          ...currentProject.manualPhaseDistribution,
+          [type]: realDistribution
+        }
+      });
+      
+      toast.success(`Répartition appliquée aux MONO uniquement : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
+    }
   };
   
   // Calcul des valeurs kVA par phase
@@ -78,29 +154,68 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
     let totalValue = 0;
     
     if (currentProject.loadModel === 'mixte_mono_poly') {
-      // MODE MIXTE : ne compter que les charges MONO
+      // Déterminer quel mode est actif
+      const mode = currentProject.phaseDistributionMode || 'mono_only';
+      
       currentProject.nodes.forEach(node => {
-        // Charges manuelles MONO
-        if (type === 'charges' && node.manualLoadType === 'MONO' && node.clients.length > 0) {
-          node.clients.forEach(client => {
-            totalValue += (client.S_kVA || 0) * (currentProject.foisonnementCharges / 100);
-          });
-        } else if (type === 'productions' && node.manualLoadType === 'MONO' && node.productions.length > 0) {
-          node.productions.forEach(production => {
-            totalValue += (production.S_kVA || 0) * (currentProject.foisonnementProductions / 100);
-          });
-        }
-        
-        // Clients importés MONO
-        if (node.autoPhaseDistribution) {
-          if (type === 'charges') {
-            totalValue += node.autoPhaseDistribution.charges.mono.A + 
-                         node.autoPhaseDistribution.charges.mono.B + 
-                         node.autoPhaseDistribution.charges.mono.C;
-          } else {
-            totalValue += node.autoPhaseDistribution.productions.mono.A + 
-                         node.autoPhaseDistribution.productions.mono.B + 
-                         node.autoPhaseDistribution.productions.mono.C;
+        if (mode === 'mono_only') {
+          // MODE MONO UNIQUEMENT : ne compter que les charges/productions MONO
+          
+          // Charges manuelles MONO
+          if (type === 'charges' && node.manualLoadType === 'MONO' && node.clients.length > 0) {
+            node.clients.forEach(client => {
+              totalValue += (client.S_kVA || 0) * (currentProject.foisonnementCharges / 100);
+            });
+          } else if (type === 'productions' && node.manualLoadType === 'MONO' && node.productions.length > 0) {
+            node.productions.forEach(production => {
+              totalValue += (production.S_kVA || 0) * (currentProject.foisonnementProductions / 100);
+            });
+          }
+          
+          // Clients importés MONO
+          if (node.autoPhaseDistribution) {
+            if (type === 'charges') {
+              totalValue += node.autoPhaseDistribution.charges.mono.A + 
+                           node.autoPhaseDistribution.charges.mono.B + 
+                           node.autoPhaseDistribution.charges.mono.C;
+            } else {
+              totalValue += node.autoPhaseDistribution.productions.mono.A + 
+                           node.autoPhaseDistribution.productions.mono.B + 
+                           node.autoPhaseDistribution.productions.mono.C;
+            }
+          }
+          
+        } else {
+          // MODE TOUS LES CLIENTS : compter MONO + POLY
+          
+          // Toutes les charges manuelles (MONO + POLY/TETRA)
+          if (type === 'charges' && node.clients.length > 0) {
+            node.clients.forEach(client => {
+              totalValue += (client.S_kVA || 0) * (currentProject.foisonnementCharges / 100);
+            });
+          } else if (type === 'productions' && node.productions.length > 0) {
+            node.productions.forEach(production => {
+              totalValue += (production.S_kVA || 0) * (currentProject.foisonnementProductions / 100);
+            });
+          }
+          
+          // Tous les clients importés (MONO + POLY)
+          if (node.autoPhaseDistribution) {
+            if (type === 'charges') {
+              totalValue += node.autoPhaseDistribution.charges.mono.A + 
+                           node.autoPhaseDistribution.charges.mono.B + 
+                           node.autoPhaseDistribution.charges.mono.C +
+                           node.autoPhaseDistribution.charges.poly.A + 
+                           node.autoPhaseDistribution.charges.poly.B + 
+                           node.autoPhaseDistribution.charges.poly.C;
+            } else {
+              totalValue += node.autoPhaseDistribution.productions.mono.A + 
+                           node.autoPhaseDistribution.productions.mono.B + 
+                           node.autoPhaseDistribution.productions.mono.C +
+                           node.autoPhaseDistribution.productions.poly.A + 
+                           node.autoPhaseDistribution.productions.poly.B + 
+                           node.autoPhaseDistribution.productions.poly.C;
+            }
           }
         }
       });

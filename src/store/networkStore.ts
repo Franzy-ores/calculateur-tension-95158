@@ -1295,6 +1295,9 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       get().updateNodePhaseDistribution(node.id);
     });
     
+    // Récupérer le state mis à jour après tous les updateNodePhaseDistribution
+    const updatedProject = get().currentProject!;
+    
     get().updateAllCalculations();
     
     // Relancer le calcul de tension
@@ -1302,15 +1305,15 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     
     // Mettre à jour les curseurs de distribution manuelle après rééquilibrage
     const realChargesDistribution = calculateRealMonoDistributionPercents(
-      currentProject.nodes,
-      currentProject.clientsImportes || [],
-      currentProject.clientLinks || []
+      updatedProject.nodes,
+      updatedProject.clientsImportes || [],
+      updatedProject.clientLinks || []
     );
     
     const realProductionsDistribution = calculateRealMonoProductionDistributionPercents(
-      currentProject.nodes,
-      currentProject.clientsImportes || [],
-      currentProject.clientLinks || []
+      updatedProject.nodes,
+      updatedProject.clientsImportes || [],
+      updatedProject.clientLinks || []
     );
     
     // Mettre à jour la configuration du projet et forcer le mode MONO uniquement

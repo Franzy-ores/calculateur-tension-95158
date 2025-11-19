@@ -1295,6 +1295,34 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     
     get().updateAllCalculations();
     
+    // Mettre à jour les curseurs de distribution manuelle après rééquilibrage
+    const realChargesDistribution = calculateRealMonoDistributionPercents(
+      currentProject.nodes,
+      currentProject.clientsImportes || [],
+      currentProject.clientLinks || []
+    );
+    
+    const realProductionsDistribution = calculateRealMonoProductionDistributionPercents(
+      currentProject.nodes,
+      currentProject.clientsImportes || [],
+      currentProject.clientLinks || []
+    );
+    
+    // Mettre à jour la configuration du projet
+    set({
+      currentProject: {
+        ...get().currentProject!,
+        manualPhaseDistribution: {
+          charges: realChargesDistribution,
+          productions: realProductionsDistribution,
+          constraints: get().currentProject!.manualPhaseDistribution.constraints
+        }
+      }
+    });
+    
+    console.log(`📊 Curseurs charges mis à jour : A=${realChargesDistribution.A.toFixed(1)}%, B=${realChargesDistribution.B.toFixed(1)}%, C=${realChargesDistribution.C.toFixed(1)}%`);
+    console.log(`📊 Curseurs productions mis à jour : A=${realProductionsDistribution.A.toFixed(1)}%, B=${realProductionsDistribution.B.toFixed(1)}%, C=${realProductionsDistribution.C.toFixed(1)}%`);
+    
     const { unbalancePercent } = calculateProjectUnbalance(currentProject.nodes);
     toast.success(`✅ Re-balancing terminé : déséquilibre = ${unbalancePercent.toFixed(1)}%`);
   },

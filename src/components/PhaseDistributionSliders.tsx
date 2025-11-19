@@ -20,7 +20,11 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
   
   const distribution = currentProject.manualPhaseDistribution[type];
   const showResetButton = currentProject.loadModel === 'monophase_reparti' || currentProject.loadModel === 'mixte_mono_poly';
-  const phaseDistributionMode = currentProject.phaseDistributionMode || 'mono_only';
+  
+  // ✅ Obtenir le mode actuel pour ce type (charges ou productions)
+  const currentMode = type === 'charges' 
+    ? (currentProject.phaseDistributionModeCharges || 'mono_only')
+    : (currentProject.phaseDistributionModeProductions || 'mono_only');
   
   const initializeToBalance = () => {
     updateProjectConfig({
@@ -101,10 +105,16 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
   };
 
   const handleModeChange = (newMode: 'mono_only' | 'all_clients') => {
-    // 1. Mettre à jour le mode
-    updateProjectConfig({
-      phaseDistributionMode: newMode
-    });
+    // ✅ 1. Mettre à jour le mode SEULEMENT pour le type concerné
+    if (type === 'charges') {
+      updateProjectConfig({
+        phaseDistributionModeCharges: newMode
+      });
+    } else {
+      updateProjectConfig({
+        phaseDistributionModeProductions: newMode
+      });
+    }
     
     // 2. Recalculer automatiquement les pourcentages en fonction du mode
     if (newMode === 'all_clients') {
@@ -114,11 +124,12 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
       updateProjectConfig({
         manualPhaseDistribution: {
           ...currentProject.manualPhaseDistribution,
-          [type]: realDistribution
+          [type]: realDistribution  // ✅ Seulement le type actuel
         }
       });
       
-      toast.success(`Répartition appliquée à TOUS les clients : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
+      const typeLabel = type === 'charges' ? 'charges' : 'productions';
+      toast.success(`Répartition ${typeLabel} appliquée à TOUS les clients : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
       
     } else {
       // Revenir en mode "mono uniquement" : recalculer avec MONO seulement
@@ -141,11 +152,12 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
       updateProjectConfig({
         manualPhaseDistribution: {
           ...currentProject.manualPhaseDistribution,
-          [type]: realDistribution
+          [type]: realDistribution  // ✅ Seulement le type actuel
         }
       });
       
-      toast.success(`Répartition appliquée aux MONO uniquement : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
+      const typeLabel = type === 'charges' ? 'charges' : 'productions';
+      toast.success(`Répartition ${typeLabel} appliquée aux MONO uniquement : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
     }
   };
   
@@ -154,8 +166,10 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
     let totalValue = 0;
     
     if (currentProject.loadModel === 'mixte_mono_poly') {
-      // Déterminer quel mode est actif
-      const mode = currentProject.phaseDistributionMode || 'mono_only';
+      // ✅ Déterminer quel mode est actif pour ce type
+      const mode = type === 'charges' 
+        ? (currentProject.phaseDistributionModeCharges || 'mono_only')
+        : (currentProject.phaseDistributionModeProductions || 'mono_only');
       
       currentProject.nodes.forEach(node => {
         if (mode === 'mono_only') {
@@ -335,7 +349,7 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
         <div className="flex flex-col gap-2">
           <Label className="text-xs text-center text-primary-foreground/80">Appliquer à :</Label>
           <RadioGroup 
-            value={phaseDistributionMode} 
+            value={currentMode} 
             onValueChange={handleModeChange}
             className="flex justify-center gap-4"
           >

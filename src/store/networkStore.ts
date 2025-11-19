@@ -1373,6 +1373,28 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       return;
     }
 
+    // En 400V mode mixte: synchroniser les curseurs avec la distribution réelle AVANT calcul
+    if (currentProject.voltageSystem === 'TÉTRAPHASÉ_400V' && currentProject.loadModel === 'mixte_mono_poly') {
+      const realChargesDistribution = calculateRealMonoDistributionPercents(
+        currentProject.nodes,
+        currentProject.clientsImportes || [],
+        currentProject.clientLinks || []
+      );
+      
+      const realProductionsDistribution = calculateRealMonoProductionDistributionPercents(
+        currentProject.nodes,
+        currentProject.clientsImportes || [],
+        currentProject.clientLinks || []
+      );
+      
+      // Mettre à jour les curseurs pour qu'ils reflètent la distribution réelle
+      currentProject.manualPhaseDistribution = {
+        ...currentProject.manualPhaseDistribution,
+        charges: realChargesDistribution,
+        productions: realProductionsDistribution
+      };
+    }
+
     const calculator = new ElectricalCalculator(currentProject.cosPhi);
     
     const results = {

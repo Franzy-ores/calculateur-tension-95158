@@ -301,18 +301,18 @@ export const TopMenu = ({
           </div>
 
           {/* Groupe 3: Foisonnement Sliders */}
-          <div className="flex items-center gap-4 bg-white/5 px-3 py-1.5 rounded border-r border-white/20">
+          <div className="flex items-center gap-4 bg-white/5 px-3 py-2 rounded border-r border-white/20">
             {/* Charges Slider */}
             <div className="flex flex-col items-center gap-1">
               <Label className={`text-xs font-medium text-center text-white drop-shadow-sm ${simulationPreview.isActive && simulationPreview.foisonnementCharges !== undefined ? 'text-orange-300' : ''}`}>
                 Charges
               </Label>
               <div className="relative flex flex-col items-center">
-                <div className="relative w-5 h-16 bg-muted rounded-md border">
+                <div className="relative w-5 h-24 bg-muted rounded-md border">
                   <div className="absolute bottom-0 w-full bg-gradient-to-t from-blue-500 to-blue-300 rounded-md transition-all duration-200" style={{
                     height: `${simulationPreview.isActive && simulationPreview.foisonnementCharges !== undefined ? simulationPreview.foisonnementCharges : currentProject.foisonnementCharges}%`
                   }} />
-                  <Slider value={[currentProject.foisonnementCharges]} onValueChange={value => setFoisonnementCharges(value[0])} max={100} min={0} step={1} orientation="vertical" className="absolute inset-0 h-16 slider-charges opacity-80" disabled={simulationPreview.isActive} />
+                  <Slider value={[currentProject.foisonnementCharges]} onValueChange={value => setFoisonnementCharges(value[0])} max={100} min={0} step={1} orientation="vertical" className="absolute inset-0 h-24 slider-charges opacity-80" disabled={simulationPreview.isActive} />
                 </div>
                 <span className={`text-xs mt-0.5 font-medium text-white drop-shadow-sm ${simulationPreview.isActive && simulationPreview.foisonnementCharges !== undefined ? 'text-orange-300' : ''}`}>
                   {simulationPreview.isActive && simulationPreview.foisonnementCharges !== undefined ? simulationPreview.foisonnementCharges : currentProject.foisonnementCharges}%
@@ -327,11 +327,11 @@ export const TopMenu = ({
             <div className="flex flex-col items-center gap-1">
               <Label className="text-xs font-medium text-center text-white drop-shadow-sm">Prod.</Label>
               <div className="relative flex flex-col items-center">
-                <div className="relative w-5 h-16 bg-muted rounded-md border">
+                <div className="relative w-5 h-24 bg-muted rounded-md border">
                   <div className="absolute bottom-0 w-full bg-gradient-to-t from-green-500 to-green-300 rounded-md transition-all duration-200" style={{
                     height: `${currentProject.foisonnementProductions}%`
                   }} />
-                  <Slider value={[currentProject.foisonnementProductions]} onValueChange={value => setFoisonnementProductions(value[0])} max={100} min={0} step={1} orientation="vertical" className="absolute inset-0 h-16 slider-productions opacity-80" disabled={simulationPreview.isActive} />
+                  <Slider value={[currentProject.foisonnementProductions]} onValueChange={value => setFoisonnementProductions(value[0])} max={100} min={0} step={1} orientation="vertical" className="absolute inset-0 h-24 slider-productions opacity-80" disabled={simulationPreview.isActive} />
                 </div>
                 <span className="text-xs mt-0.5 font-medium text-white drop-shadow-sm">
                   {currentProject.foisonnementProductions}%

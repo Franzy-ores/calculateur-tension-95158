@@ -38,6 +38,12 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
     ? (currentProject.phaseDistributionModeCharges || 'mono_only')
     : (currentProject.phaseDistributionModeProductions || 'mono_only');
   
+  // Calculer le déséquilibre en % par rapport à la moyenne (33.33%)
+  const calculateUnbalancePercent = (actualPercent: number): number => {
+    const average = 33.33;
+    return ((actualPercent - average) / average) * 100;
+  };
+  
   // ✅ Lit la répartition réelle directement depuis le tableau général (autoPhaseDistribution)
   const calculateRealDistributionFromTable = (): { A: number; B: number; C: number } => {
     if (!currentProject?.nodes) {
@@ -444,8 +450,6 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
       C: totalValue * (distribution.C / 100)
     };
   };
-
-  const kvaValues = calculateKVAValues();
   
   const handlePhaseChange = (phase: 'A' | 'B' | 'C', newValue: number) => {
     const otherPhases = phase === 'A' ? ['B', 'C'] as const : 
@@ -556,10 +560,18 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
             {/* Vertical Slider avec barre colorée */}
             <div className="relative flex flex-col items-center">
               <div className="relative w-6 h-20 bg-muted rounded-md border">
+                {/* Ligne de référence à l'équilibre (33.33%) */}
+                <div 
+                  className="absolute left-0 right-0 border-t border-white/30 border-dashed"
+                  style={{ bottom: '50%' }}
+                />
                 {/* Barre de progression colorée */}
                 <div 
                   className={`absolute bottom-0 w-full bg-gradient-to-t ${colorClasses} rounded-md transition-all duration-200`}
-                  style={{ height: `${(distribution[phase] / 53.33) * 100}%` }}
+                  style={{ 
+                    height: `${(distribution[phase] / 53.33) * 100}%`,
+                    opacity: Math.abs(calculateUnbalancePercent(distribution[phase])) > 15 ? 1 : 0.6
+                  }}
                 />
                 {/* Curseur traditionnel par-dessus */}
                 <Slider
@@ -574,13 +586,11 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
               </div>
             </div>
             
-            {/* Affichage des valeurs */}
+            {/* Affichage du déséquilibre */}
             <div className="text-center">
               <div className="text-xs font-mono text-primary-foreground">
-                {distribution[phase].toFixed(1)}%
-              </div>
-              <div className="text-xs text-primary-foreground/80">
-                {kvaValues[phase].toFixed(1)}kVA
+                {calculateUnbalancePercent(distribution[phase]) >= 0 ? '+' : ''}
+                {calculateUnbalancePercent(distribution[phase]).toFixed(1)}%
               </div>
             </div>
           </div>

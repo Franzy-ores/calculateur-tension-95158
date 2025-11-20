@@ -232,17 +232,27 @@ export class ElectricalCalculator {
   /**
    * Calcule le courant RMS par phase (A) à partir de la puissance apparente S_kVA.
    * ===== CONVENTIONS √3 HARMONISÉES =====
-   * Principe: toutes les tensions internes sont en phase-neutre (230V).
-   * La conversion √3 est appliquée UNIQUEMENT pour :
+   * 
+   * RÉSEAU 3×230V TRIANGLE (sans neutre) :
+   * - La tension de référence pour le calcul du courant est V_LL = 230V (tension phase-phase).
+   * - Les charges mono sont toujours entre deux phases (A-B, B-C, A-C).
+   * - Aucun calcul ne doit utiliser une tension phase-neutre en 230V (pas de neutre physique).
+   * 
+   * RÉSEAU 3×400V + N ÉTOILE (avec neutre) :
+   * - La tension phase-neutre est 230V, la tension ligne-ligne est 400V.
+   * - Les charges mono peuvent être phase-neutre (230V) ou phase-phase (400V).
+   * 
+   * La conversion √3 est appliquée pour :
    * - Les charges triphasées ligne-ligne lors du calcul du courant
-   * - L'affichage des tensions ligne-ligne
+   * - L'affichage des tensions ligne-ligne (400V étoile)
    * 
    * Formules:
-   * - Monophasé phase-neutre: I = S / U_phase
-   * - Triphasé équilibré ligne-ligne: I = S / (√3 · U_ligne)
+   * - Monophasé phase-phase (230V triangle): I = S / V_LL (V_LL = 230V)
+   * - Monophasé phase-neutre (400V étoile): I = S / V_phase (V_phase = 230V)
+   * - Triphasé équilibré: I = S / (√3 · V_LL)
    * 
    * S_kVA est la puissance apparente totale (kVA), positive en consommation, négative en injection.
-   * sourceVoltage, s'il est fourni, est interprété comme U_line (tri) ou U_phase (mono).
+   * sourceVoltage, s'il est fourni, est interprété comme V_LL (tri) ou V_phase (mono).
    */
   private calculateCurrentA(S_kVA: number, connectionType: ConnectionType, sourceVoltage?: number): number {
     let { U_base, isThreePhase } = this.getVoltage(connectionType);

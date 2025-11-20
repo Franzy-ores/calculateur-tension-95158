@@ -410,6 +410,12 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     if (!project.clientLinks) {
       project.clientLinks = [];
     }
+
+    // Nettoyer les liens clients vers des nœuds inexistants (projets anciens ou nœuds supprimés)
+    if (project.clientLinks.length > 0) {
+      const existingNodeIds = new Set(project.nodes.map(n => n.id));
+      project.clientLinks = project.clientLinks.filter(link => existingNodeIds.has(link.nodeId));
+    }
     
     // Normaliser connectionType pour tous les clients importés (migration)
     if (project.clientsImportes.length > 0) {
@@ -771,10 +777,14 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         nodes: currentProject.nodes.filter(node => node.id !== nodeId),
         cables: currentProject.cables.filter(cable => 
           cable.nodeAId !== nodeId && cable.nodeBId !== nodeId
-        )
+        ),
+        clientLinks: (currentProject.clientLinks || []).filter(link => link.nodeId !== nodeId)
       },
       selectedNodeId: null
     });
+
+    // Recalculer les résultats après suppression du nœud et de ses liens clients
+    get().updateAllCalculations();
   },
 
   moveNode: (nodeId, lat, lng) => {

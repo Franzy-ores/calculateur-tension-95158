@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useNetworkStore } from '@/store/networkStore';
 import { ClientCouplage, ClientConnectionType } from '@/types/network';
+import { normalizeClientConnectionType } from '@/utils/phaseDistributionCalculator';
 import { toast } from 'sonner';
 import { MapPin, Unlink, Target, Move } from 'lucide-react';
 
@@ -52,7 +53,11 @@ export const ClientEditPanel = () => {
       setIdentifiantCabine(client.identifiantCabine || '');
       setIdentifiantPosteSource(client.identifiantPosteSource || '');
       setAssignedPhase(client.assignedPhase);
-      setConnectionType(client.connectionType);
+      // Initialiser connectionType depuis couplage si pas encore défini
+      setConnectionType(
+        client.connectionType || 
+        normalizeClientConnectionType(client.couplage, currentProject.voltageSystem)
+      );
     }
   }, [client]);
 

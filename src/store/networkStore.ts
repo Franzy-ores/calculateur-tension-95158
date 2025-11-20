@@ -411,6 +411,20 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       project.clientLinks = [];
     }
     
+    // Normaliser connectionType pour tous les clients importés (migration)
+    if (project.clientsImportes.length > 0) {
+      project.clientsImportes = project.clientsImportes.map(client => {
+        if (!client.connectionType) {
+          return {
+            ...client,
+            connectionType: normalizeClientConnectionType(client.couplage, project.voltageSystem)
+          };
+        }
+        return client;
+      });
+      console.log('🔧 connectionType normalisé pour tous les clients importés');
+    }
+    
     console.log(`🔍 DIAGNOSTIC loadProject:`);
     console.log(`   - loadModel: ${project.loadModel}`);
     console.log(`   - clientsImportes.length: ${project.clientsImportes.length}`);
@@ -447,15 +461,6 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         console.log(`🔍 Nœud "${node.name}" : ${linkedClients.length} clients liés`);
         
         linkedClients.forEach(client => {
-          // Normaliser connectionType si manquant
-          if (!client.connectionType) {
-            client.connectionType = normalizeClientConnectionType(
-              client.couplage,
-              project.voltageSystem
-            );
-            console.log(`🔧 Client "${client.nomCircuit}" : connectionType normalisé vers ${client.connectionType}`);
-          }
-          
           if (client.connectionType === 'MONO') {
             monoClientsCount++;
             
@@ -927,9 +932,21 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     const { currentProject } = get();
     if (!currentProject) return;
     
+    // Normaliser le connectionType pour chaque client importé
+    const normalizedClients = clients.map(client => {
+      // Si connectionType n'est pas défini, le déduire du couplage
+      if (!client.connectionType) {
+        return {
+          ...client,
+          connectionType: normalizeClientConnectionType(client.couplage, currentProject.voltageSystem)
+        };
+      }
+      return client;
+    });
+    
     const updatedProject = {
       ...currentProject,
-      clientsImportes: [...(currentProject.clientsImportes || []), ...clients],
+      clientsImportes: [...(currentProject.clientsImportes || []), ...normalizedClients],
       clientLinks: currentProject.clientLinks || []
     };
     

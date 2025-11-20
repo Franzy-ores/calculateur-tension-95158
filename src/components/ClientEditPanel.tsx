@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useNetworkStore } from '@/store/networkStore';
-import { ClientCouplage } from '@/types/network';
+import { ClientCouplage, ClientConnectionType } from '@/types/network';
 import { toast } from 'sonner';
 import { MapPin, Unlink, Target, Move } from 'lucide-react';
 
@@ -32,6 +32,7 @@ export const ClientEditPanel = () => {
   const [identifiantCabine, setIdentifiantCabine] = useState<string>('');
   const [identifiantPosteSource, setIdentifiantPosteSource] = useState<string>('');
   const [assignedPhase, setAssignedPhase] = useState<'A' | 'B' | 'C' | undefined>(undefined);
+  const [connectionType, setConnectionType] = useState<ClientConnectionType | undefined>(undefined);
   const [isSelectingNode, setIsSelectingNode] = useState(false);
   const [isMovingClient, setIsMovingClient] = useState(false);
 
@@ -51,6 +52,7 @@ export const ClientEditPanel = () => {
       setIdentifiantCabine(client.identifiantCabine || '');
       setIdentifiantPosteSource(client.identifiantPosteSource || '');
       setAssignedPhase(client.assignedPhase);
+      setConnectionType(client.connectionType);
     }
   }, [client]);
 
@@ -137,6 +139,7 @@ export const ClientEditPanel = () => {
       identifiantCabine,
       identifiantPosteSource,
       assignedPhase,
+      connectionType,
     });
     
     toast.success('Client mis à jour');
@@ -167,20 +170,40 @@ export const ClientEditPanel = () => {
         </div>
 
         <div>
-          <Label htmlFor="couplage">Couplage</Label>
+          <Label htmlFor="connectionType">Type de couplage</Label>
+          <Select 
+            value={connectionType} 
+            onValueChange={(v: ClientConnectionType) => setConnectionType(v)}
+          >
+            <SelectTrigger id="connectionType">
+              <SelectValue placeholder="Sélectionner un type" />
+            </SelectTrigger>
+            <SelectContent className="bg-background z-50">
+              <SelectItem value="MONO">Monophasé (MONO)</SelectItem>
+              <SelectItem value="TRI">Triphasé (TRI)</SelectItem>
+              <SelectItem value="TETRA">Tétraphasé (TETRA)</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground mt-1">
+            Type de connexion du client
+          </p>
+        </div>
+
+        <div>
+          <Label htmlFor="couplageExcel">Couplage Excel (référence)</Label>
           <Input
-            id="couplage"
+            id="couplageExcel"
             value={couplage}
             readOnly
-            className="bg-muted cursor-not-allowed"
+            className="bg-muted cursor-not-allowed text-xs"
           />
           <p className="text-xs text-muted-foreground mt-1">
-            Valeur importée depuis Excel (lecture seule)
+            Valeur d'origine importée depuis Excel
           </p>
         </div>
 
         {currentProject?.loadModel === 'mixte_mono_poly' && 
-         client.connectionType === 'MONO' && 
+         connectionType === 'MONO' &&
          clientLink && (
           <div>
             <Label htmlFor="assignedPhase">Phase assignée</Label>

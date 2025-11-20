@@ -403,7 +403,13 @@ export const getClientMarkerColor = (
 ): string => {
   switch (mode) {
     case 'couplage':
-      // Interpréter les valeurs brutes pour la coloration
+      // Utiliser connectionType si disponible (modifiable), sinon interpréter couplage brut (Excel)
+      if (client.connectionType) {
+        // Utiliser le type de connexion normalisé
+        return client.connectionType === 'MONO' ? '#f97316' : '#3b82f6'; // Orange pour MONO, Bleu pour TRI/TETRA
+      }
+      
+      // Fallback : Interpréter les valeurs brutes pour la coloration
       const couplageUpper = client.couplage.toUpperCase();
       const isTriphasé = (
         couplageUpper.includes('TRI') || 

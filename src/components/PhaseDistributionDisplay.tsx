@@ -24,13 +24,18 @@ function calculateNeutralCurrent(Ia: number, Ib: number, Ic: number): number {
 // Helper pour regrouper les clients par couplage
 function groupClientsByCoupling(
   clients: ClientImporte[] | undefined,
-  voltageSystem: 'TRIPHASÉ_230V' | 'TÉTRAPHASÉ_400V'
+  voltageSystem: 'TRIPHASÉ_230V' | 'TÉTRAPHASÉ_400V',
+  clientLinks: { clientId: string; nodeId: string }[] | undefined
 ): Record<string, { clients: ClientImporte[]; totalKVA: number; totalProdKVA: number; totalCurrent: number }> {
   const groups: Record<string, { clients: ClientImporte[]; totalKVA: number; totalProdKVA: number; totalCurrent: number }> = {};
   
-  if (!clients) return groups;
+  if (!clients || !clientLinks) return groups;
+  
+  // Ne considérer que les clients liés à des nœuds
+  const linkedClientIds = new Set(clientLinks.map(link => link.clientId));
   
   clients.forEach(client => {
+    if (!linkedClientIds.has(client.id)) return; // Ignorer les clients non liés
     if (client.connectionType === 'MONO') {
       const coupling = client.phaseCoupling || client.assignedPhase || 'Non assigné';
       
@@ -108,7 +113,8 @@ export const PhaseDistributionDisplay = () => {
     currentProject.nodes
   );
   
-  // Compter les clients par type
+  // Compter les clients par type (uniquement les clients liés)
+  const linkedClientIds = new Set(currentProject.clientLinks?.map(link => link.clientId) || []);
   const clientStats = {
     mono: 0,
     tri: 0,
@@ -116,12 +122,14 @@ export const PhaseDistributionDisplay = () => {
   };
   
   currentProject.clientsImportes?.forEach(client => {
+    if (!linkedClientIds.has(client.id)) return; // Ignorer les clients non liés
+    
     if (client.connectionType === 'MONO') clientStats.mono++;
     else if (client.connectionType === 'TRI') clientStats.tri++;
     else if (client.connectionType === 'TETRA') clientStats.tetra++;
   });
   
-  // Identifier les clients MONO à forte puissance par phase
+  // Identifier les clients MONO à forte puissance par phase (uniquement les clients liés)
   const highPowerClientsPerPhase: {
     A: ClientImporte[];
     B: ClientImporte[];
@@ -129,6 +137,8 @@ export const PhaseDistributionDisplay = () => {
   } = { A: [], B: [], C: [] };
 
   currentProject.clientsImportes?.forEach(client => {
+    if (!linkedClientIds.has(client.id)) return; // Ignorer les clients non liés
+    
     if (client.connectionType === 'MONO') {
       const analysis = analyzeClientPower(client, currentProject.voltageSystem);
       if (analysis && (analysis.level === 'high' || analysis.level === 'critical')) {
@@ -158,10 +168,11 @@ export const PhaseDistributionDisplay = () => {
     neutralCurrent = calculateNeutralCurrent(Ia, Ib, Ic);
   }
   
-  // Regrouper les clients par couplage
+  // Regrouper les clients par couplage (uniquement les clients liés)
   const clientsByCoupling = groupClientsByCoupling(
     currentProject.clientsImportes,
-    currentProject.voltageSystem
+    currentProject.voltageSystem,
+    currentProject.clientLinks
   );
   
   // Badge de statut avec couleurs sémantiques

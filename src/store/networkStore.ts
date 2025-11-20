@@ -466,11 +466,12 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
             
             if (!client.assignedPhase) {
               monoWithoutPhaseCount++;
-              // Récupérer TOUS les clients MONO déjà assignés dans le projet (équilibrage global)
+              // Récupérer UNIQUEMENT les clients MONO liés et déjà assignés (équilibrage des clients connectés)
               const alreadyAssignedClients = project.clientsImportes!.filter(c =>
                 c.id !== client.id &&
                 c.connectionType === 'MONO' &&
-                c.assignedPhase !== undefined
+                c.assignedPhase !== undefined &&
+                project.clientLinks?.some(link => link.clientId === c.id)
               );
               
               // Assigner automatiquement la phase
@@ -1101,13 +1102,14 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         toast.warning(warning);
       }
       
-      // 3. Assigner phase si MONO (équilibrage global)
+      // 3. Assigner phase si MONO (équilibrage uniquement avec les clients liés)
       let assignedPhase: 'A' | 'B' | 'C' | undefined;
       if (correctedType === 'MONO') {
-        // Récupérer TOUS les clients MONO déjà assignés dans le projet (équilibrage global)
+        // Récupérer UNIQUEMENT les clients MONO liés et déjà assignés
         const allAssignedMonoClients = currentProject.clientsImportes?.filter(c =>
           c.connectionType === 'MONO' &&
-          c.assignedPhase !== undefined
+          c.assignedPhase !== undefined &&
+          currentProject.clientLinks?.some(link => link.clientId === c.id)
         ) || [];
         
         assignedPhase = autoAssignPhaseForMonoClient(client, allAssignedMonoClients, currentProject.voltageSystem);

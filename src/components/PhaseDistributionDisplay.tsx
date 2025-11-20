@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useNetworkStore } from "@/store/networkStore";
 import { calculateProjectUnbalance } from "@/utils/phaseDistributionCalculator";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 import type { Node, ClientImporte } from "@/types/network";
 import { analyzeClientPower } from "@/utils/clientsUtils";
 import * as Complex from "@/utils/complex";
@@ -97,6 +97,7 @@ function calculatePhaseProductions(
 
 export const PhaseDistributionDisplay = () => {
   const { currentProject, rebalanceAllMonoClients } = useNetworkStore();
+  const [isCollapsed, setIsCollapsed] = useState(false);
   
   if (!currentProject || currentProject.loadModel !== 'mixte_mono_poly') {
     return null;
@@ -174,6 +175,15 @@ export const PhaseDistributionDisplay = () => {
     <div className="flex flex-col gap-2 p-3 bg-white/5 rounded border border-white/10">
       {/* Ligne 1: Titre, badge et stats clients */}
       <div className="flex items-center gap-3">
+        <Button
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          size="sm"
+          variant="ghost"
+          className="h-6 w-6 p-0"
+        >
+          {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+        </Button>
+        
         <div className="flex items-center gap-2">
           <Label className="text-xs font-medium text-primary-foreground">
             📊 Distribution de phase
@@ -203,18 +213,22 @@ export const PhaseDistributionDisplay = () => {
         </div>
 
         {/* Bouton rééquilibrage */}
-        <Button
-          onClick={rebalanceAllMonoClients}
-          size="sm"
-          variant="warning"
-          className="h-7 text-xs"
-        >
-          <RefreshCw className="h-3 w-3 mr-1" />
-          Rééquilibrer MONO
-        </Button>
+        {!isCollapsed && (
+          <Button
+            onClick={rebalanceAllMonoClients}
+            size="sm"
+            variant="warning"
+            className="h-7 text-xs"
+          >
+            <RefreshCw className="h-3 w-3 mr-1" />
+            Rééquilibrer MONO
+          </Button>
+        )}
       </div>
 
-      {/* Section d'alertes pour les clients à forte puissance */}
+      {!isCollapsed && (
+        <>
+          {/* Section d'alertes pour les clients à forte puissance */}
       {(highPowerClientsPerPhase.A.length > 0 || 
         highPowerClientsPerPhase.B.length > 0 || 
         highPowerClientsPerPhase.C.length > 0) && (
@@ -483,6 +497,8 @@ export const PhaseDistributionDisplay = () => {
           </div>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 };

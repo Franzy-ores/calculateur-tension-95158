@@ -99,9 +99,33 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
       }
     });
     
+    // ✅ CONVERSION PHASES → COUPLAGES pour 230V
+    if (is230V) {
+      // Formule mathématique correcte :
+      // Couplage A-B = Phase A + Phase B - Phase C
+      // Couplage B-C = Phase B + Phase C - Phase A
+      // Couplage A-C = Phase A + Phase C - Phase B
+      const couplingAB = totalA + totalB - totalC;
+      const couplingBC = totalB + totalC - totalA;
+      const couplingAC = totalA + totalC - totalB;
+      
+      const grandTotal = couplingAB + couplingBC + couplingAC;
+      
+      if (grandTotal === 0) {
+        return { A: 33.33, B: 33.33, C: 33.34 };
+      }
+      
+      // Retourner en format A, B, C (interprétés comme A-B, B-C, A-C)
+      return {
+        A: (couplingAB / grandTotal) * 100,
+        B: (couplingBC / grandTotal) * 100,
+        C: (couplingAC / grandTotal) * 100
+      };
+    }
+    
+    // ✅ 400V : calcul normal par phases
     const grandTotal = totalA + totalB + totalC;
     
-    // Éviter division par zéro
     if (grandTotal === 0) {
       return { A: 33.33, B: 33.33, C: 33.34 };
     }
@@ -147,9 +171,9 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
     }
     
     // 2. Lire les valeurs du tableau général selon le nouveau mode
-    // EN 230V : Calculer par couplage
+    // EN 230V : Calculer par couplage avec la formule correcte
     if (is230V) {
-      let totalAB = 0, totalBC = 0, totalAC = 0;
+      let totalA = 0, totalB = 0, totalC = 0;
       
       if (currentProject?.nodes) {
         currentProject.nodes.forEach(node => {
@@ -159,36 +183,37 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
               : node.autoPhaseDistribution.productions;
             
             if (newMode === 'mono_only') {
-              const monoA = charges.mono.A;
-              const monoB = charges.mono.B;
-              const monoC = charges.mono.C;
-              
-              totalAB += monoA + monoB;
-              totalBC += monoB + monoC;
-              totalAC += monoA + monoC;
+              totalA += charges.mono.A;
+              totalB += charges.mono.B;
+              totalC += charges.mono.C;
             } else {
               const monoA = charges.mono.A;
               const monoB = charges.mono.B;
               const monoC = charges.mono.C;
               
               const polyTotal = charges.poly.A + charges.poly.B + charges.poly.C;
-              const polyPerCoupling = polyTotal / 3;
+              const polyPerPhase = polyTotal / 3;
               
-              totalAB += (monoA + monoB) + polyPerCoupling;
-              totalBC += (monoB + monoC) + polyPerCoupling;
-              totalAC += (monoA + monoC) + polyPerCoupling;
+              totalA += monoA + polyPerPhase;
+              totalB += monoB + polyPerPhase;
+              totalC += monoC + polyPerPhase;
             }
           }
         });
       }
       
-      const grandTotal = totalAB + totalBC + totalAC;
+      // ✅ Appliquer la conversion phases → couplages
+      const couplingAB = totalA + totalB - totalC;
+      const couplingBC = totalB + totalC - totalA;
+      const couplingAC = totalA + totalC - totalB;
+      
+      const grandTotal = couplingAB + couplingBC + couplingAC;
       const realDistribution = grandTotal === 0 
         ? { A: 33.33, B: 33.33, C: 33.34 }
         : {
-            A: (totalAB / grandTotal) * 100,
-            B: (totalBC / grandTotal) * 100,
-            C: (totalAC / grandTotal) * 100
+            A: (couplingAB / grandTotal) * 100,
+            B: (couplingBC / grandTotal) * 100,
+            C: (couplingAC / grandTotal) * 100
           };
       
       updateProjectConfig({
@@ -292,9 +317,9 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
         ? (currentProject.phaseDistributionModeCharges || 'mono_only')
         : (currentProject.phaseDistributionModeProductions || 'mono_only');
       
-      // EN 230V : Calculer par couplage
+      // EN 230V : Calculer par couplage avec la formule correcte
       if (is230V) {
-        let totalAB = 0, totalBC = 0, totalAC = 0;
+        let totalA = 0, totalB = 0, totalC = 0;
         
         currentProject.nodes.forEach(node => {
           if (node.autoPhaseDistribution) {
@@ -303,32 +328,35 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
               : node.autoPhaseDistribution.productions;
             
             if (mode === 'mono_only') {
-              const monoA = charges.mono.A;
-              const monoB = charges.mono.B;
-              const monoC = charges.mono.C;
-              
-              totalAB += monoA + monoB;
-              totalBC += monoB + monoC;
-              totalAC += monoA + monoC;
+              totalA += charges.mono.A;
+              totalB += charges.mono.B;
+              totalC += charges.mono.C;
             } else {
               const monoA = charges.mono.A;
               const monoB = charges.mono.B;
               const monoC = charges.mono.C;
               
               const polyTotal = charges.poly.A + charges.poly.B + charges.poly.C;
-              const polyPerCoupling = polyTotal / 3;
+              const polyPerPhase = polyTotal / 3;
               
-              totalAB += (monoA + monoB) + polyPerCoupling;
-              totalBC += (monoB + monoC) + polyPerCoupling;
-              totalAC += (monoA + monoC) + polyPerCoupling;
+              totalA += monoA + polyPerPhase;
+              totalB += monoB + polyPerPhase;
+              totalC += monoC + polyPerPhase;
             }
           }
         });
         
+        // ✅ Appliquer la conversion phases → couplages
+        const couplingAB = totalA + totalB - totalC;
+        const couplingBC = totalB + totalC - totalA;
+        const couplingAC = totalA + totalC - totalB;
+        
+        const grandTotal = couplingAB + couplingBC + couplingAC;
+        
         return {
-          A: totalAB * (distribution.A / 100),
-          B: totalBC * (distribution.B / 100),
-          C: totalAC * (distribution.C / 100)
+          A: grandTotal * (distribution.A / 100),
+          B: grandTotal * (distribution.B / 100),
+          C: grandTotal * (distribution.C / 100)
         };
       }
       

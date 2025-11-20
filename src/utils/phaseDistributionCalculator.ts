@@ -518,3 +518,70 @@ export function calculateProjectUnbalance(
   
   return { unbalancePercent, status, phaseLoads: totalPhaseLoads };
 }
+
+/**
+ * Calcule la répartition réelle par couplage pour les réseaux 230V (charges)
+ * Basé sur les clients mono réellement connectés sur chaque couplage phase-phase
+ */
+export function calculateRealCouplingDistributionPercents(
+  nodes: Node[],
+  clientsImportes: ClientImporte[],
+  clientLinks: { clientId: string; nodeId: string }[]
+): { 'A-B': number; 'B-C': number; 'A-C': number } {
+  let totalAB = 0, totalBC = 0, totalAC = 0;
+  
+  // Filtrer les clients liés
+  const linkedClientIds = new Set(clientLinks.map(link => link.clientId));
+  const linkedClients = clientsImportes.filter(c => linkedClientIds.has(c.id));
+  
+  linkedClients.forEach(client => {
+    if (client.connectionType === 'MONO' && client.phaseCoupling) {
+      const kva = client.puissanceContractuelle_kVA;
+      if (client.phaseCoupling === 'A-B') totalAB += kva;
+      else if (client.phaseCoupling === 'B-C') totalBC += kva;
+      else if (client.phaseCoupling === 'A-C') totalAC += kva;
+    }
+  });
+  
+  const total = totalAB + totalBC + totalAC;
+  if (total === 0) return { 'A-B': 33.33, 'B-C': 33.33, 'A-C': 33.34 };
+  
+  return {
+    'A-B': (totalAB / total) * 100,
+    'B-C': (totalBC / total) * 100,
+    'A-C': (totalAC / total) * 100
+  };
+}
+
+/**
+ * Calcule la répartition réelle par couplage pour les réseaux 230V (productions)
+ * Basé sur les clients mono réellement connectés sur chaque couplage phase-phase
+ */
+export function calculateRealCouplingProductionDistributionPercents(
+  nodes: Node[],
+  clientsImportes: ClientImporte[],
+  clientLinks: { clientId: string; nodeId: string }[]
+): { 'A-B': number; 'B-C': number; 'A-C': number } {
+  let totalAB = 0, totalBC = 0, totalAC = 0;
+  
+  const linkedClientIds = new Set(clientLinks.map(link => link.clientId));
+  const linkedClients = clientsImportes.filter(c => linkedClientIds.has(c.id));
+  
+  linkedClients.forEach(client => {
+    if (client.connectionType === 'MONO' && client.phaseCoupling) {
+      const kva = client.puissancePV_kVA || 0;
+      if (client.phaseCoupling === 'A-B') totalAB += kva;
+      else if (client.phaseCoupling === 'B-C') totalBC += kva;
+      else if (client.phaseCoupling === 'A-C') totalAC += kva;
+    }
+  });
+  
+  const total = totalAB + totalBC + totalAC;
+  if (total === 0) return { 'A-B': 33.33, 'B-C': 33.33, 'A-C': 33.34 };
+  
+  return {
+    'A-B': (totalAB / total) * 100,
+    'B-C': (totalBC / total) * 100,
+    'A-C': (totalAC / total) * 100
+  };
+}

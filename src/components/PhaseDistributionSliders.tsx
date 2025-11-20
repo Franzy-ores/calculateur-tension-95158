@@ -19,6 +19,18 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
   if (!currentProject || !currentProject.manualPhaseDistribution) return null;
   
   const distribution = currentProject.manualPhaseDistribution[type];
+  
+  // Déterminer le mode d'affichage selon le voltage
+  const is230V = currentProject.voltageSystem === "TRIPHASÉ_230V";
+  const phaseLabels = is230V 
+    ? { A: "Phase A-B", B: "Phase B-C", C: "Phase A-C" }
+    : { A: "Phase A", B: "Phase B", C: "Phase C" };
+  const phaseColors = {
+    A: "from-red-500 to-red-600",
+    B: "from-yellow-500 to-yellow-600", 
+    C: "from-blue-500 to-blue-600"
+  };
+  
   const showResetButton = currentProject.loadModel === 'monophase_reparti' || currentProject.loadModel === 'mixte_mono_poly';
   
   // ✅ Obtenir le mode actuel pour ce type (charges ou productions)
@@ -116,7 +128,10 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
     });
     
     const modeLabel = currentMode === 'all_clients' ? 'TOUS les clients (MONO + POLY du tableau)' : 'MONO uniquement (du tableau)';
-    toast.success(`${type === 'charges' ? 'Charges' : 'Productions'} réinitialisées (${modeLabel}) : A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
+    const phaseLabelsForToast = is230V 
+      ? `A-B=${realDistribution.A.toFixed(1)}%, B-C=${realDistribution.B.toFixed(1)}%, A-C=${realDistribution.C.toFixed(1)}%`
+      : `A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`;
+    toast.success(`${type === 'charges' ? 'Charges' : 'Productions'} réinitialisées (${modeLabel}) : ${phaseLabelsForToast}`);
   };
   
   const handleModeChange = (newMode: 'mono_only' | 'all_clients') => {
@@ -132,8 +147,64 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
     }
     
     // 2. Lire les valeurs du tableau général selon le nouveau mode
-    // Note: On doit attendre que le mode soit mis à jour dans le store
-    // donc on calcule directement avec le newMode
+    // EN 230V : Calculer par couplage
+    if (is230V) {
+      let totalAB = 0, totalBC = 0, totalAC = 0;
+      
+      if (currentProject?.nodes) {
+        currentProject.nodes.forEach(node => {
+          if (node.autoPhaseDistribution) {
+            const charges = type === 'charges' 
+              ? node.autoPhaseDistribution.charges
+              : node.autoPhaseDistribution.productions;
+            
+            if (newMode === 'mono_only') {
+              const monoA = charges.mono.A;
+              const monoB = charges.mono.B;
+              const monoC = charges.mono.C;
+              
+              totalAB += monoA + monoB;
+              totalBC += monoB + monoC;
+              totalAC += monoA + monoC;
+            } else {
+              const monoA = charges.mono.A;
+              const monoB = charges.mono.B;
+              const monoC = charges.mono.C;
+              
+              const polyTotal = charges.poly.A + charges.poly.B + charges.poly.C;
+              const polyPerCoupling = polyTotal / 3;
+              
+              totalAB += (monoA + monoB) + polyPerCoupling;
+              totalBC += (monoB + monoC) + polyPerCoupling;
+              totalAC += (monoA + monoC) + polyPerCoupling;
+            }
+          }
+        });
+      }
+      
+      const grandTotal = totalAB + totalBC + totalAC;
+      const realDistribution = grandTotal === 0 
+        ? { A: 33.33, B: 33.33, C: 33.34 }
+        : {
+            A: (totalAB / grandTotal) * 100,
+            B: (totalBC / grandTotal) * 100,
+            C: (totalAC / grandTotal) * 100
+          };
+      
+      updateProjectConfig({
+        manualPhaseDistribution: {
+          ...currentProject.manualPhaseDistribution,
+          [type]: realDistribution
+        }
+      });
+      
+      const typeLabel = type === 'charges' ? 'charges' : 'productions';
+      const modeLabel = newMode === 'all_clients' ? 'TOUS les clients (MONO + POLY du tableau)' : 'MONO uniquement (du tableau)';
+      toast.success(`Répartition ${typeLabel} appliquée : ${modeLabel} - A-B=${realDistribution.A.toFixed(1)}%, B-C=${realDistribution.B.toFixed(1)}%, A-C=${realDistribution.C.toFixed(1)}%`);
+      return;
+    }
+    
+    // EN 400V : Calculer par phase
     let totalA = 0, totalB = 0, totalC = 0;
     
     if (currentProject?.nodes) {
@@ -221,6 +292,47 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
         ? (currentProject.phaseDistributionModeCharges || 'mono_only')
         : (currentProject.phaseDistributionModeProductions || 'mono_only');
       
+      // EN 230V : Calculer par couplage
+      if (is230V) {
+        let totalAB = 0, totalBC = 0, totalAC = 0;
+        
+        currentProject.nodes.forEach(node => {
+          if (node.autoPhaseDistribution) {
+            const charges = type === 'charges' 
+              ? node.autoPhaseDistribution.charges
+              : node.autoPhaseDistribution.productions;
+            
+            if (mode === 'mono_only') {
+              const monoA = charges.mono.A;
+              const monoB = charges.mono.B;
+              const monoC = charges.mono.C;
+              
+              totalAB += monoA + monoB;
+              totalBC += monoB + monoC;
+              totalAC += monoA + monoC;
+            } else {
+              const monoA = charges.mono.A;
+              const monoB = charges.mono.B;
+              const monoC = charges.mono.C;
+              
+              const polyTotal = charges.poly.A + charges.poly.B + charges.poly.C;
+              const polyPerCoupling = polyTotal / 3;
+              
+              totalAB += (monoA + monoB) + polyPerCoupling;
+              totalBC += (monoB + monoC) + polyPerCoupling;
+              totalAC += (monoA + monoC) + polyPerCoupling;
+            }
+          }
+        });
+        
+        return {
+          A: totalAB * (distribution.A / 100),
+          B: totalBC * (distribution.B / 100),
+          C: totalAC * (distribution.C / 100)
+        };
+      }
+      
+      // EN 400V : Calculer par phase (code original)
       currentProject.nodes.forEach(node => {
         if (mode === 'mono_only') {
           // MODE MONO UNIQUEMENT : ne compter que les charges/productions MONO
@@ -411,7 +523,7 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
       <div className="flex justify-center gap-4">
         {(['A', 'B', 'C'] as const).map((phase) => (
           <div key={phase} className="flex flex-col items-center gap-2">
-            <Label className="text-xs text-primary-foreground/80 font-medium">{phase}</Label>
+            <Label className="text-xs text-primary-foreground/80 font-medium">{phaseLabels[phase]}</Label>
             
             {/* Vertical Slider avec barre colorée */}
             <div className="relative flex flex-col items-center">

@@ -108,6 +108,12 @@ export const PhaseDistributionDisplay = () => {
     return null;
   }
 
+  // Déterminer le mode d'affichage selon le voltage
+  const is230V = currentProject.voltageSystem === "TRIPHASÉ_230V";
+  const phaseLabels = is230V 
+    ? { A: "Couplage A-B", B: "Couplage B-C", C: "Couplage A-C" }
+    : { A: "Phase A", B: "Phase B", C: "Phase C" };
+
   // Calculer le déséquilibre global du projet
   const { unbalancePercent, status, phaseLoads } = calculateProjectUnbalance(
     currentProject.nodes
@@ -441,10 +447,15 @@ export const PhaseDistributionDisplay = () => {
               const ecartColor = Math.abs(ecart) < 5 ? 'text-green-400' : Math.abs(ecart) < 10 ? 'text-yellow-400' : 'text-red-400';
               const hasRisk = highPowerClientsPerPhase[phaseName].length > 0;
               
+              // Label selon le voltage
+              const phaseLabel = is230V 
+                ? (phase === 'A' ? 'A-B' : phase === 'B' ? 'B-C' : 'A-C')
+                : phase;
+              
               return (
                 <div key={phase} className={`flex flex-col gap-0.5 text-center ${hasRisk ? 'bg-blue-500/10 border-l-2 border-blue-500' : ''}`}>
                   <div className="flex items-center justify-center gap-1">
-                    <span className="text-xs font-bold text-blue-300">Ph{phase}</span>
+                    <span className="text-xs font-bold text-blue-300">{is230V ? phaseLabel : `Ph${phase}`}</span>
                     {hasRisk && <span className="text-orange-500 text-xs">⚠️</span>}
                   </div>
                   
@@ -484,9 +495,14 @@ export const PhaseDistributionDisplay = () => {
                 phaseName
               );
               
+              // Label selon le voltage
+              const phaseLabel = is230V 
+                ? (phase === 'A' ? 'A-B' : phase === 'B' ? 'B-C' : 'A-C')
+                : phase;
+              
               return (
                 <div key={phase} className="flex flex-col gap-0.5 text-center">
-                  <span className="text-xs font-bold text-orange-300">Ph{phase}</span>
+                  <span className="text-xs font-bold text-orange-300">{is230V ? phaseLabel : `Ph${phase}`}</span>
                   
                   {/* Total */}
                   <div className="text-xs font-bold text-primary-foreground">

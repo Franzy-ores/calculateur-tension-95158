@@ -178,7 +178,7 @@ export const ClientEditPanel = () => {
             <SelectTrigger id="connectionType">
               <SelectValue placeholder="Sélectionner un type" />
             </SelectTrigger>
-            <SelectContent className="bg-background z-50">
+            <SelectContent className="bg-popover border-border">
               <SelectItem value="MONO">Monophasé (MONO)</SelectItem>
               <SelectItem value="TRI">Triphasé (TRI)</SelectItem>
               <SelectItem value="TETRA">Tétraphasé (TETRA)</SelectItem>

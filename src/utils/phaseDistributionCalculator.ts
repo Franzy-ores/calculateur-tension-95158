@@ -205,41 +205,32 @@ export function calculateNodeAutoPhaseDistribution(
       const chargeKVA = client.puissanceContractuelle_kVA;
       const prodKVA = client.puissancePV_kVA;
       
-      // EN 230V : utiliser le phaseCoupling physique (50% sur chaque phase)
+      // ✅ APPLIQUER LES CURSEURS MANUELS pour redistribuer les charges et productions MONO
+      // Mode "MONO uniquement" : affecte uniquement les clients MONO
+      // Mode "Tous les clients" : affecte MONO et POLY
+      result.charges.mono.A += chargeKVA * (manualPhaseDistributionCharges.A / 100);
+      result.charges.mono.B += chargeKVA * (manualPhaseDistributionCharges.B / 100);
+      result.charges.mono.C += chargeKVA * (manualPhaseDistributionCharges.C / 100);
+      
+      result.productions.mono.A += prodKVA * (manualPhaseDistributionProductions.A / 100);
+      result.productions.mono.B += prodKVA * (manualPhaseDistributionProductions.B / 100);
+      result.productions.mono.C += prodKVA * (manualPhaseDistributionProductions.C / 100);
+      
+      // Compter le client sur sa phase physique assignée (pour l'affichage)
       if (networkVoltage === 'TRIPHASÉ_230V' && client.phaseCoupling) {
-        if (client.phaseCoupling === 'A-B') {
-          result.charges.mono.A += chargeKVA / 2;
-          result.charges.mono.B += chargeKVA / 2;
-          result.productions.mono.A += prodKVA / 2;
-          result.productions.mono.B += prodKVA / 2;
-        } else if (client.phaseCoupling === 'B-C') {
-          result.charges.mono.B += chargeKVA / 2;
-          result.charges.mono.C += chargeKVA / 2;
-          result.productions.mono.B += prodKVA / 2;
-          result.productions.mono.C += prodKVA / 2;
-        } else if (client.phaseCoupling === 'A-C') {
-          result.charges.mono.A += chargeKVA / 2;
-          result.charges.mono.C += chargeKVA / 2;
-          result.productions.mono.A += prodKVA / 2;
-          result.productions.mono.C += prodKVA / 2;
+        // En 230V, compter selon le couplage phase-phase
+        if (client.phaseCoupling === 'A-B' || client.phaseCoupling === 'A-C') {
+          result.monoClientsCount.A += 0.5;
         }
-        
-        if (client.assignedPhase) {
-          result.monoClientsCount[client.assignedPhase] += 1;
+        if (client.phaseCoupling === 'A-B' || client.phaseCoupling === 'B-C') {
+          result.monoClientsCount.B += 0.5;
         }
-      } 
-      // EN 400V : utiliser la phase assignée directement (phase-neutre)
-      // Les clients MONO en 400V sont connectés phase-neutre, donc 100% de leur puissance va à leur phase assignée
-      else if (client.assignedPhase) {
-        // Attribuer toute la charge à la phase assignée
-        result.charges.mono[client.assignedPhase] += chargeKVA;
-        result.productions.mono[client.assignedPhase] += prodKVA;
-        
-        // Compter le client sur sa phase assignée
+        if (client.phaseCoupling === 'B-C' || client.phaseCoupling === 'A-C') {
+          result.monoClientsCount.C += 0.5;
+        }
+      } else if (client.assignedPhase) {
+        // En 400V, compter sur la phase assignée
         result.monoClientsCount[client.assignedPhase] += 1;
-      } else {
-        // Fallback si pas de phase assignée (ne devrait pas arriver en mode mixte)
-        console.warn(`⚠️ Client MONO ${client.nomCircuit} sans assignedPhase ni phaseCoupling`);
       }
     } else {
       // Client TRI/TÉTRA : appliquer les modes séparément pour charges et productions

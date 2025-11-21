@@ -197,9 +197,6 @@ export function calculateNodeAutoPhaseDistribution(
   };
   
   // === 1. CLIENTS IMPORTÉS ===
-  let totalMonoCharges = 0;
-  let totalMonoProductions = 0;
-
   linkedClients.forEach(client => {
     if (client.connectionType === 'MONO') {
       const chargeKVA = client.puissanceContractuelle_kVA;

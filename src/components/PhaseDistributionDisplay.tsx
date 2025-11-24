@@ -437,7 +437,7 @@ export const PhaseDistributionDisplay = () => {
         
         {/* Tableau */}
         <div className="overflow-x-auto">
-          <table className="w-full text-[10px] border-collapse">
+          <table className="w-full text-xs border-collapse">
             <thead>
               <tr className="border-b border-white/20">
                 <th className="text-left py-2 px-2 text-white font-semibold">Couplage</th>
@@ -504,25 +504,25 @@ export const PhaseDistributionDisplay = () => {
                     <tr key={phase} className={`border-b border-white/10 ${bgClass}`}>
                       <td className="py-2 px-2 text-white font-semibold">{phaseLabel}</td>
                       <td className="text-center py-2 px-1 text-white">{monoClients.length}</td>
-                      <td className="text-right py-2 px-1 text-blue-300">{data.chargeMono.toFixed(1)}</td>
-                      <td className="text-right py-2 px-1 text-green-300">{data.productionMono.toFixed(1)}</td>
-                      <td className="text-right py-2 px-1 text-blue-300">{data.chargePoly.toFixed(1)}</td>
-                      <td className="text-right py-2 px-1 text-green-300">{data.productionPoly.toFixed(1)}</td>
-                      <td className="text-right py-2 px-1 text-blue-400 font-semibold">{data.totalPhysiqueCharge.toFixed(1)}</td>
-                      <td className="text-right py-2 px-1 text-green-400 font-semibold">{data.totalPhysiqueProduction.toFixed(1)}</td>
-                      <td className="text-right py-2 px-1 text-blue-500 font-semibold">{data.totalFoisonneCharge.toFixed(1)}</td>
-                      <td className="text-right py-2 px-1 text-green-500 font-semibold">{data.totalFoisonneProduction.toFixed(1)}</td>
-                      <td className="text-right py-2 px-1 text-blue-600 font-bold">
+                      <td className="text-right py-2 px-1 text-white">{data.chargeMono.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-white">{data.productionMono.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-white">{data.chargePoly.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-white">{data.productionPoly.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-white font-semibold">{data.totalPhysiqueCharge.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-white font-semibold">{data.totalPhysiqueProduction.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-white font-semibold">{data.totalFoisonneCharge.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-white font-semibold">{data.totalFoisonneProduction.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-white font-bold">
                         {data.chargeAvecCurseur.toFixed(1)}
                         <br/>
-                        <span className={`${ecartChargeColor} text-[9px]`}>
+                        <span className={`${ecartChargeColor} text-[10px]`}>
                           ({data.ecartChargePercent > 0 ? '+' : ''}{data.ecartChargePercent.toFixed(1)}%)
                         </span>
                       </td>
-                      <td className="text-right py-2 px-1 text-green-600 font-bold">
+                      <td className="text-right py-2 px-1 text-white font-bold">
                         {data.productionAvecCurseur.toFixed(1)}
                         <br/>
-                        <span className={`${ecartProdColor} text-[9px]`}>
+                        <span className={`${ecartProdColor} text-[10px]`}>
                           ({data.ecartProductionPercent > 0 ? '+' : ''}{data.ecartProductionPercent.toFixed(1)}%)
                         </span>
                       </td>

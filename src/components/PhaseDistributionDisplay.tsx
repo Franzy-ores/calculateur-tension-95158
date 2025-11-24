@@ -56,47 +56,105 @@ function groupClientsByCoupling(
   return groups;
 }
 
-// Helper pour calculer les charges par phase
-function calculatePhaseCharges(
+// Helper pour calculer toutes les données d'une phase/couplage
+function calculatePhaseData(
   nodes: Node[], 
-  phase: 'A' | 'B' | 'C'
-): { monoKVA: number; polyKVA: number; totalKVA: number } {
-  let monoKVA = 0;
-  let polyKVA = 0;
+  phase: 'A' | 'B' | 'C',
+  foisonnementCharges: number,
+  foisonnementProductions: number,
+  manualPhaseDistribution?: { charges: { A: number; B: number; C: number }; productions: { A: number; B: number; C: number } }
+): {
+  nbMono: number;
+  chargeMono: number;
+  productionMono: number;
+  chargePoly: number;
+  productionPoly: number;
+  totalPhysiqueCharge: number;
+  totalPhysiqueProduction: number;
+  totalFoisonneCharge: number;
+  totalFoisonneProduction: number;
+  chargeAvecCurseur: number;
+  productionAvecCurseur: number;
+  ecartChargePercent: number;
+  ecartProductionPercent: number;
+  courantTotal: number;
+} {
+  let nbMono = 0;
+  let chargeMono = 0;
+  let productionMono = 0;
+  let chargePoly = 0;
+  let productionPoly = 0;
   
   nodes.forEach(node => {
     if (node.autoPhaseDistribution) {
-      monoKVA += node.autoPhaseDistribution.charges.mono[phase];
-      polyKVA += node.autoPhaseDistribution.charges.poly[phase];
+      // Compter les clients MONO et récupérer leurs valeurs
+      const monoChargeValue = node.autoPhaseDistribution.charges.mono[phase];
+      const monoProductionValue = node.autoPhaseDistribution.productions.mono[phase];
+      
+      chargeMono += monoChargeValue;
+      productionMono += monoProductionValue;
+      
+      // Charges et productions POLY à 33.3%
+      chargePoly += node.autoPhaseDistribution.charges.poly[phase];
+      productionPoly += node.autoPhaseDistribution.productions.poly[phase];
     }
   });
   
-  return {
-    monoKVA,
-    polyKVA,
-    totalKVA: monoKVA + polyKVA
-  };
-}
-
-// Helper pour calculer les productions par phase
-function calculatePhaseProductions(
-  nodes: Node[], 
-  phase: 'A' | 'B' | 'C'
-): { monoKVA: number; polyKVA: number; totalKVA: number } {
-  let monoKVA = 0;
-  let polyKVA = 0;
+  // Total physique = MONO + POLY
+  const totalPhysiqueCharge = chargeMono + chargePoly;
+  const totalPhysiqueProduction = productionMono + productionPoly;
   
-  nodes.forEach(node => {
-    if (node.autoPhaseDistribution) {
-      monoKVA += node.autoPhaseDistribution.productions.mono[phase];
-      polyKVA += node.autoPhaseDistribution.productions.poly[phase];
-    }
+  // Total foisonné = Total physique × foisonnement
+  const totalFoisonneCharge = totalPhysiqueCharge * (foisonnementCharges / 100);
+  const totalFoisonneProduction = totalPhysiqueProduction * (foisonnementProductions / 100);
+  
+  // Avec curseurs = Total foisonné × curseur %
+  const curseurCharge = manualPhaseDistribution?.charges[phase] || 33.33;
+  const curseurProduction = manualPhaseDistribution?.productions[phase] || 33.33;
+  
+  // Calculer le total foisonné de toutes les phases pour appliquer le curseur
+  let totalFoisonneChargeAllPhases = 0;
+  let totalFoisonneProductionAllPhases = 0;
+  (['A', 'B', 'C'] as const).forEach(p => {
+    let monoC = 0, polyC = 0, monoP = 0, polyP = 0;
+    nodes.forEach(node => {
+      if (node.autoPhaseDistribution) {
+        monoC += node.autoPhaseDistribution.charges.mono[p];
+        polyC += node.autoPhaseDistribution.charges.poly[p];
+        monoP += node.autoPhaseDistribution.productions.mono[p];
+        polyP += node.autoPhaseDistribution.productions.poly[p];
+      }
+    });
+    totalFoisonneChargeAllPhases += (monoC + polyC) * (foisonnementCharges / 100);
+    totalFoisonneProductionAllPhases += (monoP + polyP) * (foisonnementProductions / 100);
   });
   
+  const chargeAvecCurseur = totalFoisonneChargeAllPhases * (curseurCharge / 100);
+  const productionAvecCurseur = totalFoisonneProductionAllPhases * (curseurProduction / 100);
+  
+  // Calcul de l'écart en % par rapport à la moyenne (33.33%)
+  const ecartChargePercent = ((curseurCharge - 33.33) / 33.33) * 100;
+  const ecartProductionPercent = ((curseurProduction - 33.33) / 33.33) * 100;
+  
+  // Courant total (approximatif, I = S / V)
+  const voltage = 230; // Toujours 230V pour le calcul
+  const courantTotal = ((chargeAvecCurseur - productionAvecCurseur) * 1000) / voltage;
+  
   return {
-    monoKVA,
-    polyKVA,
-    totalKVA: monoKVA + polyKVA
+    nbMono,
+    chargeMono,
+    productionMono,
+    chargePoly,
+    productionPoly,
+    totalPhysiqueCharge,
+    totalPhysiqueProduction,
+    totalFoisonneCharge,
+    totalFoisonneProduction,
+    chargeAvecCurseur,
+    productionAvecCurseur,
+    ecartChargePercent,
+    ecartProductionPercent,
+    courantTotal
   };
 }
 
@@ -361,9 +419,9 @@ export const PhaseDistributionDisplay = () => {
         </div>
       )}
 
-      {/* Récapitulatif par couplage avec courant de neutre */}
+      {/* Tableau consolidé par couplage */}
       <div className="p-3 bg-primary/5 border border-primary/20 rounded">
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-center gap-2 mb-3">
           <span className="text-xs font-bold text-white">📋 RÉCAPITULATIF PAR COUPLAGE</span>
           {currentProject.voltageSystem === 'TÉTRAPHASÉ_400V' && (
             <Badge variant="outline" className="text-xs">
@@ -372,164 +430,98 @@ export const PhaseDistributionDisplay = () => {
           )}
         </div>
         
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          {/* 230V Phase-à-phase */}
-          {currentProject.voltageSystem === 'TRIPHASÉ_230V' && (
-            <div className="col-span-2 space-y-1">
-              <div className="font-medium text-white mb-1">230V Phase-à-phase (sans neutre)</div>
-              {[
-                { original: 'A-B', label: 'L1-L2' },
-                { original: 'B-C', label: 'L2-L3' },
-                { original: 'A-C', label: 'L3-L1' }
-              ].map(({ original, label }) => {
-                const group = clientsByCoupling[original];
-                if (!group) return null;
+        {/* Tableau */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-[10px] border-collapse">
+            <thead>
+              <tr className="border-b border-white/20">
+                <th className="text-left py-2 px-2 text-white font-semibold">Couplage</th>
+                <th className="text-center py-2 px-1 text-white font-semibold">Nb<br/>MONO</th>
+                <th className="text-right py-2 px-1 text-blue-300 font-semibold">Ch<br/>MONO</th>
+                <th className="text-right py-2 px-1 text-green-300 font-semibold">Pr<br/>MONO</th>
+                <th className="text-right py-2 px-1 text-blue-300 font-semibold">Ch POLY<br/>33.3%</th>
+                <th className="text-right py-2 px-1 text-green-300 font-semibold">Pr POLY<br/>33.3%</th>
+                <th className="text-right py-2 px-1 text-blue-400 font-semibold">Total<br/>phys. Ch</th>
+                <th className="text-right py-2 px-1 text-green-400 font-semibold">Total<br/>phys. Pr</th>
+                <th className="text-right py-2 px-1 text-blue-500 font-semibold">Total<br/>foisonné Ch</th>
+                <th className="text-right py-2 px-1 text-green-500 font-semibold">Total<br/>foisonné Pr</th>
+                <th className="text-right py-2 px-1 text-blue-600 font-semibold">Ch avec<br/>curseurs</th>
+                <th className="text-right py-2 px-1 text-green-600 font-semibold">Pr avec<br/>curseurs</th>
+                <th className="text-right py-2 px-1 text-white font-semibold">Courant<br/>(A)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(['A', 'B', 'C'] as const).map((phase) => {
+                const phaseLabel = is230V 
+                  ? (phase === 'A' ? 'L1-L2' : phase === 'B' ? 'L2-L3' : 'L3-L1')
+                  : `L${phase === 'A' ? '1' : phase === 'B' ? '2' : '3'}`;
+                
+                const data = calculatePhaseData(
+                  currentProject.nodes,
+                  phase,
+                  currentProject.foisonnementCharges,
+                  currentProject.foisonnementProductions,
+                  currentProject.manualPhaseDistribution
+                );
+                
+                const bgClass = phase === 'A' ? 'bg-blue-500/5' : phase === 'B' ? 'bg-green-500/5' : 'bg-red-500/5';
+                const ecartChargeColor = Math.abs(data.ecartChargePercent) < 5 ? 'text-green-400' : Math.abs(data.ecartChargePercent) < 15 ? 'text-yellow-400' : 'text-red-400';
+                const ecartProdColor = Math.abs(data.ecartProductionPercent) < 5 ? 'text-green-400' : Math.abs(data.ecartProductionPercent) < 15 ? 'text-yellow-400' : 'text-red-400';
+                
+                // Compter les clients MONO réels par phase
+                const monoClients = currentProject.clientsImportes?.filter(client => {
+                  if (!linkedClientIds.has(client.id)) return false;
+                  if (client.connectionType !== 'MONO') return false;
+                  
+                  if (is230V) {
+                    const coupling = client.phaseCoupling;
+                    if (phase === 'A' && coupling === 'A-B') return true;
+                    if (phase === 'B' && coupling === 'B-C') return true;
+                    if (phase === 'C' && coupling === 'A-C') return true;
+                    return false;
+                  } else {
+                    return client.assignedPhase === phase;
+                  }
+                }) || [];
+                
                 return (
-                  <div key={original} className="flex items-center justify-between p-1.5 bg-blue-500/10 rounded">
-                    <span className="font-medium text-white">{label}</span>
-                    <div className="text-right">
-                      <div className="font-bold text-white">{group.clients.length} client{group.clients.length > 1 ? 's' : ''}</div>
-                      <div className="text-white">Ch: {group.totalKVA.toFixed(1)} kVA · Pr: {group.totalProdKVA.toFixed(1)} kVA</div>
-                      <div className="text-white/70 text-[10px]">{group.totalCurrent.toFixed(1)} A</div>
-                    </div>
-                  </div>
+                  <tr key={phase} className={`border-b border-white/10 ${bgClass}`}>
+                    <td className="py-2 px-2 text-white font-semibold">{phaseLabel}</td>
+                    <td className="text-center py-2 px-1 text-white">{monoClients.length}</td>
+                    <td className="text-right py-2 px-1 text-blue-300">{data.chargeMono.toFixed(1)}</td>
+                    <td className="text-right py-2 px-1 text-green-300">{data.productionMono.toFixed(1)}</td>
+                    <td className="text-right py-2 px-1 text-blue-300">{data.chargePoly.toFixed(1)}</td>
+                    <td className="text-right py-2 px-1 text-green-300">{data.productionPoly.toFixed(1)}</td>
+                    <td className="text-right py-2 px-1 text-blue-400 font-semibold">{data.totalPhysiqueCharge.toFixed(1)}</td>
+                    <td className="text-right py-2 px-1 text-green-400 font-semibold">{data.totalPhysiqueProduction.toFixed(1)}</td>
+                    <td className="text-right py-2 px-1 text-blue-500 font-semibold">{data.totalFoisonneCharge.toFixed(1)}</td>
+                    <td className="text-right py-2 px-1 text-green-500 font-semibold">{data.totalFoisonneProduction.toFixed(1)}</td>
+                    <td className="text-right py-2 px-1 text-blue-600 font-bold">
+                      {data.chargeAvecCurseur.toFixed(1)}
+                      <br/>
+                      <span className={`${ecartChargeColor} text-[9px]`}>
+                        ({data.ecartChargePercent > 0 ? '+' : ''}{data.ecartChargePercent.toFixed(1)}%)
+                      </span>
+                    </td>
+                    <td className="text-right py-2 px-1 text-green-600 font-bold">
+                      {data.productionAvecCurseur.toFixed(1)}
+                      <br/>
+                      <span className={`${ecartProdColor} text-[9px]`}>
+                        ({data.ecartProductionPercent > 0 ? '+' : ''}{data.ecartProductionPercent.toFixed(1)}%)
+                      </span>
+                    </td>
+                    <td className="text-right py-2 px-1 text-white font-semibold">{Math.abs(data.courantTotal).toFixed(1)}</td>
+                  </tr>
                 );
               })}
-            </div>
-          )}
-          
-          {/* 400V Phase-neutre */}
-          {currentProject.voltageSystem === 'TÉTRAPHASÉ_400V' && (
-            <div className="col-span-2 space-y-1">
-              <div className="font-medium text-white mb-1">400V Phase-neutre</div>
-              {[
-                { original: 'A', label: 'L1' },
-                { original: 'B', label: 'L2' },
-                { original: 'C', label: 'L3' }
-              ].map(({ original, label }) => {
-                const group = clientsByCoupling[original];
-                if (!group) return null;
-                const bgClass = original === 'A' ? 'bg-blue-500/10' : original === 'B' ? 'bg-green-500/10' : 'bg-red-500/10';
-                return (
-                  <div key={original} className={`flex items-center justify-between p-1.5 ${bgClass} rounded`}>
-                    <span className="font-medium text-white">{label}</span>
-                    <div className="text-right">
-                      <div className="font-bold text-white">{group.clients.length} client{group.clients.length > 1 ? 's' : ''}</div>
-                      <div className="text-white">Ch: {group.totalKVA.toFixed(1)} kVA · Pr: {group.totalProdKVA.toFixed(1)} kVA</div>
-                      <div className="text-white/70 text-[10px]">{group.totalCurrent.toFixed(1)} A</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+            </tbody>
+          </table>
         </div>
         
-        {currentProject.voltageSystem === 'TÉTRAPHASÉ_400V' && (
-          <div className="mt-2 text-[10px] text-white">
-            💡 Le courant de neutre est calculé vectoriellement à partir des charges par phase
-          </div>
-        )}
-        {currentProject.voltageSystem === 'TRIPHASÉ_230V' && (
-          <div className="mt-2 text-[10px] text-white">
-            💡 Réseau 230V sans neutre : les clients MONO sont connectés entre 2 phases
-          </div>
-        )}
-      </div>
-
-      {/* Ligne 2: Tableau compact Charges / Productions */}
-      <div className="grid grid-cols-2 gap-3">
-        {/* CHARGES */}
-        <div className="flex flex-col gap-1 p-2 bg-blue-500/10 rounded border border-blue-500/20">
-          <div className="text-xs font-semibold text-blue-400 mb-1">⚡ CHARGES</div>
-          <div className="grid grid-cols-3 gap-2">
-            {['A', 'B', 'C'].map(phase => {
-              const phaseName = phase as 'A' | 'B' | 'C';
-              const { monoKVA, polyKVA, totalKVA } = calculatePhaseCharges(
-                currentProject.nodes,
-                phaseName
-              );
-              
-              const moyenne = (phaseLoads.A + phaseLoads.B + phaseLoads.C) / 3;
-              const ecart = moyenne > 0 ? ((phaseLoads[phaseName] - moyenne) / moyenne * 100) : 0;
-              const ecartColor = Math.abs(ecart) < 5 ? 'text-green-400' : Math.abs(ecart) < 10 ? 'text-yellow-400' : 'text-red-400';
-              const hasRisk = highPowerClientsPerPhase[phaseName].length > 0;
-              
-              // Label selon le voltage
-              const phaseLabel = is230V 
-                ? (phase === 'A' ? 'L1-L2' : phase === 'B' ? 'L2-L3' : 'L3-L1')
-                : `L${phase === 'A' ? '1' : phase === 'B' ? '2' : '3'}`;
-              
-              return (
-                <div key={phase} className={`flex flex-col gap-0.5 text-center ${hasRisk ? 'bg-blue-500/10 border-l-2 border-blue-500' : ''}`}>
-                  <div className="flex items-center justify-center gap-1">
-                    <span className="text-xs font-bold text-blue-300">{phaseLabel}</span>
-                    {hasRisk && <span className="text-orange-500 text-xs">⚠️</span>}
-                  </div>
-                  
-                  {/* Total */}
-                  <div className="flex flex-col">
-                    <span className="text-xs font-bold text-primary-foreground">
-                      {totalKVA.toFixed(1)}
-                    </span>
-                    <span className={`text-[10px] ${ecartColor}`}>
-                      ({ecart > 0 ? '+' : ''}{ecart.toFixed(0)}%)
-                    </span>
-                  </div>
-                  
-                  {/* MONO */}
-                  <div className="text-xs text-blue-300/80">
-                    M: {monoKVA.toFixed(1)}
-                  </div>
-                  
-                  {/* POLY */}
-                  <div className="text-xs text-purple-300/80">
-                    P: {polyKVA.toFixed(1)}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* PRODUCTIONS */}
-        <div className="flex flex-col gap-1 p-2 bg-orange-500/10 rounded border border-orange-500/20">
-          <div className="text-xs font-semibold text-orange-400 mb-1">☀️ PRODUCTIONS</div>
-          <div className="grid grid-cols-3 gap-2">
-            {['A', 'B', 'C'].map(phase => {
-              const phaseName = phase as 'A' | 'B' | 'C';
-              const { monoKVA, polyKVA, totalKVA } = calculatePhaseProductions(
-                currentProject.nodes,
-                phaseName
-              );
-              
-              // Label selon le voltage
-              const phaseLabel = is230V 
-                ? (phase === 'A' ? 'L1-L2' : phase === 'B' ? 'L2-L3' : 'L3-L1')
-                : `L${phase === 'A' ? '1' : phase === 'B' ? '2' : '3'}`;
-              
-              return (
-                <div key={phase} className="flex flex-col gap-0.5 text-center">
-                  <span className="text-xs font-bold text-orange-300">{phaseLabel}</span>
-                  
-                  {/* Total */}
-                  <div className="text-xs font-bold text-primary-foreground">
-                    {totalKVA.toFixed(1)}
-                  </div>
-                  
-                  {/* MONO */}
-                  <div className="text-xs text-orange-300/80">
-                    M: {monoKVA.toFixed(1)}
-                  </div>
-                  
-                  {/* POLY */}
-                  <div className="text-xs text-purple-300/80">
-                    P: {polyKVA.toFixed(1)}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        <div className="mt-2 text-[10px] text-white/60">
+          {currentProject.voltageSystem === 'TÉTRAPHASÉ_400V' 
+            ? '💡 Le courant de neutre est calculé vectoriellement. Les curseurs permettent d\'ajuster la répartition des charges et productions foisonnées.'
+            : '💡 Réseau 230V sans neutre. Les curseurs permettent d\'ajuster la répartition des charges et productions foisonnées.'}
         </div>
       </div>
         </>

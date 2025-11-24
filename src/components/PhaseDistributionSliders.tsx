@@ -23,8 +23,8 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
   // Déterminer le mode d'affichage selon le voltage
   const is230V = currentProject.voltageSystem === "TRIPHASÉ_230V";
   const phaseLabels = is230V 
-    ? { A: "Phase A-B", B: "Phase B-C", C: "Phase A-C" }
-    : { A: "Phase A", B: "Phase B", C: "Phase C" };
+    ? { A: "L1-L2", B: "L2-L3", C: "L3-L1" }
+    : { A: "L1", B: "L2", C: "L3" };
   const phaseColors = {
     A: "from-red-500 to-red-600",
     B: "from-yellow-500 to-yellow-600", 
@@ -159,8 +159,8 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
     
     const modeLabel = currentMode === 'all_clients' ? 'TOUS les clients (MONO + POLY du tableau)' : 'MONO uniquement (du tableau)';
     const phaseLabelsForToast = is230V 
-      ? `A-B=${realDistribution.A.toFixed(1)}%, B-C=${realDistribution.B.toFixed(1)}%, A-C=${realDistribution.C.toFixed(1)}%`
-      : `A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`;
+      ? `L1-L2=${realDistribution.A.toFixed(1)}%, L2-L3=${realDistribution.B.toFixed(1)}%, L3-L1=${realDistribution.C.toFixed(1)}%`
+      : `L1=${realDistribution.A.toFixed(1)}%, L2=${realDistribution.B.toFixed(1)}%, L3=${realDistribution.C.toFixed(1)}%`;
     toast.success(`${type === 'charges' ? 'Charges' : 'Productions'} réinitialisées (${modeLabel}) : ${phaseLabelsForToast}`);
   };
   
@@ -231,7 +231,7 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
       
       const typeLabel = type === 'charges' ? 'charges' : 'productions';
       const modeLabel = newMode === 'all_clients' ? 'TOUS les clients (MONO + POLY du tableau)' : 'MONO uniquement (du tableau)';
-      toast.success(`Répartition ${typeLabel} appliquée : ${modeLabel} - A-B=${realDistribution.A.toFixed(1)}%, B-C=${realDistribution.B.toFixed(1)}%, A-C=${realDistribution.C.toFixed(1)}%`);
+      toast.success(`Répartition ${typeLabel} appliquée : ${modeLabel} - L1-L2=${realDistribution.A.toFixed(1)}%, L2-L3=${realDistribution.B.toFixed(1)}%, L3-L1=${realDistribution.C.toFixed(1)}%`);
       return;
     }
     
@@ -310,7 +310,7 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
     
     const typeLabel = type === 'charges' ? 'charges' : 'productions';
     const modeLabel = newMode === 'all_clients' ? 'TOUS les clients (MONO + POLY du tableau)' : 'MONO uniquement (du tableau)';
-    toast.success(`Répartition ${typeLabel} appliquée : ${modeLabel} - A=${realDistribution.A.toFixed(1)}%, B=${realDistribution.B.toFixed(1)}%, C=${realDistribution.C.toFixed(1)}%`);
+    toast.success(`Répartition ${typeLabel} appliquée : ${modeLabel} - L1=${realDistribution.A.toFixed(1)}%, L2=${realDistribution.B.toFixed(1)}%, L3=${realDistribution.C.toFixed(1)}%`);
   };
   
   // Calcul des valeurs kVA par phase

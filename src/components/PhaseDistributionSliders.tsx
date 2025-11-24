@@ -1,11 +1,9 @@
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { RefreshCw } from "lucide-react";
 import { useNetworkStore } from "@/store/networkStore";
-import { calculateRealMonoDistributionPercents, calculateRealMonoProductionDistributionPercents } from "@/utils/phaseDistributionCalculator";
 import { toast } from "sonner";
 
 interface PhaseDistributionSlidersProps {
@@ -33,95 +31,95 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
   
   const showResetButton = currentProject.loadModel === 'monophase_reparti' || currentProject.loadModel === 'mixte_mono_poly';
   
-  // ✅ Obtenir le mode actuel pour ce type (charges ou productions)
-  const currentMode = type === 'charges' 
-    ? (currentProject.phaseDistributionModeCharges || 'mono_only')
-    : (currentProject.phaseDistributionModeProductions || 'mono_only');
-  
   // Calculer le déséquilibre en % par rapport à la moyenne (33.33%)
   const calculateUnbalancePercent = (actualPercent: number): number => {
     const average = 33.33;
     return ((actualPercent - average) / average) * 100;
   };
   
-  // ✅ Lit la répartition réelle directement depuis le tableau général (autoPhaseDistribution)
-  const calculateRealDistributionFromTable = (): { A: number; B: number; C: number } => {
+  /**
+   * ✅ Calcule la distribution PHYSIQUE RÉELLE sans appliquer les curseurs (Option B)
+   * - MONO 230V : contribution physique selon couplage avec facteur √3
+   * - MONO 400V : 100% sur phase assignée
+   * - TRI/TÉTRA : 33.33% équi-réparti
+   * - Charges manuelles : 33.33% équi-réparti
+   */
+  const calculatePhysicalDistribution = (): { A: number; B: number; C: number } => {
     if (!currentProject?.nodes) {
       return { A: 33.33, B: 33.33, C: 33.34 };
     }
     
+    const DELTA_FACTOR = 1 / Math.sqrt(3); // ≈ 0.577
     let totalA = 0, totalB = 0, totalC = 0;
     
-    // Parcourir tous les nodes et additionner selon le mode actif
     currentProject.nodes.forEach(node => {
-      if (node.autoPhaseDistribution) {
-        if (currentMode === 'mono_only') {
-          // MODE MONO : lire uniquement les valeurs MONO du tableau
-          if (type === 'charges') {
-            totalA += node.autoPhaseDistribution.charges.mono.A;
-            totalB += node.autoPhaseDistribution.charges.mono.B;
-            totalC += node.autoPhaseDistribution.charges.mono.C;
-          } else {
-            totalA += node.autoPhaseDistribution.productions.mono.A;
-            totalB += node.autoPhaseDistribution.productions.mono.B;
-            totalC += node.autoPhaseDistribution.productions.mono.C;
+      // 1. Clients importés liés à ce nœud
+      const linkedClients = currentProject.clientsImportes?.filter(
+        client => currentProject.clientLinks?.some(link => 
+          link.clientId === client.id && link.nodeId === node.id
+        )
+      ) || [];
+      
+      linkedClients.forEach(client => {
+        const value = type === 'charges' ? client.puissanceContractuelle_kVA : client.puissancePV_kVA;
+        
+        if (client.connectionType === 'MONO') {
+          if (is230V && client.phaseCoupling) {
+            // MONO 230V : contribution physique avec facteur √3
+            if (client.phaseCoupling === 'A-B') {
+              totalA += value * DELTA_FACTOR;
+              totalB += value * DELTA_FACTOR;
+            } else if (client.phaseCoupling === 'B-C') {
+              totalB += value * DELTA_FACTOR;
+              totalC += value * DELTA_FACTOR;
+            } else if (client.phaseCoupling === 'A-C') {
+              totalA += value * DELTA_FACTOR;
+              totalC += value * DELTA_FACTOR;
+            }
+          } else if (client.assignedPhase) {
+            // MONO 400V : 100% sur phase assignée
+            if (client.assignedPhase === 'A') totalA += value;
+            else if (client.assignedPhase === 'B') totalB += value;
+            else if (client.assignedPhase === 'C') totalC += value;
           }
         } else {
-          // MODE ALL_CLIENTS : MONO réel du tableau + POLY total réparti 1/3-1/3-1/3
-          if (type === 'charges') {
-            // Lire les MONO
-            const monoA = node.autoPhaseDistribution.charges.mono.A;
-            const monoB = node.autoPhaseDistribution.charges.mono.B;
-            const monoC = node.autoPhaseDistribution.charges.mono.C;
-            
-            // Lire les POLY et calculer le total POLY invariant des curseurs
-            const polyA = node.autoPhaseDistribution.charges.poly.A;
-            const polyB = node.autoPhaseDistribution.charges.poly.B;
-            const polyC = node.autoPhaseDistribution.charges.poly.C;
-            const polyTotal = polyA + polyB + polyC;
-            const polyPerPhase = polyTotal / 3;
-            
-            // Ajouter MONO + POLY équi-réparti
-            totalA += monoA + polyPerPhase;
-            totalB += monoB + polyPerPhase;
-            totalC += monoC + polyPerPhase;
-          } else {
-            // Même logique pour les productions
-            const monoA = node.autoPhaseDistribution.productions.mono.A;
-            const monoB = node.autoPhaseDistribution.productions.mono.B;
-            const monoC = node.autoPhaseDistribution.productions.mono.C;
-            
-            const polyA = node.autoPhaseDistribution.productions.poly.A;
-            const polyB = node.autoPhaseDistribution.productions.poly.B;
-            const polyC = node.autoPhaseDistribution.productions.poly.C;
-            const polyTotal = polyA + polyB + polyC;
-            const polyPerPhase = polyTotal / 3;
-            
-            totalA += monoA + polyPerPhase;
-            totalB += monoB + polyPerPhase;
-            totalC += monoC + polyPerPhase;
-          }
+          // TRI/TÉTRA : équi-réparti 33.33%
+          const perPhase = value / 3;
+          totalA += perPhase;
+          totalB += perPhase;
+          totalC += perPhase;
         }
+      });
+      
+      // 2. Charges manuelles : équi-réparties 33.33%
+      if (type === 'charges' && node.clients.length > 0) {
+        node.clients.forEach(client => {
+          const manualCharge = (client.S_kVA || 0) * (currentProject.foisonnementCharges / 100);
+          const perPhase = manualCharge / 3;
+          totalA += perPhase;
+          totalB += perPhase;
+          totalC += perPhase;
+        });
+      } else if (type === 'productions' && node.productions.length > 0) {
+        node.productions.forEach(production => {
+          const manualProd = (production.S_kVA || 0) * (currentProject.foisonnementProductions / 100);
+          const perPhase = manualProd / 3;
+          totalA += perPhase;
+          totalB += perPhase;
+          totalC += perPhase;
+        });
       }
     });
     
-    // ✅ CONVERSION PHASES → COUPLAGES pour 230V
+    // Conversion 230V : phases → couplages
     if (is230V) {
-      // Formule mathématique correcte :
-      // Couplage A-B = Phase A + Phase B - Phase C
-      // Couplage B-C = Phase B + Phase C - Phase A
-      // Couplage A-C = Phase A + Phase C - Phase B
       const couplingAB = totalA + totalB - totalC;
       const couplingBC = totalB + totalC - totalA;
       const couplingAC = totalA + totalC - totalB;
-      
       const grandTotal = couplingAB + couplingBC + couplingAC;
       
-      if (grandTotal === 0) {
-        return { A: 33.33, B: 33.33, C: 33.34 };
-      }
+      if (grandTotal === 0) return { A: 33.33, B: 33.33, C: 33.34 };
       
-      // Retourner en format A, B, C (interprétés comme A-B, B-C, A-C)
       return {
         A: (couplingAB / grandTotal) * 100,
         B: (couplingBC / grandTotal) * 100,
@@ -129,12 +127,9 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
       };
     }
     
-    // ✅ 400V : calcul normal par phases
+    // 400V : calcul normal par phases
     const grandTotal = totalA + totalB + totalC;
-    
-    if (grandTotal === 0) {
-      return { A: 33.33, B: 33.33, C: 33.34 };
-    }
+    if (grandTotal === 0) return { A: 33.33, B: 33.33, C: 33.34 };
     
     return {
       A: (totalA / grandTotal) * 100,
@@ -146,10 +141,10 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
   const initializeToRealDistribution = () => {
     if (!currentProject) return;
     
-    // ✅ TOUJOURS lire les valeurs du tableau général
-    const realDistribution = calculateRealDistributionFromTable();
+    // ✅ Calculer la distribution physique réelle SANS curseurs
+    const realDistribution = calculatePhysicalDistribution();
     
-    // Mettre à jour les curseurs SANS changer le mode
+    // Mettre à jour les curseurs
     updateProjectConfig({
       manualPhaseDistribution: {
         ...currentProject.manualPhaseDistribution,
@@ -157,293 +152,52 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
       }
     });
     
-    const modeLabel = currentMode === 'all_clients' ? 'TOUS les clients (MONO + POLY du tableau)' : 'MONO uniquement (du tableau)';
     const phaseLabelsForToast = is230V 
       ? `L1-L2=${realDistribution.A.toFixed(1)}%, L2-L3=${realDistribution.B.toFixed(1)}%, L3-L1=${realDistribution.C.toFixed(1)}%`
       : `L1=${realDistribution.A.toFixed(1)}%, L2=${realDistribution.B.toFixed(1)}%, L3=${realDistribution.C.toFixed(1)}%`;
-    toast.success(`${type === 'charges' ? 'Charges' : 'Productions'} réinitialisées (${modeLabel}) : ${phaseLabelsForToast}`);
+    
+    toast.success(`${type === 'charges' ? 'Charges' : 'Productions'} réinitialisées à la distribution physique : ${phaseLabelsForToast}`);
   };
   
-  const handleModeChange = (newMode: 'mono_only' | 'all_clients') => {
-    // ✅ 1. Mettre à jour le mode SEULEMENT pour le type concerné
-    if (type === 'charges') {
-      updateProjectConfig({
-        phaseDistributionModeCharges: newMode
-      });
-    } else {
-      updateProjectConfig({
-        phaseDistributionModeProductions: newMode
-      });
-    }
-    
-    // 2. Lire les valeurs du tableau général selon le nouveau mode
-    // EN 230V : Calculer par couplage avec la formule correcte
-    if (is230V) {
-      let totalA = 0, totalB = 0, totalC = 0;
-      
-      if (currentProject?.nodes) {
-        currentProject.nodes.forEach(node => {
-          if (node.autoPhaseDistribution) {
-            const charges = type === 'charges' 
-              ? node.autoPhaseDistribution.charges
-              : node.autoPhaseDistribution.productions;
-            
-            if (newMode === 'mono_only') {
-              totalA += charges.mono.A;
-              totalB += charges.mono.B;
-              totalC += charges.mono.C;
-            } else {
-              const monoA = charges.mono.A;
-              const monoB = charges.mono.B;
-              const monoC = charges.mono.C;
-              
-              const polyTotal = charges.poly.A + charges.poly.B + charges.poly.C;
-              const polyPerPhase = polyTotal / 3;
-              
-              totalA += monoA + polyPerPhase;
-              totalB += monoB + polyPerPhase;
-              totalC += monoC + polyPerPhase;
-            }
-          }
-        });
-      }
-      
-      // ✅ Appliquer la conversion phases → couplages
-      const couplingAB = totalA + totalB - totalC;
-      const couplingBC = totalB + totalC - totalA;
-      const couplingAC = totalA + totalC - totalB;
-      
-      const grandTotal = couplingAB + couplingBC + couplingAC;
-      const realDistribution = grandTotal === 0 
-        ? { A: 33.33, B: 33.33, C: 33.34 }
-        : {
-            A: (couplingAB / grandTotal) * 100,
-            B: (couplingBC / grandTotal) * 100,
-            C: (couplingAC / grandTotal) * 100
-          };
-      
-      updateProjectConfig({
-        manualPhaseDistribution: {
-          ...currentProject.manualPhaseDistribution,
-          [type]: realDistribution
-        }
-      });
-      
-      const typeLabel = type === 'charges' ? 'charges' : 'productions';
-      const modeLabel = newMode === 'all_clients' ? 'TOUS les clients (MONO + POLY du tableau)' : 'MONO uniquement (du tableau)';
-      toast.success(`Répartition ${typeLabel} appliquée : ${modeLabel} - L1-L2=${realDistribution.A.toFixed(1)}%, L2-L3=${realDistribution.B.toFixed(1)}%, L3-L1=${realDistribution.C.toFixed(1)}%`);
-      return;
-    }
-    
-    // EN 400V : Calculer par phase
-    let totalA = 0, totalB = 0, totalC = 0;
-    
-    if (currentProject?.nodes) {
-      currentProject.nodes.forEach(node => {
-        if (node.autoPhaseDistribution) {
-          if (newMode === 'mono_only') {
-            // MODE MONO : lire uniquement les valeurs MONO du tableau
-            if (type === 'charges') {
-              totalA += node.autoPhaseDistribution.charges.mono.A;
-              totalB += node.autoPhaseDistribution.charges.mono.B;
-              totalC += node.autoPhaseDistribution.charges.mono.C;
-            } else {
-              totalA += node.autoPhaseDistribution.productions.mono.A;
-              totalB += node.autoPhaseDistribution.productions.mono.B;
-              totalC += node.autoPhaseDistribution.productions.mono.C;
-            }
-          } else {
-            // MODE ALL_CLIENTS : MONO réel du tableau + POLY total réparti 1/3-1/3-1/3
-            if (type === 'charges') {
-              // Lire les MONO
-              const monoA = node.autoPhaseDistribution.charges.mono.A;
-              const monoB = node.autoPhaseDistribution.charges.mono.B;
-              const monoC = node.autoPhaseDistribution.charges.mono.C;
-              
-              // Lire les POLY et calculer le total POLY invariant des curseurs
-              const polyA = node.autoPhaseDistribution.charges.poly.A;
-              const polyB = node.autoPhaseDistribution.charges.poly.B;
-              const polyC = node.autoPhaseDistribution.charges.poly.C;
-              const polyTotal = polyA + polyB + polyC;
-              const polyPerPhase = polyTotal / 3;
-              
-              // Ajouter MONO + POLY équi-réparti
-              totalA += monoA + polyPerPhase;
-              totalB += monoB + polyPerPhase;
-              totalC += monoC + polyPerPhase;
-            } else {
-              // Même logique pour les productions
-              const monoA = node.autoPhaseDistribution.productions.mono.A;
-              const monoB = node.autoPhaseDistribution.productions.mono.B;
-              const monoC = node.autoPhaseDistribution.productions.mono.C;
-              
-              const polyA = node.autoPhaseDistribution.productions.poly.A;
-              const polyB = node.autoPhaseDistribution.productions.poly.B;
-              const polyC = node.autoPhaseDistribution.productions.poly.C;
-              const polyTotal = polyA + polyB + polyC;
-              const polyPerPhase = polyTotal / 3;
-              
-              totalA += monoA + polyPerPhase;
-              totalB += monoB + polyPerPhase;
-              totalC += monoC + polyPerPhase;
-            }
-          }
-        }
-      });
-    }
-    
-    const grandTotal = totalA + totalB + totalC;
-    const realDistribution = grandTotal === 0 
-      ? { A: 33.33, B: 33.33, C: 33.34 }
-      : {
-          A: (totalA / grandTotal) * 100,
-          B: (totalB / grandTotal) * 100,
-          C: (totalC / grandTotal) * 100
-        };
-    
-    updateProjectConfig({
-      manualPhaseDistribution: {
-        ...currentProject.manualPhaseDistribution,
-        [type]: realDistribution
-      }
-    });
-    
-    const typeLabel = type === 'charges' ? 'charges' : 'productions';
-    const modeLabel = newMode === 'all_clients' ? 'TOUS les clients (MONO + POLY du tableau)' : 'MONO uniquement (du tableau)';
-    toast.success(`Répartition ${typeLabel} appliquée : ${modeLabel} - L1=${realDistribution.A.toFixed(1)}%, L2=${realDistribution.B.toFixed(1)}%, L3=${realDistribution.C.toFixed(1)}%`);
-  };
   
-  // Calcul des valeurs kVA par phase
+  // Calcul des valeurs kVA par phase (Option B: curseurs universels)
   const calculateKVAValues = () => {
     let totalValue = 0;
     
-    if (currentProject.loadModel === 'mixte_mono_poly') {
-      // ✅ Déterminer quel mode est actif pour ce type
-      const mode = type === 'charges' 
-        ? (currentProject.phaseDistributionModeCharges || 'mono_only')
-        : (currentProject.phaseDistributionModeProductions || 'mono_only');
-      
-      // EN 230V : Calculer par couplage avec la formule correcte
-      if (is230V) {
-        let totalA = 0, totalB = 0, totalC = 0;
-        
-        currentProject.nodes.forEach(node => {
-          if (node.autoPhaseDistribution) {
-            const charges = type === 'charges' 
-              ? node.autoPhaseDistribution.charges
-              : node.autoPhaseDistribution.productions;
-            
-            if (mode === 'mono_only') {
-              totalA += charges.mono.A;
-              totalB += charges.mono.B;
-              totalC += charges.mono.C;
-            } else {
-              const monoA = charges.mono.A;
-              const monoB = charges.mono.B;
-              const monoC = charges.mono.C;
-              
-              const polyTotal = charges.poly.A + charges.poly.B + charges.poly.C;
-              const polyPerPhase = polyTotal / 3;
-              
-              totalA += monoA + polyPerPhase;
-              totalB += monoB + polyPerPhase;
-              totalC += monoC + polyPerPhase;
-            }
-          }
+    // Calculer le total de toutes les charges/productions (MONO + POLY + manuelles)
+    currentProject.nodes.forEach(node => {
+      // Charges/productions manuelles
+      if (type === 'charges' && node.clients && node.clients.length > 0) {
+        node.clients.forEach(client => {
+          totalValue += (client.S_kVA || 0) * (currentProject.foisonnementCharges / 100);
         });
-        
-        // ✅ Appliquer la conversion phases → couplages
-        const couplingAB = totalA + totalB - totalC;
-        const couplingBC = totalB + totalC - totalA;
-        const couplingAC = totalA + totalC - totalB;
-        
-        const grandTotal = couplingAB + couplingBC + couplingAC;
-        
-        return {
-          A: grandTotal * (distribution.A / 100),
-          B: grandTotal * (distribution.B / 100),
-          C: grandTotal * (distribution.C / 100)
-        };
+      } else if (type === 'productions' && node.productions && node.productions.length > 0) {
+        node.productions.forEach(production => {
+          totalValue += (production.S_kVA || 0) * (currentProject.foisonnementProductions / 100);
+        });
       }
       
-      // EN 400V : Calculer par phase (code original)
-      currentProject.nodes.forEach(node => {
-        if (mode === 'mono_only') {
-          // MODE MONO UNIQUEMENT : ne compter que les charges/productions MONO
-          
-          // Charges manuelles MONO
-          if (type === 'charges' && node.manualLoadType === 'MONO' && node.clients.length > 0) {
-            node.clients.forEach(client => {
-              totalValue += (client.S_kVA || 0) * (currentProject.foisonnementCharges / 100);
-            });
-          } else if (type === 'productions' && node.manualLoadType === 'MONO' && node.productions.length > 0) {
-            node.productions.forEach(production => {
-              totalValue += (production.S_kVA || 0) * (currentProject.foisonnementProductions / 100);
-            });
-          }
-          
-          // Clients importés MONO
-          if (node.autoPhaseDistribution) {
-            if (type === 'charges') {
-              totalValue += node.autoPhaseDistribution.charges.mono.A + 
-                           node.autoPhaseDistribution.charges.mono.B + 
-                           node.autoPhaseDistribution.charges.mono.C;
-            } else {
-              totalValue += node.autoPhaseDistribution.productions.mono.A + 
-                           node.autoPhaseDistribution.productions.mono.B + 
-                           node.autoPhaseDistribution.productions.mono.C;
-            }
-          }
-          
+      // Clients importés (MONO + POLY)
+      if (node.autoPhaseDistribution) {
+        if (type === 'charges') {
+          totalValue += node.autoPhaseDistribution.charges.mono.A + 
+                       node.autoPhaseDistribution.charges.mono.B + 
+                       node.autoPhaseDistribution.charges.mono.C +
+                       node.autoPhaseDistribution.charges.poly.A + 
+                       node.autoPhaseDistribution.charges.poly.B + 
+                       node.autoPhaseDistribution.charges.poly.C;
         } else {
-          // MODE TOUS LES CLIENTS : compter MONO + POLY
-          
-          // Toutes les charges manuelles (MONO + POLY/TETRA)
-          if (type === 'charges' && node.clients.length > 0) {
-            node.clients.forEach(client => {
-              totalValue += (client.S_kVA || 0) * (currentProject.foisonnementCharges / 100);
-            });
-          } else if (type === 'productions' && node.productions.length > 0) {
-            node.productions.forEach(production => {
-              totalValue += (production.S_kVA || 0) * (currentProject.foisonnementProductions / 100);
-            });
-          }
-          
-          // Tous les clients importés (MONO + POLY)
-          if (node.autoPhaseDistribution) {
-            if (type === 'charges') {
-              totalValue += node.autoPhaseDistribution.charges.mono.A + 
-                           node.autoPhaseDistribution.charges.mono.B + 
-                           node.autoPhaseDistribution.charges.mono.C +
-                           node.autoPhaseDistribution.charges.poly.A + 
-                           node.autoPhaseDistribution.charges.poly.B + 
-                           node.autoPhaseDistribution.charges.poly.C;
-            } else {
-              totalValue += node.autoPhaseDistribution.productions.mono.A + 
-                           node.autoPhaseDistribution.productions.mono.B + 
-                           node.autoPhaseDistribution.productions.mono.C +
-                           node.autoPhaseDistribution.productions.poly.A + 
-                           node.autoPhaseDistribution.productions.poly.B + 
-                           node.autoPhaseDistribution.productions.poly.C;
-            }
-          }
+          totalValue += node.autoPhaseDistribution.productions.mono.A + 
+                       node.autoPhaseDistribution.productions.mono.B + 
+                       node.autoPhaseDistribution.productions.mono.C +
+                       node.autoPhaseDistribution.productions.poly.A + 
+                       node.autoPhaseDistribution.productions.poly.B + 
+                       node.autoPhaseDistribution.productions.poly.C;
         }
-      });
-    } else {
-      // MODE MONOPHASE_REPARTI : compter toutes les charges comme avant
-      currentProject.nodes.forEach(node => {
-        if (type === 'charges' && node.clients && node.clients.length > 0) {
-          node.clients.forEach(client => {
-            totalValue += (client.S_kVA || 0) * (currentProject.foisonnementCharges / 100);
-          });
-        } else if (type === 'productions' && node.productions && node.productions.length > 0) {
-          node.productions.forEach(production => {
-            totalValue += (production.S_kVA || 0) * (currentProject.foisonnementProductions / 100);
-          });
-        }
-      });
-    }
+      }
+    });
     
+    // Répartir selon les curseurs (Option B: universels)
     return {
       A: totalValue * (distribution.A / 100),
       B: totalValue * (distribution.B / 100),
@@ -523,35 +277,6 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
           </TooltipProvider>
         )}
       </div>
-      {currentProject.loadModel === 'mixte_mono_poly' && (
-        <div className="flex flex-col gap-2">
-          <Label className="text-xs text-center text-primary-foreground/80">Appliquer à :</Label>
-          <RadioGroup 
-            value={currentMode} 
-            onValueChange={handleModeChange}
-            className="flex justify-center gap-4"
-          >
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="mono_only" id={`${type}-mono_only`} />
-              <Label 
-                htmlFor={`${type}-mono_only`} 
-                className="text-xs text-primary-foreground cursor-pointer"
-              >
-                MONO uniquement
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="all_clients" id={`${type}-all_clients`} />
-              <Label 
-                htmlFor={`${type}-all_clients`} 
-                className="text-xs text-primary-foreground cursor-pointer"
-              >
-                Tous les clients
-              </Label>
-            </div>
-          </RadioGroup>
-        </div>
-      )}
       <div className="flex justify-center gap-4">
         {(['A', 'B', 'C'] as const).map((phase) => (
           <div key={phase} className="flex flex-col items-center gap-2">

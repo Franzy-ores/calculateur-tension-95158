@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeClientConnectionType, autoAssignPhaseForMonoClient } from '../phaseDistributionCalculator';
-import { ClientImporte } from '@/types/network';
+import { normalizeClientConnectionType, autoAssignPhaseForMonoClient, calculateNodeAutoPhaseDistribution } from '../phaseDistributionCalculator';
+import { ClientImporte, Node } from '@/types/network';
 
 describe('phaseDistributionCalculator', () => {
   describe('normalizeClientConnectionType', () => {
@@ -148,6 +148,73 @@ describe('phaseDistributionCalculator', () => {
       const phase = autoAssignPhaseForMonoClient(newClient, existingClients);
       // Phase C a le moins de charge (6 kVA), donc devrait être assignée
       expect(phase).toBe('C');
+    });
+  });
+  
+  describe('calculateNodeAutoPhaseDistribution (Option B)', () => {
+    it('should apply sliders to all clients (MONO, TRI/TÉTRA)', () => {
+      const node: Node = {
+        id: 'node-1',
+        name: 'Test Node',
+        lat: 0,
+        lng: 0,
+        connectionType: 'TÉTRA_3P+N_230_400V',
+        clients: [],
+        productions: []
+      };
+      
+      const linkedClients: ClientImporte[] = [
+        {
+          id: 'c1',
+          identifiantCircuit: 'C1',
+          nomCircuit: 'Client MONO',
+          lat: 0,
+          lng: 0,
+          connectionType: 'MONO',
+          assignedPhase: 'A',
+          puissanceContractuelle_kVA: 30,
+          puissancePV_kVA: 0,
+          couplage: 'MONO'
+        },
+        {
+          id: 'c2',
+          identifiantCircuit: 'C2',
+          nomCircuit: 'Client TRI',
+          lat: 0,
+          lng: 0,
+          connectionType: 'TRI',
+          puissanceContractuelle_kVA: 60,
+          puissancePV_kVA: 0,
+          couplage: 'TRI'
+        }
+      ];
+      
+      // Curseurs: 60% L1, 20% L2, 20% L3
+      const manualCharges = { A: 60, B: 20, C: 20 };
+      const manualProductions = { A: 33.33, B: 33.33, C: 33.34 };
+      
+      const result = calculateNodeAutoPhaseDistribution(
+        node,
+        linkedClients,
+        manualCharges,
+        manualProductions,
+        'TÉTRAPHASÉ_400V'
+      );
+      
+      // MONO: 30 kVA réparti selon curseurs
+      expect(result.charges.mono.A).toBeCloseTo(30 * 0.6, 1); // 18 kVA
+      expect(result.charges.mono.B).toBeCloseTo(30 * 0.2, 1); // 6 kVA
+      expect(result.charges.mono.C).toBeCloseTo(30 * 0.2, 1); // 6 kVA
+      
+      // TRI: 60 kVA réparti selon curseurs (Option B)
+      expect(result.charges.poly.A).toBeCloseTo(60 * 0.6, 1); // 36 kVA
+      expect(result.charges.poly.B).toBeCloseTo(60 * 0.2, 1); // 12 kVA
+      expect(result.charges.poly.C).toBeCloseTo(60 * 0.2, 1); // 12 kVA
+      
+      // Total
+      expect(result.charges.total.A).toBeCloseTo(54, 1); // 18 + 36
+      expect(result.charges.total.B).toBeCloseTo(18, 1); // 6 + 12
+      expect(result.charges.total.C).toBeCloseTo(18, 1); // 6 + 12
     });
   });
 });

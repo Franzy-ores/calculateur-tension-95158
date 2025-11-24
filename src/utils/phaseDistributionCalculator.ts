@@ -182,8 +182,6 @@ export function calculateNodeAutoPhaseDistribution(
   linkedClients: ClientImporte[],
   manualPhaseDistributionCharges: { A: number; B: number; C: number }, // Répartition manuelle CHARGES (%)
   manualPhaseDistributionProductions: { A: number; B: number; C: number }, // Répartition manuelle PRODUCTIONS (%)
-  phaseDistributionModeCharges: 'mono_only' | 'all_clients' = 'mono_only', // Mode d'application pour les charges
-  phaseDistributionModeProductions: 'mono_only' | 'all_clients' = 'mono_only', // Mode d'application pour les productions
   networkVoltage: 'TRIPHASÉ_230V' | 'TÉTRAPHASÉ_400V' = 'TÉTRAPHASÉ_400V' // Système de tension du réseau
 ): NodePhaseDistributionResult {
   // Initialisation des résultats
@@ -270,35 +268,17 @@ export function calculateNodeAutoPhaseDistribution(
         }
       }
     } else {
-      // Client TRI/TÉTRA : appliquer les modes séparément pour charges et productions
-      const chargePerPhase = client.puissanceContractuelle_kVA / 3;
-      const prodPerPhase = client.puissancePV_kVA / 3;
+      // Client TRI/TÉTRA : TOUJOURS appliquer les curseurs (Option B)
+      const totalCharge = client.puissanceContractuelle_kVA;
+      const totalProd = client.puissancePV_kVA;
       
-      // Charges : utiliser le mode charges
-      if (phaseDistributionModeCharges === 'all_clients') {
-        const totalCharge = client.puissanceContractuelle_kVA;
-        result.charges.poly.A += totalCharge * (manualPhaseDistributionCharges.A / 100);
-        result.charges.poly.B += totalCharge * (manualPhaseDistributionCharges.B / 100);
-        result.charges.poly.C += totalCharge * (manualPhaseDistributionCharges.C / 100);
-      } else {
-        // MODE "MONO UNIQUEMENT" : Répartir équitablement (33.33% par phase)
-        result.charges.poly.A += chargePerPhase;
-        result.charges.poly.B += chargePerPhase;
-        result.charges.poly.C += chargePerPhase;
-      }
+      result.charges.poly.A += totalCharge * (manualPhaseDistributionCharges.A / 100);
+      result.charges.poly.B += totalCharge * (manualPhaseDistributionCharges.B / 100);
+      result.charges.poly.C += totalCharge * (manualPhaseDistributionCharges.C / 100);
       
-      // Productions : utiliser le mode productions
-      if (phaseDistributionModeProductions === 'all_clients') {
-        const totalProd = client.puissancePV_kVA;
-        result.productions.poly.A += totalProd * (manualPhaseDistributionProductions.A / 100);
-        result.productions.poly.B += totalProd * (manualPhaseDistributionProductions.B / 100);
-        result.productions.poly.C += totalProd * (manualPhaseDistributionProductions.C / 100);
-      } else {
-        // MODE "MONO UNIQUEMENT" : Répartir équitablement (33.33% par phase)
-        result.productions.poly.A += prodPerPhase;
-        result.productions.poly.B += prodPerPhase;
-        result.productions.poly.C += prodPerPhase;
-      }
+      result.productions.poly.A += totalProd * (manualPhaseDistributionProductions.A / 100);
+      result.productions.poly.B += totalProd * (manualPhaseDistributionProductions.B / 100);
+      result.productions.poly.C += totalProd * (manualPhaseDistributionProductions.C / 100);
       
       result.polyClientsCount++;
     }
@@ -348,7 +328,7 @@ export function calculateNodeAutoPhaseDistribution(
   result.productions.total.C = result.productions.mono.C + result.productions.poly.C;
   
   // 🔍 Logs de débogage détaillés
-  console.log(`🔍 Distribution nœud "${node.name}" (mode charges: ${phaseDistributionModeCharges}, mode productions: ${phaseDistributionModeProductions})`);
+  console.log(`🔍 Distribution nœud "${node.name}" (Option B: curseurs appliqués à TOUS les clients)`);
   console.log(`   📊 Curseurs CHARGES: A=${manualPhaseDistributionCharges.A.toFixed(1)}%, B=${manualPhaseDistributionCharges.B.toFixed(1)}%, C=${manualPhaseDistributionCharges.C.toFixed(1)}%`);
   console.log(`   📊 Curseurs PRODUCTIONS: A=${manualPhaseDistributionProductions.A.toFixed(1)}%, B=${manualPhaseDistributionProductions.B.toFixed(1)}%, C=${manualPhaseDistributionProductions.C.toFixed(1)}%`);
   console.log(`   ⚡ Charges MONO: A=${result.charges.mono.A.toFixed(1)}kVA, B=${result.charges.mono.B.toFixed(1)}kVA, C=${result.charges.mono.C.toFixed(1)}kVA`);

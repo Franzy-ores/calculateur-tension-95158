@@ -800,28 +800,55 @@ export class ElectricalCalculator {
         let pA_productions = 1/3, pB_productions = 1/3, pC_productions = 1/3;
         
         if (n.autoPhaseDistribution) {
-          // Mode mixte : utiliser la distribution réelle du nœud
-          const totalCharges = n.autoPhaseDistribution.charges.total.A + 
-                               n.autoPhaseDistribution.charges.total.B + 
-                               n.autoPhaseDistribution.charges.total.C;
-          const totalProds = n.autoPhaseDistribution.productions.total.A + 
-                             n.autoPhaseDistribution.productions.total.B + 
-                             n.autoPhaseDistribution.productions.total.C;
-          
-          if (totalCharges > 0.001) {
-            pA_charges = n.autoPhaseDistribution.charges.total.A / totalCharges;
-            pB_charges = n.autoPhaseDistribution.charges.total.B / totalCharges;
-            pC_charges = n.autoPhaseDistribution.charges.total.C / totalCharges;
+          // ✅ PRIORITÉ : utiliser les valeurs foisonnées avec curseurs si disponibles
+          if (n.autoPhaseDistribution.charges.foisonneAvecCurseurs && 
+              n.autoPhaseDistribution.productions.foisonneAvecCurseurs) {
+            
+            const totalCharges = n.autoPhaseDistribution.charges.foisonneAvecCurseurs.A + 
+                                n.autoPhaseDistribution.charges.foisonneAvecCurseurs.B + 
+                                n.autoPhaseDistribution.charges.foisonneAvecCurseurs.C;
+            const totalProds = n.autoPhaseDistribution.productions.foisonneAvecCurseurs.A + 
+                              n.autoPhaseDistribution.productions.foisonneAvecCurseurs.B + 
+                              n.autoPhaseDistribution.productions.foisonneAvecCurseurs.C;
+            
+            if (totalCharges > 0.001) {
+              pA_charges = n.autoPhaseDistribution.charges.foisonneAvecCurseurs.A / totalCharges;
+              pB_charges = n.autoPhaseDistribution.charges.foisonneAvecCurseurs.B / totalCharges;
+              pC_charges = n.autoPhaseDistribution.charges.foisonneAvecCurseurs.C / totalCharges;
+            }
+            
+            if (totalProds > 0.001) {
+              pA_productions = n.autoPhaseDistribution.productions.foisonneAvecCurseurs.A / totalProds;
+              pB_productions = n.autoPhaseDistribution.productions.foisonneAvecCurseurs.B / totalProds;
+              pC_productions = n.autoPhaseDistribution.productions.foisonneAvecCurseurs.C / totalProds;
+            }
+            
+            console.log(`📊 Nœud ${n.name || n.id}: utilise foisonneAvecCurseurs (foisonnement + curseurs)`);
+            console.log(`   Charges: A=${(pA_charges*100).toFixed(1)}%, B=${(pB_charges*100).toFixed(1)}%, C=${(pC_charges*100).toFixed(1)}%`);
+          } else {
+            // Fallback : utiliser les valeurs physiques totales
+            const totalCharges = n.autoPhaseDistribution.charges.total.A + 
+                                n.autoPhaseDistribution.charges.total.B + 
+                                n.autoPhaseDistribution.charges.total.C;
+            const totalProds = n.autoPhaseDistribution.productions.total.A + 
+                               n.autoPhaseDistribution.productions.total.B + 
+                               n.autoPhaseDistribution.productions.total.C;
+            
+            if (totalCharges > 0.001) {
+              pA_charges = n.autoPhaseDistribution.charges.total.A / totalCharges;
+              pB_charges = n.autoPhaseDistribution.charges.total.B / totalCharges;
+              pC_charges = n.autoPhaseDistribution.charges.total.C / totalCharges;
+            }
+            
+            if (totalProds > 0.001) {
+              pA_productions = n.autoPhaseDistribution.productions.total.A / totalProds;
+              pB_productions = n.autoPhaseDistribution.productions.total.B / totalProds;
+              pC_productions = n.autoPhaseDistribution.productions.total.C / totalProds;
+            }
+            
+            console.log(`📊 Nœud ${n.name || n.id}: utilise autoPhaseDistribution (physique)`);
+            console.log(`   Charges: A=${(pA_charges*100).toFixed(1)}%, B=${(pB_charges*100).toFixed(1)}%, C=${(pC_charges*100).toFixed(1)}%`);
           }
-          
-          if (totalProds > 0.001) {
-            pA_productions = n.autoPhaseDistribution.productions.total.A / totalProds;
-            pB_productions = n.autoPhaseDistribution.productions.total.B / totalProds;
-            pC_productions = n.autoPhaseDistribution.productions.total.C / totalProds;
-          }
-          
-          console.log(`📊 Nœud ${n.name || n.id}: utilise autoPhaseDistribution`);
-          console.log(`   Charges: A=${(pA_charges*100).toFixed(1)}%, B=${(pB_charges*100).toFixed(1)}%, C=${(pC_charges*100).toFixed(1)}%`);
         } else if (manualPhaseDistribution) {
           // Fallback : mode monophase_reparti
           pA_charges = manualPhaseDistribution.charges.A / 100;

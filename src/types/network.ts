@@ -179,11 +179,13 @@ export interface Node {
       mono: { A: number; B: number; C: number };  // kVA MONO par phase
       poly: { A: number; B: number; C: number };  // kVA TRI/TÉTRA par phase
       total: { A: number; B: number; C: number }; // Somme MONO + POLY
+      foisonneAvecCurseurs?: { A: number; B: number; C: number }; // Valeurs foisonnées avec curseurs de déséquilibre
     };
     productions: {
       mono: { A: number; B: number; C: number };
       poly: { A: number; B: number; C: number };
       total: { A: number; B: number; C: number };
+      foisonneAvecCurseurs?: { A: number; B: number; C: number }; // Valeurs foisonnées avec curseurs de déséquilibre
     };
     monoClientsCount: { A: number; B: number; C: number }; // Nombre de clients MONO par phase
     polyClientsCount: number; // Nombre total de clients TRI/TÉTRA

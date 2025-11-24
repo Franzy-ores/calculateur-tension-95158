@@ -163,11 +163,13 @@ interface NodePhaseDistributionResult {
     mono: { A: number; B: number; C: number };
     poly: { A: number; B: number; C: number };
     total: { A: number; B: number; C: number };
+    foisonneAvecCurseurs?: { A: number; B: number; C: number }; // Valeurs foisonnées avec curseurs de déséquilibre
   };
   productions: {
     mono: { A: number; B: number; C: number };
     poly: { A: number; B: number; C: number };
     total: { A: number; B: number; C: number };
+    foisonneAvecCurseurs?: { A: number; B: number; C: number }; // Valeurs foisonnées avec curseurs de déséquilibre
   };
   monoClientsCount: { A: number; B: number; C: number };
   polyClientsCount: number;
@@ -182,7 +184,9 @@ export function calculateNodeAutoPhaseDistribution(
   linkedClients: ClientImporte[],
   manualPhaseDistributionCharges: { A: number; B: number; C: number }, // Répartition manuelle CHARGES (%)
   manualPhaseDistributionProductions: { A: number; B: number; C: number }, // Répartition manuelle PRODUCTIONS (%)
-  networkVoltage: 'TRIPHASÉ_230V' | 'TÉTRAPHASÉ_400V' = 'TÉTRAPHASÉ_400V' // Système de tension du réseau
+  networkVoltage: 'TRIPHASÉ_230V' | 'TÉTRAPHASÉ_400V' = 'TÉTRAPHASÉ_400V', // Système de tension du réseau
+  foisonnementCharges?: number,  // Coefficient de foisonnement des charges (%)
+  foisonnementProductions?: number  // Coefficient de foisonnement des productions (%)
 ): NodePhaseDistributionResult {
   // Initialisation des résultats
   const result: NodePhaseDistributionResult = {
@@ -352,6 +356,40 @@ export function calculateNodeAutoPhaseDistribution(
       ...totalCharges.map(val => Math.abs((val - moyenne) / moyenne * 100))
     );
     result.unbalancePercent = maxEcart;
+  }
+  
+  // === 5. CALCUL DES VALEURS FOISONNÉES AVEC CURSEURS DE DÉSÉQUILIBRE ===
+  // Si les coefficients de foisonnement sont fournis, calculer les valeurs foisonnées avec curseurs
+  if (foisonnementCharges !== undefined && foisonnementProductions !== undefined) {
+    // 1. Appliquer le foisonnement sur les valeurs physiques totales
+    const totalFoisonneChargeA = result.charges.total.A * (foisonnementCharges / 100);
+    const totalFoisonneChargeB = result.charges.total.B * (foisonnementCharges / 100);
+    const totalFoisonneChargeC = result.charges.total.C * (foisonnementCharges / 100);
+    
+    const totalFoisonneProdA = result.productions.total.A * (foisonnementProductions / 100);
+    const totalFoisonneProdB = result.productions.total.B * (foisonnementProductions / 100);
+    const totalFoisonneProdC = result.productions.total.C * (foisonnementProductions / 100);
+    
+    // 2. Calculer le total global foisonné
+    const totalFoisonneChargeGlobal = totalFoisonneChargeA + totalFoisonneChargeB + totalFoisonneChargeC;
+    const totalFoisonneProdGlobal = totalFoisonneProdA + totalFoisonneProdB + totalFoisonneProdC;
+    
+    // 3. Redistribuer selon les curseurs de déséquilibre
+    result.charges.foisonneAvecCurseurs = {
+      A: totalFoisonneChargeGlobal * (manualPhaseDistributionCharges.A / 100),
+      B: totalFoisonneChargeGlobal * (manualPhaseDistributionCharges.B / 100),
+      C: totalFoisonneChargeGlobal * (manualPhaseDistributionCharges.C / 100)
+    };
+    
+    result.productions.foisonneAvecCurseurs = {
+      A: totalFoisonneProdGlobal * (manualPhaseDistributionProductions.A / 100),
+      B: totalFoisonneProdGlobal * (manualPhaseDistributionProductions.B / 100),
+      C: totalFoisonneProdGlobal * (manualPhaseDistributionProductions.C / 100)
+    };
+    
+    console.log(`🔍 Nœud "${node.name}": Valeurs foisonnées avec curseurs calculées`);
+    console.log(`   Charges foisonnées avec curseurs: A=${result.charges.foisonneAvecCurseurs.A.toFixed(1)}kVA, B=${result.charges.foisonneAvecCurseurs.B.toFixed(1)}kVA, C=${result.charges.foisonneAvecCurseurs.C.toFixed(1)}kVA`);
+    console.log(`   Productions foisonnées avec curseurs: A=${result.productions.foisonneAvecCurseurs.A.toFixed(1)}kVA, B=${result.productions.foisonneAvecCurseurs.B.toFixed(1)}kVA, C=${result.productions.foisonneAvecCurseurs.C.toFixed(1)}kVA`);
   }
   
   return result;

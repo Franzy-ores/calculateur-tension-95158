@@ -220,9 +220,9 @@ export const ClientEditPanel = () => {
                 <SelectValue placeholder="Sélectionner une phase" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="A">Phase A</SelectItem>
-                <SelectItem value="B">Phase B</SelectItem>
-                <SelectItem value="C">Phase C</SelectItem>
+                <SelectItem value="A">L1</SelectItem>
+                <SelectItem value="B">L2</SelectItem>
+                <SelectItem value="C">L3</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground mt-1">

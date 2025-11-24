@@ -221,14 +221,14 @@ export const EditPanel = () => {
                           return (
                             <div className="space-y-1">
                               {totalMono > 0 && (
-                                <div>
-                                  🔌 <span className="font-medium">{totalMono} clients MONO</span>
-                                  <div className="ml-4 text-xs">
-                                    Phase A: {selectedNode.autoPhaseDistribution.monoClientsCount.A} • 
-                                    Phase B: {selectedNode.autoPhaseDistribution.monoClientsCount.B} • 
-                                    Phase C: {selectedNode.autoPhaseDistribution.monoClientsCount.C}
-                                  </div>
-                                </div>
+                                   <div>
+                                     🔌 <span className="font-medium">{totalMono} clients MONO</span>
+                                     <div className="ml-4 text-xs">
+                                       L1: {selectedNode.autoPhaseDistribution.monoClientsCount.A} • 
+                                       L2: {selectedNode.autoPhaseDistribution.monoClientsCount.B} • 
+                                       L3: {selectedNode.autoPhaseDistribution.monoClientsCount.C}
+                                     </div>
+                                   </div>
                               )}
                               {totalPoly > 0 && (
                                 <div>⚡ <span className="font-medium">{totalPoly} clients TRI/TÉTRA</span></div>

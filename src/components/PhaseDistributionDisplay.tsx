@@ -111,8 +111,8 @@ export const PhaseDistributionDisplay = () => {
   // Déterminer le mode d'affichage selon le voltage
   const is230V = currentProject.voltageSystem === "TRIPHASÉ_230V";
   const phaseLabels = is230V 
-    ? { A: "Couplage A-B", B: "Couplage B-C", C: "Couplage A-C" }
-    : { A: "Phase A", B: "Phase B", C: "Phase C" };
+    ? { A: "Couplage L1-L2", B: "Couplage L2-L3", C: "Couplage L3-L1" }
+    : { A: "L1", B: "L2", C: "L3" };
 
   // Calculer le déséquilibre global du projet
   const { unbalancePercent, status, phaseLoads } = calculateProjectUnbalance(
@@ -255,9 +255,9 @@ export const PhaseDistributionDisplay = () => {
           </div>
           
           <div className="grid grid-cols-3 gap-2 text-xs">
-            {/* Phase A */}
+            {/* L1 */}
             <div className={`p-2 rounded ${highPowerClientsPerPhase.A.length > 0 ? 'bg-blue-500/20 border border-blue-500/40' : 'bg-white/5'}`}>
-              <div className="font-medium text-blue-400 mb-1">Phase A</div>
+              <div className="font-medium text-blue-400 mb-1">L1</div>
               {highPowerClientsPerPhase.A.length > 0 ? (
                 <>
                   <div className="text-destructive font-bold">
@@ -288,9 +288,9 @@ export const PhaseDistributionDisplay = () => {
               )}
             </div>
             
-            {/* Phase B */}
+            {/* L2 */}
             <div className={`p-2 rounded ${highPowerClientsPerPhase.B.length > 0 ? 'bg-green-500/20 border border-green-500/40' : 'bg-white/5'}`}>
-              <div className="font-medium text-green-400 mb-1">Phase B</div>
+              <div className="font-medium text-green-400 mb-1">L2</div>
               {highPowerClientsPerPhase.B.length > 0 ? (
                 <>
                   <div className="text-destructive font-bold">
@@ -321,9 +321,9 @@ export const PhaseDistributionDisplay = () => {
               )}
             </div>
             
-            {/* Phase C */}
+            {/* L3 */}
             <div className={`p-2 rounded ${highPowerClientsPerPhase.C.length > 0 ? 'bg-red-500/20 border border-red-500/40' : 'bg-white/5'}`}>
-              <div className="font-medium text-red-400 mb-1">Phase C</div>
+              <div className="font-medium text-red-400 mb-1">L3</div>
               {highPowerClientsPerPhase.C.length > 0 ? (
                 <>
                   <div className="text-destructive font-bold">
@@ -377,12 +377,16 @@ export const PhaseDistributionDisplay = () => {
           {currentProject.voltageSystem === 'TRIPHASÉ_230V' && (
             <div className="col-span-2 space-y-1">
               <div className="font-medium text-white mb-1">230V Phase-à-phase (sans neutre)</div>
-              {['A-B', 'B-C', 'A-C'].map(coupling => {
-                const group = clientsByCoupling[coupling];
+              {[
+                { original: 'A-B', label: 'L1-L2' },
+                { original: 'B-C', label: 'L2-L3' },
+                { original: 'A-C', label: 'L3-L1' }
+              ].map(({ original, label }) => {
+                const group = clientsByCoupling[original];
                 if (!group) return null;
                 return (
-                  <div key={coupling} className="flex items-center justify-between p-1.5 bg-blue-500/10 rounded">
-                    <span className="font-medium text-white">Phase {coupling}</span>
+                  <div key={original} className="flex items-center justify-between p-1.5 bg-blue-500/10 rounded">
+                    <span className="font-medium text-white">{label}</span>
                     <div className="text-right">
                       <div className="font-bold text-white">{group.clients.length} client{group.clients.length > 1 ? 's' : ''}</div>
                       <div className="text-white">Ch: {group.totalKVA.toFixed(1)} kVA · Pr: {group.totalProdKVA.toFixed(1)} kVA</div>
@@ -398,13 +402,17 @@ export const PhaseDistributionDisplay = () => {
           {currentProject.voltageSystem === 'TÉTRAPHASÉ_400V' && (
             <div className="col-span-2 space-y-1">
               <div className="font-medium text-white mb-1">400V Phase-neutre</div>
-              {['A', 'B', 'C'].map(coupling => {
-                const group = clientsByCoupling[coupling];
+              {[
+                { original: 'A', label: 'L1' },
+                { original: 'B', label: 'L2' },
+                { original: 'C', label: 'L3' }
+              ].map(({ original, label }) => {
+                const group = clientsByCoupling[original];
                 if (!group) return null;
-                const bgClass = coupling === 'A' ? 'bg-blue-500/10' : coupling === 'B' ? 'bg-green-500/10' : 'bg-red-500/10';
+                const bgClass = original === 'A' ? 'bg-blue-500/10' : original === 'B' ? 'bg-green-500/10' : 'bg-red-500/10';
                 return (
-                  <div key={coupling} className={`flex items-center justify-between p-1.5 ${bgClass} rounded`}>
-                    <span className="font-medium text-white">Phase {coupling}</span>
+                  <div key={original} className={`flex items-center justify-between p-1.5 ${bgClass} rounded`}>
+                    <span className="font-medium text-white">{label}</span>
                     <div className="text-right">
                       <div className="font-bold text-white">{group.clients.length} client{group.clients.length > 1 ? 's' : ''}</div>
                       <div className="text-white">Ch: {group.totalKVA.toFixed(1)} kVA · Pr: {group.totalProdKVA.toFixed(1)} kVA</div>
@@ -449,13 +457,13 @@ export const PhaseDistributionDisplay = () => {
               
               // Label selon le voltage
               const phaseLabel = is230V 
-                ? (phase === 'A' ? 'A-B' : phase === 'B' ? 'B-C' : 'A-C')
-                : phase;
+                ? (phase === 'A' ? 'L1-L2' : phase === 'B' ? 'L2-L3' : 'L3-L1')
+                : `L${phase === 'A' ? '1' : phase === 'B' ? '2' : '3'}`;
               
               return (
                 <div key={phase} className={`flex flex-col gap-0.5 text-center ${hasRisk ? 'bg-blue-500/10 border-l-2 border-blue-500' : ''}`}>
                   <div className="flex items-center justify-center gap-1">
-                    <span className="text-xs font-bold text-blue-300">{is230V ? phaseLabel : `Ph${phase}`}</span>
+                    <span className="text-xs font-bold text-blue-300">{phaseLabel}</span>
                     {hasRisk && <span className="text-orange-500 text-xs">⚠️</span>}
                   </div>
                   
@@ -497,12 +505,12 @@ export const PhaseDistributionDisplay = () => {
               
               // Label selon le voltage
               const phaseLabel = is230V 
-                ? (phase === 'A' ? 'A-B' : phase === 'B' ? 'B-C' : 'A-C')
-                : phase;
+                ? (phase === 'A' ? 'L1-L2' : phase === 'B' ? 'L2-L3' : 'L3-L1')
+                : `L${phase === 'A' ? '1' : phase === 'B' ? '2' : '3'}`;
               
               return (
                 <div key={phase} className="flex flex-col gap-0.5 text-center">
-                  <span className="text-xs font-bold text-orange-300">{is230V ? phaseLabel : `Ph${phase}`}</span>
+                  <span className="text-xs font-bold text-orange-300">{phaseLabel}</span>
                   
                   {/* Total */}
                   <div className="text-xs font-bold text-primary-foreground">

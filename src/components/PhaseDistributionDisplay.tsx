@@ -62,6 +62,8 @@ function calculatePhaseData(
   phase: 'A' | 'B' | 'C',
   foisonnementCharges: number,
   foisonnementProductions: number,
+  totalFoisonneChargeGlobal: number,
+  totalFoisonneProductionGlobal: number,
   manualPhaseDistribution?: { charges: { A: number; B: number; C: number }; productions: { A: number; B: number; C: number } }
 ): {
   nbMono: number;
@@ -87,57 +89,34 @@ function calculatePhaseData(
   
   nodes.forEach(node => {
     if (node.autoPhaseDistribution) {
-      // Compter les clients MONO et récupérer leurs valeurs
-      const monoChargeValue = node.autoPhaseDistribution.charges.mono[phase];
-      const monoProductionValue = node.autoPhaseDistribution.productions.mono[phase];
-      
-      chargeMono += monoChargeValue;
-      productionMono += monoProductionValue;
-      
-      // Charges et productions POLY à 33.3%
+      chargeMono += node.autoPhaseDistribution.charges.mono[phase];
+      productionMono += node.autoPhaseDistribution.productions.mono[phase];
       chargePoly += node.autoPhaseDistribution.charges.poly[phase];
       productionPoly += node.autoPhaseDistribution.productions.poly[phase];
     }
   });
   
-  // Total physique = MONO + POLY
+  // Total physique = MONO + POLY (ne change pas avec les curseurs)
   const totalPhysiqueCharge = chargeMono + chargePoly;
   const totalPhysiqueProduction = productionMono + productionPoly;
   
-  // Total foisonné = Total physique × foisonnement
+  // Total foisonné de CETTE phase (ne change pas avec les curseurs)
   const totalFoisonneCharge = totalPhysiqueCharge * (foisonnementCharges / 100);
   const totalFoisonneProduction = totalPhysiqueProduction * (foisonnementProductions / 100);
   
-  // Avec curseurs = Total foisonné × curseur %
+  // Curseurs : redistribution du total foisonné GLOBAL selon le %
   const curseurCharge = manualPhaseDistribution?.charges[phase] || 33.33;
   const curseurProduction = manualPhaseDistribution?.productions[phase] || 33.33;
   
-  // Calculer le total foisonné de toutes les phases pour appliquer le curseur
-  let totalFoisonneChargeAllPhases = 0;
-  let totalFoisonneProductionAllPhases = 0;
-  (['A', 'B', 'C'] as const).forEach(p => {
-    let monoC = 0, polyC = 0, monoP = 0, polyP = 0;
-    nodes.forEach(node => {
-      if (node.autoPhaseDistribution) {
-        monoC += node.autoPhaseDistribution.charges.mono[p];
-        polyC += node.autoPhaseDistribution.charges.poly[p];
-        monoP += node.autoPhaseDistribution.productions.mono[p];
-        polyP += node.autoPhaseDistribution.productions.poly[p];
-      }
-    });
-    totalFoisonneChargeAllPhases += (monoC + polyC) * (foisonnementCharges / 100);
-    totalFoisonneProductionAllPhases += (monoP + polyP) * (foisonnementProductions / 100);
-  });
+  const chargeAvecCurseur = totalFoisonneChargeGlobal * (curseurCharge / 100);
+  const productionAvecCurseur = totalFoisonneProductionGlobal * (curseurProduction / 100);
   
-  const chargeAvecCurseur = totalFoisonneChargeAllPhases * (curseurCharge / 100);
-  const productionAvecCurseur = totalFoisonneProductionAllPhases * (curseurProduction / 100);
-  
-  // Calcul de l'écart en % par rapport à la moyenne (33.33%)
+  // Écart par rapport à 33.33%
   const ecartChargePercent = ((curseurCharge - 33.33) / 33.33) * 100;
   const ecartProductionPercent = ((curseurProduction - 33.33) / 33.33) * 100;
   
-  // Courant total (approximatif, I = S / V)
-  const voltage = 230; // Toujours 230V pour le calcul
+  // Courant total (I = S / V)
+  const voltage = 230;
   const courantTotal = ((chargeAvecCurseur - productionAvecCurseur) * 1000) / voltage;
   
   return {
@@ -155,6 +134,32 @@ function calculatePhaseData(
     ecartChargePercent,
     ecartProductionPercent,
     courantTotal
+  };
+}
+
+// Helper pour calculer les totaux foisonnés globaux
+function calculateGlobalFoisonne(
+  nodes: Node[],
+  foisonnementCharges: number,
+  foisonnementProductions: number
+): { totalFoisonneChargeGlobal: number; totalFoisonneProductionGlobal: number } {
+  let totalChargePhysique = 0;
+  let totalProductionPhysique = 0;
+  
+  (['A', 'B', 'C'] as const).forEach(phase => {
+    nodes.forEach(node => {
+      if (node.autoPhaseDistribution) {
+        totalChargePhysique += node.autoPhaseDistribution.charges.mono[phase] + 
+                               node.autoPhaseDistribution.charges.poly[phase];
+        totalProductionPhysique += node.autoPhaseDistribution.productions.mono[phase] + 
+                                   node.autoPhaseDistribution.productions.poly[phase];
+      }
+    });
+  });
+  
+  return {
+    totalFoisonneChargeGlobal: totalChargePhysique * (foisonnementCharges / 100),
+    totalFoisonneProductionGlobal: totalProductionPhysique * (foisonnementProductions / 100)
   };
 }
 
@@ -451,69 +456,81 @@ export const PhaseDistributionDisplay = () => {
               </tr>
             </thead>
             <tbody>
-              {(['A', 'B', 'C'] as const).map((phase) => {
-                const phaseLabel = is230V 
-                  ? (phase === 'A' ? 'L1-L2' : phase === 'B' ? 'L2-L3' : 'L3-L1')
-                  : `L${phase === 'A' ? '1' : phase === 'B' ? '2' : '3'}`;
+              {(() => {
+                // Calculer une seule fois les totaux foisonnés globaux
+                const { totalFoisonneChargeGlobal, totalFoisonneProductionGlobal } = 
+                  calculateGlobalFoisonne(
+                    currentProject.nodes,
+                    currentProject.foisonnementCharges,
+                    currentProject.foisonnementProductions
+                  );
                 
-                const data = calculatePhaseData(
-                  currentProject.nodes,
-                  phase,
-                  currentProject.foisonnementCharges,
-                  currentProject.foisonnementProductions,
-                  currentProject.manualPhaseDistribution
-                );
-                
-                const bgClass = phase === 'A' ? 'bg-blue-500/5' : phase === 'B' ? 'bg-green-500/5' : 'bg-red-500/5';
-                const ecartChargeColor = Math.abs(data.ecartChargePercent) < 5 ? 'text-green-400' : Math.abs(data.ecartChargePercent) < 15 ? 'text-yellow-400' : 'text-red-400';
-                const ecartProdColor = Math.abs(data.ecartProductionPercent) < 5 ? 'text-green-400' : Math.abs(data.ecartProductionPercent) < 15 ? 'text-yellow-400' : 'text-red-400';
-                
-                // Compter les clients MONO réels par phase
-                const monoClients = currentProject.clientsImportes?.filter(client => {
-                  if (!linkedClientIds.has(client.id)) return false;
-                  if (client.connectionType !== 'MONO') return false;
+                return (['A', 'B', 'C'] as const).map((phase) => {
+                  const phaseLabel = is230V 
+                    ? (phase === 'A' ? 'L1-L2' : phase === 'B' ? 'L2-L3' : 'L3-L1')
+                    : `L${phase === 'A' ? '1' : phase === 'B' ? '2' : '3'}`;
                   
-                  if (is230V) {
-                    const coupling = client.phaseCoupling;
-                    if (phase === 'A' && coupling === 'A-B') return true;
-                    if (phase === 'B' && coupling === 'B-C') return true;
-                    if (phase === 'C' && coupling === 'A-C') return true;
-                    return false;
-                  } else {
-                    return client.assignedPhase === phase;
-                  }
-                }) || [];
+                  const data = calculatePhaseData(
+                    currentProject.nodes,
+                    phase,
+                    currentProject.foisonnementCharges,
+                    currentProject.foisonnementProductions,
+                    totalFoisonneChargeGlobal,
+                    totalFoisonneProductionGlobal,
+                    currentProject.manualPhaseDistribution
+                  );
                 
-                return (
-                  <tr key={phase} className={`border-b border-white/10 ${bgClass}`}>
-                    <td className="py-2 px-2 text-white font-semibold">{phaseLabel}</td>
-                    <td className="text-center py-2 px-1 text-white">{monoClients.length}</td>
-                    <td className="text-right py-2 px-1 text-blue-300">{data.chargeMono.toFixed(1)}</td>
-                    <td className="text-right py-2 px-1 text-green-300">{data.productionMono.toFixed(1)}</td>
-                    <td className="text-right py-2 px-1 text-blue-300">{data.chargePoly.toFixed(1)}</td>
-                    <td className="text-right py-2 px-1 text-green-300">{data.productionPoly.toFixed(1)}</td>
-                    <td className="text-right py-2 px-1 text-blue-400 font-semibold">{data.totalPhysiqueCharge.toFixed(1)}</td>
-                    <td className="text-right py-2 px-1 text-green-400 font-semibold">{data.totalPhysiqueProduction.toFixed(1)}</td>
-                    <td className="text-right py-2 px-1 text-blue-500 font-semibold">{data.totalFoisonneCharge.toFixed(1)}</td>
-                    <td className="text-right py-2 px-1 text-green-500 font-semibold">{data.totalFoisonneProduction.toFixed(1)}</td>
-                    <td className="text-right py-2 px-1 text-blue-600 font-bold">
-                      {data.chargeAvecCurseur.toFixed(1)}
-                      <br/>
-                      <span className={`${ecartChargeColor} text-[9px]`}>
-                        ({data.ecartChargePercent > 0 ? '+' : ''}{data.ecartChargePercent.toFixed(1)}%)
-                      </span>
-                    </td>
-                    <td className="text-right py-2 px-1 text-green-600 font-bold">
-                      {data.productionAvecCurseur.toFixed(1)}
-                      <br/>
-                      <span className={`${ecartProdColor} text-[9px]`}>
-                        ({data.ecartProductionPercent > 0 ? '+' : ''}{data.ecartProductionPercent.toFixed(1)}%)
-                      </span>
-                    </td>
-                    <td className="text-right py-2 px-1 text-white font-semibold">{Math.abs(data.courantTotal).toFixed(1)}</td>
-                  </tr>
-                );
-              })}
+                  const bgClass = phase === 'A' ? 'bg-blue-500/5' : phase === 'B' ? 'bg-green-500/5' : 'bg-red-500/5';
+                  const ecartChargeColor = Math.abs(data.ecartChargePercent) < 5 ? 'text-green-400' : Math.abs(data.ecartChargePercent) < 15 ? 'text-yellow-400' : 'text-red-400';
+                  const ecartProdColor = Math.abs(data.ecartProductionPercent) < 5 ? 'text-green-400' : Math.abs(data.ecartProductionPercent) < 15 ? 'text-yellow-400' : 'text-red-400';
+                  
+                  // Compter les clients MONO réels par phase
+                  const monoClients = currentProject.clientsImportes?.filter(client => {
+                    if (!linkedClientIds.has(client.id)) return false;
+                    if (client.connectionType !== 'MONO') return false;
+                    
+                    if (is230V) {
+                      const coupling = client.phaseCoupling;
+                      if (phase === 'A' && coupling === 'A-B') return true;
+                      if (phase === 'B' && coupling === 'B-C') return true;
+                      if (phase === 'C' && coupling === 'A-C') return true;
+                      return false;
+                    } else {
+                      return client.assignedPhase === phase;
+                    }
+                  }) || [];
+                  
+                  return (
+                    <tr key={phase} className={`border-b border-white/10 ${bgClass}`}>
+                      <td className="py-2 px-2 text-white font-semibold">{phaseLabel}</td>
+                      <td className="text-center py-2 px-1 text-white">{monoClients.length}</td>
+                      <td className="text-right py-2 px-1 text-blue-300">{data.chargeMono.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-green-300">{data.productionMono.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-blue-300">{data.chargePoly.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-green-300">{data.productionPoly.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-blue-400 font-semibold">{data.totalPhysiqueCharge.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-green-400 font-semibold">{data.totalPhysiqueProduction.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-blue-500 font-semibold">{data.totalFoisonneCharge.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-green-500 font-semibold">{data.totalFoisonneProduction.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-blue-600 font-bold">
+                        {data.chargeAvecCurseur.toFixed(1)}
+                        <br/>
+                        <span className={`${ecartChargeColor} text-[9px]`}>
+                          ({data.ecartChargePercent > 0 ? '+' : ''}{data.ecartChargePercent.toFixed(1)}%)
+                        </span>
+                      </td>
+                      <td className="text-right py-2 px-1 text-green-600 font-bold">
+                        {data.productionAvecCurseur.toFixed(1)}
+                        <br/>
+                        <span className={`${ecartProdColor} text-[9px]`}>
+                          ({data.ecartProductionPercent > 0 ? '+' : ''}{data.ecartProductionPercent.toFixed(1)}%)
+                        </span>
+                      </td>
+                      <td className="text-right py-2 px-1 text-white font-semibold">{Math.abs(data.courantTotal).toFixed(1)}</td>
+                    </tr>
+                  );
+                });
+              })()}
             </tbody>
           </table>
         </div>

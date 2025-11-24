@@ -230,17 +230,14 @@ export function calculateNodeAutoPhaseDistribution(
           baseProdC = prodKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
         }
         
-        // Étape 2 : Appliquer les curseurs manuels sur la contribution physique totale
-        const totalBaseCharge = baseChargeA + baseChargeB + baseChargeC;
-        const totalBaseProd = baseProdA + baseProdB + baseProdC;
+        // Distribution physique SANS curseurs de déséquilibre
+        result.charges.mono.A += baseChargeA;
+        result.charges.mono.B += baseChargeB;
+        result.charges.mono.C += baseChargeC;
         
-        result.charges.mono.A += totalBaseCharge * (manualPhaseDistributionCharges.A / 100);
-        result.charges.mono.B += totalBaseCharge * (manualPhaseDistributionCharges.B / 100);
-        result.charges.mono.C += totalBaseCharge * (manualPhaseDistributionCharges.C / 100);
-        
-        result.productions.mono.A += totalBaseProd * (manualPhaseDistributionProductions.A / 100);
-        result.productions.mono.B += totalBaseProd * (manualPhaseDistributionProductions.B / 100);
-        result.productions.mono.C += totalBaseProd * (manualPhaseDistributionProductions.C / 100);
+        result.productions.mono.A += baseProdA;
+        result.productions.mono.B += baseProdB;
+        result.productions.mono.C += baseProdC;
         
         // Comptage pour affichage selon le couplage
         if (client.phaseCoupling === 'A-B' || client.phaseCoupling === 'A-C') {
@@ -253,14 +250,17 @@ export function calculateNodeAutoPhaseDistribution(
           result.monoClientsCount.C += 0.5;
         }
       } else {
-        // ✅ Réseau 400V : curseurs redistribuent directement (logique actuelle OK)
-        result.charges.mono.A += chargeKVA * (manualPhaseDistributionCharges.A / 100);
-        result.charges.mono.B += chargeKVA * (manualPhaseDistributionCharges.B / 100);
-        result.charges.mono.C += chargeKVA * (manualPhaseDistributionCharges.C / 100);
-        
-        result.productions.mono.A += prodKVA * (manualPhaseDistributionProductions.A / 100);
-        result.productions.mono.B += prodKVA * (manualPhaseDistributionProductions.B / 100);
-        result.productions.mono.C += prodKVA * (manualPhaseDistributionProductions.C / 100);
+        // ✅ Réseau 400V : distribution physique sur la phase assignée SANS curseurs de déséquilibre
+        if (client.assignedPhase === 'A') {
+          result.charges.mono.A += chargeKVA;
+          result.productions.mono.A += prodKVA;
+        } else if (client.assignedPhase === 'B') {
+          result.charges.mono.B += chargeKVA;
+          result.productions.mono.B += prodKVA;
+        } else if (client.assignedPhase === 'C') {
+          result.charges.mono.C += chargeKVA;
+          result.productions.mono.C += prodKVA;
+        }
         
         // Comptage pour affichage sur la phase assignée
         if (client.assignedPhase) {
@@ -268,17 +268,18 @@ export function calculateNodeAutoPhaseDistribution(
         }
       }
     } else {
-      // Client TRI/TÉTRA : TOUJOURS appliquer les curseurs (Option B)
+      // Client TRI/TÉTRA : Répartition équilibrée à 33.33% par phase (distribution physique)
+      // Les curseurs de déséquilibre s'appliqueront plus tard sur les totaux foisonnés
       const totalCharge = client.puissanceContractuelle_kVA;
       const totalProd = client.puissancePV_kVA;
       
-      result.charges.poly.A += totalCharge * (manualPhaseDistributionCharges.A / 100);
-      result.charges.poly.B += totalCharge * (manualPhaseDistributionCharges.B / 100);
-      result.charges.poly.C += totalCharge * (manualPhaseDistributionCharges.C / 100);
+      result.charges.poly.A += totalCharge / 3;
+      result.charges.poly.B += totalCharge / 3;
+      result.charges.poly.C += totalCharge / 3;
       
-      result.productions.poly.A += totalProd * (manualPhaseDistributionProductions.A / 100);
-      result.productions.poly.B += totalProd * (manualPhaseDistributionProductions.B / 100);
-      result.productions.poly.C += totalProd * (manualPhaseDistributionProductions.C / 100);
+      result.productions.poly.A += totalProd / 3;
+      result.productions.poly.B += totalProd / 3;
+      result.productions.poly.C += totalProd / 3;
       
       result.polyClientsCount++;
     }

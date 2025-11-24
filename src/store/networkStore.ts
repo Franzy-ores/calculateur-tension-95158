@@ -492,15 +492,13 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
           }
         });
         
-        // Recalculer autoPhaseDistribution pour ce nœud
+        // Recalculer autoPhaseDistribution pour ce nœud (Option B: curseurs universels)
         if (linkedClients.length > 0) {
           const distribution = calculateNodeAutoPhaseDistribution(
             node,
             linkedClients,
             project.manualPhaseDistribution!.charges,
             project.manualPhaseDistribution!.productions,
-            project.phaseDistributionModeCharges || 'mono_only',
-            project.phaseDistributionModeProductions || 'mono_only',
             project.voltageSystem
           );
           node.autoPhaseDistribution = distribution;
@@ -1252,14 +1250,12 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       state.currentProject.clientLinks || []
     );
     
-    // Calculer distribution
+    // Calculer distribution (Option B: curseurs toujours appliqués)
     const distribution = calculateNodeAutoPhaseDistribution(
       node,
       linkedClients,
       state.currentProject.manualPhaseDistribution?.charges || { A: 33.33, B: 33.33, C: 33.34 },
       state.currentProject.manualPhaseDistribution?.productions || { A: 33.33, B: 33.33, C: 33.34 },
-      state.currentProject.phaseDistributionModeCharges || 'mono_only',
-      state.currentProject.phaseDistributionModeProductions || 'mono_only',
       state.currentProject.voltageSystem
     );
     
@@ -1345,7 +1341,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       updatedProject.clientLinks || []
     );
     
-    // Mettre à jour la configuration du projet et forcer le mode MONO uniquement
+    // Mettre à jour la configuration du projet (Option B: plus de modes)
     set({
       currentProject: {
         ...get().currentProject!,
@@ -1353,9 +1349,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
           charges: realChargesDistribution,
           productions: realProductionsDistribution,
           constraints: get().currentProject!.manualPhaseDistribution.constraints
-        },
-        phaseDistributionModeCharges: 'mono_only',
-        phaseDistributionModeProductions: 'mono_only'
+        }
       }
     });
     

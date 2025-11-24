@@ -15,7 +15,8 @@ import {
   CableUpgrade,
   SimulationEquipment,
   ClientLink,
-  LoadModel
+  LoadModel,
+  ClientImporte
 } from '@/types/network';
 
 export type ClientColorMode = 'couplage' | 'circuit' | 'tension' | 'lien' | 'gps';
@@ -1397,6 +1398,30 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     if (!currentProject.cables || currentProject.cables.length === 0) {
       console.log('⚠️ No cables present, skipping calculations');
       return;
+    }
+
+    // Calculer autoPhaseDistribution pour chaque nœud en mode mixte AVANT les calculs
+    if (currentProject.loadModel === 'mixte_mono_poly' && currentProject.clientsImportes && currentProject.clientLinks) {
+      console.log('🔄 Calcul autoPhaseDistribution pour mode mixte avec foisonnement');
+      currentProject.nodes.forEach(node => {
+        const linkedClients = currentProject.clientLinks
+          ?.filter(link => link.nodeId === node.id)
+          .map(link => currentProject.clientsImportes?.find(c => c.id === link.clientId))
+          .filter(c => c !== undefined) as ClientImporte[] || [];
+        
+        if (linkedClients.length > 0 || node.clients.length > 0 || node.productions.length > 0) {
+          const autoPhaseDistribution = calculateNodeAutoPhaseDistribution(
+            node,
+            linkedClients,
+            currentProject.manualPhaseDistribution?.charges || { A: 33.33, B: 33.33, C: 33.33 },
+            currentProject.manualPhaseDistribution?.productions || { A: 33.33, B: 33.33, C: 33.33 },
+            currentProject.voltageSystem,
+            currentProject.foisonnementCharges, // Nouveau: passer le foisonnement
+            currentProject.foisonnementProductions // Nouveau: passer le foisonnement
+          );
+          node.autoPhaseDistribution = autoPhaseDistribution;
+        }
+      });
     }
 
     const calculator = new ElectricalCalculator(currentProject.cosPhi);

@@ -1,6 +1,13 @@
 import { ClientImporte, VoltageSystem, ClientConnectionType, Node, LoadModel } from '@/types/network';
 
 /**
+ * Facteur de conversion pour les réseaux Triangle (Delta) 230V
+ * Relation physique : I_ligne = √3 × I_couplage
+ * Donc : S_phase = S_couplage / √3 ≈ 0.577
+ */
+const DELTA_PHASE_CONTRIBUTION_FACTOR = 1 / Math.sqrt(3); // ≈ 0.577350269
+
+/**
  * Normalise le couplage brut du client en type de connexion standardisé
  */
 export function normalizeClientConnectionType(
@@ -202,20 +209,42 @@ export function calculateNodeAutoPhaseDistribution(
       const chargeKVA = client.puissanceContractuelle_kVA;
       const prodKVA = client.puissancePV_kVA;
       
-      // ✅ APPLIQUER LES CURSEURS MANUELS pour redistribuer les charges et productions MONO
-      // Mode "MONO uniquement" : affecte uniquement les clients MONO
-      // Mode "Tous les clients" : affecte MONO et POLY
-      result.charges.mono.A += chargeKVA * (manualPhaseDistributionCharges.A / 100);
-      result.charges.mono.B += chargeKVA * (manualPhaseDistributionCharges.B / 100);
-      result.charges.mono.C += chargeKVA * (manualPhaseDistributionCharges.C / 100);
-      
-      result.productions.mono.A += prodKVA * (manualPhaseDistributionProductions.A / 100);
-      result.productions.mono.B += prodKVA * (manualPhaseDistributionProductions.B / 100);
-      result.productions.mono.C += prodKVA * (manualPhaseDistributionProductions.C / 100);
-      
-      // Compter le client sur sa phase physique assignée (pour l'affichage)
+      // ✅ Réseau 230V : utiliser le facteur √3 pour la contribution physique
       if (networkVoltage === 'TRIPHASÉ_230V' && client.phaseCoupling) {
-        // En 230V, compter selon le couplage phase-phase
+        // Étape 1 : Calculer la contribution physique de base (sans curseurs)
+        let baseChargeA = 0, baseChargeB = 0, baseChargeC = 0;
+        let baseProdA = 0, baseProdB = 0, baseProdC = 0;
+        
+        if (client.phaseCoupling === 'A-B') {
+          baseChargeA = chargeKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
+          baseChargeB = chargeKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
+          baseProdA = prodKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
+          baseProdB = prodKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
+        } else if (client.phaseCoupling === 'B-C') {
+          baseChargeB = chargeKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
+          baseChargeC = chargeKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
+          baseProdB = prodKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
+          baseProdC = prodKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
+        } else if (client.phaseCoupling === 'A-C') {
+          baseChargeA = chargeKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
+          baseChargeC = chargeKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
+          baseProdA = prodKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
+          baseProdC = prodKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
+        }
+        
+        // Étape 2 : Appliquer les curseurs manuels sur la contribution physique totale
+        const totalBaseCharge = baseChargeA + baseChargeB + baseChargeC;
+        const totalBaseProd = baseProdA + baseProdB + baseProdC;
+        
+        result.charges.mono.A += totalBaseCharge * (manualPhaseDistributionCharges.A / 100);
+        result.charges.mono.B += totalBaseCharge * (manualPhaseDistributionCharges.B / 100);
+        result.charges.mono.C += totalBaseCharge * (manualPhaseDistributionCharges.C / 100);
+        
+        result.productions.mono.A += totalBaseProd * (manualPhaseDistributionProductions.A / 100);
+        result.productions.mono.B += totalBaseProd * (manualPhaseDistributionProductions.B / 100);
+        result.productions.mono.C += totalBaseProd * (manualPhaseDistributionProductions.C / 100);
+        
+        // Comptage pour affichage selon le couplage
         if (client.phaseCoupling === 'A-B' || client.phaseCoupling === 'A-C') {
           result.monoClientsCount.A += 0.5;
         }
@@ -225,9 +254,20 @@ export function calculateNodeAutoPhaseDistribution(
         if (client.phaseCoupling === 'B-C' || client.phaseCoupling === 'A-C') {
           result.monoClientsCount.C += 0.5;
         }
-      } else if (client.assignedPhase) {
-        // En 400V, compter sur la phase assignée
-        result.monoClientsCount[client.assignedPhase] += 1;
+      } else {
+        // ✅ Réseau 400V : curseurs redistribuent directement (logique actuelle OK)
+        result.charges.mono.A += chargeKVA * (manualPhaseDistributionCharges.A / 100);
+        result.charges.mono.B += chargeKVA * (manualPhaseDistributionCharges.B / 100);
+        result.charges.mono.C += chargeKVA * (manualPhaseDistributionCharges.C / 100);
+        
+        result.productions.mono.A += prodKVA * (manualPhaseDistributionProductions.A / 100);
+        result.productions.mono.B += prodKVA * (manualPhaseDistributionProductions.B / 100);
+        result.productions.mono.C += prodKVA * (manualPhaseDistributionProductions.C / 100);
+        
+        // Comptage pour affichage sur la phase assignée
+        if (client.assignedPhase) {
+          result.monoClientsCount[client.assignedPhase] += 1;
+        }
       }
     } else {
       // Client TRI/TÉTRA : appliquer les modes séparément pour charges et productions

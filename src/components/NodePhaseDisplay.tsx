@@ -61,7 +61,7 @@ export const NodePhaseDisplay = ({ nodeId }: NodePhaseDisplayProps) => {
       <div className="font-medium text-foreground">Tensions par phase:</div>
       <div className="grid grid-cols-3 gap-2 text-xs">
         <div className="text-center">
-          <div className="font-medium text-black">{phaseLabels.A}</div>
+          <div className="font-medium text-gray-500">{phaseLabels.A}</div>
           <div className="text-black">{voltagesPerPhase.A.toFixed(1)}V</div>
           <div className="text-muted-foreground text-[10px]">ΔU: {voltageDropsPerPhase.A.toFixed(1)}V</div>
           {nodeMetrics.deviationsPerPhase && (
@@ -71,7 +71,7 @@ export const NodePhaseDisplay = ({ nodeId }: NodePhaseDisplayProps) => {
           )}
         </div>
         <div className="text-center">
-          <div className="font-medium text-black">{phaseLabels.B}</div>
+          <div className="font-medium text-gray-500">{phaseLabels.B}</div>
           <div className="text-black">{voltagesPerPhase.B.toFixed(1)}V</div>
           <div className="text-muted-foreground text-[10px]">ΔU: {voltageDropsPerPhase.B.toFixed(1)}V</div>
           {nodeMetrics.deviationsPerPhase && (
@@ -81,7 +81,7 @@ export const NodePhaseDisplay = ({ nodeId }: NodePhaseDisplayProps) => {
           )}
         </div>
         <div className="text-center">
-          <div className="font-medium text-black">{phaseLabels.C}</div>
+          <div className="font-medium text-gray-500">{phaseLabels.C}</div>
           <div className="text-black">{voltagesPerPhase.C.toFixed(1)}V</div>
           <div className="text-muted-foreground text-[10px]">ΔU: {voltageDropsPerPhase.C.toFixed(1)}V</div>
           {nodeMetrics.deviationsPerPhase && (

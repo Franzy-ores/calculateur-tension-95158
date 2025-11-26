@@ -74,6 +74,17 @@ export const MapView = () => {
     showClientTensionLabels,
   } = useNetworkStore();
 
+  // Helper pour détecter les équipements de simulation sur un nœud
+  const getNodeEquipment = (nodeId: string) => {
+    const hasSRG2 = simulationEquipment.srg2Devices?.some(
+      s => s.nodeId === nodeId && s.enabled
+    ) || false;
+    const hasEQUI8 = simulationEquipment.neutralCompensators.some(
+      c => c.nodeId === nodeId && c.enabled
+    );
+    return { hasSRG2, hasEQUI8 };
+  };
+
   // Récupérer isSimulationActive du store
   const isSimulationActive = useNetworkStore(state => state.isSimulationActive);
   
@@ -730,11 +741,32 @@ export const MapView = () => {
       // Obtenir le numéro de circuit
       const circuitNumber = getNodeCircuit(node.id);
       
+      // Détecter les équipements SRG2/EQUI8 sur ce nœud
+      const { hasSRG2, hasEQUI8 } = getNodeEquipment(node.id);
+      
+      // Style de bordure spéciale pour les équipements de simulation
+      let equipmentBorderStyle = '';
+      let equipmentIndicator = '';
+      
+      if (hasSRG2 && hasEQUI8) {
+        // Les deux équipements : double bordure avec dégradé
+        equipmentBorderStyle = 'box-shadow: 0 0 0 3px #9333ea, 0 0 0 6px #06b6d4, 0 0 12px rgba(147, 51, 234, 0.5);';
+        equipmentIndicator = '<div style="position: absolute; top: -8px; right: -8px; font-size: 10px; background: white; border-radius: 50%; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;">⚡</div>';
+      } else if (hasSRG2) {
+        // SRG2 uniquement : bordure violette
+        equipmentBorderStyle = 'box-shadow: 0 0 0 3px #9333ea, 0 0 10px rgba(147, 51, 234, 0.6);';
+        equipmentIndicator = '<div style="position: absolute; top: -6px; right: -6px; width: 12px; height: 12px; background: #9333ea; border-radius: 50%; border: 2px solid white;"></div>';
+      } else if (hasEQUI8) {
+        // EQUI8 uniquement : bordure cyan
+        equipmentBorderStyle = 'box-shadow: 0 0 0 3px #06b6d4, 0 0 10px rgba(6, 182, 212, 0.6);';
+        equipmentIndicator = '<div style="position: absolute; top: -6px; right: -6px; width: 12px; height: 12px; background: #06b6d4; border-radius: 50%; border: 2px solid white;"></div>';
+      }
+      
       // MODE RÉDUIT : Tensions désactivées → 24px sans texte ni icône
       if (!showVoltages) {
         const icon = L.divIcon({
           className: 'custom-node-marker',
-          html: `<div class="rounded-full border-2 ${iconClass}" style="width: 24px; height: 24px;"></div>`,
+          html: `<div style="position: relative;"><div class="rounded-full border-2 ${iconClass}" style="width: 24px; height: 24px; ${equipmentBorderStyle}"></div>${equipmentIndicator}</div>`,
           iconSize: [24, 24],
           iconAnchor: [12, 12]
         });
@@ -942,7 +974,7 @@ export const MapView = () => {
       const shapeClass = isPhaseDisplayMode ? 'rounded-md' : 'rounded-full';
       const icon = L.divIcon({
         className: 'custom-node-marker',
-        html: `<div class="${iconSizeClass} ${shapeClass} border-2 flex flex-col items-center justify-center text-xs font-bold ${iconClass} p-1">
+        html: `<div style="position: relative;"><div class="${iconSizeClass} ${shapeClass} border-2 flex flex-col items-center justify-center text-xs font-bold ${iconClass} p-1" style="${equipmentBorderStyle}">
           <div class="text-base">${iconContent}</div>
           ${circuitNumber ? `<div class="text-[9px] bg-black bg-opacity-50 rounded px-1">C${circuitNumber}</div>` : ''}
           ${(() => {
@@ -1034,7 +1066,7 @@ export const MapView = () => {
               }
             })()}
           </div>
-        </div>`,
+        </div>${equipmentIndicator}</div>`,
         iconSize: iconSize,
         iconAnchor: anchorPoint
       });

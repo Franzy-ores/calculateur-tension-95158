@@ -5,7 +5,7 @@ import { useNetworkStore } from '@/store/networkStore';
 import { CableTypeSelector } from './CableTypeSelector';
 import { AddressSearch } from './AddressSearch';
 import { Button } from './ui/button';
-import { Globe, Map as MapIcon, Target } from 'lucide-react';
+import { Globe, Map as MapIcon, Target, Mountain } from 'lucide-react';
 import { getConnectedNodes } from '@/utils/networkConnectivity';
 import { getNodeConnectionType } from '@/utils/nodeConnectionType';
 import { useClientMarkers } from './ClientMarkers';
@@ -31,7 +31,7 @@ export const MapView = () => {
   const cablesRef = useRef<Map<string, L.Polyline>>(new Map<string, L.Polyline>());
   const cableLabelsRef = useRef<Map<string, L.Marker>>(new Map<string, L.Marker>());
   const tileLayerRef = useRef<L.TileLayer | null>(null);
-  const [mapType, setMapType] = useState<'osm' | 'satellite'>('osm');
+  const [mapType, setMapType] = useState<'osm' | 'satellite' | 'picc'>('osm');
   const [routingActive, setRoutingActive] = useState(false);
   const [routingFromNode, setRoutingFromNode] = useState<string | null>(null);
   const [routingToNode, setRoutingToNode] = useState<string | null>(null);
@@ -320,7 +320,7 @@ export const MapView = () => {
   });
 
   // Gérer le changement de type de carte
-  const switchMapType = (newType: 'osm' | 'satellite') => {
+  const switchMapType = (newType: 'osm' | 'satellite' | 'picc') => {
     const map = mapInstanceRef.current;
     if (!map || !tileLayerRef.current) return;
 
@@ -333,13 +333,26 @@ export const MapView = () => {
         maxZoom: 22,
         minZoom: 3,
       }).addTo(map);
-    } else {
+    } else if (newType === 'satellite') {
       tileLayerRef.current = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         attribution: '© Esri, Maxar, Earthstar Geographics, and the GIS User Community',
         maxNativeZoom: 18,
         maxZoom: 22,
         minZoom: 3,
       }).addTo(map);
+    } else if (newType === 'picc') {
+      // PICC Wallonie - Fond topographique WMS
+      tileLayerRef.current = L.tileLayer.wms(
+        'https://geoservices.wallonie.be/arcgis/services/TOPOGRAPHIE/PICC_VDIFF/MapServer/WMSServer',
+        {
+          layers: '0',
+          format: 'image/png',
+          transparent: true,
+          attribution: '© SPW - PICC Wallonie',
+          maxZoom: 22,
+          minZoom: 3,
+        }
+      ).addTo(map);
     }
 
     setMapType(newType);
@@ -1525,6 +1538,15 @@ export const MapView = () => {
         >
           <Globe className="w-4 h-4" />
           Satellite
+        </Button>
+        <Button
+          variant={mapType === 'picc' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => switchMapType('picc')}
+          className="flex items-center gap-2"
+        >
+          <Mountain className="w-4 h-4" />
+          PICC
         </Button>
       </div>
       

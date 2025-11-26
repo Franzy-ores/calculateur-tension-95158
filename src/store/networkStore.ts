@@ -1466,6 +1466,17 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     };
 
     set({ calculationResults: results });
+
+    // Si mode simulation actif avec équipements actifs, recalculer aussi la simulation
+    const { simulationMode, simulationEquipment } = get();
+    const hasActiveEquipment = simulationMode && (
+      (simulationEquipment.srg2Devices?.some(s => s.enabled) || false) ||
+      simulationEquipment.neutralCompensators.some(c => c.enabled)
+    );
+
+    if (hasActiveEquipment) {
+      get().runSimulation();
+    }
   },
 
   calculateAll: () => {
@@ -1720,6 +1731,17 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     
     // Recalculer après mise à jour du state
     get().updateAllCalculations();
+
+    // Si mode simulation actif avec équipements actifs, recalculer aussi la simulation
+    const { simulationMode, simulationEquipment } = get();
+    const hasActiveEquipment = simulationMode && (
+      (simulationEquipment.srg2Devices?.some(s => s.enabled) || false) ||
+      simulationEquipment.neutralCompensators.some(c => c.enabled)
+    );
+
+    if (hasActiveEquipment) {
+      get().runSimulation();
+    }
   },
 
   setFoisonnementProductions: (value: number) => {
@@ -1735,6 +1757,17 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     
     // Recalculer après mise à jour du state
     get().updateAllCalculations();
+
+    // Si mode simulation actif avec équipements actifs, recalculer aussi la simulation
+    const { simulationMode, simulationEquipment } = get();
+    const hasActiveEquipment = simulationMode && (
+      (simulationEquipment.srg2Devices?.some(s => s.enabled) || false) ||
+      simulationEquipment.neutralCompensators.some(c => c.enabled)
+    );
+
+    if (hasActiveEquipment) {
+      get().runSimulation();
+    }
   },
 
   calculateWithTargetVoltage: (nodeId: string, targetVoltage: number) => {

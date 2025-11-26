@@ -202,21 +202,6 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
         });
       });
       
-      // Tooltip au survol
-      const tooltipContent = `
-        <div style="font-size: 11px; line-height: 1.4; white-space: nowrap;">
-          <strong>Groupe (${groupe.nombreClients} clients)</strong><br>
-          <span style="color: #666;">Charge: ${groupe.puissanceContractuelle_kVA.toFixed(1)} kVA</span>
-          ${groupe.puissancePV_kVA > 0 ? `<br><span style="color: #666;">PV: ${groupe.puissancePV_kVA.toFixed(1)} kVA</span>` : ''}
-        </div>
-      `;
-      marker.bindTooltip(tooltipContent, {
-        permanent: false,
-        direction: 'top',
-        offset: [0, -12],
-        className: 'client-hover-tooltip',
-        opacity: 0.95
-      });
 
       // Gestion du drag & drop pour le groupe
       let initialPosition: L.LatLng;
@@ -322,8 +307,9 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
         map.dragging.enable();
       });
       
-      // Afficher les tensions si showTensionLabels est activé
+      // Affichage conditionnel : permanent si showTensionLabels, sinon au survol
       if (showTensionLabels && hasGroupTensions) {
+        // Mode label permanent : afficher uniquement les tensions Min/Max
         const tensionLabel = `<div style="
           font-size: 10px;
           font-weight: 600;
@@ -344,6 +330,22 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
           offset: [8, 0],
           className: 'client-tension-label-permanent',
           opacity: 1
+        });
+      } else {
+        // Mode normal : tooltip au survol avec les infos du groupe
+        const tooltipContent = `
+          <div style="font-size: 11px; line-height: 1.4; white-space: nowrap;">
+            <strong>Groupe (${groupe.nombreClients} clients)</strong><br>
+            <span style="color: #666;">Charge: ${groupe.puissanceContractuelle_kVA.toFixed(1)} kVA</span>
+            ${groupe.puissancePV_kVA > 0 ? `<br><span style="color: #666;">PV: ${groupe.puissancePV_kVA.toFixed(1)} kVA</span>` : ''}
+          </div>
+        `;
+        marker.bindTooltip(tooltipContent, {
+          permanent: false,
+          direction: 'top',
+          offset: [0, -12],
+          className: 'client-hover-tooltip',
+          opacity: 0.95
         });
       }
       

@@ -217,21 +217,22 @@ export function calculateNodeAutoPhaseDistribution(
         let baseChargeA = 0, baseChargeB = 0, baseChargeC = 0;
         let baseProdA = 0, baseProdB = 0, baseProdC = 0;
         
+        // Répartition 50/50 sur chaque phase du couplage
         if (client.phaseCoupling === 'A-B') {
-          baseChargeA = chargeKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
-          baseChargeB = chargeKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
-          baseProdA = prodKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
-          baseProdB = prodKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
+          baseChargeA = chargeKVA * 0.5;
+          baseChargeB = chargeKVA * 0.5;
+          baseProdA = prodKVA * 0.5;
+          baseProdB = prodKVA * 0.5;
         } else if (client.phaseCoupling === 'B-C') {
-          baseChargeB = chargeKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
-          baseChargeC = chargeKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
-          baseProdB = prodKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
-          baseProdC = prodKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
+          baseChargeB = chargeKVA * 0.5;
+          baseChargeC = chargeKVA * 0.5;
+          baseProdB = prodKVA * 0.5;
+          baseProdC = prodKVA * 0.5;
         } else if (client.phaseCoupling === 'A-C') {
-          baseChargeA = chargeKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
-          baseChargeC = chargeKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
-          baseProdA = prodKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
-          baseProdC = prodKVA * DELTA_PHASE_CONTRIBUTION_FACTOR;
+          baseChargeA = chargeKVA * 0.5;
+          baseChargeC = chargeKVA * 0.5;
+          baseProdA = prodKVA * 0.5;
+          baseProdC = prodKVA * 0.5;
         }
         
         // Distribution physique SANS curseurs de déséquilibre

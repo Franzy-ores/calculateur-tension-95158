@@ -1007,13 +1007,13 @@ export const MapView = () => {
                   const vA = phaseMetrics.voltagesPerPhase.A.toFixed(0);
                   const vB = phaseMetrics.voltagesPerPhase.B.toFixed(0);
                   const vC = phaseMetrics.voltagesPerPhase.C.toFixed(0);
-                  return `<span class="text-black font-semibold">${phaseLabels.A}:${vA}</span><br><span class="text-black font-semibold">${phaseLabels.B}:${vB}</span><br><span class="text-black font-semibold">${phaseLabels.C}:${vC}</span>`;
+                  return `<span class="text-gray-500">${phaseLabels.A}:</span><span class="text-black font-semibold">${vA}V</span><br><span class="text-gray-500">${phaseLabels.B}:</span><span class="text-black font-semibold">${vB}V</span><br><span class="text-gray-500">${phaseLabels.C}:</span><span class="text-black font-semibold">${vC}V</span>`;
                 } else {
                   const is230V = currentProject?.voltageSystem === 'TRIPHASÉ_230V';
                   const phaseLabels = is230V 
                     ? { A: 'L1-L2', B: 'L2-L3', C: 'L3-L1' }
                     : { A: 'L1', B: 'L2', C: 'L3' };
-                  return `<span class="text-black">${phaseLabels.A}:${nodeVoltage.toFixed(0)}V</span><br><span class="text-black">${phaseLabels.B}:${nodeVoltage.toFixed(0)}V</span><br><span class="text-black">${phaseLabels.C}:${nodeVoltage.toFixed(0)}V</span>`;
+                  return `<span class="text-gray-500">${phaseLabels.A}:</span><span class="text-black font-semibold">${nodeVoltage.toFixed(0)}V</span><br><span class="text-gray-500">${phaseLabels.B}:</span><span class="text-black font-semibold">${nodeVoltage.toFixed(0)}V</span><br><span class="text-gray-500">${phaseLabels.C}:</span><span class="text-black font-semibold">${nodeVoltage.toFixed(0)}V</span>`;
                 }
               } else {
                 // Mode normal : afficher une seule tension

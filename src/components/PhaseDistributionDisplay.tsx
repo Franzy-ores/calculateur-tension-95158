@@ -442,16 +442,16 @@ export const PhaseDistributionDisplay = () => {
               <tr className="border-b border-white/20">
                 <th className="text-left py-2 px-2 text-white font-semibold">Couplage</th>
                 <th className="text-center py-2 px-1 text-white font-semibold">Nb<br/>MONO</th>
-                <th className="text-right py-2 px-1 text-blue-300 font-semibold">Ch<br/>MONO</th>
-                <th className="text-right py-2 px-1 text-green-300 font-semibold">Pr<br/>MONO</th>
-                <th className="text-right py-2 px-1 text-blue-300 font-semibold">Ch POLY<br/>33.3%</th>
-                <th className="text-right py-2 px-1 text-green-300 font-semibold">Pr POLY<br/>33.3%</th>
-                <th className="text-right py-2 px-1 text-blue-400 font-semibold">Total<br/>phys. Ch</th>
-                <th className="text-right py-2 px-1 text-green-400 font-semibold">Total<br/>phys. Pr</th>
-                <th className="text-right py-2 px-1 text-blue-500 font-semibold">Total<br/>foisonné Ch</th>
-                <th className="text-right py-2 px-1 text-green-500 font-semibold">Total<br/>foisonné Pr</th>
-                <th className="text-right py-2 px-1 text-blue-600 font-semibold">Ch avec<br/>curseurs</th>
-                <th className="text-right py-2 px-1 text-green-600 font-semibold">Pr avec<br/>curseurs</th>
+                <th className="text-right py-2 px-1 text-white font-semibold">Ch.<br/>MONO</th>
+                <th className="text-right py-2 px-1 text-white font-semibold">Prod.<br/>MONO</th>
+                <th className="text-right py-2 px-1 text-white font-semibold">Ch. Poly<br/>33.3%</th>
+                <th className="text-right py-2 px-1 text-white font-semibold">Prod. POLY<br/>33.3%</th>
+                <th className="text-right py-2 px-1 text-white font-semibold">Ch.<br/>contrat</th>
+                <th className="text-right py-2 px-1 text-white font-semibold">Prod.<br/>Contrat</th>
+                <th className="text-right py-2 px-1 text-white font-semibold">Ch.<br/>foisonné</th>
+                <th className="text-right py-2 px-1 text-white font-semibold">Prod.<br/>foisonné</th>
+                <th className="text-right py-2 px-1 text-white font-semibold">Ch.<br/>déséquilibre</th>
+                <th className="text-right py-2 px-1 text-white font-semibold">Prod<br/>Déséquilibre</th>
                 <th className="text-right py-2 px-1 text-white font-semibold">Courant<br/>(A)</th>
               </tr>
             </thead>

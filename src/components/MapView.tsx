@@ -31,6 +31,7 @@ export const MapView = () => {
   const cablesRef = useRef<Map<string, L.Polyline>>(new Map<string, L.Polyline>());
   const cableLabelsRef = useRef<Map<string, L.Marker>>(new Map<string, L.Marker>());
   const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const overlayLayerRef = useRef<L.TileLayer.WMS | null>(null);
   const [mapType, setMapType] = useState<'osm' | 'satellite' | 'picc'>('osm');
   const [routingActive, setRoutingActive] = useState(false);
   const [routingFromNode, setRoutingFromNode] = useState<string | null>(null);
@@ -201,6 +202,22 @@ export const MapView = () => {
     }).addTo(map);
 
     tileLayerRef.current = initialTileLayer;
+    
+    // Ajouter l'overlay PICC couche 29 au démarrage (visible à zoom 10+)
+    overlayLayerRef.current = L.tileLayer.wms(
+      'https://geoservices.wallonie.be/arcgis/services/TOPOGRAPHIE/PICC_VDIFF/MapServer/WMSServer',
+      {
+        layers: '29',
+        format: 'image/png',
+        transparent: true,
+        version: '1.3.0',
+        crs: L.CRS.EPSG3857,
+        attribution: '© SPW - PICC (couche 29)',
+        maxZoom: 22,
+        minZoom: 10,
+      }
+    ).addTo(map);
+    
     mapInstanceRef.current = map;
 
     // Exposer l'instance globalement pour leaflet-image
@@ -325,6 +342,12 @@ export const MapView = () => {
     if (!map || !tileLayerRef.current) return;
 
     map.removeLayer(tileLayerRef.current);
+    
+    // Supprimer l'overlay PICC s'il existe
+    if (overlayLayerRef.current) {
+      map.removeLayer(overlayLayerRef.current);
+      overlayLayerRef.current = null;
+    }
 
     if (newType === 'osm') {
       tileLayerRef.current = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -333,6 +356,22 @@ export const MapView = () => {
         maxZoom: 22,
         minZoom: 3,
       }).addTo(map);
+      
+      // Ajouter l'overlay PICC couche 29 (transparent par-dessus OSM)
+      overlayLayerRef.current = L.tileLayer.wms(
+        'https://geoservices.wallonie.be/arcgis/services/TOPOGRAPHIE/PICC_VDIFF/MapServer/WMSServer',
+        {
+          layers: '29',
+          format: 'image/png',
+          transparent: true,
+          version: '1.3.0',
+          crs: L.CRS.EPSG3857,
+          attribution: '© SPW - PICC (couche 29)',
+          maxZoom: 22,
+          minZoom: 10,
+        }
+      ).addTo(map);
+      
     } else if (newType === 'satellite') {
       tileLayerRef.current = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         attribution: '© Esri, Maxar, Earthstar Geographics, and the GIS User Community',

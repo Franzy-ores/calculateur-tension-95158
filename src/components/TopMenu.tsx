@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState } from 'react';
 import { FileText, Save, FolderOpen, Settings, Zap, FileDown, FileSpreadsheet } from "lucide-react";
 import { useNetworkStore } from "@/store/networkStore";
@@ -215,37 +216,66 @@ export const TopMenu = ({
         )}
 
         {/* Right: Actions Buttons (compact) */}
-        <div className="flex items-center gap-0.5">
-          {/* Node Voltage Display Button */}
-          {currentProject && (
-            <Button 
-              onClick={() => setShowVoltages(!showVoltages)} 
-              variant={showVoltages ? "secondary" : "ghost"}
-              size="sm" 
-              className={`h-7 px-2 text-xs mr-1 ${showVoltages 
-                ? 'bg-white/20 text-white font-semibold border border-white/30' 
-                : 'text-white hover:bg-white/20'
-              }`}
-            >
-              Noeud
-            </Button>
-          )}
-          
-          {/* Voltage System Switch */}
-          {currentProject && (
-            <Button onClick={changeVoltageSystem} variant="ghost" size="sm" className="text-white hover:bg-white/20 h-7 px-2 text-xs mr-1">
-              {currentProject.voltageSystem === 'TRIPHASÉ_230V' ? '230→400V' : '400→230V'}
-            </Button>
-          )}
-          
-          <Button variant="ghost" size="sm" onClick={handleExportPDF} disabled={!currentProject || !calculationResults[selectedScenario]} className="text-white hover:bg-white/20 disabled:opacity-50 h-7 px-2 text-xs">
-            <FileDown className="h-3.5 w-3.5" />
-          </Button>
-          
-          <Button variant="ghost" size="sm" onClick={() => setShowImporter(true)} disabled={!currentProject} className="text-white hover:bg-white/20 disabled:opacity-50 h-7 px-2 text-xs">
-            <FileSpreadsheet className="h-3.5 w-3.5 mr-1" />
-            Import
-          </Button>
+        <TooltipProvider>
+          <div className="flex items-center gap-0.5">
+            {/* Node Voltage Display Button */}
+            {currentProject && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    onClick={() => setShowVoltages(!showVoltages)} 
+                    variant={showVoltages ? "secondary" : "ghost"}
+                    size="sm" 
+                    className={`h-7 px-2 text-xs mr-1 ${showVoltages 
+                      ? 'bg-white/20 text-white font-semibold border border-white/30' 
+                      : 'text-white hover:bg-white/20'
+                    }`}
+                  >
+                    Noeud
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Afficher/Masquer les tensions des nœuds</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+            
+            {/* Voltage System Switch */}
+            {currentProject && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button onClick={changeVoltageSystem} variant="ghost" size="sm" className="text-white hover:bg-white/20 h-7 px-2 text-xs mr-1">
+                    {currentProject.voltageSystem === 'TRIPHASÉ_230V' ? '230→400V' : '400→230V'}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Changer le système de tension</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+            
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={handleExportPDF} disabled={!currentProject || !calculationResults[selectedScenario]} className="text-white hover:bg-white/20 disabled:opacity-50 h-7 px-2 text-xs">
+                  <FileDown className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Exporter le rapport PDF</p>
+              </TooltipContent>
+            </Tooltip>
+            
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={() => setShowImporter(true)} disabled={!currentProject} className="text-white hover:bg-white/20 disabled:opacity-50 h-7 px-2 text-xs">
+                  <FileSpreadsheet className="h-3.5 w-3.5 mr-1" />
+                  Import
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Importer clients depuis Excel</p>
+              </TooltipContent>
+            </Tooltip>
           
           {currentProject && currentProject.clientsImportes && currentProject.clientsImportes.length > 0 && (
             <Select value={clientColorMode} onValueChange={(value: any) => setClientColorMode(value)}>
@@ -262,42 +292,92 @@ export const TopMenu = ({
             </Select>
           )}
           
-          <Button variant="ghost" size="sm" onClick={onNewNetwork} className="text-white hover:bg-white/20 h-7 px-2 text-xs">
-            <FileText className="h-3.5 w-3.5" />
-          </Button>
-          
-          <Button variant="ghost" size="sm" onClick={onSave} className="text-white hover:bg-white/20 h-7 px-2 text-xs">
-            <Save className="h-3.5 w-3.5" />
-          </Button>
-          
-          <Button variant="ghost" size="sm" onClick={onLoad} className="text-white hover:bg-white/20 h-7 px-2 text-xs">
-            <FolderOpen className="h-3.5 w-3.5" />
-          </Button>
-          
-          <Button variant="ghost" size="sm" onClick={updateCableTypes} disabled={!currentProject} className="text-white hover:bg-white/20 disabled:opacity-50 h-7 px-2 text-xs">
-            <Settings className="h-3.5 w-3.5" />
-          </Button>
-          
-          <Button 
-            variant={editTarget === 'simulation' ? 'secondary' : 'ghost'} 
-            size="sm" 
-            onClick={onSimulation} 
-            className={`h-7 px-2 text-xs ${editTarget === 'simulation' 
-              ? 'bg-white/20 text-white font-semibold border border-white/30' 
-              : 'text-white hover:bg-white/20'
-            }`}
-          >
-            <Zap className={`h-3.5 w-3.5 ${editTarget === 'simulation' ? 'text-orange-400' : ''}`} />
-          </Button>
-          
-          <Button variant="ghost" size="sm" onClick={onSettings} className="text-white hover:bg-white/20 h-7 px-2 text-xs">
-            <Settings className="h-3.5 w-3.5" />
-          </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={onNewNetwork} className="text-white hover:bg-white/20 h-7 px-2 text-xs">
+                  <FileText className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Nouveau réseau</p>
+              </TooltipContent>
+            </Tooltip>
+            
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={onSave} className="text-white hover:bg-white/20 h-7 px-2 text-xs">
+                  <Save className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Sauvegarder le projet</p>
+              </TooltipContent>
+            </Tooltip>
+            
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={onLoad} className="text-white hover:bg-white/20 h-7 px-2 text-xs">
+                  <FolderOpen className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Charger un projet</p>
+              </TooltipContent>
+            </Tooltip>
+            
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={updateCableTypes} disabled={!currentProject} className="text-white hover:bg-white/20 disabled:opacity-50 h-7 px-2 text-xs">
+                  <Settings className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Gérer les types de câbles</p>
+              </TooltipContent>
+            </Tooltip>
+            
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant={editTarget === 'simulation' ? 'secondary' : 'ghost'} 
+                  size="sm" 
+                  onClick={onSimulation} 
+                  className={`h-7 px-2 text-xs ${editTarget === 'simulation' 
+                    ? 'bg-white/20 text-white font-semibold border border-white/30' 
+                    : 'text-white hover:bg-white/20'
+                  }`}
+                >
+                  <Zap className={`h-3.5 w-3.5 ${editTarget === 'simulation' ? 'text-orange-400' : ''}`} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Mode simulation</p>
+              </TooltipContent>
+            </Tooltip>
+            
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={onSettings} className="text-white hover:bg-white/20 h-7 px-2 text-xs">
+                  <Settings className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Paramètres du projet</p>
+              </TooltipContent>
+            </Tooltip>
 
-          <Button variant="ghost" size="sm" onClick={() => window.open('/manuel-utilisateur.html', '_blank')} className="text-white hover:bg-white/20 h-7 px-2 text-xs">
-            <FileText className="h-3.5 w-3.5" />
-          </Button>
-        </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" onClick={() => window.open('/manuel-utilisateur.html', '_blank')} className="text-white hover:bg-white/20 h-7 px-2 text-xs">
+                  <FileText className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Manuel utilisateur</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </TooltipProvider>
       </div>
 
       {/* ROW 2 - Controls (~50px, visible if project exists) */}

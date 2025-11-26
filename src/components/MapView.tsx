@@ -998,20 +998,22 @@ export const MapView = () => {
                 }
                 
                 if (phaseMetrics) {
-                  // Couleurs de conformité par phase
-                  const colorA = phaseMetrics.compliancePerPhase?.A === 'critical' ? 'text-red-600' : 
-                                 phaseMetrics.compliancePerPhase?.A === 'warning' ? 'text-orange-500' : 'text-black';
-                  const colorB = phaseMetrics.compliancePerPhase?.B === 'critical' ? 'text-red-600' : 
-                                 phaseMetrics.compliancePerPhase?.B === 'warning' ? 'text-orange-500' : 'text-black';
-                  const colorC = phaseMetrics.compliancePerPhase?.C === 'critical' ? 'text-red-600' : 
-                                 phaseMetrics.compliancePerPhase?.C === 'warning' ? 'text-orange-500' : 'text-black';
+                  // Labels de phase selon le système de tension
+                  const is230V = currentProject?.voltageSystem === 'TRIPHASÉ_230V';
+                  const phaseLabels = is230V 
+                    ? { A: 'L1-L2', B: 'L2-L3', C: 'L3-L1' }
+                    : { A: 'L1', B: 'L2', C: 'L3' };
                   
                   const vA = phaseMetrics.voltagesPerPhase.A.toFixed(0);
                   const vB = phaseMetrics.voltagesPerPhase.B.toFixed(0);
                   const vC = phaseMetrics.voltagesPerPhase.C.toFixed(0);
-                  return `<span class="${colorA} font-semibold">A:${vA}</span><br><span class="${colorB} font-semibold">B:${vB}</span><br><span class="${colorC} font-semibold">C:${vC}</span>`;
+                  return `<span class="text-black font-semibold">${phaseLabels.A}:${vA}</span><br><span class="text-black font-semibold">${phaseLabels.B}:${vB}</span><br><span class="text-black font-semibold">${phaseLabels.C}:${vC}</span>`;
                 } else {
-                  return `<span class="text-black">A:${nodeVoltage.toFixed(0)}V</span><br><span class="text-black">B:${nodeVoltage.toFixed(0)}V</span><br><span class="text-black">C:${nodeVoltage.toFixed(0)}V</span>`;
+                  const is230V = currentProject?.voltageSystem === 'TRIPHASÉ_230V';
+                  const phaseLabels = is230V 
+                    ? { A: 'L1-L2', B: 'L2-L3', C: 'L3-L1' }
+                    : { A: 'L1', B: 'L2', C: 'L3' };
+                  return `<span class="text-black">${phaseLabels.A}:${nodeVoltage.toFixed(0)}V</span><br><span class="text-black">${phaseLabels.B}:${nodeVoltage.toFixed(0)}V</span><br><span class="text-black">${phaseLabels.C}:${nodeVoltage.toFixed(0)}V</span>`;
                 }
               } else {
                 // Mode normal : afficher une seule tension

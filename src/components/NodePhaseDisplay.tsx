@@ -50,13 +50,19 @@ export const NodePhaseDisplay = ({ nodeId }: NodePhaseDisplayProps) => {
     return `${deviation > 0 ? '+' : ''}${deviation.toFixed(1)}%`;
   };
 
+  // Labels de phase selon le système de tension
+  const is230V = currentProject?.voltageSystem === 'TRIPHASÉ_230V';
+  const phaseLabels = is230V 
+    ? { A: 'L1-L2', B: 'L2-L3', C: 'L3-L1' }
+    : { A: 'L1', B: 'L2', C: 'L3' };
+
   return (
     <div className="text-xs bg-background/90 border rounded px-2 py-1 space-y-1">
       <div className="font-medium text-foreground">Tensions par phase:</div>
       <div className="grid grid-cols-3 gap-2 text-xs">
         <div className="text-center">
-          <div className="font-medium text-blue-600">L1</div>
-          <div>{voltagesPerPhase.A.toFixed(1)}V</div>
+          <div className="font-medium text-black">{phaseLabels.A}</div>
+          <div className="text-black">{voltagesPerPhase.A.toFixed(1)}V</div>
           <div className="text-muted-foreground text-[10px]">ΔU: {voltageDropsPerPhase.A.toFixed(1)}V</div>
           {nodeMetrics.deviationsPerPhase && (
             <div className={`text-[10px] font-medium ${getDeviationColor(nodeMetrics.deviationsPerPhase.A)}`}>
@@ -65,8 +71,8 @@ export const NodePhaseDisplay = ({ nodeId }: NodePhaseDisplayProps) => {
           )}
         </div>
         <div className="text-center">
-          <div className="font-medium text-green-600">L2</div>
-          <div>{voltagesPerPhase.B.toFixed(1)}V</div>
+          <div className="font-medium text-black">{phaseLabels.B}</div>
+          <div className="text-black">{voltagesPerPhase.B.toFixed(1)}V</div>
           <div className="text-muted-foreground text-[10px]">ΔU: {voltageDropsPerPhase.B.toFixed(1)}V</div>
           {nodeMetrics.deviationsPerPhase && (
             <div className={`text-[10px] font-medium ${getDeviationColor(nodeMetrics.deviationsPerPhase.B)}`}>
@@ -75,8 +81,8 @@ export const NodePhaseDisplay = ({ nodeId }: NodePhaseDisplayProps) => {
           )}
         </div>
         <div className="text-center">
-          <div className="font-medium text-red-600">L3</div>
-          <div>{voltagesPerPhase.C.toFixed(1)}V</div>
+          <div className="font-medium text-black">{phaseLabels.C}</div>
+          <div className="text-black">{voltagesPerPhase.C.toFixed(1)}V</div>
           <div className="text-muted-foreground text-[10px]">ΔU: {voltageDropsPerPhase.C.toFixed(1)}V</div>
           {nodeMetrics.deviationsPerPhase && (
             <div className={`text-[10px] font-medium ${getDeviationColor(nodeMetrics.deviationsPerPhase.C)}`}>

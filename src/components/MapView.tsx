@@ -341,16 +341,18 @@ export const MapView = () => {
         minZoom: 3,
       }).addTo(map);
     } else if (newType === 'picc') {
-      // PICC Wallonie - Fond topographique WMS
+      // PICC Wallonie - Fond topographique WMS (toutes les couches)
       tileLayerRef.current = L.tileLayer.wms(
         'https://geoservices.wallonie.be/arcgis/services/TOPOGRAPHIE/PICC_VDIFF/MapServer/WMSServer',
         {
-          layers: '0',
+          layers: '1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40',
           format: 'image/png',
           transparent: true,
+          version: '1.3.0',
+          crs: L.CRS.EPSG3857,
           attribution: '© SPW - PICC Wallonie',
           maxZoom: 22,
-          minZoom: 3,
+          minZoom: 10,
         }
       ).addTo(map);
     }

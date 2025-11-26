@@ -87,9 +87,9 @@ export const MapView = () => {
     return { hasSRG2, hasEQUI8 };
   };
 
-  // Calcule le point médian d'un câble et l'angle d'alignement
-  const getCableMidpointAndAngle = (coordinates: { lat: number; lng: number }[]) => {
-    if (coordinates.length < 2) return null;
+  // Calcule le point médian d'un câble et l'angle d'alignement EN PIXELS
+  const getCableMidpointAndAngle = (coordinates: { lat: number; lng: number }[], map: L.Map) => {
+    if (coordinates.length < 2 || !map) return null;
     
     // Trouver le segment du milieu
     const totalLength = coordinates.length;
@@ -99,16 +99,20 @@ export const MapView = () => {
     const p1 = coordinates[Math.max(0, midIndex - 1)];
     const p2 = coordinates[Math.min(totalLength - 1, midIndex)];
     
-    // Point médian
+    // Point médian en lat/lng
     const midPoint = {
       lat: (p1.lat + p2.lat) / 2,
       lng: (p1.lng + p2.lng) / 2
     };
     
-    // Calculer l'angle en degrés
-    const deltaLng = p2.lng - p1.lng;
-    const deltaLat = p2.lat - p1.lat;
-    let angle = Math.atan2(deltaLat, deltaLng) * (180 / Math.PI);
+    // CONVERTIR EN PIXELS pour calculer l'angle visuel
+    const pixel1 = map.latLngToContainerPoint([p1.lat, p1.lng]);
+    const pixel2 = map.latLngToContainerPoint([p2.lat, p2.lng]);
+    
+    // Calculer l'angle en degrés basé sur les PIXELS
+    const deltaX = pixel2.x - pixel1.x;
+    const deltaY = pixel2.y - pixel1.y;
+    let angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
     
     // Ajuster l'angle pour que le texte soit toujours lisible (pas à l'envers)
     if (angle > 90) angle -= 180;
@@ -1440,7 +1444,7 @@ export const MapView = () => {
       // === LABEL DU TYPE DE CÂBLE ===
       // Créer le label uniquement si zoom >= 16
       if (currentZoom >= 16 && cableType) {
-        const midData = getCableMidpointAndAngle(cable.coordinates);
+        const midData = getCableMidpointAndAngle(cable.coordinates, map);
         
         if (midData) {
           const { midPoint, angle } = midData;
@@ -1454,12 +1458,8 @@ export const MapView = () => {
               white-space: nowrap;
               font-size: 11px;
               font-weight: 600;
-              color: #1f2937;
-              background: rgba(255, 255, 255, 0.9);
-              padding: 2px 6px;
-              border-radius: 3px;
-              box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-              border: 1px solid ${cableColor};
+              color: ${cableColor};
+              text-shadow: 1px 1px 2px white, -1px -1px 2px white, 1px -1px 2px white, -1px 1px 2px white;
             ">${cableType.label}</div>`,
             iconSize: [0, 0],
             iconAnchor: [0, 0]

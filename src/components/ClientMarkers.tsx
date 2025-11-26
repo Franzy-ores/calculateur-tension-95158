@@ -69,6 +69,21 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
       const color = getClientMarkerColor(firstClient, colorMode, circuitColorMapping, links);
       const hasProduction = groupe.puissancePV_kVA > 0;
       
+      // Calculer les tensions min/max pour le groupe
+      const groupTensions = groupe.clients.reduce<{ min: number | null; max: number | null }>(
+        (acc, c) => {
+          if (c.tensionMin_V !== undefined && c.tensionMin_V !== null) {
+            acc.min = acc.min === null ? c.tensionMin_V : Math.min(acc.min, c.tensionMin_V);
+          }
+          if (c.tensionMax_V !== undefined && c.tensionMax_V !== null) {
+            acc.max = acc.max === null ? c.tensionMax_V : Math.max(acc.max, c.tensionMax_V);
+          }
+          return acc;
+        },
+        { min: null, max: null }
+      );
+      const hasGroupTensions = groupTensions.min !== null || groupTensions.max !== null;
+      
       const icon = L.divIcon({
         className: 'client-groupe-marker',
         html: hasProduction 
@@ -306,6 +321,31 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
         
         map.dragging.enable();
       });
+      
+      // Afficher les tensions si showTensionLabels est activé
+      if (showTensionLabels && hasGroupTensions) {
+        const tensionLabel = `<div style="
+          font-size: 10px;
+          font-weight: 600;
+          color: #f59e0b;
+          background: rgba(255, 255, 255, 0.95);
+          padding: 2px 4px;
+          border-radius: 3px;
+          white-space: nowrap;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+          border: 1px solid #f59e0b;
+        ">
+          ${(groupTensions.min || 0).toFixed(1)}V / ${(groupTensions.max || 0).toFixed(1)}V
+        </div>`;
+        
+        marker.bindTooltip(tensionLabel, {
+          permanent: true,
+          direction: 'right',
+          offset: [8, 0],
+          className: 'client-tension-label-permanent',
+          opacity: 1
+        });
+      }
       
       marker.addTo(map);
       groupeMarkersRef.current.set(groupe.id, marker);

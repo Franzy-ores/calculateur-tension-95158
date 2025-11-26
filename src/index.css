@@ -226,3 +226,9 @@ All colors MUST be HSL.
 .animate-pulse {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+/* Labels de type de câble */
+.cable-type-label {
+  background: transparent !important;
+  border: none !important;
+}

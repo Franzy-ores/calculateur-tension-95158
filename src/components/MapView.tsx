@@ -29,6 +29,7 @@ export const MapView = () => {
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<Map<string, L.Marker>>(new Map<string, L.Marker>());
   const cablesRef = useRef<Map<string, L.Polyline>>(new Map<string, L.Polyline>());
+  const cableLabelsRef = useRef<Map<string, L.Marker>>(new Map<string, L.Marker>());
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const [mapType, setMapType] = useState<'osm' | 'satellite'>('osm');
   const [routingActive, setRoutingActive] = useState(false);
@@ -39,6 +40,7 @@ export const MapView = () => {
   const tempLineRef = useRef<L.Polyline | null>(null);
   const [selectingNodeForClient, setSelectingNodeForClient] = useState(false);
   const [movingClient, setMovingClient] = useState(false);
+  const [currentZoom, setCurrentZoom] = useState<number>(10);
   
   const {
     currentProject,
@@ -83,6 +85,36 @@ export const MapView = () => {
       c => c.nodeId === nodeId && c.enabled
     );
     return { hasSRG2, hasEQUI8 };
+  };
+
+  // Calcule le point médian d'un câble et l'angle d'alignement
+  const getCableMidpointAndAngle = (coordinates: { lat: number; lng: number }[]) => {
+    if (coordinates.length < 2) return null;
+    
+    // Trouver le segment du milieu
+    const totalLength = coordinates.length;
+    const midIndex = Math.floor(totalLength / 2);
+    
+    // Points autour du milieu
+    const p1 = coordinates[Math.max(0, midIndex - 1)];
+    const p2 = coordinates[Math.min(totalLength - 1, midIndex)];
+    
+    // Point médian
+    const midPoint = {
+      lat: (p1.lat + p2.lat) / 2,
+      lng: (p1.lng + p2.lng) / 2
+    };
+    
+    // Calculer l'angle en degrés
+    const deltaLng = p2.lng - p1.lng;
+    const deltaLat = p2.lat - p1.lat;
+    let angle = Math.atan2(deltaLat, deltaLng) * (180 / Math.PI);
+    
+    // Ajuster l'angle pour que le texte soit toujours lisible (pas à l'envers)
+    if (angle > 90) angle -= 180;
+    if (angle < -90) angle += 180;
+    
+    return { midPoint, angle };
   };
 
   // Récupérer isSimulationActive du store
@@ -169,6 +201,14 @@ export const MapView = () => {
 
     // Exposer l'instance globalement pour leaflet-image
     (window as any).globalMap = map;
+
+    // Écouter les changements de zoom
+    map.on('zoomend', () => {
+      setCurrentZoom(map.getZoom());
+    });
+
+    // Initialiser le zoom actuel
+    setCurrentZoom(map.getZoom());
 
     const handleZoomToProject = (event: Event) => {
       const customEvent = event as CustomEvent;
@@ -1256,6 +1296,10 @@ export const MapView = () => {
 
     cablesRef.current.forEach(cable => map.removeLayer(cable));
     cablesRef.current.clear();
+    
+    // Nettoyer les labels de câbles existants
+    cableLabelsRef.current.forEach(label => map.removeLayer(label));
+    cableLabelsRef.current.clear();
 
     // Calculer les nœuds alimentés (connectés à une source)
     const connectedNodes = getConnectedNodes(currentProject.nodes, currentProject.cables);
@@ -1392,8 +1436,46 @@ export const MapView = () => {
       });
 
       cablesRef.current.set(cable.id, polyline);
+      
+      // === LABEL DU TYPE DE CÂBLE ===
+      // Créer le label uniquement si zoom >= 16
+      if (currentZoom >= 16 && cableType) {
+        const midData = getCableMidpointAndAngle(cable.coordinates);
+        
+        if (midData) {
+          const { midPoint, angle } = midData;
+          
+          // Créer un divIcon avec le texte rotatif
+          const labelIcon = L.divIcon({
+            className: 'cable-type-label',
+            html: `<div style="
+              transform: rotate(${angle}deg);
+              transform-origin: center center;
+              white-space: nowrap;
+              font-size: 11px;
+              font-weight: 600;
+              color: #1f2937;
+              background: rgba(255, 255, 255, 0.9);
+              padding: 2px 6px;
+              border-radius: 3px;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+              border: 1px solid ${cableColor};
+            ">${cableType.label}</div>`,
+            iconSize: [0, 0],
+            iconAnchor: [0, 0]
+          });
+          
+          const labelMarker = L.marker([midPoint.lat, midPoint.lng], {
+            icon: labelIcon,
+            interactive: false, // Ne pas intercepter les clics
+            zIndexOffset: -1000 // Sous les nœuds
+          }).addTo(map);
+          
+          cableLabelsRef.current.set(cable.id, labelMarker);
+        }
+      }
     });
-  }, [currentProject?.cables, selectedTool, setSelectedCable, openEditPanel, deleteCable, calculationResults, selectedScenario, simulationEquipment, simulationMode]);
+  }, [currentProject?.cables, selectedTool, setSelectedCable, openEditPanel, deleteCable, calculationResults, selectedScenario, simulationEquipment, simulationMode, currentZoom]);
 
   return (
     <div className="flex-1 relative">

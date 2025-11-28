@@ -137,7 +137,7 @@ export const TopMenu = ({
           <div className="flex items-center gap-1.5 flex-1 justify-center">
             {/* Voltage Badge */}
             <Badge className={`${currentProject.voltageSystem === 'TÉTRAPHASÉ_400V' ? 'bg-fuchsia-600/90' : 'bg-cyan-600/90'} text-white text-xs px-2 py-0.5 shadow-sm`}>
-              {currentProject.voltageSystem === 'TÉTRAPHASÉ_400V' ? '400V' : '230V'} · cos φ={currentProject.cosPhi}
+              {currentProject.voltageSystem === 'TÉTRAPHASÉ_400V' ? '400V' : '230V'} · φCh={currentProject.cosPhiCharges ?? currentProject.cosPhi} · φPr={currentProject.cosPhiProductions ?? 1.00}
             </Badge>
             
             {/* Transformer Badge */}

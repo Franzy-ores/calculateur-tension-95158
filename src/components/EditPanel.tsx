@@ -80,6 +80,8 @@ export const EditPanel = () => {
           name: currentProject.name,
           voltageSystem: currentProject.voltageSystem,
           cosPhi: currentProject.cosPhi,
+          cosPhiCharges: currentProject.cosPhiCharges ?? currentProject.cosPhi ?? 0.95,
+          cosPhiProductions: currentProject.cosPhiProductions ?? 1.00,
           foisonnementCharges: currentProject.foisonnementCharges,
           foisonnementProductions: currentProject.foisonnementProductions,
           defaultChargeKVA: currentProject.defaultChargeKVA || 5,
@@ -803,18 +805,59 @@ export const EditPanel = () => {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="cos-phi">Facteur de puissance (cos φ)</Label>
-                <Input
-                  id="cos-phi"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="1"
-                  value={formData.cosPhi || 0.95}
-                  onChange={(e) => setFormData({ ...formData, cosPhi: parseFloat(e.target.value) || 0.95 })}
-                />
-              </div>
+              {/* Facteurs de puissance séparés */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Zap className="w-4 h-4" />
+                    Facteurs de puissance (cos φ)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="cos-phi-charges">Cos φ Charges (Consommation)</Label>
+                    <Input
+                      id="cos-phi-charges"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="1"
+                      value={formData.cosPhiCharges ?? formData.cosPhi ?? 0.95}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        cosPhiCharges: parseFloat(e.target.value) || 0.95,
+                        cosPhi: parseFloat(e.target.value) || 0.95 // Synchroniser pour rétrocompatibilité
+                      })}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Facteur de puissance des charges. Par défaut: 0.95 (inductif)
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="cos-phi-productions">Cos φ Productions (PV/Cogen)</Label>
+                    <Input
+                      id="cos-phi-productions"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="1"
+                      value={formData.cosPhiProductions ?? 1.00}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        cosPhiProductions: parseFloat(e.target.value) || 1.00 
+                      })}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Facteur de puissance des productions. Par défaut: 1.00 (unitaire)
+                    </p>
+                  </div>
+                  <div className="text-xs text-muted-foreground p-2 bg-muted rounded">
+                    <strong>Impact sur les calculs:</strong><br />
+                    • Charges: Q = P × tan(acos(cos φ)) → Q réactif consommé<br />
+                    • Productions: cos φ = 1 → Q = 0 (injection purement active)
+                  </div>
+                </CardContent>
+              </Card>
 
               <div className="space-y-2">
                 <Label htmlFor="foisonnement-charges">Foisonnement charges (%)</Label>

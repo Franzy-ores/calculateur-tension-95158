@@ -5,7 +5,9 @@ import { getNodeConnectionType } from '@/utils/nodeConnectionType';
 import { getLinkedClientsForNode, calculateNodePowersFromClients } from '@/utils/clientsUtils';
 
 export class ElectricalCalculator {
-  private cosPhi: number;
+  private cosPhi: number; // Legacy - utilisé comme fallback
+  private cosPhiCharges: number; // Cos phi des charges (consommation)
+  private cosPhiProductions: number; // Cos phi des productions (PV/Cogen)
 
   // Constantes pour la robustesse et maintenabilité
   private static readonly CONVERGENCE_TOLERANCE = 1e-4;
@@ -14,9 +16,14 @@ export class ElectricalCalculator {
   private static readonly MIN_VOLTAGE_SAFETY = 1e-6;
   private static readonly SMALL_IMPEDANCE_SAFETY = 1e-12;
 
-  constructor(cosPhi: number = 0.95) {
+  constructor(cosPhi: number = 0.95, cosPhiCharges?: number, cosPhiProductions?: number) {
     this.validateCosPhi(cosPhi);
     this.cosPhi = cosPhi;
+    // Utiliser les valeurs spécifiques ou le cosPhi global comme fallback
+    this.cosPhiCharges = cosPhiCharges !== undefined ? cosPhiCharges : cosPhi;
+    this.cosPhiProductions = cosPhiProductions !== undefined ? cosPhiProductions : 1.0;
+    this.validateCosPhi(this.cosPhiCharges);
+    this.validateCosPhi(this.cosPhiProductions);
   }
 
   private validateCosPhi(cosPhi: number): void {
@@ -28,6 +35,24 @@ export class ElectricalCalculator {
   setCosPhi(value: number) {
     this.validateCosPhi(value);
     this.cosPhi = value;
+  }
+
+  setCosPhiCharges(value: number) {
+    this.validateCosPhi(value);
+    this.cosPhiCharges = value;
+  }
+
+  setCosPhiProductions(value: number) {
+    this.validateCosPhi(value);
+    this.cosPhiProductions = value;
+  }
+
+  getCosPhiCharges(): number {
+    return this.cosPhiCharges;
+  }
+
+  getCosPhiProductions(): number {
+    return this.cosPhiProductions;
   }
 
   /**
@@ -765,12 +790,13 @@ export class ElectricalCalculator {
     const V_node = new Map<string, Complex>();
     for (const n of nodes) V_node.set(n.id, Vslack);
 
-    // Sécurité: cosΦ dans [0,1]
-    const cosPhi_eff = Math.min(1, Math.max(0, this.cosPhi));
-    if (!isFinite(this.cosPhi) || this.cosPhi < 0 || this.cosPhi > 1) {
-      console.warn('⚠️ cosΦ hors [0,1], application d\'un clamp.', { cosPhi_in: this.cosPhi, cosPhi_eff });
-    }
-    const sinPhi = Math.sqrt(Math.max(0, 1 - cosPhi_eff * cosPhi_eff));
+    // Sécurité: cosΦ dans [0,1] - Séparation charges/productions
+    const cosPhiCharges_eff = Math.min(1, Math.max(0, this.cosPhiCharges));
+    const cosPhiProductions_eff = Math.min(1, Math.max(0, this.cosPhiProductions));
+    const sinPhiCharges = Math.sqrt(Math.max(0, 1 - cosPhiCharges_eff * cosPhiCharges_eff));
+    const sinPhiProductions = Math.sqrt(Math.max(0, 1 - cosPhiProductions_eff * cosPhiProductions_eff));
+    
+    console.log(`🔌 Facteurs de puissance: cosφ_charges=${cosPhiCharges_eff}, cosφ_productions=${cosPhiProductions_eff}`);
 
     // ---- Power Flow using Backward-Forward Sweep (complex R+jX) ----
     
@@ -910,15 +936,39 @@ export class ElectricalCalculator {
         console.log(`   Prod:    A=${S_A_prod_kVA.toFixed(2)}kVA, B=${S_B_prod_kVA.toFixed(2)}kVA, C=${S_C_prod_kVA.toFixed(2)}kVA`);
         console.log(`   NET:     A=${S_A_kVA.toFixed(2)}kVA, B=${S_B_kVA.toFixed(2)}kVA, C=${S_C_kVA.toFixed(2)}kVA`);
         
-        const P_A_kW = S_A_kVA * cosPhi_eff;
-        const Q_A_kVAr = Math.abs(S_A_kVA) * sinPhi * sign;
-        const P_B_kW = S_B_kVA * cosPhi_eff;
-        const Q_B_kVAr = Math.abs(S_B_kVA) * sinPhi * sign;
-        const P_C_kW = S_C_kVA * cosPhi_eff;
-        const Q_C_kVAr = Math.abs(S_C_kVA) * sinPhi * sign;
-        S_A_map.set(n.id, C(P_A_kW * 1000, Q_A_kVAr * 1000));
-        S_B_map.set(n.id, C(P_B_kW * 1000, Q_B_kVAr * 1000));
-        S_C_map.set(n.id, C(P_C_kW * 1000, Q_C_kVAr * 1000));
+        // ===== SOMME VECTORIELLE : P et Q calculés séparément pour charges et productions =====
+        // CHARGES: P_load = S_charge × cos(φ_charges), Q_load = S_charge × sin(φ_charges) > 0 (consommé)
+        // PRODUCTIONS: P_prod = S_prod × cos(φ_productions), Q_prod = S_prod × sin(φ_productions)
+        // RÉSULTAT: P_net = P_load - P_prod, Q_net = Q_load - Q_prod
+        
+        // Phase A
+        const P_A_load_kW = S_A_charges_kVA * cosPhiCharges_eff;
+        const Q_A_load_kVAr = S_A_charges_kVA * sinPhiCharges; // Q positif (consommé)
+        const P_A_prod_kW = S_A_prod_kVA * cosPhiProductions_eff;
+        const Q_A_prod_kVAr = S_A_prod_kVA * sinPhiProductions; // Q selon réglage onduleur
+        const P_A_net_kW = P_A_load_kW - P_A_prod_kW;
+        const Q_A_net_kVAr = Q_A_load_kVAr - Q_A_prod_kVAr;
+        
+        // Phase B
+        const P_B_load_kW = S_B_charges_kVA * cosPhiCharges_eff;
+        const Q_B_load_kVAr = S_B_charges_kVA * sinPhiCharges;
+        const P_B_prod_kW = S_B_prod_kVA * cosPhiProductions_eff;
+        const Q_B_prod_kVAr = S_B_prod_kVA * sinPhiProductions;
+        const P_B_net_kW = P_B_load_kW - P_B_prod_kW;
+        const Q_B_net_kVAr = Q_B_load_kVAr - Q_B_prod_kVAr;
+        
+        // Phase C
+        const P_C_load_kW = S_C_charges_kVA * cosPhiCharges_eff;
+        const Q_C_load_kVAr = S_C_charges_kVA * sinPhiCharges;
+        const P_C_prod_kW = S_C_prod_kVA * cosPhiProductions_eff;
+        const Q_C_prod_kVAr = S_C_prod_kVA * sinPhiProductions;
+        const P_C_net_kW = P_C_load_kW - P_C_prod_kW;
+        const Q_C_net_kVAr = Q_C_load_kVAr - Q_C_prod_kVAr;
+        
+        // Construction des phaseurs S = P + jQ (en W et VAr)
+        S_A_map.set(n.id, C(P_A_net_kW * 1000, Q_A_net_kVAr * 1000));
+        S_B_map.set(n.id, C(P_B_net_kW * 1000, Q_B_net_kVAr * 1000));
+        S_C_map.set(n.id, C(P_C_net_kW * 1000, Q_C_net_kVAr * 1000));
 
         // Intégrer les contributions explicites P/Q (équipements virtuels)
         const addExtra = (items: any[], sign: 1 | -1) => {
@@ -1470,16 +1520,39 @@ export class ElectricalCalculator {
       return result;
     }
 
-    // ---- Mode équilibré (inchangé) ----
+    // ---- Mode équilibré (avec cos phi séparés) ----
     // Helper: per-node per-phase complex power in VA (signed)
     const S_node_phase_VA = new Map<string, Complex>();
     const computeNodeS = () => {
       S_node_phase_VA.clear();
       for (const n of nodes) {
-        const S_kVA = S_node_total_kVA.get(n.id) || 0; // S_total (kVA), signé: >0 charge, <0 injection
-        const P_kW = S_kVA * cosPhi_eff;
-        const Q_kVAr = Math.abs(S_kVA) * sinPhi * Math.sign(S_kVA);
-        const S_VA_total = C(P_kW * 1000, Q_kVAr * 1000);
+        // Récupérer charges et productions brutes
+        const S_charges_kVA = S_prel_map.get(n.id) || 0;
+        const S_productions_kVA = S_pv_map.get(n.id) || 0;
+        
+        // ===== SOMME VECTORIELLE pour mode équilibré =====
+        // CHARGES: P_load = S_charge × cos(φ_charges), Q_load = S_charge × sin(φ_charges)
+        const P_load_kW = S_charges_kVA * cosPhiCharges_eff;
+        const Q_load_kVAr = S_charges_kVA * sinPhiCharges;
+        
+        // PRODUCTIONS: P_prod = S_prod × cos(φ_productions), Q_prod = S_prod × sin(φ_productions)
+        const P_prod_kW = S_productions_kVA * cosPhiProductions_eff;
+        const Q_prod_kVAr = S_productions_kVA * sinPhiProductions;
+        
+        // NET: P_net = P_load - P_prod, Q_net = Q_load - Q_prod
+        let P_net_kW = 0, Q_net_kVAr = 0;
+        if (scenario === 'PRÉLÈVEMENT') {
+          P_net_kW = P_load_kW;
+          Q_net_kVAr = Q_load_kVAr;
+        } else if (scenario === 'PRODUCTION') {
+          P_net_kW = -P_prod_kW;
+          Q_net_kVAr = -Q_prod_kVAr;
+        } else {
+          P_net_kW = P_load_kW - P_prod_kW;
+          Q_net_kVAr = Q_load_kVAr - Q_prod_kVAr;
+        }
+        
+        const S_VA_total = C(P_net_kW * 1000, Q_net_kVAr * 1000);
 
         // Contributions explicites P/Q (équipements virtuels)
         let S_extra_VA = C(0, 0);

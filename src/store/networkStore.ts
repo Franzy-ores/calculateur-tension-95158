@@ -99,7 +99,7 @@ interface NetworkActions {
   // Project actions
   createNewProject: (name: string, voltageSystem: VoltageSystem) => void;
   loadProject: (project: Project) => void;
-  updateProjectConfig: (updates: Partial<Pick<Project, 'name' | 'voltageSystem' | 'cosPhi' | 'foisonnementCharges' | 'foisonnementProductions' | 'defaultChargeKVA' | 'defaultProductionKVA' | 'loadModel' | 'desequilibrePourcent' | 'forcedModeConfig' | 'manualPhaseDistribution' | 'phaseDistributionModeCharges' | 'phaseDistributionModeProductions'>>) => void;
+  updateProjectConfig: (updates: Partial<Pick<Project, 'name' | 'voltageSystem' | 'cosPhi' | 'cosPhiCharges' | 'cosPhiProductions' | 'foisonnementCharges' | 'foisonnementProductions' | 'defaultChargeKVA' | 'defaultProductionKVA' | 'loadModel' | 'desequilibrePourcent' | 'forcedModeConfig' | 'manualPhaseDistribution' | 'phaseDistributionModeCharges' | 'phaseDistributionModeProductions'>>) => void;
   
   // Node actions
   addNode: (lat: number, lng: number) => void;
@@ -247,6 +247,8 @@ const createDefaultProject = (): Project => ({
   name: "Nouveau Projet",
   voltageSystem: "TÉTRAPHASÉ_400V",
   cosPhi: 0.95,
+  cosPhiCharges: 0.95, // Charges inductives - défaut 0.95
+  cosPhiProductions: 1.00, // Productions PV/Cogen - défaut 1.00
   foisonnementCharges: 100,
   foisonnementProductions: 100,
   defaultChargeKVA: 10,
@@ -271,6 +273,8 @@ const createDefaultProject2 = (name: string, voltageSystem: VoltageSystem): Proj
   name,
   voltageSystem,
   cosPhi: 0.95,
+  cosPhiCharges: 0.95, // Charges inductives - défaut 0.95
+  cosPhiProductions: 1.00, // Productions PV/Cogen - défaut 1.00
   foisonnementCharges: 100,
   foisonnementProductions: 100,
   defaultChargeKVA: 10,
@@ -376,6 +380,16 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     if (!project.loadModel) {
       project.loadModel = 'polyphase_equilibre';
       console.log('📦 Projet ancien migré vers loadModel: polyphase_equilibre');
+    }
+    
+    // Migration automatique: cosPhiCharges et cosPhiProductions
+    if (project.cosPhiCharges === undefined) {
+      project.cosPhiCharges = project.cosPhi ?? 0.95;
+      console.log('📦 Projet migré: cosPhiCharges =', project.cosPhiCharges);
+    }
+    if (project.cosPhiProductions === undefined) {
+      project.cosPhiProductions = 1.00;
+      console.log('📦 Projet migré: cosPhiProductions = 1.00');
     }
     
     // Vérifier que le projet a la structure minimale requise
@@ -1424,7 +1438,11 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       });
     }
 
-    const calculator = new ElectricalCalculator(currentProject.cosPhi);
+    const calculator = new ElectricalCalculator(
+      currentProject.cosPhi,
+      currentProject.cosPhiCharges ?? currentProject.cosPhi ?? 0.95,
+      currentProject.cosPhiProductions ?? 1.00
+    );
     
     const results = {
       PRÉLÈVEMENT: calculator.calculateScenarioWithHTConfig(
@@ -1544,7 +1562,11 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     // Appliquer la renumérotation
     renumberCables();
 
-    const calculator = new ElectricalCalculator(currentProject.cosPhi);
+    const calculator = new ElectricalCalculator(
+      currentProject.cosPhi,
+      currentProject.cosPhiCharges ?? currentProject.cosPhi ?? 0.95,
+      currentProject.cosPhiProductions ?? 1.00
+    );
     
     const results = {
       PRÉLÈVEMENT: calculator.calculateScenarioWithHTConfig(
@@ -1578,7 +1600,11 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         // Pour le mode FORCÉ, utiliser la simulation avec convergence
         if (currentProject.forcedModeConfig) {
           try {
-            const simCalculator = new SimulationCalculator(currentProject.cosPhi);
+            const simCalculator = new SimulationCalculator(
+              currentProject.cosPhi,
+              currentProject.cosPhiCharges ?? currentProject.cosPhi ?? 0.95,
+              currentProject.cosPhiProductions ?? 1.00
+            );
             const simResult = simCalculator.calculateWithSimulation(
               currentProject,
               'FORCÉ',
@@ -1774,7 +1800,11 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     const { currentProject, selectedScenario } = get();
     if (!currentProject) return;
 
-    const calculator = new ElectricalCalculator(currentProject.cosPhi);
+    const calculator = new ElectricalCalculator(
+      currentProject.cosPhi,
+      currentProject.cosPhiCharges ?? currentProject.cosPhi ?? 0.95,
+      currentProject.cosPhiProductions ?? 1.00
+    );
     let bestFoisonnement = 100;
     let bestVoltage = 0;
     let minDiff = Infinity;
@@ -2084,7 +2114,11 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     const result = calculationResults[selectedScenario]!;
     
     // Utiliser le SimulationCalculator pour proposer des améliorations basées sur la chute de tension
-    const calculator = new SimulationCalculator(currentProject.cosPhi);
+    const calculator = new SimulationCalculator(
+      currentProject.cosPhi,
+      currentProject.cosPhiCharges ?? currentProject.cosPhi ?? 0.95,
+      currentProject.cosPhiProductions ?? 1.00
+    );
     
     // Optimisation par circuit en un seul passage avec seuil paramétrable (par défaut 8%)
     const upgrades = calculator.proposeFullCircuitReinforcement(
@@ -2115,7 +2149,11 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     if (!currentProject) return;
 
     try {
-      const calculator = new SimulationCalculator(currentProject.cosPhi);
+      const calculator = new SimulationCalculator(
+        currentProject.cosPhi,
+        currentProject.cosPhiCharges ?? currentProject.cosPhi ?? 0.95,
+        currentProject.cosPhiProductions ?? 1.00
+      );
       
       // Calculer pour chaque scénario avec équipements de simulation
       const newSimulationResults: { [key in CalculationScenario]: any } = {

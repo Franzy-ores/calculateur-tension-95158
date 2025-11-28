@@ -41,8 +41,8 @@ export class SimulationCalculator extends ElectricalCalculator {
     ecart_equi8: number;  // (Umax-Umin)EQUI8 selon formule CME
   }> = new Map();
   
-  constructor(cosPhi: number = 0.95) {
-    super(cosPhi);
+  constructor(cosPhi: number = 0.95, cosPhiCharges?: number, cosPhiProductions?: number) {
+    super(cosPhi, cosPhiCharges, cosPhiProductions);
     this.simCosPhi = Math.min(1, Math.max(0, cosPhi));
   }
 

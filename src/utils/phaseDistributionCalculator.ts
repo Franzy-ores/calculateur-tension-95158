@@ -158,6 +158,95 @@ export function autoAssignPhaseForMonoClient(
   return assignedPhase;
 }
 
+/**
+ * Assigne automatiquement une phase de PRODUCTION pour un client TRI/TETRA dont la production ≤5kVA
+ * doit être traitée comme MONO (option treatSmallPolyProductionsAsMono)
+ * Équilibre en fonction des productions existantes (pas des charges)
+ */
+export function autoAssignProductionPhaseForSmallPolyClient(
+  client: ClientImporte,
+  existingClients: ClientImporte[],
+  networkVoltage: 'TRIPHASÉ_230V' | 'TÉTRAPHASÉ_400V' = 'TÉTRAPHASÉ_400V'
+): { assignedPhase: 'A' | 'B' | 'C'; phaseCoupling: 'A' | 'B' | 'C' | 'A-B' | 'B-C' | 'A-C' } {
+  // Calculer la production totale par phase/couplage des clients existants
+  const phaseProductions = { A: 0, B: 0, C: 0 };
+  const couplingProductions = { 'A-B': 0, 'B-C': 0, 'A-C': 0 };
+  
+  existingClients.forEach(c => {
+    const prodKVA = c.puissancePV_kVA || 0;
+    if (prodKVA === 0) return;
+    
+    if (c.connectionType === 'MONO') {
+      // Client MONO : utiliser sa phase assignée
+      if (networkVoltage === 'TRIPHASÉ_230V' && c.phaseCoupling) {
+        couplingProductions[c.phaseCoupling as keyof typeof couplingProductions] += prodKVA;
+        if (c.phaseCoupling === 'A-B') {
+          phaseProductions.A += prodKVA / 2;
+          phaseProductions.B += prodKVA / 2;
+        } else if (c.phaseCoupling === 'B-C') {
+          phaseProductions.B += prodKVA / 2;
+          phaseProductions.C += prodKVA / 2;
+        } else if (c.phaseCoupling === 'A-C') {
+          phaseProductions.A += prodKVA / 2;
+          phaseProductions.C += prodKVA / 2;
+        }
+      } else if (c.assignedPhase) {
+        phaseProductions[c.assignedPhase] += prodKVA;
+      }
+    } else if ((c.connectionType === 'TRI' || c.connectionType === 'TETRA') && prodKVA <= 5) {
+      // Client TRI/TETRA ≤5kVA avec production traitée comme MONO
+      if (c.assignedProductionPhase) {
+        if (networkVoltage === 'TRIPHASÉ_230V' && c.productionPhaseCoupling) {
+          couplingProductions[c.productionPhaseCoupling as keyof typeof couplingProductions] += prodKVA;
+          if (c.productionPhaseCoupling === 'A-B') {
+            phaseProductions.A += prodKVA / 2;
+            phaseProductions.B += prodKVA / 2;
+          } else if (c.productionPhaseCoupling === 'B-C') {
+            phaseProductions.B += prodKVA / 2;
+            phaseProductions.C += prodKVA / 2;
+          } else if (c.productionPhaseCoupling === 'A-C') {
+            phaseProductions.A += prodKVA / 2;
+            phaseProductions.C += prodKVA / 2;
+          }
+        } else {
+          phaseProductions[c.assignedProductionPhase] += prodKVA;
+        }
+      }
+    } else {
+      // Client TRI/TETRA >5kVA : réparti 33.33%
+      phaseProductions.A += prodKVA / 3;
+      phaseProductions.B += prodKVA / 3;
+      phaseProductions.C += prodKVA / 3;
+    }
+  });
+  
+  // Trouver la phase avec la plus faible production
+  const phases: Array<'A' | 'B' | 'C'> = ['A', 'B', 'C'];
+  const minProd = Math.min(phaseProductions.A, phaseProductions.B, phaseProductions.C);
+  const minPhases = phases.filter(p => phaseProductions[p] === minProd);
+  const assignedPhase = minPhases[Math.floor(Math.random() * minPhases.length)];
+  
+  let phaseCoupling: 'A' | 'B' | 'C' | 'A-B' | 'B-C' | 'A-C';
+  
+  if (networkVoltage === 'TRIPHASÉ_230V') {
+    // 230V : équilibrer sur les couplages
+    const couplings: Array<'A-B' | 'B-C' | 'A-C'> = ['A-B', 'B-C', 'A-C'];
+    const minCouplingProd = Math.min(...Object.values(couplingProductions));
+    const minCouplings = couplings.filter(c => couplingProductions[c] === minCouplingProd);
+    phaseCoupling = minCouplings[Math.floor(Math.random() * minCouplings.length)];
+    
+    console.log(`☀️ Production TRI/TETRA ≤5kVA "${client.nomCircuit}" (${client.puissancePV_kVA}kVA) → couplage ${phaseCoupling} (230V)`);
+  } else {
+    // 400V : phase simple
+    phaseCoupling = assignedPhase;
+    console.log(`☀️ Production TRI/TETRA ≤5kVA "${client.nomCircuit}" (${client.puissancePV_kVA}kVA) → phase ${assignedPhase} (400V)`);
+  }
+  
+  console.log(`   Productions avant: A=${phaseProductions.A.toFixed(1)} kVA, B=${phaseProductions.B.toFixed(1)} kVA, C=${phaseProductions.C.toFixed(1)} kVA`);
+  
+  return { assignedPhase, phaseCoupling };
+}
+
 interface NodePhaseDistributionResult {
   charges: {
     mono: { A: number; B: number; C: number };
@@ -186,7 +275,8 @@ export function calculateNodeAutoPhaseDistribution(
   manualPhaseDistributionProductions: { A: number; B: number; C: number }, // Répartition manuelle PRODUCTIONS (%)
   networkVoltage: 'TRIPHASÉ_230V' | 'TÉTRAPHASÉ_400V' = 'TÉTRAPHASÉ_400V', // Système de tension du réseau
   foisonnementCharges?: number,  // Coefficient de foisonnement des charges (%)
-  foisonnementProductions?: number  // Coefficient de foisonnement des productions (%)
+  foisonnementProductions?: number,  // Coefficient de foisonnement des productions (%)
+  treatSmallPolyProductionsAsMono: boolean = false  // Option pour traiter productions TRI/TETRA ≤5kVA comme MONO
 ): NodePhaseDistributionResult {
   // Initialisation des résultats
   const result: NodePhaseDistributionResult = {
@@ -273,18 +363,50 @@ export function calculateNodeAutoPhaseDistribution(
         }
       }
     } else {
-      // Client TRI/TÉTRA : Répartition équilibrée à 33.33% par phase (distribution physique)
-      // Les curseurs de déséquilibre s'appliqueront plus tard sur les totaux foisonnés
+      // Client TRI/TÉTRA
       const totalCharge = client.puissanceContractuelle_kVA;
       const totalProd = client.puissancePV_kVA;
       
+      // Charges : TOUJOURS réparties 33.33% par phase (pas affecté par l'option)
       result.charges.poly.A += totalCharge / 3;
       result.charges.poly.B += totalCharge / 3;
       result.charges.poly.C += totalCharge / 3;
       
-      result.productions.poly.A += totalProd / 3;
-      result.productions.poly.B += totalProd / 3;
-      result.productions.poly.C += totalProd / 3;
+      // Productions : dépend de l'option treatSmallPolyProductionsAsMono
+      if (treatSmallPolyProductionsAsMono && totalProd > 0 && totalProd <= 5) {
+        // Production ≤5 kVA : traiter comme MONO (comptée dans productions.mono)
+        if (networkVoltage === 'TRIPHASÉ_230V' && client.productionPhaseCoupling) {
+          // 230V : 50/50 sur le couplage
+          if (client.productionPhaseCoupling === 'A-B') {
+            result.productions.mono.A += totalProd * 0.5;
+            result.productions.mono.B += totalProd * 0.5;
+          } else if (client.productionPhaseCoupling === 'B-C') {
+            result.productions.mono.B += totalProd * 0.5;
+            result.productions.mono.C += totalProd * 0.5;
+          } else if (client.productionPhaseCoupling === 'A-C') {
+            result.productions.mono.A += totalProd * 0.5;
+            result.productions.mono.C += totalProd * 0.5;
+          } else {
+            // Fallback si pas de couplage assigné : répartir équitablement
+            result.productions.poly.A += totalProd / 3;
+            result.productions.poly.B += totalProd / 3;
+            result.productions.poly.C += totalProd / 3;
+          }
+        } else if (client.assignedProductionPhase) {
+          // 400V : 100% sur la phase assignée
+          result.productions.mono[client.assignedProductionPhase] += totalProd;
+        } else {
+          // Fallback si pas de phase assignée : répartir équitablement
+          result.productions.poly.A += totalProd / 3;
+          result.productions.poly.B += totalProd / 3;
+          result.productions.poly.C += totalProd / 3;
+        }
+      } else {
+        // Production >5 kVA ou option désactivée : répartir 33.33% par phase
+        result.productions.poly.A += totalProd / 3;
+        result.productions.poly.B += totalProd / 3;
+        result.productions.poly.C += totalProd / 3;
+      }
       
       result.polyClientsCount++;
     }

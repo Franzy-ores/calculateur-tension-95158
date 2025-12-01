@@ -88,7 +88,8 @@ export const EditPanel = () => {
           defaultProductionKVA: currentProject.defaultProductionKVA || 5,
           loadModel: currentProject.loadModel ?? 'polyphase_equilibre',
           desequilibrePourcent: currentProject.desequilibrePourcent ?? 0,
-          addEmptyNodeByDefault: currentProject.addEmptyNodeByDefault || false
+          addEmptyNodeByDefault: currentProject.addEmptyNodeByDefault || false,
+          treatSmallPolyProductionsAsMono: currentProject.treatSmallPolyProductionsAsMono || false
         });
       }
     }
@@ -933,6 +934,30 @@ export const EditPanel = () => {
                   Si activé, les nouveaux nœuds n'auront ni charge ni production par défaut
                 </p>
               </div>
+
+              {/* Option pour les petites productions TRI/TETRA */}
+              {formData.loadModel === 'mixte_mono_poly' && (
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="treat-small-poly-productions"
+                      checked={formData.treatSmallPolyProductionsAsMono || false}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        treatSmallPolyProductionsAsMono: e.target.checked 
+                      })}
+                      className="rounded border-input"
+                    />
+                    <Label htmlFor="treat-small-poly-productions" className="cursor-pointer font-normal">
+                      Production TRI/Tétra ≤5 kVA : mono
+                    </Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Les productions PV des clients TRI/TÉTRA ≤5 kVA sont réparties comme des productions MONO (100% sur une phase en 400V, 50/50 en 230V). Les charges restent en répartition 33.33%.
+                  </p>
+                </div>
+              )}
 
               {/* Configuration Modèle de Charge */}
               <Card>

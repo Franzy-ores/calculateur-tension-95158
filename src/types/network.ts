@@ -61,6 +61,10 @@ export interface ClientImporte {
   phaseCoupling?: 'A' | 'B' | 'C' | 'A-B' | 'B-C' | 'A-C';  // Couplage précis: phase-neutre (400V) ou phase-phase (230V)
   connectionType?: ClientConnectionType; // Type de raccordement normalisé
   
+  // Phase assignée pour la production (uniquement pour TRI/TETRA ≤5kVA traités comme MONO)
+  assignedProductionPhase?: 'A' | 'B' | 'C';
+  productionPhaseCoupling?: 'A' | 'B' | 'C' | 'A-B' | 'B-C' | 'A-C';
+  
   // Métadonnées Excel brutes (pour conserver toutes les colonnes)
   rawData?: Record<string, any>;
   
@@ -281,6 +285,8 @@ export interface Project {
   clientLinks?: ClientLink[];
   // Option pour ajouter des nœuds vierges par défaut
   addEmptyNodeByDefault?: boolean;
+  // Option pour traiter les productions TRI/TETRA ≤5kVA comme MONO
+  treatSmallPolyProductionsAsMono?: boolean;
   // Équipements de simulation (SRG2 et EQUI8)
   simulationEquipment?: SimulationEquipment;
   // Debug flags pour développement

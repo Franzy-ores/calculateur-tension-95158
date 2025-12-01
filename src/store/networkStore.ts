@@ -30,6 +30,7 @@ import {
   normalizeClientConnectionType,
   validateAndConvertConnectionType,
   autoAssignPhaseForMonoClient,
+  autoAssignProductionPhaseForSmallPolyClient,
   calculateNodeAutoPhaseDistribution,
   calculateRealMonoDistributionPercents,
   calculateRealMonoProductionDistributionPercents,
@@ -514,7 +515,10 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
             linkedClients,
             project.manualPhaseDistribution!.charges,
             project.manualPhaseDistribution!.productions,
-            project.voltageSystem
+            project.voltageSystem,
+            undefined, // foisonnementCharges
+            undefined, // foisonnementProductions
+            project.treatSmallPolyProductionsAsMono || false
           );
           node.autoPhaseDistribution = distribution;
         }
@@ -1127,6 +1131,9 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       
       // 3. Assigner phase si MONO (équilibrage uniquement avec les clients liés)
       let assignedPhase: 'A' | 'B' | 'C' | undefined;
+      let assignedProductionPhase: 'A' | 'B' | 'C' | undefined;
+      let productionPhaseCoupling: 'A' | 'B' | 'C' | 'A-B' | 'B-C' | 'A-C' | undefined;
+      
       if (correctedType === 'MONO') {
         // Récupérer UNIQUEMENT les clients MONO liés et déjà assignés
         const allAssignedMonoClients = currentProject.clientsImportes?.filter(c =>
@@ -1138,15 +1145,35 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         assignedPhase = autoAssignPhaseForMonoClient(client, allAssignedMonoClients, currentProject.voltageSystem);
         
         console.log(`✅ Client MONO "${client.nomCircuit}" lié au nœud "${node.name}" sur phase ${assignedPhase}`);
+      } else if ((correctedType === 'TRI' || correctedType === 'TETRA') && 
+                 currentProject.treatSmallPolyProductionsAsMono && 
+                 client.puissancePV_kVA > 0 && 
+                 client.puissancePV_kVA <= 5) {
+        // Client TRI/TETRA avec production ≤5kVA et option activée : assigner une phase de production
+        const allLinkedClients = currentProject.clientsImportes?.filter(c =>
+          currentProject.clientLinks?.some(link => link.clientId === c.id)
+        ) || [];
+        
+        const result = autoAssignProductionPhaseForSmallPolyClient(client, allLinkedClients, currentProject.voltageSystem);
+        assignedProductionPhase = result.assignedPhase;
+        productionPhaseCoupling = result.phaseCoupling;
+        
+        console.log(`✅ Client ${correctedType} "${client.nomCircuit}" avec production ≤5kVA : phase production ${assignedProductionPhase}`);
       }
       
       console.log(`   Type final: ${correctedType}`);
       console.log('================================');
       
-      // Mettre à jour le client avec connectionType et assignedPhase
+      // Mettre à jour le client avec connectionType, assignedPhase et assignedProductionPhase
       const updatedClientsImportes = currentProject.clientsImportes?.map(c => 
         c.id === clientId 
-          ? { ...c, connectionType: correctedType, assignedPhase }
+          ? { 
+              ...c, 
+              connectionType: correctedType, 
+              assignedPhase,
+              assignedProductionPhase,
+              productionPhaseCoupling
+            }
           : c
       );
       
@@ -1271,7 +1298,10 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       linkedClients,
       state.currentProject.manualPhaseDistribution?.charges || { A: 33.33, B: 33.33, C: 33.34 },
       state.currentProject.manualPhaseDistribution?.productions || { A: 33.33, B: 33.33, C: 33.34 },
-      state.currentProject.voltageSystem
+      state.currentProject.voltageSystem,
+      undefined, // foisonnementCharges
+      undefined, // foisonnementProductions
+      state.currentProject.treatSmallPolyProductionsAsMono || false
     );
     
     // Mettre à jour le nœud
@@ -1431,7 +1461,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
             currentProject.manualPhaseDistribution?.productions || { A: 33.33, B: 33.33, C: 33.33 },
             currentProject.voltageSystem,
             currentProject.foisonnementCharges, // Nouveau: passer le foisonnement
-            currentProject.foisonnementProductions // Nouveau: passer le foisonnement
+            currentProject.foisonnementProductions, // Nouveau: passer le foisonnement
+            currentProject.treatSmallPolyProductionsAsMono || false
           );
           node.autoPhaseDistribution = autoPhaseDistribution;
         }

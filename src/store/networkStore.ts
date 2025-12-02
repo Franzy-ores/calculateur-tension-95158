@@ -1334,23 +1334,66 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       currentProject.clientLinks?.some(link => link.clientId === c.id)
     ) || [];
     
-    if (monoClients.length === 0) {
-      toast.info('ℹ️ Aucun client MONO à re-balancer');
+    // Récupérer les clients TRI/TETRA avec production ≤5 kVA si l'option est activée
+    const smallPolyProdClients = (currentProject.treatSmallPolyProductionsAsMono
+      ? currentProject.clientsImportes?.filter(c => 
+          (c.connectionType === 'TRI' || c.connectionType === 'TETRA') &&
+          c.puissancePV_kVA > 0 && c.puissancePV_kVA <= 5 &&
+          currentProject.clientLinks?.some(link => link.clientId === c.id)
+        ) || []
+      : []);
+    
+    if (monoClients.length === 0 && smallPolyProdClients.length === 0) {
+      const msg = currentProject.treatSmallPolyProductionsAsMono
+        ? 'ℹ️ Aucun client MONO ni production TRI/TETRA ≤5kVA à rééquilibrer'
+        : 'ℹ️ Aucun client MONO à rééquilibrer';
+      toast.info(msg);
       return;
     }
     
-    // Trier par puissance décroissante pour meilleur équilibrage
+    // Trier clients MONO par puissance décroissante pour meilleur équilibrage
     monoClients.sort((a, b) => 
       (b.puissanceContractuelle_kVA + b.puissancePV_kVA) - 
       (a.puissanceContractuelle_kVA + a.puissancePV_kVA)
     );
     
-    // Réassigner séquentiellement
+    // Réassigner séquentiellement les clients MONO
     const alreadyAssigned: import('@/types/network').ClientImporte[] = [];
     monoClients.forEach(client => {
       client.assignedPhase = autoAssignPhaseForMonoClient(client, alreadyAssigned, currentProject.voltageSystem);
       alreadyAssigned.push(client);
     });
+    
+    // Réassigner les productions TRI/TETRA ≤5kVA si l'option est activée
+    if (smallPolyProdClients.length > 0) {
+      console.log(`🔄 Rééquilibrage de ${smallPolyProdClients.length} productions TRI/TETRA ≤5kVA...`);
+      
+      // Trier par puissance de production décroissante
+      smallPolyProdClients.sort((a, b) => b.puissancePV_kVA - a.puissancePV_kVA);
+      
+      // Récupérer tous les clients déjà traités pour équilibrage des productions
+      const alreadyAssignedProductions = [
+        ...alreadyAssigned,
+        ...currentProject.clientsImportes?.filter(c => 
+          c.connectionType !== 'MONO' &&
+          (c.connectionType === 'TRI' || c.connectionType === 'TETRA') &&
+          c.puissancePV_kVA > 0 && c.puissancePV_kVA <= 5 &&
+          currentProject.clientLinks?.some(link => link.clientId === c.id) &&
+          !smallPolyProdClients.includes(c)
+        ) || []
+      ];
+      
+      smallPolyProdClients.forEach(client => {
+        const assignment = autoAssignProductionPhaseForSmallPolyClient(
+          client,
+          alreadyAssignedProductions,
+          currentProject.voltageSystem
+        );
+        client.assignedProductionPhase = assignment.assignedPhase;
+        client.productionPhaseCoupling = assignment.phaseCoupling;
+        alreadyAssignedProductions.push(client);
+      });
+    }
     
     // Mettre à jour le projet
     set({ 
@@ -1401,8 +1444,14 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     console.log(`📊 Curseurs charges mis à jour : A=${realChargesDistribution.A.toFixed(1)}%, B=${realChargesDistribution.B.toFixed(1)}%, C=${realChargesDistribution.C.toFixed(1)}%`);
     console.log(`📊 Curseurs productions mis à jour : A=${realProductionsDistribution.A.toFixed(1)}%, B=${realProductionsDistribution.B.toFixed(1)}%, C=${realProductionsDistribution.C.toFixed(1)}%`);
     
+    const totalRebalanced = monoClients.length + smallPolyProdClients.length;
     const { unbalancePercent } = calculateProjectUnbalance(currentProject.nodes);
-    toast.success(`✅ Re-balancing terminé : déséquilibre = ${unbalancePercent.toFixed(1)}%`);
+    
+    const message = smallPolyProdClients.length > 0
+      ? `✅ Rééquilibrage terminé : ${monoClients.length} MONO + ${smallPolyProdClients.length} prod. TRI/TETRA ≤5kVA (déséquilibre = ${unbalancePercent.toFixed(1)}%)`
+      : `✅ Rééquilibrage terminé : ${monoClients.length} clients MONO (déséquilibre = ${unbalancePercent.toFixed(1)}%)`;
+    
+    toast.success(message);
   },
 
   openEditPanel: (target) => {

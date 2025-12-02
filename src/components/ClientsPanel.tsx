@@ -5,6 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { useNetworkStore } from '@/store/networkStore';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { analyzeClientPower } from '@/utils/clientsUtils';
@@ -14,6 +16,7 @@ export const ClientsPanel = () => {
   const [filterCouplage, setFilterCouplage] = useState<'ALL' | 'TRI' | 'MONO'>('ALL');
   const [filterLinked, setFilterLinked] = useState<'ALL' | 'LINKED' | 'UNLINKED'>('ALL');
   const [filterPower, setFilterPower] = useState<'ALL' | 'HIGH_POWER'>('ALL');
+  const [filterSmallPolyProd, setFilterSmallPolyProd] = useState<boolean>(false);
 
   const {
     currentProject,
@@ -67,6 +70,15 @@ export const ClientsPanel = () => {
       }
     }
 
+    // Filtre TRI/TETRA avec production ≤ 5 kVA
+    if (filterSmallPolyProd) {
+      const isPolyClient = client.couplage === 'TRI' || client.connectionType === 'TRI' || client.connectionType === 'TETRA';
+      const hasSmallProduction = client.puissancePV_kVA > 0 && client.puissancePV_kVA <= 5;
+      if (!isPolyClient || !hasSmallProduction) {
+        return false;
+      }
+    }
+
     return true;
   });
 
@@ -76,6 +88,10 @@ export const ClientsPanel = () => {
   const unlinkedClients = totalClients - linkedClients;
   const totalCharge = clients.reduce((sum, c) => sum + c.puissanceContractuelle_kVA, 0);
   const totalPV = clients.reduce((sum, c) => sum + c.puissancePV_kVA, 0);
+  const smallPolyProdClients = clients.filter(c => 
+    (c.couplage === 'TRI' || c.connectionType === 'TRI' || c.connectionType === 'TETRA') &&
+    c.puissancePV_kVA > 0 && c.puissancePV_kVA <= 5
+  ).length;
 
   const handleStartLinking = (clientId: string) => {
     setSelectedClientForLinking(clientId);
@@ -218,6 +234,12 @@ export const ClientsPanel = () => {
             <p className="text-muted-foreground">Production totale</p>
             <p className="text-xl font-bold">{totalPV.toFixed(1)} kVA</p>
           </div>
+          {smallPolyProdClients > 0 && (
+            <div className="col-span-2">
+              <p className="text-muted-foreground">TRI/TETRA avec prod. ≤5 kVA</p>
+              <p className="text-xl font-bold text-purple-600">{smallPolyProdClients}</p>
+            </div>
+          )}
         </div>
       </Card>
 
@@ -267,6 +289,17 @@ export const ClientsPanel = () => {
               <SelectItem value="HIGH_POWER">⚡ Forte puissance (≥10 kVA MONO)</SelectItem>
             </SelectContent>
           </Select>
+
+          <div className="flex items-center space-x-2 pt-1">
+            <Checkbox 
+              id="filter-small-poly-prod"
+              checked={filterSmallPolyProd}
+              onCheckedChange={(checked) => setFilterSmallPolyProd(!!checked)}
+            />
+            <Label htmlFor="filter-small-poly-prod" className="text-sm cursor-pointer">
+              TRI/TETRA avec production ≤ 5 kVA
+            </Label>
+          </div>
         </div>
       </Card>
 
@@ -310,6 +343,12 @@ export const ClientsPanel = () => {
                           {client.connectionType && client.connectionType !== 'MONO' && (
                             <Badge variant="outline" className="text-xs">
                               {client.connectionType}
+                            </Badge>
+                          )}
+                          {(client.connectionType === 'TRI' || client.connectionType === 'TETRA' || client.couplage === 'TRI') && 
+                           client.puissancePV_kVA > 0 && client.puissancePV_kVA <= 5 && (
+                            <Badge variant="outline" className="text-xs text-purple-600 border-purple-600">
+                              Prod ≤5kVA
                             </Badge>
                           )}
                           {link && (

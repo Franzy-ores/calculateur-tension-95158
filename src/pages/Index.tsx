@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { TopMenu } from "@/components/TopMenu";
 import { MapView } from "@/components/MapView";
 import { Toolbar } from "@/components/Toolbar";
@@ -7,6 +7,7 @@ import { EditPanel } from "@/components/EditPanel";
 import { ClientsPanel } from "@/components/ClientsPanel";
 import { SimulationPanel } from "@/components/SimulationPanel";
 import { ClientEditPanel } from "@/components/ClientEditPanel";
+import { GlobalAlertPopup } from "@/components/GlobalAlertPopup";
 import { useNetworkStore } from "@/store/networkStore";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,36 @@ const Index = () => {
                                simulationEquipment.neutralCompensators.filter(c => c.enabled).length;
   
   const resultsToUse = (isSimulationActive && activeEquipmentCount > 0) ? simulationResults : calculationResults;
+
+  // Calcul des charges et productions foisonnées pour l'alerte globale
+  const { foisonnedCharge, foisonnedProduction, transformerPower } = useMemo(() => {
+    if (!currentProject) {
+      return { foisonnedCharge: 0, foisonnedProduction: 0, transformerPower: 0 };
+    }
+    
+    // Somme des charges contractuelles des clients liés aux nœuds
+    let totalChargeContractuelle = 0;
+    let totalProductionContractuelle = 0;
+    
+    const linkedClientIds = new Set(currentProject.clientLinks?.map(link => link.clientId) || []);
+    
+    currentProject.clientsImportes?.forEach(client => {
+      if (linkedClientIds.has(client.id)) {
+        totalChargeContractuelle += client.puissanceContractuelle_kVA || 0;
+        totalProductionContractuelle += client.puissancePV_kVA || 0;
+      }
+    });
+    
+    // Application des coefficients de foisonnement
+    const foisonnementCharges = currentProject.foisonnementCharges ?? 1;
+    const foisonnementProductions = currentProject.foisonnementProductions ?? 1;
+    
+    return {
+      foisonnedCharge: totalChargeContractuelle * foisonnementCharges,
+      foisonnedProduction: totalProductionContractuelle * foisonnementProductions,
+      transformerPower: currentProject.transformerConfig?.nominalPower_kVA || 0
+    };
+  }, [currentProject]);
 
   const handleNewNetwork = () => {
     createNewProject("Nouveau Réseau", "TÉTRAPHASÉ_400V");
@@ -172,6 +203,15 @@ const Index = () => {
           </Button>
         )}
       </div>
+
+      {/* Alerte globale surcharge/injection */}
+      {currentProject && transformerPower > 0 && (
+        <GlobalAlertPopup
+          transformerPower={transformerPower}
+          foisonnedCharge={foisonnedCharge}
+          foisonnedProduction={foisonnedProduction}
+        />
+      )}
 
       {/* Clients Panel - Sheet latéral */}
       <Sheet open={clientsPanelOpen} onOpenChange={setClientsPanelOpen} modal={false}>

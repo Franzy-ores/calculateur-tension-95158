@@ -45,26 +45,22 @@ const Index = () => {
       return { foisonnedCharge: 0, foisonnedProduction: 0, transformerPower: 0 };
     }
     
-    // Somme des charges contractuelles des clients liés aux nœuds
+    // Somme des charges et productions de TOUS les clients importés
     let totalChargeContractuelle = 0;
     let totalProductionContractuelle = 0;
     
-    const linkedClientIds = new Set(currentProject.clientLinks?.map(link => link.clientId) || []);
-    
     currentProject.clientsImportes?.forEach(client => {
-      if (linkedClientIds.has(client.id)) {
-        totalChargeContractuelle += client.puissanceContractuelle_kVA || 0;
-        totalProductionContractuelle += client.puissancePV_kVA || 0;
-      }
+      totalChargeContractuelle += client.puissanceContractuelle_kVA || 0;
+      totalProductionContractuelle += client.puissancePV_kVA || 0;
     });
     
-    // Application des coefficients de foisonnement
-    const foisonnementCharges = currentProject.foisonnementCharges ?? 1;
-    const foisonnementProductions = currentProject.foisonnementProductions ?? 1;
+    // Application des coefficients de foisonnement (stockés en %, ex: 100 = 100%)
+    const foisonnementCharges = currentProject.foisonnementCharges ?? 100;
+    const foisonnementProductions = currentProject.foisonnementProductions ?? 100;
     
     return {
-      foisonnedCharge: totalChargeContractuelle * foisonnementCharges,
-      foisonnedProduction: totalProductionContractuelle * foisonnementProductions,
+      foisonnedCharge: totalChargeContractuelle * (foisonnementCharges / 100),
+      foisonnedProduction: totalProductionContractuelle * (foisonnementProductions / 100),
       transformerPower: currentProject.transformerConfig?.nominalPower_kVA || 0
     };
   }, [currentProject]);

@@ -391,6 +391,48 @@ export const ResultsPanel = ({ results, selectedScenario, isCollapsed = false }:
               </div>
             )}
 
+            {/* Section 3b: Informations Source (tous clients importés) */}
+            {currentProject?.clientsImportes && currentProject.clientsImportes.length > 0 && (
+              <div className="pt-2 border-t">
+                <p className="text-muted-foreground text-xs mb-2 font-medium">Source (tous clients importés)</p>
+                {(() => {
+                  // Calcul des totaux sur TOUS les clients importés
+                  let chargeSource = 0;
+                  let productionSource = 0;
+                  currentProject.clientsImportes.forEach(client => {
+                    chargeSource += client.puissanceContractuelle_kVA || 0;
+                    productionSource += client.puissancePV_kVA || 0;
+                  });
+                  
+                  const foisCharge = currentProject.foisonnementCharges ?? 100;
+                  const foisProd = currentProject.foisonnementProductions ?? 100;
+                  const chargeFoisonnee = chargeSource * (foisCharge / 100);
+                  const productionFoisonnee = productionSource * (foisProd / 100);
+                  
+                  return (
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                      <div>
+                        <p className="text-muted-foreground">Charge Source</p>
+                        <p className="font-semibold">{chargeSource.toFixed(1)} kVA</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Production Source</p>
+                        <p className="font-semibold">{productionSource.toFixed(1)} kVA</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Charge × {foisCharge}%</p>
+                        <p className="font-semibold">{chargeFoisonnee.toFixed(1)} kVA</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Production × {foisProd}%</p>
+                        <p className="font-semibold">{productionFoisonnee.toFixed(1)} kVA</p>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
             {/* Section 4: Chute max. et Pertes globales */}
             <div className="pt-2 border-t grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
               <div>

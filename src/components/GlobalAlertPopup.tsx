@@ -54,16 +54,6 @@ export const GlobalAlertPopup = ({
     }
   }, [checkAlertConditions, transformerPower, foisonnedCharge, foisonnedProduction, lastAlertKey]);
 
-  // Auto-fermeture après 10 secondes
-  useEffect(() => {
-    if (isVisible && !isClosing) {
-      const timer = setTimeout(() => {
-        handleClose();
-      }, 10000);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [isVisible, isClosing, lastAlertKey]);
 
   const handleClose = () => {
     setIsClosing(true);

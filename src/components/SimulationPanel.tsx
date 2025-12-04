@@ -16,6 +16,7 @@ import { getNodeConnectionType } from '@/utils/nodeConnectionType';
 import { toast } from "sonner";
 import { DocumentationPanel } from "@/components/DocumentationPanel";
 import { SRG2Panel } from "@/components/SRG2Panel";
+import { CableReplacementSimulator } from "@/components/CableReplacementSimulator";
 import { Settings, Play, RotateCcw, Trash2, Plus, AlertTriangle, CheckCircle, Cable } from "lucide-react";
 import { useState } from 'react';
 
@@ -247,10 +248,11 @@ export const SimulationPanel = () => {
       <ScrollArea className="flex-1">
         <div className="p-4">
           <Tabs defaultValue="equi8" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="equi8">EQUI8</TabsTrigger>
               <TabsTrigger value="srg2">SRG2</TabsTrigger>
-              <TabsTrigger value="doc">Documentation</TabsTrigger>
+              <TabsTrigger value="cables">Câbles</TabsTrigger>
+              <TabsTrigger value="doc">Doc</TabsTrigger>
             </TabsList>
 
             <TabsContent value="equi8" className="space-y-4 mt-4">
@@ -373,6 +375,10 @@ export const SimulationPanel = () => {
 
             <TabsContent value="srg2" className="mt-4">
               <SRG2Panel />
+            </TabsContent>
+
+            <TabsContent value="cables" className="mt-4">
+              <CableReplacementSimulator />
             </TabsContent>
 
             <TabsContent value="doc" className="mt-4">

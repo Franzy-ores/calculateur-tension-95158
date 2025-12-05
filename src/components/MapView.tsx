@@ -127,7 +127,8 @@ export const MapView = () => {
   
   // Déterminer quels résultats utiliser - simulation si active ET équipements actifs
   const activeEquipmentCount = (simulationEquipment.srg2Devices?.filter(s => s.enabled).length || 0) + 
-                               simulationEquipment.neutralCompensators.filter(c => c.enabled).length;
+                               simulationEquipment.neutralCompensators.filter(c => c.enabled).length +
+                               (simulationEquipment.cableReplacement?.enabled ? 1 : 0);
   
   const useSimulation = isSimulationActive && activeEquipmentCount > 0;
   
@@ -135,7 +136,8 @@ export const MapView = () => {
     isSimulationActive,
     activeEquipmentCount,
     useSimulation,
-    resultsType: useSimulation ? 'SIMULATION' : 'CALCULATION'
+    resultsType: useSimulation ? 'SIMULATION' : 'CALCULATION',
+    cableReplacementActive: simulationEquipment.cableReplacement?.enabled
   });
   
   const resultsToUse = useSimulation ? simulationResults : calculationResults;
@@ -1372,12 +1374,19 @@ export const MapView = () => {
         return upgrade.originalCableId === cable.id;
       });
       
+      // Vérifier si ce câble est remplacé par la simulation de câbles
+      const isReplacedCable = simulationEquipment?.cableReplacement?.enabled && 
+        simulationEquipment?.cableReplacement?.affectedCableIds?.includes(cable.id);
+      
       if (simulationEquipment?.cableUpgrades?.length > 0 && cable.id === currentProject?.cables[0]?.id) {
         console.log('Cable upgrades available:', simulationEquipment.cableUpgrades);
         console.log('Current cable ID:', cable.id);
       }
       
-      if (hasUpgrade) {
+      if (isReplacedCable) {
+        cableColor = '#10b981'; // Vert émeraude pour câbles remplacés par simulation
+        cableWeight = 6;
+      } else if (hasUpgrade) {
         cableColor = '#8A2BE2'; // violet pour les câbles remplacés/suggérés
         cableWeight = 8; // épaisseur doublée
       } else {

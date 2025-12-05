@@ -544,40 +544,50 @@ export class SimulationCalculator extends ElectricalCalculator {
     scenario: CalculationScenario,
     equipment: SimulationEquipment
   ): SimulationResult {
+    // Vérifier si on a un remplacement de câbles actif
+    const cableReplacement = equipment.cableReplacement;
+    let projectToUse = project;
+    
+    if (cableReplacement?.enabled && cableReplacement.affectedCableIds.length > 0) {
+      // Créer une copie du projet avec les câbles remplacés
+      projectToUse = this.applyProjectCableReplacement(project, cableReplacement);
+      console.log(`🔄 Remplacement de câbles appliqué: ${cableReplacement.affectedCableIds.length} câbles -> ${cableReplacement.targetCableTypeId}`);
+    }
+    
     // D'abord calculer le scénario de base (sans équipements)
     let baselineResult: CalculationResult;
     
-    if (scenario === 'FORCÉ' && project.forcedModeConfig) {
+    if (scenario === 'FORCÉ' && projectToUse.forcedModeConfig) {
       // Mode forcé : utiliser le nouveau processus en 2 étapes
-      baselineResult = this.runForcedModeSimulation(project, scenario, equipment);
+      baselineResult = this.runForcedModeSimulation(projectToUse, scenario, equipment);
     } else {
       // Autres modes : baseline normal
       baselineResult = this.calculateScenario(
-        project.nodes,
-        project.cables,
-        project.cableTypes,
+        projectToUse.nodes,
+        projectToUse.cables,
+        projectToUse.cableTypes,
         scenario,
-        project.foisonnementCharges,
-        project.foisonnementProductions,
-        project.transformerConfig,
-        project.loadModel,
-        project.desequilibrePourcent,
-        project.manualPhaseDistribution,
-        project.clientsImportes,
-        project.clientLinks
+        projectToUse.foisonnementCharges,
+        projectToUse.foisonnementProductions,
+        projectToUse.transformerConfig,
+        projectToUse.loadModel,
+        projectToUse.desequilibrePourcent,
+        projectToUse.manualPhaseDistribution,
+        projectToUse.clientsImportes,
+        projectToUse.clientLinks
       );
     }
 
     // Ensuite calculer avec les équipements de simulation actifs
     const simulationResult = this.calculateScenarioWithEquipment(
-      project,
+      projectToUse,
       scenario,
       equipment
     );
 
     console.log('🎯 SRG2 simulation terminée - nettoyage des marqueurs maintenant');
     // Nettoyage des marqueurs SRG2 après calcul final et utilisation des résultats
-    this.cleanupSRG2Markers(project.nodes);
+    this.cleanupSRG2Markers(projectToUse.nodes);
 
     return {
       ...simulationResult,
@@ -585,6 +595,29 @@ export class SimulationCalculator extends ElectricalCalculator {
       equipment,
       baselineResult,
       convergenceStatus: (simulationResult as any).convergenceStatus || (baselineResult as any).convergenceStatus
+    };
+  }
+  
+  /**
+   * Applique le remplacement de câbles à un projet (crée une copie modifiée)
+   */
+  private applyProjectCableReplacement(
+    project: Project,
+    cableReplacement: { targetCableTypeId: string; affectedCableIds: string[] }
+  ): Project {
+    const modifiedCables = project.cables.map(cable => {
+      if (cableReplacement.affectedCableIds.includes(cable.id)) {
+        return {
+          ...cable,
+          typeId: cableReplacement.targetCableTypeId
+        };
+      }
+      return cable;
+    });
+    
+    return {
+      ...project,
+      cables: modifiedCables
     };
   }
 

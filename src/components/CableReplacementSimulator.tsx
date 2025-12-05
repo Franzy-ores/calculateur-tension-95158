@@ -20,7 +20,8 @@ import {
 } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Cable, ArrowRightLeft, CheckCircle, AlertTriangle, X } from 'lucide-react';
+import { Cable, ArrowRightLeft, CheckCircle, AlertTriangle, X, Eye } from 'lucide-react';
+import { CableReplacementConfig } from '@/types/network';
 
 interface SimulationComparisonResult {
   before: {
@@ -46,13 +47,24 @@ const TARGET_SECTIONS = [
 ];
 
 export const CableReplacementSimulator: React.FC = () => {
-  const { currentProject, calculationResults, selectedScenario } = useNetworkStore();
+  const { 
+    currentProject, 
+    calculationResults, 
+    simulationResults,
+    selectedScenario,
+    simulationEquipment,
+    setCableReplacementConfig,
+    runSimulation,
+    isSimulationActive
+  } = useNetworkStore();
   
   const [selectedTargetSection, setSelectedTargetSection] = useState<string>('baxb-95');
   const [selectedCableTypes, setSelectedCableTypes] = useState<string[]>([]);
   const [showResultsPopup, setShowResultsPopup] = useState(false);
-  const [simulationResult, setSimulationResult] = useState<SimulationComparisonResult | null>(null);
-  const [isSimulationActive, setIsSimulationActive] = useState(false);
+
+  // Check if cable replacement simulation is active
+  const cableReplacementConfig = simulationEquipment?.cableReplacement;
+  const isReplacementActive = cableReplacementConfig?.enabled ?? false;
 
   // Get aerial cable types currently used in the project (excluding target sections)
   const aerialCableTypesInProject = useMemo(() => {
@@ -89,6 +101,43 @@ export const CableReplacementSimulator: React.FC = () => {
 
   const totalCablesToReplace = Object.values(cablesCountByType).reduce((sum, count) => sum + count, 0);
 
+  // Compute simulation results comparison
+  const simulationComparison = useMemo((): SimulationComparisonResult | null => {
+    if (!isReplacementActive || !cableReplacementConfig) return null;
+    
+    const baseResult = calculationResults[selectedScenario];
+    const simResult = simulationResults[selectedScenario];
+    
+    if (!baseResult || !simResult) return null;
+    
+    const beforeMaxVoltageDrop = baseResult.maxVoltageDropPercent ?? 0;
+    const beforeLosses = baseResult.globalLosses_kW ?? 0;
+    const afterMaxVoltageDrop = simResult.maxVoltageDropPercent ?? 0;
+    const afterLosses = simResult.globalLosses_kW ?? 0;
+    
+    return {
+      before: {
+        maxVoltageDrop: beforeMaxVoltageDrop,
+        losses: beforeLosses,
+        en50160Compliant: beforeMaxVoltageDrop <= 10,
+      },
+      after: {
+        maxVoltageDrop: afterMaxVoltageDrop,
+        losses: afterLosses,
+        en50160Compliant: afterMaxVoltageDrop <= 10,
+      },
+      gains: {
+        voltageDropReduction: beforeMaxVoltageDrop > 0 
+          ? ((beforeMaxVoltageDrop - afterMaxVoltageDrop) / beforeMaxVoltageDrop) * 100 
+          : 0,
+        lossesReduction: beforeLosses > 0 
+          ? ((beforeLosses - afterLosses) / beforeLosses) * 100 
+          : 0,
+      },
+      replacedCablesCount: cableReplacementConfig.affectedCableIds.length,
+    };
+  }, [isReplacementActive, cableReplacementConfig, calculationResults, simulationResults, selectedScenario]);
+
   const handleCableTypeToggle = (typeId: string) => {
     setSelectedCableTypes(prev => 
       prev.includes(typeId) 
@@ -105,80 +154,36 @@ export const CableReplacementSimulator: React.FC = () => {
     }
   };
 
-  const runSimulation = () => {
+  const handleSimulate = () => {
     if (!currentProject || selectedCableTypes.length === 0) return;
 
-    const currentResult = calculationResults[selectedScenario];
+    // Identify affected cables
+    const affectedCableIds = currentProject.cables
+      .filter(cable => cable.pose === 'AÉRIEN' && selectedCableTypes.includes(cable.typeId))
+      .map(cable => cable.id);
     
-    // Get target cable type characteristics
-    const targetCableType = currentProject.cableTypes.find(ct => ct.id === selectedTargetSection);
-    if (!targetCableType) return;
+    if (affectedCableIds.length === 0) return;
 
-    // Calculate current state
-    const beforeMaxVoltageDrop = currentResult?.maxVoltageDropPercent ?? 0;
-    const beforeLosses = currentResult?.globalLosses_kW ?? 0;
-    const beforeCompliant = beforeMaxVoltageDrop <= 10; // EN50160 threshold
-
-    // Simulate replacement - estimate improvements based on cable characteristics
-    let estimatedVoltageDropReduction = 0;
-    let estimatedLossesReduction = 0;
-    let replacedCount = 0;
-
-    currentProject.cables.forEach(cable => {
-      if (cable.pose === 'AÉRIEN' && selectedCableTypes.includes(cable.typeId)) {
-        const originalType = currentProject.cableTypes.find(ct => ct.id === cable.typeId);
-        if (originalType) {
-          // Calculate improvement ratio based on resistance difference
-          const resistanceRatio = targetCableType.R12_ohm_per_km / originalType.R12_ohm_per_km;
-          const cableLength = cable.length_m / 1000; // Convert to km
-          
-          // Estimate voltage drop improvement (proportional to resistance reduction)
-          const voltageDropContribution = (originalType.R12_ohm_per_km * cableLength) * (1 - resistanceRatio);
-          estimatedVoltageDropReduction += voltageDropContribution * 0.5; // Factor based on current flow
-          
-          // Estimate losses improvement (proportional to R reduction)
-          estimatedLossesReduction += (1 - resistanceRatio) * 0.1 * cableLength; // Simplified estimation
-          
-          replacedCount++;
-        }
-      }
-    });
-
-    // Calculate after values
-    const afterMaxVoltageDrop = Math.max(0, beforeMaxVoltageDrop - estimatedVoltageDropReduction);
-    const afterLosses = Math.max(0, beforeLosses - estimatedLossesReduction);
-    const afterCompliant = afterMaxVoltageDrop <= 10;
-
-    const result: SimulationComparisonResult = {
-      before: {
-        maxVoltageDrop: beforeMaxVoltageDrop,
-        losses: beforeLosses,
-        en50160Compliant: beforeCompliant,
-      },
-      after: {
-        maxVoltageDrop: afterMaxVoltageDrop,
-        losses: afterLosses,
-        en50160Compliant: afterCompliant,
-      },
-      gains: {
-        voltageDropReduction: beforeMaxVoltageDrop > 0 
-          ? ((beforeMaxVoltageDrop - afterMaxVoltageDrop) / beforeMaxVoltageDrop) * 100 
-          : 0,
-        lossesReduction: beforeLosses > 0 
-          ? ((beforeLosses - afterLosses) / beforeLosses) * 100 
-          : 0,
-      },
-      replacedCablesCount: replacedCount,
+    // Create and set the cable replacement config
+    const config: CableReplacementConfig = {
+      id: `cable-replacement-${Date.now()}`,
+      enabled: true,
+      targetCableTypeId: selectedTargetSection,
+      sourceCableTypeIds: selectedCableTypes,
+      affectedCableIds,
     };
 
-    setSimulationResult(result);
-    setShowResultsPopup(true);
-    setIsSimulationActive(true);
+    setCableReplacementConfig(config);
+    
+    // Run the simulation
+    runSimulation();
+    
+    // Show results popup
+    setTimeout(() => setShowResultsPopup(true), 500);
   };
 
-  const cancelSimulation = () => {
-    setIsSimulationActive(false);
-    setSimulationResult(null);
+  const handleCancelSimulation = () => {
+    setCableReplacementConfig(null);
     setSelectedCableTypes([]);
   };
 
@@ -199,7 +204,7 @@ export const CableReplacementSimulator: React.FC = () => {
           <Select 
             value={selectedTargetSection} 
             onValueChange={setSelectedTargetSection}
-            disabled={isSimulationActive}
+            disabled={isReplacementActive}
           >
             <SelectTrigger className="w-full bg-background">
               <SelectValue placeholder="Choisir la section cible" />
@@ -223,7 +228,7 @@ export const CableReplacementSimulator: React.FC = () => {
                 variant="ghost" 
                 size="sm" 
                 onClick={handleSelectAll}
-                disabled={isSimulationActive}
+                disabled={isReplacementActive}
                 className="h-7 text-xs"
               >
                 {selectedCableTypes.length === aerialCableTypesInProject.length 
@@ -253,7 +258,7 @@ export const CableReplacementSimulator: React.FC = () => {
                       id={`cable-${cableType.id}`}
                       checked={selectedCableTypes.includes(cableType.id)}
                       onCheckedChange={() => handleCableTypeToggle(cableType.id)}
-                      disabled={isSimulationActive}
+                      disabled={isReplacementActive}
                     />
                     <Label 
                       htmlFor={`cable-${cableType.id}`}
@@ -272,17 +277,27 @@ export const CableReplacementSimulator: React.FC = () => {
         </div>
 
         {/* Summary */}
-        {totalCablesToReplace > 0 && (
+        {totalCablesToReplace > 0 && !isReplacementActive && (
           <div className="bg-primary/10 rounded-md p-2 text-sm">
             <span className="font-medium">{totalCablesToReplace}</span> câble{totalCablesToReplace > 1 ? 's' : ''} sera{totalCablesToReplace > 1 ? 'ont' : ''} remplacé{totalCablesToReplace > 1 ? 's' : ''} par <span className="font-medium">{TARGET_SECTIONS.find(s => s.id === selectedTargetSection)?.label}</span>
+          </div>
+        )}
+        
+        {/* Active simulation indicator */}
+        {isReplacementActive && cableReplacementConfig && (
+          <div className="bg-emerald-500/20 border border-emerald-500/50 rounded-md p-2 text-sm">
+            <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+              <CheckCircle className="h-4 w-4" />
+              <span>Simulation active : <span className="font-medium">{cableReplacementConfig.affectedCableIds.length}</span> câble(s) remplacé(s)</span>
+            </div>
           </div>
         )}
 
         {/* Action buttons */}
         <div className="flex gap-2">
-          {!isSimulationActive ? (
+          {!isReplacementActive ? (
             <Button 
-              onClick={runSimulation}
+              onClick={handleSimulate}
               disabled={selectedCableTypes.length === 0}
               className="flex-1"
             >
@@ -296,15 +311,16 @@ export const CableReplacementSimulator: React.FC = () => {
                 onClick={() => setShowResultsPopup(true)}
                 className="flex-1"
               >
+                <Eye className="h-4 w-4 mr-2" />
                 Voir résultats
               </Button>
               <Button 
                 variant="destructive"
-                onClick={cancelSimulation}
+                onClick={handleCancelSimulation}
                 className="flex-1"
               >
                 <X className="h-4 w-4 mr-2" />
-                Annuler simulation
+                Annuler
               </Button>
             </>
           )}
@@ -319,11 +335,11 @@ export const CableReplacementSimulator: React.FC = () => {
                 Résultats de simulation
               </DialogTitle>
               <DialogDescription>
-                Comparaison avant/après remplacement de {simulationResult?.replacedCablesCount} câble(s)
+                Comparaison avant/après remplacement de {simulationComparison?.replacedCablesCount || cableReplacementConfig?.affectedCableIds.length || 0} câble(s)
               </DialogDescription>
             </DialogHeader>
 
-            {simulationResult && (
+            {simulationComparison && (
               <div className="space-y-4">
                 {/* Voltage Drop Comparison */}
                 <div className="grid grid-cols-3 gap-2 text-center">
@@ -335,11 +351,11 @@ export const CableReplacementSimulator: React.FC = () => {
                 {/* Max Voltage Drop */}
                 <div className="grid grid-cols-3 gap-2 items-center bg-muted/50 rounded-md p-2">
                   <div className="text-sm">Chute de tension max</div>
-                  <div className={`text-center font-mono ${simulationResult.before.maxVoltageDrop > 10 ? 'text-destructive' : 'text-foreground'}`}>
-                    {simulationResult.before.maxVoltageDrop.toFixed(2)}%
+                  <div className={`text-center font-mono ${simulationComparison.before.maxVoltageDrop > 10 ? 'text-destructive' : 'text-foreground'}`}>
+                    {simulationComparison.before.maxVoltageDrop.toFixed(2)}%
                   </div>
-                  <div className={`text-center font-mono ${simulationResult.after.maxVoltageDrop > 10 ? 'text-destructive' : 'text-success'}`}>
-                    {simulationResult.after.maxVoltageDrop.toFixed(2)}%
+                  <div className={`text-center font-mono ${simulationComparison.after.maxVoltageDrop > 10 ? 'text-destructive' : 'text-emerald-600'}`}>
+                    {simulationComparison.after.maxVoltageDrop.toFixed(2)}%
                   </div>
                 </div>
 
@@ -347,10 +363,10 @@ export const CableReplacementSimulator: React.FC = () => {
                 <div className="grid grid-cols-3 gap-2 items-center bg-muted/50 rounded-md p-2">
                   <div className="text-sm">Pertes</div>
                   <div className="text-center font-mono">
-                    {simulationResult.before.losses.toFixed(3)} kW
+                    {simulationComparison.before.losses.toFixed(3)} kW
                   </div>
-                  <div className="text-center font-mono text-success">
-                    {simulationResult.after.losses.toFixed(3)} kW
+                  <div className="text-center font-mono text-emerald-600">
+                    {simulationComparison.after.losses.toFixed(3)} kW
                   </div>
                 </div>
 
@@ -358,8 +374,8 @@ export const CableReplacementSimulator: React.FC = () => {
                 <div className="grid grid-cols-3 gap-2 items-center bg-muted/50 rounded-md p-2">
                   <div className="text-sm">Conformité EN50160</div>
                   <div className="flex justify-center">
-                    {simulationResult.before.en50160Compliant ? (
-                      <Badge variant="success" className="gap-1">
+                    {simulationComparison.before.en50160Compliant ? (
+                      <Badge variant="default" className="gap-1 bg-emerald-600">
                         <CheckCircle className="h-3 w-3" /> Conforme
                       </Badge>
                     ) : (
@@ -369,8 +385,8 @@ export const CableReplacementSimulator: React.FC = () => {
                     )}
                   </div>
                   <div className="flex justify-center">
-                    {simulationResult.after.en50160Compliant ? (
-                      <Badge variant="success" className="gap-1">
+                    {simulationComparison.after.en50160Compliant ? (
+                      <Badge variant="default" className="gap-1 bg-emerald-600">
                         <CheckCircle className="h-3 w-3" /> Conforme
                       </Badge>
                     ) : (
@@ -385,15 +401,15 @@ export const CableReplacementSimulator: React.FC = () => {
                 <div className="border-t pt-3 mt-3">
                   <h4 className="text-sm font-medium mb-2">Gains estimés</h4>
                   <div className="flex gap-4">
-                    <div className={`flex-1 text-center p-2 rounded-md ${simulationResult.gains.voltageDropReduction > 0 ? 'bg-success/20 text-success' : 'bg-muted'}`}>
+                    <div className={`flex-1 text-center p-2 rounded-md ${simulationComparison.gains.voltageDropReduction > 0 ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300' : 'bg-muted'}`}>
                       <div className="text-lg font-bold">
-                        {simulationResult.gains.voltageDropReduction > 0 ? '-' : ''}{simulationResult.gains.voltageDropReduction.toFixed(1)}%
+                        {simulationComparison.gains.voltageDropReduction > 0 ? '-' : ''}{simulationComparison.gains.voltageDropReduction.toFixed(1)}%
                       </div>
                       <div className="text-xs">Chute de tension</div>
                     </div>
-                    <div className={`flex-1 text-center p-2 rounded-md ${simulationResult.gains.lossesReduction > 0 ? 'bg-success/20 text-success' : 'bg-muted'}`}>
+                    <div className={`flex-1 text-center p-2 rounded-md ${simulationComparison.gains.lossesReduction > 0 ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300' : 'bg-muted'}`}>
                       <div className="text-lg font-bold">
-                        {simulationResult.gains.lossesReduction > 0 ? '-' : ''}{simulationResult.gains.lossesReduction.toFixed(1)}%
+                        {simulationComparison.gains.lossesReduction > 0 ? '-' : ''}{simulationComparison.gains.lossesReduction.toFixed(1)}%
                       </div>
                       <div className="text-xs">Pertes</div>
                     </div>

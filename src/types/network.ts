@@ -354,10 +354,20 @@ export interface CableUpgrade {
   };
 }
 
+// Configuration pour la simulation de remplacement de câbles
+export interface CableReplacementConfig {
+  id: string;
+  enabled: boolean;
+  targetCableTypeId: string; // ID du type de câble cible (ex: 'baxb-95' ou 'baxb-150')
+  sourceCableTypeIds: string[]; // Liste des IDs de types de câbles à remplacer
+  affectedCableIds: string[]; // IDs des câbles effectivement remplacés
+}
+
 export interface SimulationEquipment {
   srg2Devices: SRG2Config[]; // Nouveau: dispositifs SRG2
   neutralCompensators: NeutralCompensator[];
   cableUpgrades: CableUpgrade[];
+  cableReplacement?: CableReplacementConfig; // Configuration de remplacement de câbles
 }
 
 export interface SimulationResult extends CalculationResult {

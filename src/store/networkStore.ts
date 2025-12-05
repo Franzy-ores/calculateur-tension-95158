@@ -14,6 +14,7 @@ import {
   NeutralCompensator,
   CableUpgrade,
   SimulationEquipment,
+  CableReplacementConfig,
   ClientLink,
   LoadModel,
   ClientImporte
@@ -152,6 +153,7 @@ interface NetworkActions {
   updateNeutralCompensator: (compensatorId: string, updates: Partial<NeutralCompensator>) => void;
   proposeCableUpgrades: (threshold?: number) => void;
   toggleCableUpgrade: (upgradeId: string) => void;
+  setCableReplacementConfig: (config: CableReplacementConfig | null) => void;
   runSimulation: () => void;
   
   // Validation
@@ -1999,13 +2001,16 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     const { isSimulationActive, simulationEquipment } = get();
     const newActiveState = !isSimulationActive;
     
-    // Désactiver/activer tous les équipements SRG2 et EQUI8
+    // Désactiver/activer tous les équipements SRG2, EQUI8 et cable replacement
     set({ 
       isSimulationActive: newActiveState,
       simulationEquipment: {
         ...simulationEquipment,
         srg2Devices: simulationEquipment.srg2Devices?.map(s => ({ ...s, enabled: newActiveState })) || [],
-        neutralCompensators: simulationEquipment.neutralCompensators.map(c => ({ ...c, enabled: newActiveState }))
+        neutralCompensators: simulationEquipment.neutralCompensators.map(c => ({ ...c, enabled: newActiveState })),
+        cableReplacement: simulationEquipment.cableReplacement 
+          ? { ...simulationEquipment.cableReplacement, enabled: newActiveState }
+          : undefined
       }
     });
     
@@ -2224,6 +2229,23 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     toast.info('Fonctionnalité en cours de développement');
   },
 
+  setCableReplacementConfig: (config: CableReplacementConfig | null) => {
+    const { simulationEquipment } = get();
+    
+    set({
+      simulationEquipment: {
+        ...simulationEquipment,
+        cableReplacement: config || undefined
+      }
+    });
+    
+    if (config) {
+      toast.success(`Simulation de remplacement configurée: ${config.affectedCableIds.length} câble(s)`);
+    } else {
+      toast.info('Simulation de remplacement annulée');
+    }
+  },
+
   runSimulation: () => {
     const { currentProject, selectedScenario, simulationEquipment } = get();
     if (!currentProject) return;
@@ -2262,7 +2284,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       set({ simulationResults: newSimulationResults });
       
       const activeEquipmentCount = (simulationEquipment.srg2Devices?.filter(s => s.enabled).length || 0) + 
-                                   simulationEquipment.neutralCompensators.filter(c => c.enabled).length;
+                                   simulationEquipment.neutralCompensators.filter(c => c.enabled).length +
+                                   (simulationEquipment.cableReplacement?.enabled ? 1 : 0);
       
       toast.success(`Simulation recalculée avec ${activeEquipmentCount} équipement(s) actif(s)`);
     } catch (error) {

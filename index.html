@@ -3,26 +3,40 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Voltage Graph</title>
-    <meta name="description" content="Network voltage calculation and visualization tool" />
+    <title>Calculateur de Tension</title>
+    <meta name="description" content="Outil de calcul et visualisation des chutes de tension réseau" />
     <meta name="author" content="Lovable" />
 
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#000000" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="Voltage Graph" />
-    <link rel="manifest" href="/manifest.json" />
-    <link rel="apple-touch-icon" href="/placeholder.svg" />
+    <meta name="apple-mobile-web-app-title" content="Calculateur de Tension" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="apple-touch-icon" href="placeholder.svg" />
 
-    <meta property="og:title" content="Voltage Graph" />
-    <meta property="og:description" content="Network voltage calculation and visualization tool" />
+    <meta property="og:title" content="Calculateur de Tension" />
+    <meta property="og:description" content="Outil de calcul et visualisation des chutes de tension réseau" />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@lovable_dev" />
     <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+
+    <!-- SPA redirect script for GitHub Pages -->
+    <script type="text/javascript">
+      (function(l) {
+        if (l.search[1] === '/' ) {
+          var decoded = l.search.slice(1).split('&').map(function(s) { 
+            return s.replace(/~and~/g, '&')
+          }).join('?');
+          window.history.replaceState(null, null,
+              l.pathname.slice(0, -1) + decoded + l.hash
+          );
+        }
+      }(window.location))
+    </script>
   </head>
 
   <body>
@@ -31,7 +45,7 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
+          navigator.serviceWorker.register('sw.js')
             .then((registration) => {
               console.log('SW registered: ', registration);
             })

@@ -2,7 +2,7 @@
 
 ## Vue d'ensemble
 
-Cette application permet de calculer les chutes de tension dans un réseau électrique en créant visuellement des nœuds et des câbles sur une carte interactive, puis en générant des rapports PDF détaillés.
+Cette application permet de calculer les chutes de tension dans un réseau électrique en créant visuellement des nœuds et des câbles sur une carte interactive, puis en générant des rapports PDF détaillés
 
 ## Architecture
 

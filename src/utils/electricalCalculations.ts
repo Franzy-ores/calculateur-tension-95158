@@ -1247,10 +1247,12 @@ export class ElectricalCalculator {
         const dVC = abs(mul(Z, IC));
 
         const current_A = Math.max(IA_mag, IB_mag, IC_mag);
-        // Pour TRI_230V_3F, pas de conversion car travail direct en composé
-        const deltaU_line_V = distalNode.connectionType === 'TRI_230V_3F' 
-          ? Math.max(dVA, dVB, dVC) // Direct en 230V composé
-          : Math.max(dVA, dVB, dVC) * (isThreePhase ? Math.sqrt(3) : 1);
+        // ===== CORRECTION : Appliquer √3 pour TOUS les réseaux triphasés (triangle ET étoile) =====
+        // Formule officielle: ΔU = √3 × I × (R×cosφ + X×sinφ) × L
+        // Le facteur √3 convertit la chute de tension par phase en chute de tension ligne-ligne
+        const deltaU_line_V = isThreePhase 
+          ? Math.max(dVA, dVB, dVC) * Math.sqrt(3)
+          : Math.max(dVA, dVB, dVC);
 
         // Base voltage for percent
         let { U_base } = this.getVoltage(distalNode.connectionType);
@@ -1702,10 +1704,11 @@ export class ElectricalCalculator {
       const Iph = I_branch.get(cab.id) || C(0, 0);
       const dVph = mul(Z!, Iph);
       const current_A = abs(Iph);
-      // Pour TRI_230V_3F, pas de conversion car travail direct en composé
-      const deltaU_line_V = distalNode.connectionType === 'TRI_230V_3F' 
-        ? abs(dVph) // Direct en 230V composé
-        : abs(dVph) * (isThreePhase ? Math.sqrt(3) : 1);
+      // ===== CORRECTION : Appliquer √3 pour TOUS les réseaux triphasés (triangle ET étoile) =====
+      // Formule officielle: ΔU = √3 × I × (R×cosφ + X×sinφ) × L
+      const deltaU_line_V = isThreePhase 
+        ? abs(dVph) * Math.sqrt(3)
+        : abs(dVph);
 
       // Base voltage for percent: prefer source target voltage if provided
       let { U_base } = this.getVoltage(distalNode.connectionType);

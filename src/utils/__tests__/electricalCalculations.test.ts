@@ -394,4 +394,62 @@ describe('ElectricalCalculator - basic LV radial cases', () => {
     console.log(`📊 Pertes globales: Mono=${resultMono.globalLosses_kW.toFixed(3)}kW, Poly=${resultPoly.globalLosses_kW.toFixed(3)}kW, Diff=${diffLossesPct.toFixed(1)}%`);
     expect(diffLossesPct).toBeLessThan(10);
   });
+
+  // ==================== CAS 9: Hausse de tension en production 230V triangle ====================
+  // Vérifier que l'injection PV cause bien une hausse de tension avec √3
+  it('Cas 9: Réseau 230V triangle - Hausse de tension en production avec √3', () => {
+    const calc = new ElectricalCalculator(1.0);
+    
+    const cableType = mkCableType('t1', 0.32, 0.08, 0.64, 0.10);
+    
+    const nodes: Node[] = [
+      { id: 'src', name: 'Source', lat: 0, lng: 0, connectionType: 'TRI_230V_3F', clients: [], productions: [], isSource: true },
+      { id: 'n1', name: 'Node1', lat: degLatForMeters(100), lng: 0, connectionType: 'TRI_230V_3F', clients: [], productions: [{ id: 'pv1', label: 'PV', S_kVA: 30 }] }
+    ];
+    
+    const cables: Cable[] = [
+      { id: 'cab1', name: 'C1', typeId: 't1', pose: 'AÉRIEN', nodeAId: 'src', nodeBId: 'n1', coordinates: [{ lat: 0, lng: 0 }, { lat: degLatForMeters(100), lng: 0 }] }
+    ];
+    
+    // ===== CALCUL MODE PRODUCTION =====
+    const result = calc.calculateScenario(
+      nodes, cables, [cableType], 'PRODUCTION' as CalculationScenario,
+      100, 100, undefined, 'polyphase_equilibre', 0, undefined
+    );
+    
+    // ===== VÉRIFICATIONS =====
+    const cable = result.cables.find(c => c.id === 'cab1');
+    expect(cable).toBeDefined();
+    
+    if (cable) {
+      const I = cable.current_A!;
+      const L_km = 0.1; // 100m
+      const R12 = cableType.R12_ohm_per_km;
+      
+      // Formule: ΔU = √3 × R12 × I × L (avec √3 pour triphasé)
+      const deltaV_theory = Math.sqrt(3) * R12 * I * L_km;
+      
+      console.log(`📊 Hausse de tension 230V triangle (production):`);
+      console.log(`   - Courant: ${I.toFixed(2)}A`);
+      console.log(`   - Théorique (√3 × R × I × L): ${deltaV_theory.toFixed(2)}V`);
+      console.log(`   - Calculée: ${cable.voltageDrop_V!.toFixed(2)}V`);
+      
+      // La chute de tension en mode production doit être négative (hausse de tension)
+      // ou positive selon la convention (valeur absolue)
+      expect(cable.voltageDrop_V!).toBeGreaterThan(0);
+      
+      // Tolérance: différence < 20% (effets réactifs + convergence)
+      const diff = Math.abs(cable.voltageDrop_V! - deltaV_theory);
+      const diffPct = (diff / deltaV_theory) * 100;
+      expect(diffPct).toBeLessThan(20);
+      
+      // Vérification que le facteur √3 est bien appliqué
+      // Si √3 n'était pas appliqué, la valeur serait ~1.73x plus petite
+      const deltaV_without_sqrt3 = R12 * I * L_km;
+      const ratio = cable.voltageDrop_V! / deltaV_without_sqrt3;
+      console.log(`   - Ratio calculé/sans√3: ${ratio.toFixed(2)} (attendu ~√3 ≈ 1.73)`);
+      expect(ratio).toBeGreaterThan(1.5); // Doit être proche de √3 = 1.73
+      expect(ratio).toBeLessThan(2.0);
+    }
+  });
 });

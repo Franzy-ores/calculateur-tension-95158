@@ -413,30 +413,77 @@ export function calculateNodeAutoPhaseDistribution(
   });
   
   // === 2. CHARGES/PRODUCTIONS MANUELLES DU NŒUD ===
-  const manualChargeTotal = node.clients.reduce((sum, c) => sum + c.S_kVA, 0);
-  const manualProdTotal = node.productions.reduce((sum, p) => sum + p.S_kVA, 0);
+  // ✅ Correction : traiter chaque charge/production manuelle individuellement selon sa phase assignée
   
   if (node.manualLoadType === 'MONO') {
-    // Charges manuelles MONO : appliquer répartition manuelle (%)
-    // ✅ Curseurs CHARGES pour les charges
-    const ratioChargesA = manualPhaseDistributionCharges.A / 100;
-    const ratioChargesB = manualPhaseDistributionCharges.B / 100;
-    const ratioChargesC = manualPhaseDistributionCharges.C / 100;
+    // Charges manuelles MONO : chaque charge a sa propre phase assignée
+    node.clients.forEach(client => {
+      const chargeKVA = client.S_kVA;
+      
+      if (networkVoltage === 'TRIPHASÉ_230V' && client.phaseCoupling) {
+        // 230V : 50/50 sur le couplage assigné
+        if (client.phaseCoupling === 'A-B') {
+          result.charges.mono.A += chargeKVA * 0.5;
+          result.charges.mono.B += chargeKVA * 0.5;
+        } else if (client.phaseCoupling === 'B-C') {
+          result.charges.mono.B += chargeKVA * 0.5;
+          result.charges.mono.C += chargeKVA * 0.5;
+        } else if (client.phaseCoupling === 'A-C') {
+          result.charges.mono.A += chargeKVA * 0.5;
+          result.charges.mono.C += chargeKVA * 0.5;
+        } else {
+          // Fallback : utiliser curseurs globaux si pas de couplage assigné
+          result.charges.mono.A += chargeKVA * (manualPhaseDistributionCharges.A / 100);
+          result.charges.mono.B += chargeKVA * (manualPhaseDistributionCharges.B / 100);
+          result.charges.mono.C += chargeKVA * (manualPhaseDistributionCharges.C / 100);
+        }
+      } else if (client.assignedPhase) {
+        // 400V : 100% sur la phase assignée
+        result.charges.mono[client.assignedPhase] += chargeKVA;
+      } else {
+        // Fallback : utiliser curseurs globaux si pas de phase assignée
+        result.charges.mono.A += chargeKVA * (manualPhaseDistributionCharges.A / 100);
+        result.charges.mono.B += chargeKVA * (manualPhaseDistributionCharges.B / 100);
+        result.charges.mono.C += chargeKVA * (manualPhaseDistributionCharges.C / 100);
+      }
+    });
     
-    // ✅ Curseurs PRODUCTIONS pour les productions
-    const ratioProdsA = manualPhaseDistributionProductions.A / 100;
-    const ratioProdsB = manualPhaseDistributionProductions.B / 100;
-    const ratioProdsC = manualPhaseDistributionProductions.C / 100;
-    
-    result.charges.mono.A += manualChargeTotal * ratioChargesA;
-    result.charges.mono.B += manualChargeTotal * ratioChargesB;
-    result.charges.mono.C += manualChargeTotal * ratioChargesC;
-    
-    result.productions.mono.A += manualProdTotal * ratioProdsA;
-    result.productions.mono.B += manualProdTotal * ratioProdsB;
-    result.productions.mono.C += manualProdTotal * ratioProdsC;
+    // Productions manuelles MONO : chaque production a sa propre phase assignée
+    node.productions.forEach(prod => {
+      const prodKVA = prod.S_kVA;
+      
+      if (networkVoltage === 'TRIPHASÉ_230V' && prod.phaseCoupling) {
+        // 230V : 50/50 sur le couplage assigné
+        if (prod.phaseCoupling === 'A-B') {
+          result.productions.mono.A += prodKVA * 0.5;
+          result.productions.mono.B += prodKVA * 0.5;
+        } else if (prod.phaseCoupling === 'B-C') {
+          result.productions.mono.B += prodKVA * 0.5;
+          result.productions.mono.C += prodKVA * 0.5;
+        } else if (prod.phaseCoupling === 'A-C') {
+          result.productions.mono.A += prodKVA * 0.5;
+          result.productions.mono.C += prodKVA * 0.5;
+        } else {
+          // Fallback : utiliser curseurs globaux
+          result.productions.mono.A += prodKVA * (manualPhaseDistributionProductions.A / 100);
+          result.productions.mono.B += prodKVA * (manualPhaseDistributionProductions.B / 100);
+          result.productions.mono.C += prodKVA * (manualPhaseDistributionProductions.C / 100);
+        }
+      } else if (prod.assignedPhase) {
+        // 400V : 100% sur la phase assignée
+        result.productions.mono[prod.assignedPhase] += prodKVA;
+      } else {
+        // Fallback : utiliser curseurs globaux
+        result.productions.mono.A += prodKVA * (manualPhaseDistributionProductions.A / 100);
+        result.productions.mono.B += prodKVA * (manualPhaseDistributionProductions.B / 100);
+        result.productions.mono.C += prodKVA * (manualPhaseDistributionProductions.C / 100);
+      }
+    });
   } else {
-    // Charges manuelles POLY : répartir équitablement
+    // Charges manuelles POLY : répartir équitablement (33.33%)
+    const manualChargeTotal = node.clients.reduce((sum, c) => sum + c.S_kVA, 0);
+    const manualProdTotal = node.productions.reduce((sum, p) => sum + p.S_kVA, 0);
+    
     result.charges.poly.A += manualChargeTotal / 3;
     result.charges.poly.B += manualChargeTotal / 3;
     result.charges.poly.C += manualChargeTotal / 3;

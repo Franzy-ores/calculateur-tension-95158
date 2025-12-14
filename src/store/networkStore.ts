@@ -285,7 +285,8 @@ const createDefaultProject2 = (name: string, voltageSystem: VoltageSystem): Proj
   transformerConfig: createDefaultTransformerConfig(voltageSystem), // Configuration transformateur adaptée au système
   loadModel: 'mixte_mono_poly', // NOUVEAU : mode mixte par défaut
   desequilibrePourcent: 0,
-  addEmptyNodeByDefault: false, // Par défaut, on garde le comportement actuel
+  addEmptyNodeByDefault: true, // Par défaut, ajouter des nœuds vierges
+  treatSmallPolyProductionsAsMono: true, // Par défaut, traiter productions TRI/TETRA ≤5kVA comme MONO
   manualPhaseDistribution: {
     charges: { A: 33.33, B: 33.33, C: 33.34 },
     productions: { A: 33.33, B: 33.33, C: 33.34 },
@@ -560,7 +561,12 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
 
     // Rétrocompatibilité: définir addEmptyNodeByDefault si non défini
     if (project.addEmptyNodeByDefault === undefined) {
-      project.addEmptyNodeByDefault = false;
+      project.addEmptyNodeByDefault = true;
+    }
+    
+    // Rétrocompatibilité: définir treatSmallPolyProductionsAsMono si non défini
+    if (project.treatSmallPolyProductionsAsMono === undefined) {
+      project.treatSmallPolyProductionsAsMono = true;
     }
 
     // Calculer les bounds géographiques si pas encore définis

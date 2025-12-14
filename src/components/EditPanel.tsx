@@ -88,8 +88,8 @@ export const EditPanel = () => {
           defaultProductionKVA: currentProject.defaultProductionKVA || 5,
           loadModel: currentProject.loadModel ?? 'polyphase_equilibre',
           desequilibrePourcent: currentProject.desequilibrePourcent ?? 0,
-          addEmptyNodeByDefault: currentProject.addEmptyNodeByDefault || false,
-          treatSmallPolyProductionsAsMono: currentProject.treatSmallPolyProductionsAsMono || false
+          addEmptyNodeByDefault: currentProject.addEmptyNodeByDefault ?? true,
+          treatSmallPolyProductionsAsMono: currentProject.treatSmallPolyProductionsAsMono ?? true
         });
       }
     }

@@ -1295,14 +1295,15 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     );
     
     // Calculer distribution (Option B: curseurs toujours appliqués)
+    // ✅ Correction : passer les coefficients de foisonnement pour calculer foisonneAvecCurseurs
     const distribution = calculateNodeAutoPhaseDistribution(
       node,
       linkedClients,
       state.currentProject.manualPhaseDistribution?.charges || { A: 33.33, B: 33.33, C: 33.34 },
       state.currentProject.manualPhaseDistribution?.productions || { A: 33.33, B: 33.33, C: 33.34 },
       state.currentProject.voltageSystem,
-      undefined, // foisonnementCharges
-      undefined, // foisonnementProductions
+      state.currentProject.foisonnementCharges ?? 100, // ✅ Passer foisonnement charges
+      state.currentProject.foisonnementProductions ?? 100, // ✅ Passer foisonnement productions
       state.currentProject.treatSmallPolyProductionsAsMono || false
     );
     

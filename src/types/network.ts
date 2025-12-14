@@ -147,12 +147,18 @@ export interface ClientCharge {
   id: string;
   label: string;
   S_kVA: number; // par défaut 5 kVA
+  // NOUVEAU : Phase assignée pour les charges manuelles en mode mixte MONO
+  assignedPhase?: 'A' | 'B' | 'C';
+  phaseCoupling?: 'A-B' | 'B-C' | 'A-C'; // Pour réseau 230V
 }
 
 export interface ProductionPV {
   id: string;
   label: string;
   S_kVA: number; // par défaut 5 kVA
+  // NOUVEAU : Phase assignée pour les productions manuelles en mode mixte MONO
+  assignedPhase?: 'A' | 'B' | 'C';
+  phaseCoupling?: 'A-B' | 'B-C' | 'A-C'; // Pour réseau 230V
 }
 
 export interface Node {

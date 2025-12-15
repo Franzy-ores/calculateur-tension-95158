@@ -260,6 +260,11 @@ interface NodePhaseDistributionResult {
     total: { A: number; B: number; C: number };
     foisonneAvecCurseurs?: { A: number; B: number; C: number }; // Valeurs foisonnées avec curseurs de déséquilibre
   };
+  // NOUVEAU : Charges phase-phase pour réseau 230V triangle (pour calcul correct du courant)
+  phasePhaseLoads?: {
+    charges: { 'A-B': number; 'B-C': number; 'A-C': number };
+    productions: { 'A-B': number; 'B-C': number; 'A-C': number };
+  };
   monoClientsCount: { A: number; B: number; C: number };
   polyClientsCount: number;
   unbalancePercent: number; // Déséquilibre mesuré (max écart vs moyenne)

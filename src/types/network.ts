@@ -197,6 +197,12 @@ export interface Node {
       total: { A: number; B: number; C: number };
       foisonneAvecCurseurs?: { A: number; B: number; C: number }; // Valeurs foisonnées avec curseurs de déséquilibre
     };
+    // NOUVEAU : Charges phase-phase pour réseau 230V triangle (pour calcul correct du courant)
+    // Le courant dans un couplage phase-phase est I = S_total / U_LL (pas S/2 / U_LL)
+    phasePhaseLoads?: {
+      charges: { 'A-B': number; 'B-C': number; 'A-C': number };  // kVA par couplage
+      productions: { 'A-B': number; 'B-C': number; 'A-C': number }; // kVA par couplage
+    };
     monoClientsCount: { A: number; B: number; C: number }; // Nombre de clients MONO par phase
     polyClientsCount: number; // Nombre total de clients TRI/TÉTRA
     unbalancePercent?: number; // Déséquilibre mesuré (max écart vs moyenne)

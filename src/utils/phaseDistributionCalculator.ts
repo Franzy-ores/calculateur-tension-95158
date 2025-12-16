@@ -295,6 +295,11 @@ export function calculateNodeAutoPhaseDistribution(
       poly: { A: 0, B: 0, C: 0 },
       total: { A: 0, B: 0, C: 0 }
     },
+    // NOUVEAU : Charges phase-phase pour calcul correct du courant en 230V triangle
+    phasePhaseLoads: {
+      charges: { 'A-B': 0, 'B-C': 0, 'A-C': 0 },
+      productions: { 'A-B': 0, 'B-C': 0, 'A-C': 0 }
+    },
     monoClientsCount: { A: 0, B: 0, C: 0 },
     polyClientsCount: 0,
     unbalancePercent: 0
@@ -312,22 +317,30 @@ export function calculateNodeAutoPhaseDistribution(
         let baseChargeA = 0, baseChargeB = 0, baseChargeC = 0;
         let baseProdA = 0, baseProdB = 0, baseProdC = 0;
         
-        // Répartition 50/50 sur chaque phase du couplage
+        // Répartition 50/50 sur chaque phase du couplage (pour affichage)
+        // MAIS stocker la puissance TOTALE dans phasePhaseLoads (pour calcul correct du courant)
         if (client.phaseCoupling === 'A-B') {
           baseChargeA = chargeKVA * 0.5;
           baseChargeB = chargeKVA * 0.5;
           baseProdA = prodKVA * 0.5;
           baseProdB = prodKVA * 0.5;
+          // ✅ NOUVEAU : Stocker la puissance TOTALE pour le couplage (pour I = S_total / U_LL)
+          result.phasePhaseLoads!.charges['A-B'] += chargeKVA;
+          result.phasePhaseLoads!.productions['A-B'] += prodKVA;
         } else if (client.phaseCoupling === 'B-C') {
           baseChargeB = chargeKVA * 0.5;
           baseChargeC = chargeKVA * 0.5;
           baseProdB = prodKVA * 0.5;
           baseProdC = prodKVA * 0.5;
+          result.phasePhaseLoads!.charges['B-C'] += chargeKVA;
+          result.phasePhaseLoads!.productions['B-C'] += prodKVA;
         } else if (client.phaseCoupling === 'A-C') {
           baseChargeA = chargeKVA * 0.5;
           baseChargeC = chargeKVA * 0.5;
           baseProdA = prodKVA * 0.5;
           baseProdC = prodKVA * 0.5;
+          result.phasePhaseLoads!.charges['A-C'] += chargeKVA;
+          result.phasePhaseLoads!.productions['A-C'] += prodKVA;
         }
         
         // Distribution physique SANS curseurs de déséquilibre
@@ -385,12 +398,16 @@ export function calculateNodeAutoPhaseDistribution(
           if (client.productionPhaseCoupling === 'A-B') {
             result.productions.mono.A += totalProd * 0.5;
             result.productions.mono.B += totalProd * 0.5;
+            // ✅ NOUVEAU : Stocker la puissance TOTALE pour le couplage
+            result.phasePhaseLoads!.productions['A-B'] += totalProd;
           } else if (client.productionPhaseCoupling === 'B-C') {
             result.productions.mono.B += totalProd * 0.5;
             result.productions.mono.C += totalProd * 0.5;
+            result.phasePhaseLoads!.productions['B-C'] += totalProd;
           } else if (client.productionPhaseCoupling === 'A-C') {
             result.productions.mono.A += totalProd * 0.5;
             result.productions.mono.C += totalProd * 0.5;
+            result.phasePhaseLoads!.productions['A-C'] += totalProd;
           } else {
             // Fallback si pas de couplage assigné : répartir équitablement
             result.productions.poly.A += totalProd / 3;
@@ -430,12 +447,16 @@ export function calculateNodeAutoPhaseDistribution(
         if (client.phaseCoupling === 'A-B') {
           result.charges.mono.A += chargeKVA * 0.5;
           result.charges.mono.B += chargeKVA * 0.5;
+          // ✅ NOUVEAU : Stocker la puissance TOTALE pour le couplage
+          result.phasePhaseLoads!.charges['A-B'] += chargeKVA;
         } else if (client.phaseCoupling === 'B-C') {
           result.charges.mono.B += chargeKVA * 0.5;
           result.charges.mono.C += chargeKVA * 0.5;
+          result.phasePhaseLoads!.charges['B-C'] += chargeKVA;
         } else if (client.phaseCoupling === 'A-C') {
           result.charges.mono.A += chargeKVA * 0.5;
           result.charges.mono.C += chargeKVA * 0.5;
+          result.phasePhaseLoads!.charges['A-C'] += chargeKVA;
         } else {
           // Fallback : utiliser curseurs globaux si pas de couplage assigné
           result.charges.mono.A += chargeKVA * (manualPhaseDistributionCharges.A / 100);
@@ -462,12 +483,16 @@ export function calculateNodeAutoPhaseDistribution(
         if (prod.phaseCoupling === 'A-B') {
           result.productions.mono.A += prodKVA * 0.5;
           result.productions.mono.B += prodKVA * 0.5;
+          // ✅ NOUVEAU : Stocker la puissance TOTALE pour le couplage
+          result.phasePhaseLoads!.productions['A-B'] += prodKVA;
         } else if (prod.phaseCoupling === 'B-C') {
           result.productions.mono.B += prodKVA * 0.5;
           result.productions.mono.C += prodKVA * 0.5;
+          result.phasePhaseLoads!.productions['B-C'] += prodKVA;
         } else if (prod.phaseCoupling === 'A-C') {
           result.productions.mono.A += prodKVA * 0.5;
           result.productions.mono.C += prodKVA * 0.5;
+          result.phasePhaseLoads!.productions['A-C'] += prodKVA;
         } else {
           // Fallback : utiliser curseurs globaux
           result.productions.mono.A += prodKVA * (manualPhaseDistributionProductions.A / 100);

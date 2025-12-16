@@ -970,6 +970,41 @@ export class ElectricalCalculator {
         S_B_map.set(n.id, C(P_B_net_kW * 1000, Q_B_net_kVAr * 1000));
         S_C_map.set(n.id, C(P_C_net_kW * 1000, Q_C_net_kVAr * 1000));
 
+        // ===== CORRECTION MONO 230V PHASE-PHASE =====
+        // Pour les réseaux 230V triangle, les charges MONO sont entre phases (A-B, B-C, A-C).
+        // Le courant de ligne est I = S_total / U_LL, pas I = (S_total/2) / U_LL.
+        // La distribution actuelle met S/2 sur chaque phase du couplage, ce qui sous-estime le courant de 2x.
+        // On corrige en ajoutant la puissance manquante basée sur phasePhaseLoads.
+        const is230VTriangle = U_line_base < ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
+        if (is230VTriangle && n.autoPhaseDistribution?.phasePhaseLoads) {
+          const ppLoads = n.autoPhaseDistribution.phasePhaseLoads;
+          const foisCoeff = foisonnementCharges ? foisonnementCharges / 100 : 1;
+          
+          // NET des charges et productions par couplage (avec foisonnement)
+          const S_AB_net = (ppLoads.charges['A-B'] - ppLoads.productions['A-B']) * foisCoeff;
+          const S_BC_net = (ppLoads.charges['B-C'] - ppLoads.productions['B-C']) * foisCoeff;
+          const S_AC_net = (ppLoads.charges['A-C'] - ppLoads.productions['A-C']) * foisCoeff;
+          
+          // Correction pour chaque phase : ajouter la moitié manquante des couplages
+          const S_A_mono_correction_kVA = (S_AB_net + S_AC_net) / 2;
+          const S_B_mono_correction_kVA = (S_AB_net + S_BC_net) / 2;
+          const S_C_mono_correction_kVA = (S_BC_net + S_AC_net) / 2;
+          
+          // Appliquer la correction (avec cos phi)
+          const P_correction_A = S_A_mono_correction_kVA * cosPhiCharges_eff * 1000;
+          const Q_correction_A = S_A_mono_correction_kVA * sinPhiCharges * 1000;
+          const P_correction_B = S_B_mono_correction_kVA * cosPhiCharges_eff * 1000;
+          const Q_correction_B = S_B_mono_correction_kVA * sinPhiCharges * 1000;
+          const P_correction_C = S_C_mono_correction_kVA * cosPhiCharges_eff * 1000;
+          const Q_correction_C = S_C_mono_correction_kVA * sinPhiCharges * 1000;
+          
+          S_A_map.set(n.id, add(S_A_map.get(n.id) || C(0,0), C(P_correction_A, Q_correction_A)));
+          S_B_map.set(n.id, add(S_B_map.get(n.id) || C(0,0), C(P_correction_B, Q_correction_B)));
+          S_C_map.set(n.id, add(S_C_map.get(n.id) || C(0,0), C(P_correction_C, Q_correction_C)));
+          
+          console.log(`🔧 Correction MONO 230V phase-phase nœud ${n.name || n.id}: A-B=${S_AB_net.toFixed(1)}kVA, B-C=${S_BC_net.toFixed(1)}kVA, A-C=${S_AC_net.toFixed(1)}kVA`);
+        }
+
         // Intégrer les contributions explicites P/Q (équipements virtuels)
         const addExtra = (items: any[], sign: 1 | -1) => {
           for (const it of items || []) {

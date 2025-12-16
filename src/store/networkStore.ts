@@ -2243,12 +2243,22 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       simulationEquipment: {
         ...simulationEquipment,
         cableReplacement: config || undefined
-      }
+      },
+      // Activer automatiquement isSimulationActive quand une config de remplacement est définie
+      isSimulationActive: config?.enabled ?? get().isSimulationActive
     });
     
     if (config) {
       toast.success(`Simulation de remplacement configurée: ${config.affectedCableIds.length} câble(s)`);
     } else {
+      // Vérifier s'il reste d'autres équipements actifs, sinon désactiver isSimulationActive
+      const otherActiveEquipment = 
+        (simulationEquipment.srg2Devices?.some(s => s.enabled) || false) ||
+        simulationEquipment.neutralCompensators.some(c => c.enabled);
+      
+      if (!otherActiveEquipment) {
+        set({ isSimulationActive: false });
+      }
       toast.info('Simulation de remplacement annulée');
     }
   },

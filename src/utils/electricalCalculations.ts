@@ -984,10 +984,29 @@ export class ElectricalCalculator {
         const is230VTriangle = U_line_base < ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
         if (is230VTriangle && n.autoPhaseDistribution?.phasePhaseLoads) {
           const ppLoads = n.autoPhaseDistribution.phasePhaseLoads;
-          const foisChargeCoeff = foisonnementCharges ? foisonnementCharges / 100 : 1;
-          const foisProdCoeff = foisonnementProductions ? foisonnementProductions / 100 : 1;
+          
+          // FIX: Utiliser ?? pour éviter que 0 soit traité comme falsy
+          const foisChargeCoeff = (foisonnementCharges ?? 100) / 100;
+          const foisProdCoeff = (foisonnementProductions ?? 100) / 100;
+          
+          // Appliquer les curseurs de déséquilibre aux phasePhaseLoads
+          // Les curseurs définissent la répartition finale souhaitée par l'utilisateur
+          // On calcule le ratio de chaque phase dans chaque couplage
+          const totalChargePercent = pA_charges + pB_charges + pC_charges;
+          const totalProdPercent = pA_productions + pB_productions + pC_productions;
+          
+          // Pour A-B: les phases A et B contribuent
+          // Ratio de A dans A-B = pA / (pA + pB), Ratio de B dans A-B = pB / (pA + pB)
+          const ratioAB_A_charges = (pA_charges + pB_charges) > 0 ? pA_charges / (pA_charges + pB_charges) : 0.5;
+          const ratioBC_B_charges = (pB_charges + pC_charges) > 0 ? pB_charges / (pB_charges + pC_charges) : 0.5;
+          const ratioAC_A_charges = (pA_charges + pC_charges) > 0 ? pA_charges / (pA_charges + pC_charges) : 0.5;
+          
+          const ratioAB_A_prods = (pA_productions + pB_productions) > 0 ? pA_productions / (pA_productions + pB_productions) : 0.5;
+          const ratioBC_B_prods = (pB_productions + pC_productions) > 0 ? pB_productions / (pB_productions + pC_productions) : 0.5;
+          const ratioAC_A_prods = (pA_productions + pC_productions) > 0 ? pA_productions / (pA_productions + pC_productions) : 0.5;
           
           // NET des charges et productions par couplage (avec foisonnement séparé)
+          // Pondéré par les ratios des curseurs de déséquilibre
           const S_AB_charges = ppLoads.charges['A-B'] * foisChargeCoeff;
           const S_AB_prods = ppLoads.productions['A-B'] * foisProdCoeff;
           const S_AB_net = S_AB_charges - S_AB_prods;

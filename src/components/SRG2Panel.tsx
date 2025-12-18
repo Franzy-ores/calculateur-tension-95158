@@ -5,18 +5,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Progress } from "@/components/ui/progress";
 import { useNetworkStore } from "@/store/networkStore";
 import { SRG2Config } from "@/types/srg2";
 import { NodeSelector } from "@/components/NodeSelector";
 import { 
   Zap, 
-  Settings, 
+  Plug,
   Trash2,
   Plus,
   AlertTriangle,
   CheckCircle,
-  Activity
+  Activity,
+  MapPin
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export const SRG2Panel = () => {
   const {
@@ -408,59 +411,138 @@ export const SRG2Panel = () => {
 
       {/* Affichage des puissances aval pour tous les SRG2 */}
       {simulationEquipment.srg2Devices && simulationEquipment.srg2Devices.length > 0 && (
-        <Card className="p-3">
-          <div className="text-xs font-medium mb-2">Puissances aval foisonnées:</div>
-          <div className="space-y-2">
-            {simulationEquipment.srg2Devices.map(srg2 => {
-              const powers = calculateDownstreamPowers(srg2);
-              
-              let badgeVariant: "default" | "warning" | "destructive" = "default";
-              let badgeLabel = "Dans les limites";
-              
-              if (!powers.isWithinLimits) {
-                badgeVariant = "destructive";
-                badgeLabel = "Limite dépassée";
-              } else if (powers.ratioCharge > 0.8 || powers.ratioProduction > 0.8) {
-                badgeVariant = "warning";
-                badgeLabel = "Proche limite";
-              }
-              
-              return (
-                <div key={srg2.id} className="border rounded p-2 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium">{srg2.name}</span>
-                    <Badge variant={badgeVariant} className="text-xs">
-                      {badgeLabel}
-                    </Badge>
+        <div className="space-y-3">
+          {simulationEquipment.srg2Devices.map(srg2 => {
+            const powers = calculateDownstreamPowers(srg2);
+            
+            const getProgressColor = (ratio: number) => {
+              if (ratio > 1) return 'bg-destructive';
+              if (ratio > 0.8) return 'bg-orange-500';
+              if (ratio > 0.7) return 'bg-yellow-500';
+              return 'bg-green-500';
+            };
+            
+            let badgeVariant: "default" | "secondary" | "destructive" = "default";
+            let badgeLabel = "OK";
+            
+            if (!powers.isWithinLimits) {
+              badgeVariant = "destructive";
+              badgeLabel = "Dépassement";
+            } else if (powers.ratioCharge > 0.8 || powers.ratioProduction > 0.8) {
+              badgeVariant = "secondary";
+              badgeLabel = "Attention";
+            }
+            
+            return (
+              <Card key={srg2.id} className="overflow-hidden">
+                {/* Header amélioré */}
+                <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+                  <div className="flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-primary" />
+                    <span className="font-semibold text-sm">{srg2.name}</span>
+                  </div>
+                  <Badge 
+                    variant={badgeVariant}
+                    className={cn(
+                      "px-2 py-0.5 flex items-center gap-1",
+                      badgeVariant === "default" && "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300"
+                    )}
+                  >
+                    {powers.isWithinLimits ? (
+                      <CheckCircle className="h-3 w-3" />
+                    ) : (
+                      <AlertTriangle className="h-3 w-3" />
+                    )}
+                    {badgeLabel}
+                  </Badge>
+                </div>
+                
+                {/* Grille 2 colonnes Production / Charge */}
+                <div className="grid grid-cols-2 gap-3 p-3">
+                  {/* Colonne Production */}
+                  <div className="bg-orange-50 dark:bg-orange-950/30 rounded-lg p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Zap className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                      <span className="text-xs font-medium text-orange-800 dark:text-orange-300">Production</span>
+                    </div>
+                    <div className="text-lg font-bold">
+                      {powers.totalProductionKVA.toFixed(1)}
+                      <span className="text-xs font-normal text-muted-foreground ml-1">/ {LIMITE_PRODUCTION_KVA} kVA</span>
+                    </div>
+                    <div className="relative">
+                      <Progress 
+                        value={Math.min(powers.ratioProduction * 100, 100)} 
+                        className="h-2 bg-orange-200 dark:bg-orange-900/50"
+                      />
+                      <div 
+                        className={cn(
+                          "absolute inset-0 h-2 rounded-full transition-all",
+                          getProgressColor(powers.ratioProduction)
+                        )}
+                        style={{ width: `${Math.min(powers.ratioProduction * 100, 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-end gap-1 text-xs">
+                      <span className={cn(
+                        "font-medium",
+                        powers.ratioProduction > 1 && "text-destructive",
+                        powers.ratioProduction > 0.8 && powers.ratioProduction <= 1 && "text-orange-600 dark:text-orange-400"
+                      )}>
+                        {(powers.ratioProduction * 100).toFixed(0)}%
+                      </span>
+                      {!powers.productionWithinLimit && (
+                        <AlertTriangle className="h-3 w-3 text-destructive" />
+                      )}
+                    </div>
                   </div>
                   
-                  {/* Production avec indicateur de limite */}
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Production:</span>
-                    <span className={!powers.productionWithinLimit ? 'text-destructive font-bold' : 'font-medium'}>
-                      {powers.totalProductionKVA.toFixed(1)} / {LIMITE_PRODUCTION_KVA} kVA
-                      {!powers.productionWithinLimit && ' ⚠️'}
-                    </span>
-                  </div>
-                  
-                  {/* Charge avec indicateur de limite */}
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Charge:</span>
-                    <span className={!powers.chargeWithinLimit ? 'text-destructive font-bold' : 'font-medium'}>
-                      {powers.totalChargeKVA.toFixed(1)} / {LIMITE_CHARGE_KVA} kVA
-                      {!powers.chargeWithinLimit && ' ⚠️'}
-                    </span>
-                  </div>
-                  
-                  {/* Nombre de nœuds */}
-                  <div className="text-xs text-muted-foreground">
-                    {powers.nodeCount} nœud{powers.nodeCount > 1 ? 's' : ''} en aval
+                  {/* Colonne Charge */}
+                  <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Plug className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <span className="text-xs font-medium text-blue-800 dark:text-blue-300">Charge</span>
+                    </div>
+                    <div className="text-lg font-bold">
+                      {powers.totalChargeKVA.toFixed(1)}
+                      <span className="text-xs font-normal text-muted-foreground ml-1">/ {LIMITE_CHARGE_KVA} kVA</span>
+                    </div>
+                    <div className="relative">
+                      <Progress 
+                        value={Math.min(powers.ratioCharge * 100, 100)} 
+                        className="h-2 bg-blue-200 dark:bg-blue-900/50"
+                      />
+                      <div 
+                        className={cn(
+                          "absolute inset-0 h-2 rounded-full transition-all",
+                          getProgressColor(powers.ratioCharge)
+                        )}
+                        style={{ width: `${Math.min(powers.ratioCharge * 100, 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-end gap-1 text-xs">
+                      <span className={cn(
+                        "font-medium",
+                        powers.ratioCharge > 1 && "text-destructive",
+                        powers.ratioCharge > 0.8 && powers.ratioCharge <= 1 && "text-blue-600 dark:text-blue-400"
+                      )}>
+                        {(powers.ratioCharge * 100).toFixed(0)}%
+                      </span>
+                      {!powers.chargeWithinLimit && (
+                        <AlertTriangle className="h-3 w-3 text-destructive" />
+                      )}
+                    </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </Card>
+                
+                {/* Footer avec nombre de nœuds */}
+                <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground py-2 border-t bg-muted/20">
+                  <MapPin className="h-3 w-3" />
+                  <span>{powers.nodeCount} nœud{powers.nodeCount > 1 ? 's' : ''} en aval</span>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
       )}
 
       {simulationEquipment.srg2Devices?.length === 0 ? (

@@ -106,6 +106,7 @@ export interface TransformerConfig {
   shortCircuitVoltage_percent: number; // Tension de court-circuit en %
   cosPhi: number;              // Facteur de puissance (peut être utilisé ailleurs, mais pas pour Ztr)
   xOverR?: number;             // Ratio X/R du transformateur (optionnel)
+  sourceVoltage?: number;      // Tension source en V (±5% de la tension nominale)
 }
 
 // Interface pour le jeu de barres virtuel

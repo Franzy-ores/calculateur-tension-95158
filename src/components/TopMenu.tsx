@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { FileText, Save, FolderOpen, Settings, Zap, FileDown, FileSpreadsheet } from "lucide-react";
 import { useNetworkStore } from "@/store/networkStore";
 import { PDFGenerator } from "@/utils/pdfGenerator";
@@ -54,7 +54,45 @@ export const TopMenu = ({
     toggleSimulationActive,
     clientColorMode,
     setClientColorMode,
+    updateAllCalculations,
   } = useNetworkStore();
+
+  // Source voltage slider state with debounce
+  const nominalVoltage = currentProject?.voltageSystem === 'TÉTRAPHASÉ_400V' ? 400 : 230;
+  const minVoltage = Math.round(nominalVoltage * 0.95 * 10) / 10;
+  const maxVoltage = Math.round(nominalVoltage * 1.05 * 10) / 10;
+  const currentSourceVoltage = currentProject?.transformerConfig?.sourceVoltage ?? nominalVoltage;
+  
+  const [localSourceVoltage, setLocalSourceVoltage] = useState(currentSourceVoltage);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Sync local state when project changes
+  useEffect(() => {
+    setLocalSourceVoltage(currentSourceVoltage);
+  }, [currentSourceVoltage]);
+  
+  // Debounced update for source voltage
+  useEffect(() => {
+    if (localSourceVoltage !== currentSourceVoltage && currentProject) {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+      debounceRef.current = setTimeout(() => {
+        updateProjectConfig({
+          transformerConfig: {
+            ...currentProject.transformerConfig,
+            sourceVoltage: localSourceVoltage
+          }
+        });
+        updateAllCalculations();
+      }, 300);
+    }
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, [localSourceVoltage]);
 
   // Calcul des puissances totales et foisonnées (manuel + clients importés)
   const connectedNodes = currentProject?.cables && currentProject?.nodes 
@@ -166,6 +204,30 @@ export const TopMenu = ({
                 })()}
               </Badge>
             )}
+
+            {/* Source Voltage Slider */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1.5 bg-yellow-500/20 px-2 py-0.5 rounded border border-yellow-500/30">
+                  <Zap className="h-3 w-3 text-yellow-400" />
+                  <span className="text-xs text-white whitespace-nowrap">U<sub>s</sub></span>
+                  <Slider
+                    value={[localSourceVoltage]}
+                    min={minVoltage}
+                    max={maxVoltage}
+                    step={0.5}
+                    onValueChange={(value) => setLocalSourceVoltage(value[0])}
+                    className="w-20"
+                  />
+                  <span className="text-xs font-mono text-yellow-300 w-12 text-right">
+                    {localSourceVoltage.toFixed(1)}V
+                  </span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Tension source ({minVoltage}V - {maxVoltage}V)</p>
+              </TooltipContent>
+            </Tooltip>
 
             {/* Simulation Toggle (if equipment exists) */}
             {((simulationEquipment.srg2Devices?.length || 0) > 0 || simulationEquipment.neutralCompensators.length > 0) && (

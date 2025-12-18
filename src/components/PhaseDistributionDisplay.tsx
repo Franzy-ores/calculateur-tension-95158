@@ -252,7 +252,7 @@ export const PhaseDistributionDisplay = () => {
   }[status];
 
   return (
-    <div className="flex flex-col gap-2 p-3 bg-white/5 rounded border border-white/10">
+    <div className="flex flex-col gap-2 p-2 bg-card/90 rounded border border-border/50">
       {/* Ligne 1: Titre, badge et stats clients */}
       <div className="flex items-center gap-3">
         <Button

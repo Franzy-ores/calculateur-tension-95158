@@ -183,15 +183,15 @@ All colors MUST be HSL.
   }
 }
 
-/* Forcer les marqueurs clients au premier plan */
-.client-marker {
+/* Forcer les marqueurs de nœuds au premier plan */
+.custom-node-marker {
   z-index: 1000 !important;
-  pointer-events: auto;
 }
 
-/* Assurer que les marqueurs de nœuds restent derrière */
-.custom-node-marker {
-  z-index: 0 !important;
+/* Assurer que les marqueurs clients restent derrière les nœuds */
+.client-marker {
+  z-index: 500 !important;
+  pointer-events: auto;
 }
 
 /* Garantir que les éléments interactifs des clients sont cliquables */

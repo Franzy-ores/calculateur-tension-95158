@@ -58,6 +58,10 @@ export const SRG2Panel = () => {
     return downstream;
   };
 
+  // Limites fixes SRG2
+  const LIMITE_CHARGE_KVA = 100;
+  const LIMITE_PRODUCTION_KVA = 85;
+
   // Fonction pour calculer les puissances foisonnées en aval
   const calculateDownstreamPowers = (srg2: SRG2Config) => {
     const downstreamNodeIds = findDownstreamNodes(srg2.nodeId);
@@ -80,18 +84,21 @@ export const SRG2Panel = () => {
       totalProductionKVA += productionsFoisonnees;
     });
     
-    const bilanNet = totalProductionKVA - totalChargeKVA; // positif = injection, négatif = prélèvement
-    const isInjection = bilanNet > 0;
-    const limit = isInjection ? 85 : 110;
-    const ratio = Math.abs(bilanNet) / limit;
+    // Vérification séparée de chaque limite (sans bilan net)
+    const ratioCharge = totalChargeKVA / LIMITE_CHARGE_KVA;
+    const ratioProduction = totalProductionKVA / LIMITE_PRODUCTION_KVA;
+    
+    const chargeWithinLimit = ratioCharge <= 1.0;
+    const productionWithinLimit = ratioProduction <= 1.0;
     
     return {
       totalChargeKVA,
       totalProductionKVA,
-      bilanNet,
-      isInjection,
-      ratio,
-      isWithinLimits: ratio <= 1.0,
+      ratioCharge,
+      ratioProduction,
+      chargeWithinLimit,
+      productionWithinLimit,
+      isWithinLimits: chargeWithinLimit && productionWithinLimit,
       nodeCount: downstreamNodeIds.length
     };
   };
@@ -288,19 +295,19 @@ export const SRG2Panel = () => {
           {/* Limites de puissance - Informations fixes */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-xs">Injection max (kVA)</Label>
+              <Label className="text-xs">Production max (kVA)</Label>
               <Input
                 type="number"
-                value={85}
+                value={LIMITE_PRODUCTION_KVA}
                 disabled
                 className="h-8 bg-muted"
               />
             </div>
             <div>
-              <Label className="text-xs">Prélèvement max (kVA)</Label>
+              <Label className="text-xs">Charge max (kVA)</Label>
               <Input
                 type="number"
-                value={110}
+                value={LIMITE_CHARGE_KVA}
                 disabled
                 className="h-8 bg-muted"
               />
@@ -406,15 +413,14 @@ export const SRG2Panel = () => {
           <div className="space-y-2">
             {simulationEquipment.srg2Devices.map(srg2 => {
               const powers = calculateDownstreamPowers(srg2);
-              const node = currentProject.nodes.find(n => n.id === srg2.nodeId);
               
               let badgeVariant: "default" | "warning" | "destructive" = "default";
               let badgeLabel = "Dans les limites";
               
-              if (powers.ratio > 1.0) {
+              if (!powers.isWithinLimits) {
                 badgeVariant = "destructive";
                 badgeLabel = "Limite dépassée";
-              } else if (powers.ratio > 0.8) {
+              } else if (powers.ratioCharge > 0.8 || powers.ratioProduction > 0.8) {
                 badgeVariant = "warning";
                 badgeLabel = "Proche limite";
               }
@@ -427,20 +433,28 @@ export const SRG2Panel = () => {
                       {badgeLabel}
                     </Badge>
                   </div>
-                  <div className="grid grid-cols-2 gap-1 text-xs text-muted-foreground">
-                    <div>Production: <span className="font-medium text-foreground">{powers.totalProductionKVA.toFixed(1)} kVA</span></div>
-                    <div>Charge: <span className="font-medium text-foreground">{powers.totalChargeKVA.toFixed(1)} kVA</span></div>
+                  
+                  {/* Production avec indicateur de limite */}
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Production:</span>
+                    <span className={!powers.productionWithinLimit ? 'text-destructive font-bold' : 'font-medium'}>
+                      {powers.totalProductionKVA.toFixed(1)} / {LIMITE_PRODUCTION_KVA} kVA
+                      {!powers.productionWithinLimit && ' ⚠️'}
+                    </span>
                   </div>
-                  <div className="text-xs">
-                    Bilan net: <span className={`font-medium ${powers.isInjection ? 'text-blue-600' : 'text-orange-600'}`}>
-                      {powers.bilanNet > 0 ? '+' : ''}{powers.bilanNet.toFixed(1)} kVA
+                  
+                  {/* Charge avec indicateur de limite */}
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Charge:</span>
+                    <span className={!powers.chargeWithinLimit ? 'text-destructive font-bold' : 'font-medium'}>
+                      {powers.totalChargeKVA.toFixed(1)} / {LIMITE_CHARGE_KVA} kVA
+                      {!powers.chargeWithinLimit && ' ⚠️'}
                     </span>
-                    <span className="text-muted-foreground ml-1">
-                      ({powers.isInjection ? 'injection' : 'prélèvement'})
-                    </span>
-                    <span className="text-muted-foreground ml-1">
-                      • {powers.nodeCount} nœud{powers.nodeCount > 1 ? 's' : ''}
-                    </span>
+                  </div>
+                  
+                  {/* Nombre de nœuds */}
+                  <div className="text-xs text-muted-foreground">
+                    {powers.nodeCount} nœud{powers.nodeCount > 1 ? 's' : ''} en aval
                   </div>
                 </div>
               );

@@ -1383,9 +1383,44 @@ export const MapView = () => {
         console.log('Current cable ID:', cable.id);
       }
       
+      // Determine cable color based on compliance (applies to all cables including replaced ones)
+      const determineCableColor = () => {
+        const nodeAConnected = connectedNodes.has(cable.nodeAId);
+        const nodeBConnected = connectedNodes.has(cable.nodeBId);
+        
+        if (nodeAConnected && nodeBConnected) {
+          const results = resultsToUse[selectedScenario];
+          
+          if (results && results.nodeVoltageDrops) {
+            const calculatedCable = results.cables.find(c => c.id === cable.id);
+            
+            if (calculatedCable) {
+              const arrivalNodeId = calculatedCable.nodeBId;
+              const phaseMetrics = results.nodeMetricsPerPhase?.find(n => n.nodeId === arrivalNodeId);
+              
+              if (phaseMetrics?.nodeCompliance) {
+                if (phaseMetrics.nodeCompliance === 'critical') return '#ef4444';
+                if (phaseMetrics.nodeCompliance === 'warning') return '#f97316';
+                return '#22c55e';
+              } else {
+                const nodeData = results.nodeVoltageDrops.find(n => n.nodeId === arrivalNodeId);
+                if (nodeData && nodeData.deltaU_cum_percent !== undefined) {
+                  const voltageDropPercent = Math.abs(nodeData.deltaU_cum_percent);
+                  if (voltageDropPercent < 8) return '#22c55e';
+                  if (voltageDropPercent < 10) return '#f97316';
+                  return '#ef4444';
+                }
+              }
+            }
+          }
+        }
+        return '#3b82f6'; // Default blue
+      };
+      
       if (isReplacedCable) {
-        cableColor = '#10b981'; // Vert émeraude pour câbles remplacés par simulation
-        cableWeight = 6;
+        // Câbles remplacés : conserver couleur de conformité mais ligne plus épaisse
+        cableColor = determineCableColor();
+        cableWeight = 8;
       } else if (hasUpgrade) {
         cableColor = '#8A2BE2'; // violet pour les câbles remplacés/suggérés
         cableWeight = 8; // épaisseur doublée
@@ -1512,6 +1547,17 @@ export const MapView = () => {
         if (midData) {
           const { midPoint, angle } = midData;
           
+          // Pour les câbles remplacés, afficher le nouveau type de câble
+          let displayLabel = cableType.label;
+          if (isReplacedCable && simulationEquipment?.cableReplacement?.targetCableTypeId) {
+            const targetCableType = currentProject.cableTypes.find(
+              ct => ct.id === simulationEquipment.cableReplacement?.targetCableTypeId
+            );
+            if (targetCableType) {
+              displayLabel = targetCableType.label;
+            }
+          }
+          
           // Créer un divIcon avec le texte rotatif
           const labelIcon = L.divIcon({
             className: 'cable-type-label',
@@ -1523,7 +1569,7 @@ export const MapView = () => {
               font-weight: 600;
               color: ${cableColor};
               text-shadow: 1px 1px 2px white, -1px -1px 2px white, 1px -1px 2px white, -1px 1px 2px white;
-            ">${cableType.label}</div>`,
+            ">${displayLabel}</div>`,
             iconSize: [0, 0],
             iconAnchor: [0, 0]
           });

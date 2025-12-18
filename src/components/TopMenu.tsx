@@ -230,7 +230,7 @@ export const TopMenu = ({
             </Tooltip>
 
             {/* Simulation Toggle (if equipment exists) */}
-            {((simulationEquipment.srg2Devices?.length || 0) > 0 || simulationEquipment.neutralCompensators.length > 0) && (
+            {((simulationEquipment.srg2Devices?.length || 0) > 0 || simulationEquipment.neutralCompensators.length > 0 || simulationEquipment.cableReplacement?.enabled) && (
               <div className="flex items-center gap-1.5 ml-2">
                 <Switch 
                   checked={isSimulationActive} 

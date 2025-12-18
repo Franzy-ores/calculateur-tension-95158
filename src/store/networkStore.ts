@@ -101,7 +101,7 @@ interface NetworkActions {
   // Project actions
   createNewProject: (name: string, voltageSystem: VoltageSystem) => void;
   loadProject: (project: Project) => void;
-  updateProjectConfig: (updates: Partial<Pick<Project, 'name' | 'voltageSystem' | 'cosPhi' | 'cosPhiCharges' | 'cosPhiProductions' | 'foisonnementCharges' | 'foisonnementProductions' | 'defaultChargeKVA' | 'defaultProductionKVA' | 'loadModel' | 'desequilibrePourcent' | 'forcedModeConfig' | 'manualPhaseDistribution' | 'phaseDistributionModeCharges' | 'phaseDistributionModeProductions'>>) => void;
+  updateProjectConfig: (updates: Partial<Pick<Project, 'name' | 'voltageSystem' | 'cosPhi' | 'cosPhiCharges' | 'cosPhiProductions' | 'foisonnementCharges' | 'foisonnementProductions' | 'defaultChargeKVA' | 'defaultProductionKVA' | 'loadModel' | 'desequilibrePourcent' | 'forcedModeConfig' | 'manualPhaseDistribution' | 'phaseDistributionModeCharges' | 'phaseDistributionModeProductions' | 'transformerConfig'>>) => void;
   
   // Node actions
   addNode: (lat: number, lng: number) => void;

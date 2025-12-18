@@ -125,7 +125,13 @@ export class ElectricalCalculator {
       return source.tensionCible;
     }
 
-    // 2. Si configuration HT disponible, calcul réaliste
+    // 2. Priorité: tension source ajustée via slider (±5%)
+    if (transformerConfig?.sourceVoltage) {
+      console.log(`🎚️ Utilisation tension source (slider): ${transformerConfig.sourceVoltage}V`);
+      return transformerConfig.sourceVoltage;
+    }
+
+    // 3. Si configuration HT disponible, calcul réaliste
     if (project.htVoltageConfig) {
       const {
         nominalVoltageHT_V,
@@ -144,7 +150,7 @@ export class ElectricalCalculator {
       return realisticVoltage;
     }
 
-    // 3. Tension nominale du transformateur
+    // 4. Tension nominale du transformateur
     if (transformerConfig?.nominalVoltage_V) {
       console.log(`⚡ Utilisation tension nominale transformateur: ${transformerConfig.nominalVoltage_V}V`);
       return transformerConfig.nominalVoltage_V;
@@ -734,7 +740,17 @@ export class ElectricalCalculator {
         Vslack_phase = source.tensionCible;
       }
     }
-    // 2. Sinon : utiliser tension nominale
+    // 2. Priorité: tension source ajustée via slider (±5%)
+    else if (transformerConfig?.sourceVoltage) {
+      const U_line = transformerConfig.sourceVoltage;
+      console.log(`🎚️ Utilisation tension source (slider): ${U_line}V`);
+      if (source.connectionType === 'TÉTRA_3P+N_230_400V') {
+        Vslack_phase = U_line / Math.sqrt(3);
+      } else {
+        Vslack_phase = U_line;
+      }
+    }
+    // 3. Sinon : utiliser tension nominale
     else if (transformerConfig?.nominalVoltage_V) {
       const U_line = transformerConfig.nominalVoltage_V;
       // Décision basée sur le type de connexion, pas sur un seuil de tension
@@ -744,7 +760,7 @@ export class ElectricalCalculator {
         Vslack_phase = U_line; // Triangle ou mono : utiliser directement
       }
     } else {
-      // Fallback sur U_line_base
+      // 4. Fallback sur U_line_base
       if (source.connectionType === 'TÉTRA_3P+N_230_400V') {
         Vslack_phase = U_line_base / Math.sqrt(3);
       } else {

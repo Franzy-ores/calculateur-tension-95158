@@ -10,29 +10,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Cable, ArrowRightLeft, CheckCircle, AlertTriangle, X, Eye } from 'lucide-react';
+import { Cable, ArrowRightLeft, CheckCircle, X, TrendingDown } from 'lucide-react';
 import { CableReplacementConfig } from '@/types/network';
 
 interface SimulationComparisonResult {
   before: {
     maxVoltageDrop: number;
     losses: number;
-    en50160Compliant: boolean;
   };
   after: {
     maxVoltageDrop: number;
     losses: number;
-    en50160Compliant: boolean;
   };
   gains: {
     voltageDropReduction: number;
@@ -54,13 +44,11 @@ export const CableReplacementSimulator: React.FC = () => {
     selectedScenario,
     simulationEquipment,
     setCableReplacementConfig,
-    runSimulation,
-    isSimulationActive
+    runSimulation
   } = useNetworkStore();
   
   const [selectedTargetSection, setSelectedTargetSection] = useState<string>('baxb-95');
   const [selectedCableTypes, setSelectedCableTypes] = useState<string[]>([]);
-  const [showResultsPopup, setShowResultsPopup] = useState(false);
 
   // Check if cable replacement simulation is active
   const cableReplacementConfig = simulationEquipment?.cableReplacement;
@@ -77,8 +65,6 @@ export const CableReplacementSimulator: React.FC = () => {
       }
     });
 
-    // Filter cable types that are aerial and used in the project
-    // Exclude BAXB 95 and BAXB 150 (target sections)
     return currentProject.cableTypes.filter(ct => 
       ct.posesPermises.includes('AÉRIEN') && 
       usedCableTypeIds.has(ct.id) &&
@@ -101,6 +87,14 @@ export const CableReplacementSimulator: React.FC = () => {
 
   const totalCablesToReplace = Object.values(cablesCountByType).reduce((sum, count) => sum + count, 0);
 
+  // Calculate total length of replaced cables
+  const totalReplacedLength = useMemo(() => {
+    if (!currentProject || !cableReplacementConfig) return 0;
+    return currentProject.cables
+      .filter(c => cableReplacementConfig.affectedCableIds.includes(c.id))
+      .reduce((sum, c) => sum + (c.length_m || 0), 0);
+  }, [currentProject, cableReplacementConfig]);
+
   // Compute simulation results comparison
   const simulationComparison = useMemo((): SimulationComparisonResult | null => {
     if (!isReplacementActive || !cableReplacementConfig) return null;
@@ -119,12 +113,10 @@ export const CableReplacementSimulator: React.FC = () => {
       before: {
         maxVoltageDrop: beforeMaxVoltageDrop,
         losses: beforeLosses,
-        en50160Compliant: beforeMaxVoltageDrop <= 10,
       },
       after: {
         maxVoltageDrop: afterMaxVoltageDrop,
         losses: afterLosses,
-        en50160Compliant: afterMaxVoltageDrop <= 10,
       },
       gains: {
         voltageDropReduction: beforeMaxVoltageDrop > 0 
@@ -157,14 +149,12 @@ export const CableReplacementSimulator: React.FC = () => {
   const handleSimulate = () => {
     if (!currentProject || selectedCableTypes.length === 0) return;
 
-    // Identify affected cables
     const affectedCableIds = currentProject.cables
       .filter(cable => cable.pose === 'AÉRIEN' && selectedCableTypes.includes(cable.typeId))
       .map(cable => cable.id);
     
     if (affectedCableIds.length === 0) return;
 
-    // Create and set the cable replacement config
     const config: CableReplacementConfig = {
       id: `cable-replacement-${Date.now()}`,
       enabled: true,
@@ -174,12 +164,7 @@ export const CableReplacementSimulator: React.FC = () => {
     };
 
     setCableReplacementConfig(config);
-    
-    // Run the simulation
     runSimulation();
-    
-    // Show results popup
-    setTimeout(() => setShowResultsPopup(true), 500);
   };
 
   const handleCancelSimulation = () => {
@@ -283,12 +268,38 @@ export const CableReplacementSimulator: React.FC = () => {
           </div>
         )}
         
-        {/* Active simulation indicator */}
+        {/* Active simulation indicator with gains */}
         {isReplacementActive && cableReplacementConfig && (
-          <div className="bg-emerald-500/20 border border-emerald-500/50 rounded-md p-2 text-sm">
+          <div className="bg-emerald-500/20 border border-emerald-500/50 rounded-md p-3 space-y-2">
             <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
               <CheckCircle className="h-4 w-4" />
-              <span>Simulation active : <span className="font-medium">{cableReplacementConfig.affectedCableIds.length}</span> câble(s) remplacé(s)</span>
+              <span className="font-medium">Simulation active</span>
+            </div>
+            <div className="text-sm space-y-1.5 text-foreground">
+              <div className="flex justify-between">
+                <span>Tronçons remplacés :</span>
+                <span className="font-mono font-medium">{cableReplacementConfig.affectedCableIds.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Longueur totale :</span>
+                <span className="font-mono font-medium">{totalReplacedLength.toFixed(0)} m</span>
+              </div>
+              {simulationComparison && (
+                <div className="flex justify-between items-center pt-1 border-t border-emerald-500/30">
+                  <span className="flex items-center gap-1">
+                    <TrendingDown className="h-3.5 w-3.5 text-emerald-600" />
+                    Chute de tension :
+                  </span>
+                  <span className="font-mono">
+                    <span className="text-muted-foreground">{simulationComparison.before.maxVoltageDrop.toFixed(2)}%</span>
+                    <span className="mx-1">→</span>
+                    <span className="text-emerald-600 font-medium">{simulationComparison.after.maxVoltageDrop.toFixed(2)}%</span>
+                    <span className="text-emerald-500 text-xs ml-1">
+                      ({simulationComparison.gains.voltageDropReduction > 0 ? '-' : ''}{simulationComparison.gains.voltageDropReduction.toFixed(1)}%)
+                    </span>
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -305,126 +316,16 @@ export const CableReplacementSimulator: React.FC = () => {
               Simuler
             </Button>
           ) : (
-            <>
-              <Button 
-                variant="outline"
-                onClick={() => setShowResultsPopup(true)}
-                className="flex-1"
-              >
-                <Eye className="h-4 w-4 mr-2" />
-                Voir résultats
-              </Button>
-              <Button 
-                variant="destructive"
-                onClick={handleCancelSimulation}
-                className="flex-1"
-              >
-                <X className="h-4 w-4 mr-2" />
-                Annuler
-              </Button>
-            </>
+            <Button 
+              variant="destructive"
+              onClick={handleCancelSimulation}
+              className="flex-1"
+            >
+              <X className="h-4 w-4 mr-2" />
+              Annuler la simulation
+            </Button>
           )}
         </div>
-
-        {/* Results Popup */}
-        <Dialog open={showResultsPopup} onOpenChange={setShowResultsPopup}>
-          <DialogContent className="sm:max-w-md bg-background">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Cable className="h-5 w-5" />
-                Résultats de simulation
-              </DialogTitle>
-              <DialogDescription>
-                Comparaison avant/après remplacement de {simulationComparison?.replacedCablesCount || cableReplacementConfig?.affectedCableIds.length || 0} câble(s)
-              </DialogDescription>
-            </DialogHeader>
-
-            {simulationComparison && (
-              <div className="space-y-4">
-                {/* Voltage Drop Comparison */}
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="text-sm font-medium text-muted-foreground">Indicateur</div>
-                  <div className="text-sm font-medium text-muted-foreground">Avant</div>
-                  <div className="text-sm font-medium text-muted-foreground">Après</div>
-                </div>
-
-                {/* Max Voltage Drop */}
-                <div className="grid grid-cols-3 gap-2 items-center bg-muted/50 rounded-md p-2">
-                  <div className="text-sm">Chute de tension max</div>
-                  <div className={`text-center font-mono ${simulationComparison.before.maxVoltageDrop > 10 ? 'text-destructive' : 'text-foreground'}`}>
-                    {simulationComparison.before.maxVoltageDrop.toFixed(2)}%
-                  </div>
-                  <div className={`text-center font-mono ${simulationComparison.after.maxVoltageDrop > 10 ? 'text-destructive' : 'text-emerald-600'}`}>
-                    {simulationComparison.after.maxVoltageDrop.toFixed(2)}%
-                  </div>
-                </div>
-
-                {/* Losses */}
-                <div className="grid grid-cols-3 gap-2 items-center bg-muted/50 rounded-md p-2">
-                  <div className="text-sm">Pertes</div>
-                  <div className="text-center font-mono">
-                    {simulationComparison.before.losses.toFixed(3)} kW
-                  </div>
-                  <div className="text-center font-mono text-emerald-600">
-                    {simulationComparison.after.losses.toFixed(3)} kW
-                  </div>
-                </div>
-
-                {/* EN50160 Compliance */}
-                <div className="grid grid-cols-3 gap-2 items-center bg-muted/50 rounded-md p-2">
-                  <div className="text-sm">Conformité EN50160</div>
-                  <div className="flex justify-center">
-                    {simulationComparison.before.en50160Compliant ? (
-                      <Badge variant="default" className="gap-1 bg-emerald-600">
-                        <CheckCircle className="h-3 w-3" /> Conforme
-                      </Badge>
-                    ) : (
-                      <Badge variant="destructive" className="gap-1">
-                        <AlertTriangle className="h-3 w-3" /> Non conforme
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex justify-center">
-                    {simulationComparison.after.en50160Compliant ? (
-                      <Badge variant="default" className="gap-1 bg-emerald-600">
-                        <CheckCircle className="h-3 w-3" /> Conforme
-                      </Badge>
-                    ) : (
-                      <Badge variant="destructive" className="gap-1">
-                        <AlertTriangle className="h-3 w-3" /> Non conforme
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-
-                {/* Gains */}
-                <div className="border-t pt-3 mt-3">
-                  <h4 className="text-sm font-medium mb-2">Gains estimés</h4>
-                  <div className="flex gap-4">
-                    <div className={`flex-1 text-center p-2 rounded-md ${simulationComparison.gains.voltageDropReduction > 0 ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300' : 'bg-muted'}`}>
-                      <div className="text-lg font-bold">
-                        {simulationComparison.gains.voltageDropReduction > 0 ? '-' : ''}{simulationComparison.gains.voltageDropReduction.toFixed(1)}%
-                      </div>
-                      <div className="text-xs">Chute de tension</div>
-                    </div>
-                    <div className={`flex-1 text-center p-2 rounded-md ${simulationComparison.gains.lossesReduction > 0 ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300' : 'bg-muted'}`}>
-                      <div className="text-lg font-bold">
-                        {simulationComparison.gains.lossesReduction > 0 ? '-' : ''}{simulationComparison.gains.lossesReduction.toFixed(1)}%
-                      </div>
-                      <div className="text-xs">Pertes</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <DialogFooter>
-              <Button onClick={() => setShowResultsPopup(false)}>
-                Fermer
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </CardContent>
     </Card>
   );

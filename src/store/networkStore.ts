@@ -95,6 +95,9 @@ interface NetworkStoreState extends NetworkState {
   clientColorMode: ClientColorMode;
   circuitColorMapping: Map<string, string>;
   showClientTensionLabels: boolean;
+  // État partagé pour la création de client avec sélection sur carte
+  selectingLocationForNewClient: boolean;
+  pendingClientLocation: { lat: number; lng: number } | null;
 }
 
 interface NetworkActions {
@@ -183,6 +186,11 @@ interface NetworkActions {
   updateCableTypes: () => void;
   setClientColorMode: (mode: ClientColorMode) => void;
   generateCircuitColorMapping: () => void;
+  // Actions pour la création de client avec sélection sur carte
+  startClientLocationSelection: () => void;
+  setClientLocation: (lat: number, lng: number) => void;
+  cancelClientLocationSelection: () => void;
+  clearPendingClientLocation: () => void;
 }
 
 // Fonction utilitaire pour créer la configuration par défaut du transformateur
@@ -358,6 +366,9 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   clientColorMode: 'couplage',
   circuitColorMapping: new Map(),
   showClientTensionLabels: false,
+  // État partagé pour la création de client
+  selectingLocationForNewClient: false,
+  pendingClientLocation: null,
 
   // Actions
   createNewProject: (name, voltageSystem) => {
@@ -2487,5 +2498,25 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     });
     
     set({ circuitColorMapping: mapping });
+  },
+
+  // Actions pour la création de client avec sélection sur carte
+  startClientLocationSelection: () => {
+    console.log('[DEBUG Store] startClientLocationSelection');
+    set({ selectingLocationForNewClient: true, pendingClientLocation: null });
+  },
+  
+  setClientLocation: (lat: number, lng: number) => {
+    console.log('[DEBUG Store] setClientLocation:', lat, lng);
+    set({ selectingLocationForNewClient: false, pendingClientLocation: { lat, lng } });
+  },
+  
+  cancelClientLocationSelection: () => {
+    console.log('[DEBUG Store] cancelClientLocationSelection');
+    set({ selectingLocationForNewClient: false });
+  },
+  
+  clearPendingClientLocation: () => {
+    set({ pendingClientLocation: null });
   },
 }));

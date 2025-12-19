@@ -109,8 +109,17 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
     onOpenChange(false);
   };
 
+  // Gérer la fermeture du dialog sans interférer avec la sélection de position
+  const handleOpenChange = (newOpen: boolean) => {
+    // Ne pas propager la fermeture si on est en train de sélectionner une position
+    if (!newOpen && isSelectingLocation) {
+      return;
+    }
+    onOpenChange(newOpen);
+  };
+
   return (
-    <Dialog open={open && dialogVisible} onOpenChange={onOpenChange}>
+    <Dialog open={open && dialogVisible} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Créer un nouveau client</DialogTitle>

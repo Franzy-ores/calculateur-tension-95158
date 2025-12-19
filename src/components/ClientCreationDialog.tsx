@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,7 @@ import { useNetworkStore } from '@/store/networkStore';
 import { ClientConnectionType, ClientType } from '@/types/network';
 import { MapPin } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 interface ClientCreationDialogProps {
   open: boolean;
@@ -25,34 +26,24 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
   const [isSelectingLocation, setIsSelectingLocation] = useState(false);
-  const [dialogVisible, setDialogVisible] = useState(true);
-  
-  // Ref pour tracker immédiatement le mode sélection (évite le délai des mises à jour d'état)
-  const isSelectingRef = useRef(false);
 
   // Écouter l'événement de sélection de position
   useEffect(() => {
+    if (!isSelectingLocation) return;
+    
     const handleLocationSelected = (e: Event) => {
-      if (!isSelectingRef.current) return;
-      
       const customEvent = e as CustomEvent;
       const { lat: selectedLat, lng: selectedLng } = customEvent.detail;
       
       setLat(selectedLat);
       setLng(selectedLng);
-      isSelectingRef.current = false;
       setIsSelectingLocation(false);
-      setDialogVisible(true); // Réafficher le dialog
       
       toast.success('Position sélectionnée');
     };
     
     const handleLocationCancelled = () => {
-      if (!isSelectingRef.current) return;
-      
-      isSelectingRef.current = false;
       setIsSelectingLocation(false);
-      setDialogVisible(true); // Réafficher le dialog
     };
     
     window.addEventListener('locationSelectedForNewClient', handleLocationSelected);
@@ -62,7 +53,7 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
       window.removeEventListener('locationSelectedForNewClient', handleLocationSelected);
       window.removeEventListener('cancelNewClientLocationSelection', handleLocationCancelled);
     };
-  }, []);
+  }, [isSelectingLocation]);
 
   // Réinitialiser le formulaire à l'ouverture
   useEffect(() => {
@@ -74,16 +65,12 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
       setPuissanceProduction(0);
       setLat(null);
       setLng(null);
-      isSelectingRef.current = false;
       setIsSelectingLocation(false);
-      setDialogVisible(true);
     }
   }, [open]);
 
   const handleSelectLocation = () => {
-    isSelectingRef.current = true; // Mise à jour immédiate via ref
     setIsSelectingLocation(true);
-    setDialogVisible(false); // Masquer le dialog
     window.dispatchEvent(new CustomEvent('startNewClientLocationSelection'));
   };
 
@@ -118,18 +105,22 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
     onOpenChange(false);
   };
 
-  // Gérer la fermeture du dialog sans interférer avec la sélection de position
+  // Gérer la fermeture du dialog - bloquer pendant la sélection de position
   const handleOpenChange = (newOpen: boolean) => {
-    // Ne pas propager la fermeture si on est en train de sélectionner une position (vérification via ref pour synchronisation immédiate)
-    if (!newOpen && isSelectingRef.current) {
-      return;
+    if (!newOpen && isSelectingLocation) {
+      return; // Bloquer la fermeture pendant la sélection
     }
     onOpenChange(newOpen);
   };
 
   return (
-    <Dialog open={open && dialogVisible} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent 
+        className={cn(
+          "sm:max-w-md transition-opacity duration-200",
+          isSelectingLocation && "opacity-0 pointer-events-none"
+        )}
+      >
         <DialogHeader>
           <DialogTitle>Créer un nouveau client</DialogTitle>
         </DialogHeader>

@@ -127,6 +127,15 @@ interface NetworkActions {
   
   // Client actions
   importClientsFromExcel: (clients: import('@/types/network').ClientImporte[]) => void;
+  addClientManual: (clientData: {
+    nomCircuit: string;
+    puissanceContractuelle_kVA: number;
+    puissancePV_kVA: number;
+    lat: number;
+    lng: number;
+    clientType: import('@/types/network').ClientType;
+    connectionType: import('@/types/network').ClientConnectionType;
+  }) => void;
   updateClientImporte: (clientId: string, updates: Partial<import('@/types/network').ClientImporte>) => void;
   deleteClientImporte: (clientId: string) => void;
   linkClientToNode: (clientId: string, nodeId: string) => void;
@@ -1043,6 +1052,32 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         window.dispatchEvent(event);
       }, 100);
     }
+  },
+
+  addClientManual: (clientData) => {
+    const { currentProject } = get();
+    if (!currentProject) return;
+    
+    const newClient: ClientImporte = {
+      id: `client-manual-${Date.now()}`,
+      identifiantCircuit: `MANUAL-${Date.now()}`,
+      nomCircuit: clientData.nomCircuit,
+      lat: clientData.lat,
+      lng: clientData.lng,
+      puissanceContractuelle_kVA: clientData.puissanceContractuelle_kVA,
+      puissancePV_kVA: clientData.puissancePV_kVA,
+      couplage: clientData.connectionType, // Utiliser le connectionType comme couplage brut
+      clientType: clientData.clientType,
+      connectionType: clientData.connectionType,
+    };
+    
+    const updatedProject = {
+      ...currentProject,
+      clientsImportes: [...(currentProject.clientsImportes || []), newClient],
+    };
+    
+    set({ currentProject: updatedProject });
+    toast.success(`Client "${clientData.nomCircuit}" créé avec succès`);
   },
 
   updateClientImporte: (clientId, updates) => {

@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useNetworkStore } from '@/store/networkStore';
 import { ClientConnectionType, ClientType } from '@/types/network';
-import { MapPin } from 'lucide-react';
+import { MapPin, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -41,6 +40,7 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
       setLat(selectedLat);
       setLng(selectedLng);
       setIsSelectingLocation(false);
+      console.log('[DEBUG Dialog] isSelectingLocation set to false, dialog should reappear');
       
       toast.success('Position sélectionnée');
     };
@@ -115,47 +115,64 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
     onOpenChange(false);
   };
 
-  // Gérer la fermeture du dialog - bloquer pendant la sélection de position
-  const handleOpenChange = (newOpen: boolean) => {
-    console.log('[DEBUG Dialog] handleOpenChange called:', newOpen, 'isSelectingLocation:', isSelectingLocation);
-    if (!newOpen && isSelectingLocation) {
-      console.log('[DEBUG Dialog] BLOCKED closure during selection');
-      return; // Bloquer la fermeture pendant la sélection
-    }
-    console.log('[DEBUG Dialog] Propagating to parent:', newOpen);
-    onOpenChange(newOpen);
-  };
+  // Fermer avec ESC
+  useEffect(() => {
+    if (!open) return;
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isSelectingLocation) {
+          window.dispatchEvent(new CustomEvent('cancelNewClientLocationSelection'));
+          setIsSelectingLocation(false);
+        } else {
+          onOpenChange(false);
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open, isSelectingLocation, onOpenChange]);
+
+  console.log('[DEBUG Dialog] RENDER - open:', open, 'isSelectingLocation:', isSelectingLocation);
+
+  if (!open) return null;
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange} modal={false}>
-      {/* Overlay manuel - uniquement visible quand PAS en sélection */}
-      {open && !isSelectingLocation && (
+    <>
+      {/* Overlay - seulement quand pas en sélection */}
+      {!isSelectingLocation && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40"
+          className="fixed inset-0 bg-black/50 z-[100]"
           onClick={() => onOpenChange(false)}
         />
       )}
-      <DialogContent 
+      
+      {/* Dialog box - custom, pas Radix */}
+      <div 
         className={cn(
-          "sm:max-w-md transition-opacity duration-200 z-50",
-          isSelectingLocation && "opacity-0 pointer-events-none"
+          "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101]",
+          "bg-background border border-border rounded-lg shadow-xl",
+          "w-full max-w-md p-6",
+          "transition-all duration-200",
+          isSelectingLocation && "opacity-0 pointer-events-none scale-95"
         )}
-        onPointerDownOutside={(e) => {
-          if (isSelectingLocation) {
-            e.preventDefault();
-          }
-        }}
-        onInteractOutside={(e) => {
-          if (isSelectingLocation) {
-            e.preventDefault();
-          }
-        }}
       >
-        <DialogHeader>
-          <DialogTitle>Créer un nouveau client</DialogTitle>
-        </DialogHeader>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold">Créer un nouveau client</h2>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={handleCancel}
+            className="h-8 w-8"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
         
-        <div className="space-y-4 py-4">
+        {/* Content */}
+        <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="nomCircuit">Nom du client</Label>
             <Input
@@ -172,7 +189,7 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
               <SelectTrigger id="clientType">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-popover border-border">
+              <SelectContent className="bg-popover border-border z-[102]">
                 <SelectItem value="résidentiel">🏠 Résidentiel</SelectItem>
                 <SelectItem value="industriel">🏭 Industriel</SelectItem>
               </SelectContent>
@@ -185,7 +202,7 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
               <SelectTrigger id="connectionType">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-popover border-border">
+              <SelectContent className="bg-popover border-border z-[102]">
                 <SelectItem value="MONO">Monophasé (MONO)</SelectItem>
                 <SelectItem value="TRI">Triphasé (TRI)</SelectItem>
                 <SelectItem value="TETRA">Tétraphasé (TETRA)</SelectItem>
@@ -248,15 +265,16 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
           </div>
         </div>
 
-        <DialogFooter>
+        {/* Footer */}
+        <div className="flex justify-end gap-2 mt-6">
           <Button variant="outline" onClick={handleCancel}>
             Annuler
           </Button>
           <Button onClick={handleCreate} disabled={!nomCircuit.trim() || lat === null || lng === null}>
             Créer
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </div>
+    </>
   );
 };

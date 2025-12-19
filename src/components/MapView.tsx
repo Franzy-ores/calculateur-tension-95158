@@ -41,6 +41,7 @@ export const MapView = () => {
   const tempLineRef = useRef<L.Polyline | null>(null);
   const [selectingNodeForClient, setSelectingNodeForClient] = useState(false);
   const [movingClient, setMovingClient] = useState(false);
+  const [selectingLocationForNewClient, setSelectingLocationForNewClient] = useState(false);
   const [currentZoom, setCurrentZoom] = useState<number>(10);
   
   const {
@@ -283,16 +284,29 @@ export const MapView = () => {
       setMovingClient(false);
     };
     
+    const handleStartNewClientLocation = () => {
+      setSelectingLocationForNewClient(true);
+      toast.info('Cliquez sur la carte pour positionner le nouveau client');
+    };
+    
+    const handleCancelNewClientLocation = () => {
+      setSelectingLocationForNewClient(false);
+    };
+    
     window.addEventListener('startNodeSelection', handleStartSelection);
     window.addEventListener('cancelNodeSelection', handleCancelSelection);
     window.addEventListener('startClientMove', handleStartMove);
     window.addEventListener('cancelClientMove', handleCancelMove);
+    window.addEventListener('startNewClientLocationSelection', handleStartNewClientLocation);
+    window.addEventListener('cancelNewClientLocationSelection', handleCancelNewClientLocation);
     
     return () => {
       window.removeEventListener('startNodeSelection', handleStartSelection);
       window.removeEventListener('cancelNodeSelection', handleCancelSelection);
       window.removeEventListener('startClientMove', handleStartMove);
       window.removeEventListener('cancelClientMove', handleCancelMove);
+      window.removeEventListener('startNewClientLocationSelection', handleStartNewClientLocation);
+      window.removeEventListener('cancelNewClientLocationSelection', handleCancelNewClientLocation);
     };
   }, []);
   
@@ -308,13 +322,30 @@ export const MapView = () => {
           setMovingClient(false);
           window.dispatchEvent(new CustomEvent('cancelClientMove'));
           toast.info('Déplacement annulé');
+        } else if (selectingLocationForNewClient) {
+          setSelectingLocationForNewClient(false);
+          window.dispatchEvent(new CustomEvent('cancelNewClientLocationSelection'));
+          toast.info('Sélection annulée');
         }
       }
     };
     
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [selectingNodeForClient, movingClient]);
+  }, [selectingNodeForClient, movingClient, selectingLocationForNewClient]);
+  
+  // Changer le curseur de la carte pendant la sélection de position nouveau client
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    
+    const container = map.getContainer();
+    if (selectingLocationForNewClient) {
+      container.style.cursor = 'crosshair';
+    } else {
+      container.style.cursor = '';
+    }
+  }, [selectingLocationForNewClient]);
 
   // Afficher les marqueurs clients sur la carte
   useClientMarkers({
@@ -432,6 +463,15 @@ export const MapView = () => {
     if (!map) return;
 
     const handleMapClick = (e: L.LeafletMouseEvent) => {
+      if (selectingLocationForNewClient) {
+        // Mode sélection position pour nouveau client
+        window.dispatchEvent(new CustomEvent('locationSelectedForNewClient', {
+          detail: { lat: e.latlng.lat, lng: e.latlng.lng }
+        }));
+        setSelectingLocationForNewClient(false);
+        return;
+      }
+      
       if (movingClient) {
         // Mode déplacement de client : émettre l'événement avec les nouvelles coordonnées
         window.dispatchEvent(new CustomEvent('locationSelectedForClient', {

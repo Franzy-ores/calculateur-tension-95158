@@ -252,7 +252,7 @@ export const PhaseDistributionDisplay = () => {
   }[status];
 
   return (
-    <div className="flex flex-col gap-2 p-2 bg-card/90 rounded border border-border/50">
+    <div className="flex flex-col gap-2 p-2 bg-slate-800 dark:bg-slate-900 rounded border border-slate-600">
       {/* Ligne 1: Titre, badge et stats clients */}
       <div className="flex items-center gap-3">
         <Button
@@ -312,14 +312,14 @@ export const PhaseDistributionDisplay = () => {
       {(highPowerClientsPerPhase.A.length > 0 || 
         highPowerClientsPerPhase.B.length > 0 || 
         highPowerClientsPerPhase.C.length > 0) && (
-        <div className="p-3 bg-orange-500/10 border border-orange-500/30 rounded">
+        <div className="p-3 bg-orange-500/20 border border-orange-500/40 rounded">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs font-bold text-orange-600">⚠️ CLIENTS À FORTE PUISSANCE MONO</span>
           </div>
           
           <div className="grid grid-cols-3 gap-2 text-xs">
             {/* L1 */}
-            <div className={`p-2 rounded ${highPowerClientsPerPhase.A.length > 0 ? 'bg-blue-500/20 border border-blue-500/40' : 'bg-white/5'}`}>
+            <div className={`p-2 rounded ${highPowerClientsPerPhase.A.length > 0 ? 'bg-blue-500/30 border border-blue-500/50' : 'bg-slate-700/50'}`}>
               <div className="font-medium text-blue-400 mb-1">L1</div>
               {highPowerClientsPerPhase.A.length > 0 ? (
                 <>
@@ -352,7 +352,7 @@ export const PhaseDistributionDisplay = () => {
             </div>
             
             {/* L2 */}
-            <div className={`p-2 rounded ${highPowerClientsPerPhase.B.length > 0 ? 'bg-green-500/20 border border-green-500/40' : 'bg-white/5'}`}>
+            <div className={`p-2 rounded ${highPowerClientsPerPhase.B.length > 0 ? 'bg-green-500/30 border border-green-500/50' : 'bg-slate-700/50'}`}>
               <div className="font-medium text-green-400 mb-1">L2</div>
               {highPowerClientsPerPhase.B.length > 0 ? (
                 <>
@@ -385,7 +385,7 @@ export const PhaseDistributionDisplay = () => {
             </div>
             
             {/* L3 */}
-            <div className={`p-2 rounded ${highPowerClientsPerPhase.C.length > 0 ? 'bg-red-500/20 border border-red-500/40' : 'bg-white/5'}`}>
+            <div className={`p-2 rounded ${highPowerClientsPerPhase.C.length > 0 ? 'bg-red-500/30 border border-red-500/50' : 'bg-slate-700/50'}`}>
               <div className="font-medium text-red-400 mb-1">L3</div>
               {highPowerClientsPerPhase.C.length > 0 ? (
                 <>
@@ -425,7 +425,7 @@ export const PhaseDistributionDisplay = () => {
       )}
 
       {/* Tableau consolidé par couplage */}
-      <div className="p-3 bg-primary/5 border border-primary/20 rounded">
+      <div className="p-3 bg-slate-700/95 border border-slate-600 rounded">
         <div className="flex items-center gap-2 mb-3">
           <span className="text-xs font-bold text-white">📋 RÉCAPITULATIF PAR COUPLAGE</span>
           {currentProject.voltageSystem === 'TÉTRAPHASÉ_400V' && (
@@ -439,7 +439,7 @@ export const PhaseDistributionDisplay = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-xs border-collapse">
             <thead>
-              <tr className="border-b border-white/20">
+              <tr className="border-b border-slate-500">
                 <th className="text-left py-2 px-2 text-white font-semibold">Couplage</th>
                 <th className="text-center py-2 px-1 text-white font-semibold">Nb<br/>MONO</th>
                 <th className="text-right py-2 px-1 text-white font-semibold">Ch.<br/>MONO</th>
@@ -480,7 +480,7 @@ export const PhaseDistributionDisplay = () => {
                     currentProject.manualPhaseDistribution
                   );
                 
-                  const bgClass = phase === 'A' ? 'bg-blue-500/5' : phase === 'B' ? 'bg-green-500/5' : 'bg-red-500/5';
+                  const bgClass = phase === 'A' ? 'bg-blue-500/20' : phase === 'B' ? 'bg-green-500/20' : 'bg-red-500/20';
                   const ecartChargeColor = Math.abs(data.ecartChargePercent) < 5 ? 'text-green-400' : Math.abs(data.ecartChargePercent) < 15 ? 'text-yellow-400' : 'text-red-400';
                   const ecartProdColor = Math.abs(data.ecartProductionPercent) < 5 ? 'text-green-400' : Math.abs(data.ecartProductionPercent) < 15 ? 'text-yellow-400' : 'text-red-400';
                   
@@ -501,7 +501,7 @@ export const PhaseDistributionDisplay = () => {
                   }) || [];
                   
                   return (
-                    <tr key={phase} className={`border-b border-white/10 ${bgClass}`}>
+                    <tr key={phase} className={`border-b border-slate-600/50 ${bgClass}`}>
                       <td className="py-2 px-2 text-white font-semibold">{phaseLabel}</td>
                       <td className="text-center py-2 px-1 text-white">{monoClients.length}</td>
                       <td className="text-right py-2 px-1 text-white">{data.chargeMono.toFixed(1)}</td>
@@ -535,7 +535,7 @@ export const PhaseDistributionDisplay = () => {
           </table>
         </div>
         
-        <div className="mt-2 text-[10px] text-white/60">
+        <div className="mt-2 text-[10px] text-slate-300">
           {currentProject.voltageSystem === 'TÉTRAPHASÉ_400V' 
             ? '💡 Le courant de neutre est calculé vectoriellement. Les curseurs permettent d\'ajuster la répartition des charges et productions foisonnées.'
             : '💡 Réseau 230V sans neutre. Les curseurs permettent d\'ajuster la répartition des charges et productions foisonnées.'}

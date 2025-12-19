@@ -1,14 +1,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
-import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
-import { Percent, BarChart3, ChevronDown, ChevronUp } from "lucide-react";
+import { Percent, BarChart3, ChevronDown, ChevronUp, Home, Factory, Sun } from "lucide-react";
 import { useNetworkStore } from "@/store/networkStore";
 import { PhaseDistributionSliders } from "@/components/PhaseDistributionSliders";
 import { PhaseDistributionDisplay } from "@/components/PhaseDistributionDisplay";
-import { calculateTotalPowersForNodes } from '@/utils/clientsUtils';
+import { calculatePowersByClientType } from '@/utils/clientsUtils';
 import { getConnectedNodes } from '@/utils/networkConnectivity';
 import { useState } from 'react';
 
@@ -17,7 +16,8 @@ export const ParametersTab = () => {
   
   const {
     currentProject,
-    setFoisonnementCharges,
+    setFoisonnementChargesResidentiel,
+    setFoisonnementChargesIndustriel,
     setFoisonnementProductions,
     simulationPreview,
   } = useNetworkStore();
@@ -30,46 +30,59 @@ export const ParametersTab = () => {
     : new Set<string>();
   const connectedNodesData = currentProject?.nodes.filter(node => connectedNodes.has(node.id)) || [];
 
-  const { totalChargesContractuelles, totalProductionsContractuelles } = 
-    calculateTotalPowersForNodes(
-      connectedNodesData,
-      currentProject.clientsImportes || [],
-      currentProject.clientLinks || []
-    );
+  // Calcul des puissances par type de client
+  const { chargesResidentielles, chargesIndustrielles } = calculatePowersByClientType(
+    connectedNodesData,
+    currentProject.clientsImportes || [],
+    currentProject.clientLinks || []
+  );
 
-  const foisonnementChargesValue = simulationPreview.isActive && simulationPreview.foisonnementCharges !== undefined 
-    ? simulationPreview.foisonnementCharges 
-    : currentProject.foisonnementCharges;
+  // Calcul des productions totales
+  let totalProductionsContractuelles = 0;
+  connectedNodesData.forEach(node => {
+    totalProductionsContractuelles += node.productions.reduce((sum, p) => sum + p.S_kVA, 0);
+    const linkedClients = (currentProject.clientsImportes || []).filter(c => 
+      (currentProject.clientLinks || []).some(link => link.clientId === c.id && link.nodeId === node.id)
+    );
+    totalProductionsContractuelles += linkedClients.reduce((sum, c) => sum + c.puissancePV_kVA, 0);
+  });
+
+  const foisonnementResidentiel = currentProject.foisonnementChargesResidentiel ?? 15;
+  const foisonnementIndustriel = currentProject.foisonnementChargesIndustriel ?? 70;
+  const foisonnementProductions = currentProject.foisonnementProductions;
     
-  const chargesFoisonnees = totalChargesContractuelles * (foisonnementChargesValue / 100);
-  const productionsFoisonnees = totalProductionsContractuelles * (currentProject.foisonnementProductions / 100);
+  const chargesResidentiellesFoisonnees = chargesResidentielles * (foisonnementResidentiel / 100);
+  const chargesIndustriellesFoisonnees = chargesIndustrielles * (foisonnementIndustriel / 100);
+  const totalChargesFoisonnees = chargesResidentiellesFoisonnees + chargesIndustriellesFoisonnees;
+  const productionsFoisonnees = totalProductionsContractuelles * (foisonnementProductions / 100);
 
   const showPhaseDistribution = currentProject.loadModel === 'monophase_reparti' || currentProject.loadModel === 'mixte_mono_poly';
 
   return (
     <div className="flex flex-wrap gap-3 p-3">
-      {/* Card 1: Foisonnement - compact */}
-      <Card className="bg-card/80 backdrop-blur border-border/50 flex-1 min-w-[280px] max-w-[400px]">
+      {/* Card 1: Foisonnement différencié */}
+      <Card className="bg-card/80 backdrop-blur border-border/50 flex-1 min-w-[300px] max-w-[450px]">
         <CardHeader className="pb-1 pt-2 px-3">
           <CardTitle className="text-xs font-medium flex items-center gap-1.5">
             <Percent className="h-3 w-3 text-primary" />
             Coefficients de foisonnement
           </CardTitle>
         </CardHeader>
-        <CardContent className="px-3 pb-2 space-y-2">
-          {/* Charges - compact */}
+        <CardContent className="px-3 pb-2 space-y-3">
+          {/* Charges Résidentielles */}
           <div className="space-y-1">
             <div className="flex items-center justify-between">
-              <Label className={`text-xs ${simulationPreview.isActive && simulationPreview.foisonnementCharges !== undefined ? 'text-accent' : ''}`}>
-                Charges
+              <Label className="text-xs flex items-center gap-1">
+                <Home className="h-3 w-3 text-blue-500" />
+                Résidentiel
               </Label>
-              <span className={`text-xs font-mono font-medium ${simulationPreview.isActive && simulationPreview.foisonnementCharges !== undefined ? 'text-accent' : 'text-primary'}`}>
-                {foisonnementChargesValue}%
+              <span className="text-xs font-mono font-medium text-blue-500">
+                {foisonnementResidentiel}%
               </span>
             </div>
             <Slider
-              value={[currentProject.foisonnementCharges]}
-              onValueChange={(value) => setFoisonnementCharges(value[0])}
+              value={[foisonnementResidentiel]}
+              onValueChange={(value) => setFoisonnementChargesResidentiel(value[0])}
               max={100}
               min={0}
               step={1}
@@ -77,21 +90,61 @@ export const ParametersTab = () => {
               className="h-4"
             />
             <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-              <span>{totalChargesContractuelles.toFixed(1)} kVA</span>
-              <span className="font-medium text-primary">{chargesFoisonnees.toFixed(1)} kVA</span>
+              <span>{chargesResidentielles.toFixed(1)} kVA contractuel</span>
+              <span className="font-medium text-blue-500">{chargesResidentiellesFoisonnees.toFixed(1)} kVA</span>
             </div>
           </div>
 
-          {/* Productions - compact */}
+          {/* Charges Industrielles */}
           <div className="space-y-1">
             <div className="flex items-center justify-between">
-              <Label className="text-xs">Productions</Label>
-              <span className="text-xs font-mono font-medium text-secondary">
-                {currentProject.foisonnementProductions}%
+              <Label className="text-xs flex items-center gap-1">
+                <Factory className="h-3 w-3 text-orange-500" />
+                Industriel
+              </Label>
+              <span className="text-xs font-mono font-medium text-orange-500">
+                {foisonnementIndustriel}%
               </span>
             </div>
             <Slider
-              value={[currentProject.foisonnementProductions]}
+              value={[foisonnementIndustriel]}
+              onValueChange={(value) => setFoisonnementChargesIndustriel(value[0])}
+              max={100}
+              min={0}
+              step={1}
+              disabled={simulationPreview.isActive}
+              className="h-4"
+            />
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+              <span>{chargesIndustrielles.toFixed(1)} kVA contractuel</span>
+              <span className="font-medium text-orange-500">{chargesIndustriellesFoisonnees.toFixed(1)} kVA</span>
+            </div>
+          </div>
+
+          {/* Séparateur et Total */}
+          <div className="border-t border-border/50 pt-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Total charges foisonnées</span>
+              <span className="font-medium text-primary">{totalChargesFoisonnees.toFixed(1)} kVA</span>
+            </div>
+            <div className="text-[10px] text-muted-foreground text-right">
+              sur {(chargesResidentielles + chargesIndustrielles).toFixed(1)} kVA contractuel
+            </div>
+          </div>
+
+          {/* Productions */}
+          <div className="space-y-1 border-t border-border/50 pt-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs flex items-center gap-1">
+                <Sun className="h-3 w-3 text-yellow-500" />
+                Productions
+              </Label>
+              <span className="text-xs font-mono font-medium text-yellow-500">
+                {foisonnementProductions}%
+              </span>
+            </div>
+            <Slider
+              value={[foisonnementProductions]}
               onValueChange={(value) => setFoisonnementProductions(value[0])}
               max={100}
               min={0}
@@ -101,7 +154,7 @@ export const ParametersTab = () => {
             />
             <div className="flex items-center justify-between text-[10px] text-muted-foreground">
               <span>{totalProductionsContractuelles.toFixed(1)} kVA</span>
-              <span className="font-medium text-secondary">{productionsFoisonnees.toFixed(1)} kVA</span>
+              <span className="font-medium text-yellow-500">{productionsFoisonnees.toFixed(1)} kVA</span>
             </div>
           </div>
         </CardContent>

@@ -522,7 +522,9 @@ export class ElectricalCalculator {
       project.desequilibrePourcent ?? 0,
       manualPhaseDistribution,
       clientsImportes,
-      clientLinks
+      clientLinks,
+      (project as any).foisonnementChargesResidentiel,
+      (project as any).foisonnementChargesIndustriel
     );
   }
   calculateScenario(
@@ -537,7 +539,9 @@ export class ElectricalCalculator {
     desequilibrePourcent: number = 0,
     manualPhaseDistribution?: { charges: {A:number;B:number;C:number}; productions: {A:number;B:number;C:number} },
     clientsImportes?: ClientImporte[],
-    clientLinks?: ClientLink[]
+    clientLinks?: ClientLink[],
+    foisonnementChargesResidentiel?: number,
+    foisonnementChargesIndustriel?: number
   ): CalculationResult {
     // Validation robuste des entrées
     this.validateInputs(nodes, cables, cableTypes, foisonnementCharges, foisonnementProductions, desequilibrePourcent);
@@ -584,14 +588,34 @@ export class ElectricalCalculator {
       let S_prel = 0;
       let S_pv = 0;
       
-      // Si des clients importés sont disponibles, utiliser la fonction complète
+      // Si des clients importés sont disponibles, utiliser le foisonnement différencié par type
       if (clientsImportes && clientLinks) {
         const linkedClients = getLinkedClientsForNode(n.id, clientsImportes, clientLinks);
-        const { totalCharge_kVA, totalProduction_kVA } = calculateNodePowersFromClients(n, linkedClients);
-        S_prel = totalCharge_kVA * (foisonnementCharges / 100);
+        
+        // Foisonnement différencié par type de client
+        const foisonnementResidentiel = foisonnementChargesResidentiel ?? foisonnementCharges;
+        const foisonnementIndustriel = foisonnementChargesIndustriel ?? foisonnementCharges;
+        
+        for (const client of linkedClients) {
+          const foisonnement = client.clientType === 'industriel' 
+            ? foisonnementIndustriel 
+            : foisonnementResidentiel;
+          S_prel += client.puissanceContractuelle_kVA * (foisonnement / 100);
+        }
+        
+        // Productions (foisonnement unique)
+        const totalProduction_kVA = linkedClients.reduce((sum, c) => sum + c.puissancePV_kVA, 0);
         S_pv = totalProduction_kVA * (foisonnementProductions / 100);
+        
+        // Charges manuelles du nœud (considérées comme résidentielles)
+        const manualCharges = (n.clients || []).reduce((s, c) => s + (c.S_kVA || 0), 0);
+        S_prel += manualCharges * (foisonnementResidentiel / 100);
+        
+        // Productions manuelles du nœud
+        const manualProductions = (n.productions || []).reduce((s, p) => s + (p.S_kVA || 0), 0);
+        S_pv += manualProductions * (foisonnementProductions / 100);
       } else {
-        // Fallback : charges/productions manuelles uniquement
+        // Fallback : charges/productions manuelles uniquement (foisonnement global)
         S_prel = (n.clients || []).reduce((s, c) => s + (c.S_kVA || 0), 0) * (foisonnementCharges / 100);
         S_pv = (n.productions || []).reduce((s, p) => s + (p.S_kVA || 0), 0) * (foisonnementProductions / 100);
       }
@@ -641,11 +665,24 @@ export class ElectricalCalculator {
     for (const n of connectedNodesData) {
       if (clientsImportes && clientLinks) {
         const linkedClients = getLinkedClientsForNode(n.id, clientsImportes, clientLinks);
-        const { totalCharge_kVA, totalProduction_kVA } = calculateNodePowersFromClients(n, linkedClients);
-        totalLoads += totalCharge_kVA * (foisonnementCharges / 100);
-        totalProductions += totalProduction_kVA * (foisonnementProductions / 100);
+        
+        // Foisonnement différencié par type de client
+        const foisonnementResidentiel = foisonnementChargesResidentiel ?? foisonnementCharges;
+        const foisonnementIndustriel = foisonnementChargesIndustriel ?? foisonnementCharges;
+        
+        for (const client of linkedClients) {
+          const foisonnement = client.clientType === 'industriel' 
+            ? foisonnementIndustriel 
+            : foisonnementResidentiel;
+          totalLoads += client.puissanceContractuelle_kVA * (foisonnement / 100);
+          totalProductions += client.puissancePV_kVA * (foisonnementProductions / 100);
+        }
+        
+        // Charges manuelles du nœud (considérées comme résidentielles)
+        totalLoads += (n.clients || []).reduce((s, c) => s + (c.S_kVA || 0), 0) * (foisonnementResidentiel / 100);
+        totalProductions += (n.productions || []).reduce((s, p) => s + (p.S_kVA || 0), 0) * (foisonnementProductions / 100);
       } else {
-        // Fallback : charges/productions manuelles uniquement
+        // Fallback : charges/productions manuelles uniquement (foisonnement global)
         totalLoads += (n.clients || []).reduce((s,c) => s + (c.S_kVA || 0), 0) * (foisonnementCharges / 100);
         totalProductions += (n.productions || []).reduce((s,p) => s + (p.S_kVA || 0), 0) * (foisonnementProductions / 100);
       }

@@ -249,7 +249,9 @@ export interface Project {
   cosPhi: number; // facteur de puissance global (legacy, utilisé comme fallback)
   cosPhiCharges?: number; // facteur de puissance des charges (consommation) - défaut 0.95 inductif
   cosPhiProductions?: number; // facteur de puissance des productions (PV/Cogen) - défaut 1.00
-  foisonnementCharges: number; // facteur de foisonnement des charges (0-100%)
+  foisonnementCharges: number; // facteur de foisonnement des charges (0-100%) - legacy, utilisé comme moyenne
+  foisonnementChargesResidentiel?: number; // facteur de foisonnement des charges résidentielles (0-100%), défaut 15%
+  foisonnementChargesIndustriel?: number; // facteur de foisonnement des charges industrielles (0-100%), défaut 70%
   foisonnementProductions: number; // facteur de foisonnement des productions (0-100%)
   defaultChargeKVA: number; // charge par défaut pour nouveaux nœuds (kVA)
   defaultProductionKVA: number; // production par défaut pour nouveaux nœuds (kVA)

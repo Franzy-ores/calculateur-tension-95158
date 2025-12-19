@@ -327,6 +327,74 @@ export const calculateTotalPowersForNodes = (
   };
 };
 
+/**
+ * Calcule les puissances totales par type de client (résidentiel/industriel)
+ */
+export const calculatePowersByClientType = (
+  nodes: Node[],
+  clientsImportes: ClientImporte[],
+  clientLinks: ClientLink[]
+): {
+  chargesResidentielles: number;
+  chargesIndustrielles: number;
+  totalCharges: number;
+} => {
+  let chargesResidentielles = 0;
+  let chargesIndustrielles = 0;
+
+  // Parcourir les clients liés aux nœuds
+  const linkedClientIds = new Set(clientLinks.map(link => link.clientId));
+  
+  clientsImportes.forEach(client => {
+    if (linkedClientIds.has(client.id)) {
+      if (client.clientType === 'industriel') {
+        chargesIndustrielles += client.puissanceContractuelle_kVA;
+      } else {
+        chargesResidentielles += client.puissanceContractuelle_kVA;
+      }
+    }
+  });
+
+  // Ajouter les charges manuelles (considérées comme résidentielles par défaut)
+  nodes.forEach(node => {
+    chargesResidentielles += node.clients.reduce((sum, c) => sum + c.S_kVA, 0);
+  });
+
+  return {
+    chargesResidentielles,
+    chargesIndustrielles,
+    totalCharges: chargesResidentielles + chargesIndustrielles
+  };
+};
+
+/**
+ * Calcule les puissances foisonnées par type de client
+ */
+export const calculateFoisonnedPowers = (
+  nodes: Node[],
+  clientsImportes: ClientImporte[],
+  clientLinks: ClientLink[],
+  foisonnementResidentiel: number,
+  foisonnementIndustriel: number
+): {
+  chargesResidentiellesFoisonnees: number;
+  chargesIndustriellesFoisonnees: number;
+  totalFoisonne: number;
+} => {
+  const { chargesResidentielles, chargesIndustrielles } = calculatePowersByClientType(
+    nodes, clientsImportes, clientLinks
+  );
+
+  const chargesResidentiellesFoisonnees = chargesResidentielles * (foisonnementResidentiel / 100);
+  const chargesIndustriellesFoisonnees = chargesIndustrielles * (foisonnementIndustriel / 100);
+
+  return {
+    chargesResidentiellesFoisonnees,
+    chargesIndustriellesFoisonnees,
+    totalFoisonne: chargesResidentiellesFoisonnees + chargesIndustriellesFoisonnees
+  };
+};
+
 
 /**
  * Regroupe les clients ayant des coordonnées identiques (avec tolérance)

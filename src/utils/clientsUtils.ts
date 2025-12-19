@@ -15,17 +15,13 @@ export interface ClientPowerAnalysis {
 }
 
 /**
- * Analyse le niveau de risque d'un client MONO selon sa puissance contractuelle
+ * Analyse le niveau de risque d'un client selon sa puissance contractuelle
+ * Seuils unifiés pour tous les types (MONO, TRI, TETRA) : 10, 22, 56 kVA
  */
 export const analyzeClientPower = (
   client: ClientImporte,
   networkVoltage?: 'TRIPHASÉ_230V' | 'TÉTRAPHASÉ_400V'
-): ClientPowerAnalysis | null => {
-  // Seulement pour les clients MONO
-  if (client.connectionType !== 'MONO') {
-    return null;
-  }
-
+): ClientPowerAnalysis => {
   const power = client.puissanceContractuelle_kVA;
   
   // Déterminer le couplage (phase-phase pour 230V, phase-neutre pour 400V)
@@ -41,7 +37,8 @@ export const analyzeClientPower = (
       : `${client.assignedPhase} (400V)`;
   }
 
-  if (power >= 36) {
+  // Seuils unifiés : 10, 22, 56 kVA
+  if (power >= 56) {
     return {
       level: 'critical',
       label: '🔴 CRITIQUE',
@@ -51,7 +48,7 @@ export const analyzeClientPower = (
       badgeVariant: 'destructive',
       phaseCoupling
     };
-  } else if (power >= 20) {
+  } else if (power >= 22) {
     return {
       level: 'high',
       label: '⚡ FORTE CHARGE',

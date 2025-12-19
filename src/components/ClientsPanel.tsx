@@ -77,7 +77,7 @@ export const ClientsPanel = () => {
     // Filtre puissance
     if (filterPower === 'HIGH_POWER') {
       const analysis = analyzeClientPower(client);
-      if (!analysis || analysis.level === 'normal') {
+      if (analysis.level === 'normal') {
         return false;
       }
     }

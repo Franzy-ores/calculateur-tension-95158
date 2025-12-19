@@ -198,6 +198,7 @@ export const parseExcelToClients = (
             puissanceContractuelle_kVA: parseFloat(row['Puissance contractuelle']) || 0,
             puissancePV_kVA: parseFloat(row['Puissance PV en kVA']) || 0,
             couplage,
+            clientType: 'résidentiel', // Par défaut résidentiel pour les imports Excel
             tensionMin_V: parseFloat(row['Min Tension']) || undefined,
             tensionMax_V: parseFloat(row['Max Tension']) || undefined,
             tensionMinHiver_V: parseFloat(row['Min Tension hiver']) || undefined,

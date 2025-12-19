@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Link2, Unlink, Edit, Trash2, MapPin, Filter } from 'lucide-react';
+import { Search, Link2, Unlink, Edit, Trash2, MapPin, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +10,8 @@ import { Label } from '@/components/ui/label';
 import { useNetworkStore } from '@/store/networkStore';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { analyzeClientPower } from '@/utils/clientsUtils';
+import { ClientCreationDialog } from './ClientCreationDialog';
+import { ClientType } from '@/types/network';
 
 export const ClientsPanel = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -17,6 +19,8 @@ export const ClientsPanel = () => {
   const [filterLinked, setFilterLinked] = useState<'ALL' | 'LINKED' | 'UNLINKED'>('ALL');
   const [filterPower, setFilterPower] = useState<'ALL' | 'HIGH_POWER'>('ALL');
   const [filterSmallPolyProd, setFilterSmallPolyProd] = useState<boolean>(false);
+  const [filterClientType, setFilterClientType] = useState<'ALL' | ClientType>('ALL');
+  const [showCreationDialog, setShowCreationDialog] = useState(false);
 
   const {
     currentProject,
@@ -35,8 +39,16 @@ export const ClientsPanel = () => {
       <Card className="p-6">
         <div className="text-center text-muted-foreground">
           <p>Aucun client importé</p>
-          <p className="text-sm mt-2">Utilisez le bouton "Importer Clients" pour commencer</p>
+          <p className="text-sm mt-2">Utilisez le bouton "Importer Clients" ou créez un client manuellement</p>
+          <Button 
+            className="mt-4" 
+            onClick={() => setShowCreationDialog(true)}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Créer un client
+          </Button>
         </div>
+        <ClientCreationDialog open={showCreationDialog} onOpenChange={setShowCreationDialog} />
       </Card>
     );
   }
@@ -75,6 +87,14 @@ export const ClientsPanel = () => {
       const isPolyClient = client.couplage === 'TRI' || client.connectionType === 'TRI' || client.connectionType === 'TETRA';
       const hasSmallProduction = client.puissancePV_kVA > 0 && client.puissancePV_kVA <= 5;
       if (!isPolyClient || !hasSmallProduction) {
+        return false;
+      }
+    }
+
+    // Filtre type de client
+    if (filterClientType !== 'ALL') {
+      const clientTypeValue = client.clientType || 'résidentiel';
+      if (clientTypeValue !== filterClientType) {
         return false;
       }
     }
@@ -122,6 +142,12 @@ export const ClientsPanel = () => {
 
   return (
     <div className="h-full flex flex-col gap-4">
+      {/* Bouton de création */}
+      <Button onClick={() => setShowCreationDialog(true)} className="w-full">
+        <Plus className="h-4 w-4 mr-2" />
+        Créer un client
+      </Button>
+
       {/* Légende mode de coloration */}
       <Card className="p-3">
         <div className="text-sm">
@@ -290,6 +316,17 @@ export const ClientsPanel = () => {
             </SelectContent>
           </Select>
 
+          <Select value={filterClientType} onValueChange={(v: any) => setFilterClientType(v)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Tous types</SelectItem>
+              <SelectItem value="résidentiel">🏠 Résidentiel</SelectItem>
+              <SelectItem value="industriel">🏭 Industriel</SelectItem>
+            </SelectContent>
+          </Select>
+
           <div className="flex items-center space-x-2 pt-1">
             <Checkbox 
               id="filter-small-poly-prod"
@@ -356,6 +393,9 @@ export const ClientsPanel = () => {
                               Lié
                             </Badge>
                           )}
+                          <Badge variant={client.clientType === 'industriel' ? 'warning' : 'outline'} className="text-xs">
+                            {client.clientType === 'industriel' ? '🏭 Industriel' : '🏠 Résidentiel'}
+                          </Badge>
                         </div>
                         <p className="text-xs text-muted-foreground">{client.identifiantCircuit}</p>
                       </div>
@@ -426,6 +466,8 @@ export const ClientsPanel = () => {
           </div>
         </ScrollArea>
       </Card>
+
+      <ClientCreationDialog open={showCreationDialog} onOpenChange={setShowCreationDialog} />
     </div>
   );
 };

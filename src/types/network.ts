@@ -26,6 +26,9 @@ import { SRG2Config } from './srg2';
 import { Complex } from '@/utils/complex';
 
 // Types pour les clients importés
+// Type de client
+export type ClientType = 'résidentiel' | 'industriel';
+
 export interface ClientImporte {
   id: string;
   // Identifiants
@@ -40,6 +43,9 @@ export interface ClientImporte {
   puissanceContractuelle_kVA: number;  // charge
   puissancePV_kVA: number;             // production PV
   couplage: ClientCouplage;            // "TRI" ou "MONO"
+  
+  // Type de client (résidentiel par défaut, industriel en option)
+  clientType?: ClientType;
   
   // Tensions mesurées (noms EXACTS des colonnes Excel)
   tensionMin_V?: number;                    // "Min Tension"

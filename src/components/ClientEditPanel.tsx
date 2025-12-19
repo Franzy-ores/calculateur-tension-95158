@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useNetworkStore } from '@/store/networkStore';
-import { ClientCouplage, ClientConnectionType } from '@/types/network';
+import { ClientCouplage, ClientConnectionType, ClientType } from '@/types/network';
 import { normalizeClientConnectionType } from '@/utils/phaseDistributionCalculator';
 import { toast } from 'sonner';
 import { MapPin, Unlink, Target, Move } from 'lucide-react';
@@ -34,6 +34,7 @@ export const ClientEditPanel = () => {
   const [identifiantPosteSource, setIdentifiantPosteSource] = useState<string>('');
   const [assignedPhase, setAssignedPhase] = useState<'A' | 'B' | 'C' | undefined>(undefined);
   const [connectionType, setConnectionType] = useState<ClientConnectionType | undefined>(undefined);
+  const [clientType, setClientType] = useState<ClientType>('résidentiel');
   const [isSelectingNode, setIsSelectingNode] = useState(false);
   const [isMovingClient, setIsMovingClient] = useState(false);
 
@@ -53,6 +54,7 @@ export const ClientEditPanel = () => {
       setIdentifiantCabine(client.identifiantCabine || '');
       setIdentifiantPosteSource(client.identifiantPosteSource || '');
       setAssignedPhase(client.assignedPhase);
+      setClientType(client.clientType || 'résidentiel');
       // Initialiser connectionType depuis couplage si pas encore défini
       setConnectionType(
         client.connectionType || 
@@ -145,6 +147,7 @@ export const ClientEditPanel = () => {
       identifiantPosteSource,
       assignedPhase,
       connectionType,
+      clientType,
     });
     
     toast.success('Client mis à jour');
@@ -191,6 +194,22 @@ export const ClientEditPanel = () => {
           </Select>
           <p className="text-xs text-muted-foreground mt-1">
             Type de connexion du client
+          </p>
+        </div>
+
+        <div>
+          <Label htmlFor="clientType">Type de client</Label>
+          <Select value={clientType} onValueChange={(v: ClientType) => setClientType(v)}>
+            <SelectTrigger id="clientType">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-popover border-border">
+              <SelectItem value="résidentiel">🏠 Résidentiel</SelectItem>
+              <SelectItem value="industriel">🏭 Industriel</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground mt-1">
+            Catégorie du client
           </p>
         </div>
 

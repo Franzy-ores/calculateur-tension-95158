@@ -285,11 +285,13 @@ export const MapView = () => {
     };
     
     const handleStartNewClientLocation = () => {
+      console.log('[DEBUG Map] EVENT RECEIVED: startNewClientLocationSelection');
       setSelectingLocationForNewClient(true);
       toast.info('Cliquez sur la carte pour positionner le nouveau client');
     };
     
     const handleCancelNewClientLocation = () => {
+      console.log('[DEBUG Map] EVENT RECEIVED: cancelNewClientLocationSelection');
       setSelectingLocationForNewClient(false);
     };
     
@@ -463,7 +465,9 @@ export const MapView = () => {
     if (!map) return;
 
     const handleMapClick = (e: L.LeafletMouseEvent) => {
+      console.log('[DEBUG Map] handleMapClick, selectingLocationForNewClient:', selectingLocationForNewClient);
       if (selectingLocationForNewClient) {
+        console.log('[DEBUG Map] Dispatching locationSelectedForNewClient:', e.latlng.lat, e.latlng.lng);
         // Mode sélection position pour nouveau client
         window.dispatchEvent(new CustomEvent('locationSelectedForNewClient', {
           detail: { lat: e.latlng.lat, lng: e.latlng.lng }

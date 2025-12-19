@@ -29,11 +29,14 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
 
   // Écouter l'événement de sélection de position
   useEffect(() => {
+    console.log('[DEBUG Dialog] useEffect isSelectingLocation:', isSelectingLocation);
     if (!isSelectingLocation) return;
     
     const handleLocationSelected = (e: Event) => {
+      console.log('[DEBUG Dialog] EVENT RECEIVED: locationSelectedForNewClient');
       const customEvent = e as CustomEvent;
       const { lat: selectedLat, lng: selectedLng } = customEvent.detail;
+      console.log('[DEBUG Dialog] Coordinates received:', selectedLat, selectedLng);
       
       setLat(selectedLat);
       setLng(selectedLng);
@@ -43,13 +46,16 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
     };
     
     const handleLocationCancelled = () => {
+      console.log('[DEBUG Dialog] EVENT RECEIVED: cancelNewClientLocationSelection');
       setIsSelectingLocation(false);
     };
     
+    console.log('[DEBUG Dialog] Adding event listeners');
     window.addEventListener('locationSelectedForNewClient', handleLocationSelected);
     window.addEventListener('cancelNewClientLocationSelection', handleLocationCancelled);
     
     return () => {
+      console.log('[DEBUG Dialog] Removing event listeners');
       window.removeEventListener('locationSelectedForNewClient', handleLocationSelected);
       window.removeEventListener('cancelNewClientLocationSelection', handleLocationCancelled);
     };
@@ -57,7 +63,9 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
 
   // Réinitialiser le formulaire à l'ouverture
   useEffect(() => {
+    console.log('[DEBUG Dialog] useEffect open:', open);
     if (open) {
+      console.log('[DEBUG Dialog] Resetting form');
       setNomCircuit('');
       setClientType('résidentiel');
       setConnectionType('MONO');
@@ -70,7 +78,9 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
   }, [open]);
 
   const handleSelectLocation = () => {
+    console.log('[DEBUG Dialog] handleSelectLocation called');
     setIsSelectingLocation(true);
+    console.log('[DEBUG Dialog] Dispatching startNewClientLocationSelection');
     window.dispatchEvent(new CustomEvent('startNewClientLocationSelection'));
   };
 
@@ -107,9 +117,12 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
 
   // Gérer la fermeture du dialog - bloquer pendant la sélection de position
   const handleOpenChange = (newOpen: boolean) => {
+    console.log('[DEBUG Dialog] handleOpenChange called:', newOpen, 'isSelectingLocation:', isSelectingLocation);
     if (!newOpen && isSelectingLocation) {
+      console.log('[DEBUG Dialog] BLOCKED closure during selection');
       return; // Bloquer la fermeture pendant la sélection
     }
+    console.log('[DEBUG Dialog] Propagating to parent:', newOpen);
     onOpenChange(newOpen);
   };
 

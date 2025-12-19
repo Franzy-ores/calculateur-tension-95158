@@ -8,6 +8,7 @@ import { ClientsPanel } from "@/components/ClientsPanel";
 import { SimulationPanel } from "@/components/SimulationPanel";
 import { ClientEditPanel } from "@/components/ClientEditPanel";
 import { GlobalAlertPopup } from "@/components/GlobalAlertPopup";
+import DebugConsole from "@/components/DebugConsole";
 import { useNetworkStore } from "@/store/networkStore";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -248,6 +249,9 @@ const Index = () => {
         console.log('🐛 Should render SimulationPanel:', editTarget === 'simulation');
         return editTarget === 'simulation' ? <SimulationPanel /> : null;
       })()}
+
+      {/* Console de debug visuelle (pour iOS/mobile) */}
+      <DebugConsole />
     </div>
   );
 };

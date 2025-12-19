@@ -127,10 +127,17 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange} modal={!isSelectingLocation}>
+    <Dialog open={open} onOpenChange={handleOpenChange} modal={false}>
+      {/* Overlay manuel - uniquement visible quand PAS en sélection */}
+      {open && !isSelectingLocation && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40"
+          onClick={() => onOpenChange(false)}
+        />
+      )}
       <DialogContent 
         className={cn(
-          "sm:max-w-md transition-opacity duration-200",
+          "sm:max-w-md transition-opacity duration-200 z-50",
           isSelectingLocation && "opacity-0 pointer-events-none"
         )}
         onPointerDownOutside={(e) => {

@@ -41,7 +41,6 @@ export const MapView = () => {
   const tempLineRef = useRef<L.Polyline | null>(null);
   const [selectingNodeForClient, setSelectingNodeForClient] = useState(false);
   const [movingClient, setMovingClient] = useState(false);
-  const [selectingLocationForNewClient, setSelectingLocationForNewClient] = useState(false);
   const [currentZoom, setCurrentZoom] = useState<number>(10);
   
   const {
@@ -76,6 +75,10 @@ export const MapView = () => {
     circuitColorMapping,
     generateCircuitColorMapping,
     showClientTensionLabels,
+    // État partagé pour création client
+    selectingLocationForNewClient,
+    setClientLocation,
+    cancelClientLocationSelection,
   } = useNetworkStore();
 
   // Helper pour détecter les équipements de simulation sur un nœud
@@ -284,31 +287,16 @@ export const MapView = () => {
       setMovingClient(false);
     };
     
-    const handleStartNewClientLocation = () => {
-      console.log('[DEBUG Map] EVENT RECEIVED: startNewClientLocationSelection');
-      setSelectingLocationForNewClient(true);
-      toast.info('Cliquez sur la carte pour positionner le nouveau client');
-    };
-    
-    const handleCancelNewClientLocation = () => {
-      console.log('[DEBUG Map] EVENT RECEIVED: cancelNewClientLocationSelection');
-      setSelectingLocationForNewClient(false);
-    };
-    
     window.addEventListener('startNodeSelection', handleStartSelection);
     window.addEventListener('cancelNodeSelection', handleCancelSelection);
     window.addEventListener('startClientMove', handleStartMove);
     window.addEventListener('cancelClientMove', handleCancelMove);
-    window.addEventListener('startNewClientLocationSelection', handleStartNewClientLocation);
-    window.addEventListener('cancelNewClientLocationSelection', handleCancelNewClientLocation);
     
     return () => {
       window.removeEventListener('startNodeSelection', handleStartSelection);
       window.removeEventListener('cancelNodeSelection', handleCancelSelection);
       window.removeEventListener('startClientMove', handleStartMove);
       window.removeEventListener('cancelClientMove', handleCancelMove);
-      window.removeEventListener('startNewClientLocationSelection', handleStartNewClientLocation);
-      window.removeEventListener('cancelNewClientLocationSelection', handleCancelNewClientLocation);
     };
   }, []);
   
@@ -325,8 +313,7 @@ export const MapView = () => {
           window.dispatchEvent(new CustomEvent('cancelClientMove'));
           toast.info('Déplacement annulé');
         } else if (selectingLocationForNewClient) {
-          setSelectingLocationForNewClient(false);
-          window.dispatchEvent(new CustomEvent('cancelNewClientLocationSelection'));
+          cancelClientLocationSelection();
           toast.info('Sélection annulée');
         }
       }
@@ -334,7 +321,7 @@ export const MapView = () => {
     
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [selectingNodeForClient, movingClient, selectingLocationForNewClient]);
+  }, [selectingNodeForClient, movingClient, selectingLocationForNewClient, cancelClientLocationSelection]);
   
   // Changer le curseur de la carte pendant la sélection de position nouveau client
   useEffect(() => {
@@ -467,12 +454,10 @@ export const MapView = () => {
     const handleMapClick = (e: L.LeafletMouseEvent) => {
       console.log('[DEBUG Map] handleMapClick, selectingLocationForNewClient:', selectingLocationForNewClient);
       if (selectingLocationForNewClient) {
-        console.log('[DEBUG Map] Dispatching locationSelectedForNewClient:', e.latlng.lat, e.latlng.lng);
-        // Mode sélection position pour nouveau client
-        window.dispatchEvent(new CustomEvent('locationSelectedForNewClient', {
-          detail: { lat: e.latlng.lat, lng: e.latlng.lng }
-        }));
-        setSelectingLocationForNewClient(false);
+        console.log('[DEBUG Map] Setting client location via store:', e.latlng.lat, e.latlng.lng);
+        // Mode sélection position pour nouveau client - utiliser le store
+        setClientLocation(e.latlng.lat, e.latlng.lng);
+        toast.success('Position sélectionnée');
         return;
       }
       

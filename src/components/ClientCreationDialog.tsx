@@ -15,51 +15,20 @@ interface ClientCreationDialogProps {
 }
 
 export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialogProps) => {
-  const { addClientManual } = useNetworkStore();
+  const { 
+    addClientManual,
+    selectingLocationForNewClient,
+    pendingClientLocation,
+    startClientLocationSelection,
+    cancelClientLocationSelection,
+    clearPendingClientLocation,
+  } = useNetworkStore();
   
   const [nomCircuit, setNomCircuit] = useState('');
   const [clientType, setClientType] = useState<ClientType>('résidentiel');
   const [connectionType, setConnectionType] = useState<ClientConnectionType>('MONO');
   const [puissanceCharge, setPuissanceCharge] = useState(5);
   const [puissanceProduction, setPuissanceProduction] = useState(0);
-  const [lat, setLat] = useState<number | null>(null);
-  const [lng, setLng] = useState<number | null>(null);
-  const [isSelectingLocation, setIsSelectingLocation] = useState(false);
-
-  // Écouter l'événement de sélection de position
-  useEffect(() => {
-    console.log('[DEBUG Dialog] useEffect isSelectingLocation:', isSelectingLocation);
-    if (!isSelectingLocation) return;
-    
-    const handleLocationSelected = (e: Event) => {
-      console.log('[DEBUG Dialog] EVENT RECEIVED: locationSelectedForNewClient');
-      const customEvent = e as CustomEvent;
-      const { lat: selectedLat, lng: selectedLng } = customEvent.detail;
-      console.log('[DEBUG Dialog] Coordinates received:', selectedLat, selectedLng);
-      
-      setLat(selectedLat);
-      setLng(selectedLng);
-      setIsSelectingLocation(false);
-      console.log('[DEBUG Dialog] isSelectingLocation set to false, dialog should reappear');
-      
-      toast.success('Position sélectionnée');
-    };
-    
-    const handleLocationCancelled = () => {
-      console.log('[DEBUG Dialog] EVENT RECEIVED: cancelNewClientLocationSelection');
-      setIsSelectingLocation(false);
-    };
-    
-    console.log('[DEBUG Dialog] Adding event listeners');
-    window.addEventListener('locationSelectedForNewClient', handleLocationSelected);
-    window.addEventListener('cancelNewClientLocationSelection', handleLocationCancelled);
-    
-    return () => {
-      console.log('[DEBUG Dialog] Removing event listeners');
-      window.removeEventListener('locationSelectedForNewClient', handleLocationSelected);
-      window.removeEventListener('cancelNewClientLocationSelection', handleLocationCancelled);
-    };
-  }, [isSelectingLocation]);
 
   // Réinitialiser le formulaire à l'ouverture
   useEffect(() => {
@@ -71,17 +40,22 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
       setConnectionType('MONO');
       setPuissanceCharge(5);
       setPuissanceProduction(0);
-      setLat(null);
-      setLng(null);
-      setIsSelectingLocation(false);
+      clearPendingClientLocation();
+      cancelClientLocationSelection();
     }
-  }, [open]);
+  }, [open, clearPendingClientLocation, cancelClientLocationSelection]);
+
+  // Log quand la location est reçue
+  useEffect(() => {
+    if (pendingClientLocation) {
+      console.log('[DEBUG Dialog] pendingClientLocation updated:', pendingClientLocation);
+    }
+  }, [pendingClientLocation]);
 
   const handleSelectLocation = () => {
-    console.log('[DEBUG Dialog] handleSelectLocation called');
-    setIsSelectingLocation(true);
-    console.log('[DEBUG Dialog] Dispatching startNewClientLocationSelection');
-    window.dispatchEvent(new CustomEvent('startNewClientLocationSelection'));
+    console.log('[DEBUG Dialog] handleSelectLocation called - using store');
+    startClientLocationSelection();
+    toast.info('Cliquez sur la carte pour positionner le nouveau client');
   };
 
   const handleCreate = () => {
@@ -90,7 +64,7 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
       return;
     }
     
-    if (lat === null || lng === null) {
+    if (!pendingClientLocation) {
       toast.error('Veuillez sélectionner une position sur la carte');
       return;
     }
@@ -99,19 +73,19 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
       nomCircuit: nomCircuit.trim(),
       puissanceContractuelle_kVA: puissanceCharge,
       puissancePV_kVA: puissanceProduction,
-      lat,
-      lng,
+      lat: pendingClientLocation.lat,
+      lng: pendingClientLocation.lng,
       clientType,
       connectionType,
     });
     
+    clearPendingClientLocation();
     onOpenChange(false);
   };
 
   const handleCancel = () => {
-    if (isSelectingLocation) {
-      window.dispatchEvent(new CustomEvent('cancelNewClientLocationSelection'));
-    }
+    cancelClientLocationSelection();
+    clearPendingClientLocation();
     onOpenChange(false);
   };
 
@@ -121,41 +95,40 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
     
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (isSelectingLocation) {
-          window.dispatchEvent(new CustomEvent('cancelNewClientLocationSelection'));
-          setIsSelectingLocation(false);
+        if (selectingLocationForNewClient) {
+          cancelClientLocationSelection();
         } else {
-          onOpenChange(false);
+          handleCancel();
         }
       }
     };
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, isSelectingLocation, onOpenChange]);
+  }, [open, selectingLocationForNewClient, cancelClientLocationSelection]);
 
-  console.log('[DEBUG Dialog] RENDER - open:', open, 'isSelectingLocation:', isSelectingLocation);
+  console.log('[DEBUG Dialog] RENDER - open:', open, 'selecting:', selectingLocationForNewClient, 'location:', pendingClientLocation);
 
   if (!open) return null;
 
   return (
     <>
       {/* Overlay - seulement quand pas en sélection */}
-      {!isSelectingLocation && (
+      {!selectingLocationForNewClient && (
         <div 
           className="fixed inset-0 bg-black/50 z-[100]"
-          onClick={() => onOpenChange(false)}
+          onClick={handleCancel}
         />
       )}
       
-      {/* Dialog box - custom, pas Radix */}
+      {/* Dialog box - custom */}
       <div 
         className={cn(
           "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101]",
           "bg-background border border-border rounded-lg shadow-xl",
           "w-full max-w-md p-6",
           "transition-all duration-200",
-          isSelectingLocation && "opacity-0 pointer-events-none scale-95"
+          selectingLocationForNewClient && "opacity-0 pointer-events-none scale-95"
         )}
       >
         {/* Header */}
@@ -238,10 +211,10 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
 
           <div className="space-y-2">
             <Label>Position sur la carte</Label>
-            {lat !== null && lng !== null ? (
+            {pendingClientLocation ? (
               <div className="text-sm text-muted-foreground bg-muted p-2 rounded">
-                <div>Latitude: {lat.toFixed(6)}</div>
-                <div>Longitude: {lng.toFixed(6)}</div>
+                <div>Latitude: {pendingClientLocation.lat.toFixed(6)}</div>
+                <div>Longitude: {pendingClientLocation.lng.toFixed(6)}</div>
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">Aucune position sélectionnée</p>
@@ -251,13 +224,13 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
               variant="outline"
               className="w-full"
               onClick={handleSelectLocation}
-              disabled={isSelectingLocation}
+              disabled={selectingLocationForNewClient}
             >
               <MapPin className="w-4 h-4 mr-2" />
-              {isSelectingLocation ? 'Cliquez sur la carte...' : '📍 Sélectionner sur la carte'}
+              {selectingLocationForNewClient ? 'Cliquez sur la carte...' : '📍 Sélectionner sur la carte'}
             </Button>
             
-            {isSelectingLocation && (
+            {selectingLocationForNewClient && (
               <p className="text-xs text-amber-600">
                 ⚡ Cliquez sur la carte pour positionner le client. Appuyez sur ESC pour annuler.
               </p>
@@ -270,7 +243,7 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
           <Button variant="outline" onClick={handleCancel}>
             Annuler
           </Button>
-          <Button onClick={handleCreate} disabled={!nomCircuit.trim() || lat === null || lng === null}>
+          <Button onClick={handleCreate} disabled={!nomCircuit.trim() || !pendingClientLocation}>
             Créer
           </Button>
         </div>

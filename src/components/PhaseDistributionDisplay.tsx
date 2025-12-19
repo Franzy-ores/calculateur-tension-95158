@@ -210,7 +210,7 @@ export const PhaseDistributionDisplay = () => {
     
     if (client.connectionType === 'MONO') {
       const analysis = analyzeClientPower(client, currentProject.voltageSystem);
-      if (analysis && (analysis.level === 'high' || analysis.level === 'critical')) {
+      if (analysis.level === 'high' || analysis.level === 'critical') {
         // Trouver la phase du client
         if (client.assignedPhase) {
           highPowerClientsPerPhase[client.assignedPhase as 'A' | 'B' | 'C'].push(client);

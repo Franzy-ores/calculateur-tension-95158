@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,17 +26,21 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
   const [lng, setLng] = useState<number | null>(null);
   const [isSelectingLocation, setIsSelectingLocation] = useState(false);
   const [dialogVisible, setDialogVisible] = useState(true);
+  
+  // Ref pour tracker immédiatement le mode sélection (évite le délai des mises à jour d'état)
+  const isSelectingRef = useRef(false);
 
   // Écouter l'événement de sélection de position
   useEffect(() => {
-    if (!isSelectingLocation) return;
-    
     const handleLocationSelected = (e: Event) => {
+      if (!isSelectingRef.current) return;
+      
       const customEvent = e as CustomEvent;
       const { lat: selectedLat, lng: selectedLng } = customEvent.detail;
       
       setLat(selectedLat);
       setLng(selectedLng);
+      isSelectingRef.current = false;
       setIsSelectingLocation(false);
       setDialogVisible(true); // Réafficher le dialog
       
@@ -44,6 +48,9 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
     };
     
     const handleLocationCancelled = () => {
+      if (!isSelectingRef.current) return;
+      
+      isSelectingRef.current = false;
       setIsSelectingLocation(false);
       setDialogVisible(true); // Réafficher le dialog
     };
@@ -55,7 +62,7 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
       window.removeEventListener('locationSelectedForNewClient', handleLocationSelected);
       window.removeEventListener('cancelNewClientLocationSelection', handleLocationCancelled);
     };
-  }, [isSelectingLocation]);
+  }, []);
 
   // Réinitialiser le formulaire à l'ouverture
   useEffect(() => {
@@ -67,12 +74,14 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
       setPuissanceProduction(0);
       setLat(null);
       setLng(null);
+      isSelectingRef.current = false;
       setIsSelectingLocation(false);
       setDialogVisible(true);
     }
   }, [open]);
 
   const handleSelectLocation = () => {
+    isSelectingRef.current = true; // Mise à jour immédiate via ref
     setIsSelectingLocation(true);
     setDialogVisible(false); // Masquer le dialog
     window.dispatchEvent(new CustomEvent('startNewClientLocationSelection'));
@@ -111,8 +120,8 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
 
   // Gérer la fermeture du dialog sans interférer avec la sélection de position
   const handleOpenChange = (newOpen: boolean) => {
-    // Ne pas propager la fermeture si on est en train de sélectionner une position
-    if (!newOpen && isSelectingLocation) {
+    // Ne pas propager la fermeture si on est en train de sélectionner une position (vérification via ref pour synchronisation immédiate)
+    if (!newOpen && isSelectingRef.current) {
       return;
     }
     onOpenChange(newOpen);

@@ -114,12 +114,22 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange} modal={!isSelectingLocation}>
       <DialogContent 
         className={cn(
           "sm:max-w-md transition-opacity duration-200",
           isSelectingLocation && "opacity-0 pointer-events-none"
         )}
+        onPointerDownOutside={(e) => {
+          if (isSelectingLocation) {
+            e.preventDefault();
+          }
+        }}
+        onInteractOutside={(e) => {
+          if (isSelectingLocation) {
+            e.preventDefault();
+          }
+        }}
       >
         <DialogHeader>
           <DialogTitle>Créer un nouveau client</DialogTitle>

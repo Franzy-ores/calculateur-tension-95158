@@ -25,6 +25,7 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
   const [isSelectingLocation, setIsSelectingLocation] = useState(false);
+  const [dialogVisible, setDialogVisible] = useState(true);
 
   // Écouter l'événement de sélection de position
   useEffect(() => {
@@ -37,14 +38,22 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
       setLat(selectedLat);
       setLng(selectedLng);
       setIsSelectingLocation(false);
+      setDialogVisible(true); // Réafficher le dialog
       
       toast.success('Position sélectionnée');
     };
     
+    const handleLocationCancelled = () => {
+      setIsSelectingLocation(false);
+      setDialogVisible(true); // Réafficher le dialog
+    };
+    
     window.addEventListener('locationSelectedForNewClient', handleLocationSelected);
+    window.addEventListener('cancelNewClientLocationSelection', handleLocationCancelled);
     
     return () => {
       window.removeEventListener('locationSelectedForNewClient', handleLocationSelected);
+      window.removeEventListener('cancelNewClientLocationSelection', handleLocationCancelled);
     };
   }, [isSelectingLocation]);
 
@@ -59,11 +68,13 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
       setLat(null);
       setLng(null);
       setIsSelectingLocation(false);
+      setDialogVisible(true);
     }
   }, [open]);
 
   const handleSelectLocation = () => {
     setIsSelectingLocation(true);
+    setDialogVisible(false); // Masquer le dialog
     window.dispatchEvent(new CustomEvent('startNewClientLocationSelection'));
   };
 
@@ -99,7 +110,7 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open && dialogVisible} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Créer un nouveau client</DialogTitle>

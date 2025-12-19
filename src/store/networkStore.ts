@@ -176,6 +176,8 @@ interface NetworkActions {
   toggleClientTensionLabels: () => void;
   changeVoltageSystem: () => void;
   setFoisonnementCharges: (value: number) => void;
+  setFoisonnementChargesResidentiel: (value: number) => void;
+  setFoisonnementChargesIndustriel: (value: number) => void;
   setFoisonnementProductions: (value: number) => void;
   calculateWithTargetVoltage: (nodeId: string, targetVoltage: number) => void;
   updateCableTypes: () => void;
@@ -261,7 +263,9 @@ const createDefaultProject = (): Project => ({
   cosPhi: 0.95,
   cosPhiCharges: 0.95, // Charges inductives - défaut 0.95
   cosPhiProductions: 1.00, // Productions PV/Cogen - défaut 1.00
-  foisonnementCharges: 100,
+  foisonnementCharges: 100, // Legacy (calculé comme moyenne pondérée)
+  foisonnementChargesResidentiel: 15, // Défaut résidentiel
+  foisonnementChargesIndustriel: 70, // Défaut industriel
   foisonnementProductions: 100,
   defaultChargeKVA: 10,
   defaultProductionKVA: 5,
@@ -287,7 +291,9 @@ const createDefaultProject2 = (name: string, voltageSystem: VoltageSystem): Proj
   cosPhi: 0.95,
   cosPhiCharges: 0.95, // Charges inductives - défaut 0.95
   cosPhiProductions: 1.00, // Productions PV/Cogen - défaut 1.00
-  foisonnementCharges: 100,
+  foisonnementCharges: 100, // Legacy (calculé comme moyenne pondérée)
+  foisonnementChargesResidentiel: 15, // Défaut résidentiel
+  foisonnementChargesIndustriel: 70, // Défaut industriel
   foisonnementProductions: 100,
   defaultChargeKVA: 10,
   defaultProductionKVA: 5,
@@ -403,6 +409,16 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     if (project.cosPhiProductions === undefined) {
       project.cosPhiProductions = 1.00;
       console.log('📦 Projet migré: cosPhiProductions = 1.00');
+    }
+    
+    // Migration automatique: foisonnement différencié résidentiel/industriel
+    if (project.foisonnementChargesResidentiel === undefined) {
+      project.foisonnementChargesResidentiel = project.foisonnementCharges ?? 15;
+      console.log('📦 Projet migré: foisonnementChargesResidentiel =', project.foisonnementChargesResidentiel);
+    }
+    if (project.foisonnementChargesIndustriel === undefined) {
+      project.foisonnementChargesIndustriel = 70;
+      console.log('📦 Projet migré: foisonnementChargesIndustriel = 70');
     }
     
     // Vérifier que le projet a la structure minimale requise
@@ -1883,6 +1899,52 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     get().updateAllCalculations();
 
     // Si mode simulation actif avec équipements actifs, recalculer aussi la simulation
+    const { simulationMode, simulationEquipment } = get();
+    const hasActiveEquipment = simulationMode && (
+      (simulationEquipment.srg2Devices?.some(s => s.enabled) || false) ||
+      simulationEquipment.neutralCompensators.some(c => c.enabled)
+    );
+
+    if (hasActiveEquipment) {
+      get().runSimulation();
+    }
+  },
+
+  setFoisonnementChargesResidentiel: (value: number) => {
+    const { currentProject } = get();
+    if (!currentProject) return;
+
+    const updatedProject = {
+      ...currentProject,
+      foisonnementChargesResidentiel: Math.max(0, Math.min(100, value))
+    };
+    
+    set({ currentProject: updatedProject });
+    get().updateAllCalculations();
+
+    const { simulationMode, simulationEquipment } = get();
+    const hasActiveEquipment = simulationMode && (
+      (simulationEquipment.srg2Devices?.some(s => s.enabled) || false) ||
+      simulationEquipment.neutralCompensators.some(c => c.enabled)
+    );
+
+    if (hasActiveEquipment) {
+      get().runSimulation();
+    }
+  },
+
+  setFoisonnementChargesIndustriel: (value: number) => {
+    const { currentProject } = get();
+    if (!currentProject) return;
+
+    const updatedProject = {
+      ...currentProject,
+      foisonnementChargesIndustriel: Math.max(0, Math.min(100, value))
+    };
+    
+    set({ currentProject: updatedProject });
+    get().updateAllCalculations();
+
     const { simulationMode, simulationEquipment } = get();
     const hasActiveEquipment = simulationMode && (
       (simulationEquipment.srg2Devices?.some(s => s.enabled) || false) ||

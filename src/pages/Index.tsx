@@ -7,6 +7,7 @@ import { EditPanel } from "@/components/EditPanel";
 import { ClientsPanel } from "@/components/ClientsPanel";
 import { SimulationPanel } from "@/components/SimulationPanel";
 import { ClientEditPanel } from "@/components/ClientEditPanel";
+import { ClientCreationPanel } from "@/components/ClientCreationPanel";
 import { GlobalAlertPopup } from "@/components/GlobalAlertPopup";
 import DebugConsole from "@/components/DebugConsole";
 import { useNetworkStore } from "@/store/networkStore";
@@ -32,6 +33,8 @@ const Index = () => {
     resultsPanelFullscreen,
     focusMode,
     isSimulationActive,
+    creatingClient,
+    closeClientCreation,
   } = useNetworkStore();
 
   // Déterminer quels résultats utiliser - simulation si équipements actifs ET isSimulationActive, sinon calculs normaux
@@ -239,6 +242,25 @@ const Index = () => {
           </div>
           <div className="flex-1 overflow-y-auto p-4">
             <ClientEditPanel />
+          </div>
+        </div>
+      )}
+
+      {/* Client Creation Panel - Panneau fixe non-modal identique à l'édition */}
+      {creatingClient && (
+        <div className="fixed right-4 top-24 bottom-4 w-96 bg-background border border-border rounded-lg shadow-xl z-[500] overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between p-4 border-b">
+            <h2 className="text-lg font-semibold">Créer un nouveau client</h2>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => closeClientCreation()}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4">
+            <ClientCreationPanel />
           </div>
         </div>
       )}

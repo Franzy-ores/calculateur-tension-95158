@@ -127,12 +127,12 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
   return (
     <>
       <div 
-        className="fixed inset-0 bg-black/50 z-[100]"
+        className="fixed inset-0 bg-black/50 z-[2000]"
         onClick={handleCancel}
       />
       
       <div 
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] bg-background border border-border rounded-lg shadow-xl w-full max-w-md p-6"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[2001] bg-background border border-border rounded-lg shadow-xl w-full max-w-md p-6"
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
@@ -165,7 +165,7 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
               <SelectTrigger id="clientType">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-popover border-border z-[102]">
+              <SelectContent className="bg-popover border-border z-[2002]">
                 <SelectItem value="résidentiel">🏠 Résidentiel</SelectItem>
                 <SelectItem value="industriel">🏭 Industriel</SelectItem>
               </SelectContent>
@@ -178,7 +178,7 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
               <SelectTrigger id="connectionType">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-popover border-border z-[102]">
+              <SelectContent className="bg-popover border-border z-[2002]">
                 <SelectItem value="MONO">Monophasé (MONO)</SelectItem>
                 <SelectItem value="TRI">Triphasé (TRI)</SelectItem>
                 <SelectItem value="TETRA">Tétraphasé (TETRA)</SelectItem>

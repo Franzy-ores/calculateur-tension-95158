@@ -31,31 +31,40 @@ export const ClientCreationDialog = ({ open, onOpenChange }: ClientCreationDialo
   
   // Track if we're waiting for location (to reopen dialog)
   const waitingForLocation = useRef(false);
-
-  // Réinitialiser le formulaire à l'ouverture (sauf si on réouvre après sélection)
-  useEffect(() => {
-    console.log('[DEBUG Dialog] useEffect open:', open, 'waitingForLocation:', waitingForLocation.current);
-    if (open && !waitingForLocation.current) {
-      console.log('[DEBUG Dialog] Resetting form (fresh open)');
-      setNomCircuit('');
-      setClientType('résidentiel');
-      setConnectionType('MONO');
-      setPuissanceCharge(5);
-      setPuissanceProduction(0);
-      clearPendingClientLocation();
-    }
-    if (open) {
-      waitingForLocation.current = false;
-    }
-  }, [open, clearPendingClientLocation]);
+  const hasReopenedWithLocation = useRef(false);
 
   // Rouvrir le dialog quand une location est reçue
   useEffect(() => {
+    console.log('[DEBUG Dialog] useEffect pendingClientLocation:', pendingClientLocation, 'open:', open, 'waiting:', waitingForLocation.current);
     if (pendingClientLocation && !open && waitingForLocation.current) {
-      console.log('[DEBUG Dialog] Location received, reopening dialog:', pendingClientLocation);
-      onOpenChange(true);
+      console.log('[DEBUG Dialog] Location received, reopening dialog');
+      hasReopenedWithLocation.current = true;
+      waitingForLocation.current = false;
+      // Use setTimeout to ensure state updates are processed
+      setTimeout(() => {
+        onOpenChange(true);
+      }, 50);
     }
   }, [pendingClientLocation, open, onOpenChange]);
+
+  // Réinitialiser le formulaire à l'ouverture (sauf si on réouvre après sélection)
+  useEffect(() => {
+    console.log('[DEBUG Dialog] useEffect open:', open, 'hasReopenedWithLocation:', hasReopenedWithLocation.current);
+    if (open) {
+      if (!hasReopenedWithLocation.current) {
+        console.log('[DEBUG Dialog] Resetting form (fresh open)');
+        setNomCircuit('');
+        setClientType('résidentiel');
+        setConnectionType('MONO');
+        setPuissanceCharge(5);
+        setPuissanceProduction(0);
+        clearPendingClientLocation();
+      } else {
+        console.log('[DEBUG Dialog] Reopened with location, keeping form data');
+        hasReopenedWithLocation.current = false;
+      }
+    }
+  }, [open, clearPendingClientLocation]);
 
   const handleSelectLocation = () => {
     console.log('[DEBUG Dialog] handleSelectLocation - closing dialog, starting selection');

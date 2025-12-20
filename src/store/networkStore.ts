@@ -98,8 +98,6 @@ interface NetworkStoreState extends NetworkState {
   // État partagé pour la création de client avec sélection sur carte
   selectingLocationForNewClient: boolean;
   pendingClientLocation: { lat: number; lng: number } | null;
-  // État pour le panneau de création de client
-  creatingClient: boolean;
 }
 
 interface NetworkActions {
@@ -193,9 +191,6 @@ interface NetworkActions {
   setClientLocation: (lat: number, lng: number) => void;
   cancelClientLocationSelection: () => void;
   clearPendingClientLocation: () => void;
-  // Actions pour le panneau de création de client
-  openClientCreation: () => void;
-  closeClientCreation: () => void;
 }
 
 // Fonction utilitaire pour créer la configuration par défaut du transformateur
@@ -374,8 +369,6 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   // État partagé pour la création de client
   selectingLocationForNewClient: false,
   pendingClientLocation: null,
-  // État pour le panneau de création de client
-  creatingClient: false,
 
   // Actions
   createNewProject: (name, voltageSystem) => {
@@ -2525,14 +2518,5 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   
   clearPendingClientLocation: () => {
     set({ pendingClientLocation: null });
-  },
-
-  // Actions pour le panneau de création de client
-  openClientCreation: () => {
-    set({ creatingClient: true });
-  },
-  
-  closeClientCreation: () => {
-    set({ creatingClient: false });
   },
 }));

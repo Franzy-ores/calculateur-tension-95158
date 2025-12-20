@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { useNetworkStore } from '@/store/networkStore';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { analyzeClientPower } from '@/utils/clientsUtils';
+import { ClientCreationDialog } from './ClientCreationDialog';
 import { ClientType } from '@/types/network';
 
 export const ClientsPanel = () => {
@@ -19,6 +20,7 @@ export const ClientsPanel = () => {
   const [filterPower, setFilterPower] = useState<'ALL' | 'HIGH_POWER'>('ALL');
   const [filterSmallPolyProd, setFilterSmallPolyProd] = useState<boolean>(false);
   const [filterClientType, setFilterClientType] = useState<'ALL' | ClientType>('ALL');
+  const [showCreationDialog, setShowCreationDialog] = useState(false);
 
   const {
     currentProject,
@@ -30,7 +32,6 @@ export const ClientsPanel = () => {
     openEditPanel,
     clientColorMode,
     circuitColorMapping,
-    openClientCreation,
   } = useNetworkStore();
 
   if (!currentProject?.clientsImportes || currentProject.clientsImportes.length === 0) {
@@ -41,12 +42,13 @@ export const ClientsPanel = () => {
           <p className="text-sm mt-2">Utilisez le bouton "Importer Clients" ou créez un client manuellement</p>
           <Button 
             className="mt-4" 
-            onClick={() => openClientCreation()}
+            onClick={() => setShowCreationDialog(true)}
           >
             <Plus className="h-4 w-4 mr-2" />
             Créer un client
           </Button>
         </div>
+        <ClientCreationDialog open={showCreationDialog} onOpenChange={setShowCreationDialog} />
       </Card>
     );
   }
@@ -141,7 +143,7 @@ export const ClientsPanel = () => {
   return (
     <div className="h-full flex flex-col gap-4">
       {/* Bouton de création */}
-      <Button onClick={() => openClientCreation()} className="w-full">
+      <Button onClick={() => setShowCreationDialog(true)} className="w-full">
         <Plus className="h-4 w-4 mr-2" />
         Créer un client
       </Button>
@@ -464,6 +466,8 @@ export const ClientsPanel = () => {
           </div>
         </ScrollArea>
       </Card>
+
+      <ClientCreationDialog open={showCreationDialog} onOpenChange={setShowCreationDialog} />
     </div>
   );
 };

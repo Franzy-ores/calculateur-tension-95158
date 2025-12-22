@@ -216,10 +216,6 @@ export const ClientEditPanel = () => {
       toast.error('Veuillez sélectionner une position sur la carte');
       return;
     }
-    if (!creationNodeId) {
-      toast.error("Veuillez sélectionner un point d'insertion (nœud)");
-      return;
-    }
     if (puissanceContractuelle <= 0) {
       toast.error('La puissance de charge doit être supérieure à 0');
       return;
@@ -236,16 +232,18 @@ export const ClientEditPanel = () => {
       connectionType,
     });
     
-    // Récupérer l'ID du client créé et le lier au nœud
-    const state = useNetworkStore.getState();
-    const clientsImportes = state.currentProject?.clientsImportes || [];
-    const newClient = clientsImportes[clientsImportes.length - 1];
-    
-    if (newClient) {
-      linkClientToNode(newClient.id, creationNodeId);
-      toast.success(`Client "${nomCircuit}" créé et lié au réseau`);
+    // Si un nœud a été sélectionné, lier le client
+    if (creationNodeId) {
+      const state = useNetworkStore.getState();
+      const clientsImportes = state.currentProject?.clientsImportes || [];
+      const newClient = clientsImportes[clientsImportes.length - 1];
+      
+      if (newClient) {
+        linkClientToNode(newClient.id, creationNodeId);
+        toast.success(`Client "${nomCircuit}" créé et lié au réseau`);
+      }
     } else {
-      toast.success('Client créé');
+      toast.success(`Client "${nomCircuit}" créé`);
     }
     
     cancelClientCreation();
@@ -427,10 +425,13 @@ export const ClientEditPanel = () => {
           </div>
         )}
 
-        {/* Section Point d'insertion - Mode Création */}
+        {/* Section Point d'insertion - Mode Création (optionnel) */}
         {isCreationMode && (
           <div className="border-t pt-3 mt-3">
-            <Label className="text-sm font-medium mb-2 block">Point d'insertion (nœud) *</Label>
+            <Label className="text-sm font-medium mb-2 block">Point d'insertion (optionnel)</Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Vous pouvez lier le client à un nœud maintenant ou plus tard
+            </p>
             
             {selectedNodeForCreation ? (
               <div className="text-sm text-muted-foreground bg-muted p-2 rounded mb-2">
@@ -439,9 +440,7 @@ export const ClientEditPanel = () => {
                   Position: {selectedNodeForCreation.lat.toFixed(6)}, {selectedNodeForCreation.lng.toFixed(6)}
                 </div>
               </div>
-            ) : (
-              <p className="text-sm text-muted-foreground mb-2">Aucun nœud sélectionné</p>
-            )}
+            ) : null}
             
             <Button
               variant="outline"
@@ -453,12 +452,12 @@ export const ClientEditPanel = () => {
               disabled={isSelectingNode}
             >
               <Target className="w-4 h-4 mr-2" />
-              {isSelectingNode ? 'Cliquez sur un nœud...' : "Sélectionner un point d'insertion"}
+              {isSelectingNode ? 'Cliquez sur un nœud...' : selectedNodeForCreation ? 'Changer le point d\'insertion' : "Sélectionner un point d'insertion"}
             </Button>
             
             {isSelectingNode && (
               <p className="text-xs text-amber-600 mt-2">
-                ⚡ Cliquez sur un nœud de la carte pour définir le point d'insertion. Appuyez sur ESC pour annuler.
+                ⚡ Cliquez sur un nœud de la carte. Appuyez sur ESC pour annuler.
               </p>
             )}
           </div>
@@ -724,7 +723,7 @@ export const ClientEditPanel = () => {
             <Button 
               onClick={handleCreate} 
               className="flex-1"
-              disabled={!nomCircuit.trim() || !creationLocation || !creationNodeId || puissanceContractuelle <= 0}
+              disabled={!nomCircuit.trim() || !creationLocation || puissanceContractuelle <= 0}
             >
               Créer
             </Button>

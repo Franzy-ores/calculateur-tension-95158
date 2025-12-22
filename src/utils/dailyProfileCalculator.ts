@@ -19,15 +19,6 @@ export class DailyProfileCalculator {
   }
 
   /**
-   * Calcule les puissances totales d'un nœud depuis ses clients et productions
-   */
-  private getNodeTotalPowers(node: Node): { charge_kVA: number; production_kVA: number } {
-    const charge_kVA = (node.clients || []).reduce((sum, c) => sum + (c.S_kVA || 0), 0);
-    const production_kVA = (node.productions || []).reduce((sum, p) => sum + (p.S_kVA || 0), 0);
-    return { charge_kVA, production_kVA };
-  }
-
-  /**
    * Calcule les tensions pour chaque heure (0-23)
    */
   calculateDailyVoltages(): HourlyVoltageResult[] {
@@ -44,27 +35,25 @@ export class DailyProfileCalculator {
 
   /**
    * Calcule la tension à une heure donnée
+   * Utilise le foisonnement horaire du JSON directement dans le calcul électrique
    */
   private calculateHourlyVoltage(hour: number, nominalVoltage: number): HourlyVoltageResult {
     const seasonProfile = this.profiles.profiles[this.options.season];
     const weatherFactor = this.profiles.weatherFactors[this.options.weather];
     const hourStr = hour.toString();
 
-    // Récupérer les pourcentages horaires
-    const residentialPercent = seasonProfile.residential[hourStr] || 0;
-    const pvPercent = (seasonProfile.pv[hourStr] || 0) * weatherFactor;
-    const evPercent = this.options.enableEV ? (seasonProfile.ev[hourStr] || 0) : 0;
-    const industrialPercent = this.options.enableIndustrialPME ? (seasonProfile.industrial_pme[hourStr] || 0) : 0;
+    // Foisonnement charges = profil résidentiel horaire du JSON
+    let chargesFoisonnement = seasonProfile.residential[hourStr] || 0;
 
-    // Créer une copie du projet avec les puissances modulées
-    const modulatedProject = this.createModulatedProject(
-      residentialPercent,
-      pvPercent,
-      evPercent,
-      industrialPercent
-    );
+    // Majoration VE : +5% entre 18h et 5h si activé
+    if (this.options.enableEV && (hour >= 18 || hour <= 5)) {
+      chargesFoisonnement += 5;
+    }
 
-    // Exécuter le calcul électrique
+    // Foisonnement productions = profil PV × facteur météo
+    const productionsFoisonnement = (seasonProfile.pv[hourStr] || 0) * weatherFactor;
+
+    // Exécuter le calcul électrique avec le projet ORIGINAL et le foisonnement horaire
     const calculator = new ElectricalCalculator(
       this.project.cosPhi,
       this.project.cosPhiCharges,
@@ -73,11 +62,11 @@ export class DailyProfileCalculator {
 
     try {
       const result = calculator.calculateScenarioWithHTConfig(
-        modulatedProject,
+        this.project,              // Projet ORIGINAL (pas modulé)
         'MIXTE',
-        this.project.foisonnementCharges ?? 100,
-        this.project.foisonnementProductions ?? 100,
-        this.project.manualPhaseDistribution,
+        chargesFoisonnement,       // Foisonnement horaire du JSON
+        productionsFoisonnement,   // Production PV horaire avec météo
+        this.project.manualPhaseDistribution,  // Déséquilibre conservé
         this.project.clientsImportes,
         this.project.clientLinks
       );
@@ -86,50 +75,6 @@ export class DailyProfileCalculator {
       console.warn(`Erreur calcul heure ${hour}:`, error);
       return this.createDefaultHourlyResult(hour, nominalVoltage);
     }
-  }
-
-  /**
-   * Crée une copie du projet avec les puissances modulées selon les profils horaires
-   */
-  private createModulatedProject(
-    residentialPercent: number,
-    pvPercent: number,
-    evPercent: number,
-    industrialPercent: number
-  ): Project {
-    const modulatedNodes = this.project.nodes.map(node => {
-      const { charge_kVA, production_kVA } = this.getNodeTotalPowers(node);
-      
-      // Déterminer si le nœud est industriel (charge > 20 kVA)
-      const isIndustrial = charge_kVA > 20;
-      const chargeFactor = isIndustrial ? (industrialPercent / 100) : (residentialPercent / 100);
-      
-      // Ajouter la charge VE si activée
-      const evCharge = evPercent > 0 ? this.profiles.evPower_kVA * (evPercent / 100) : 0;
-
-      // Moduler les clients (charges)
-      const modulatedClients = (node.clients || []).map(client => ({
-        ...client,
-        S_kVA: (client.S_kVA || 0) * chargeFactor + (evCharge / Math.max(1, (node.clients || []).length))
-      }));
-
-      // Moduler les productions PV
-      const modulatedProductions = (node.productions || []).map(prod => ({
-        ...prod,
-        S_kVA: (prod.S_kVA || 0) * (pvPercent / 100)
-      }));
-
-      return {
-        ...node,
-        clients: modulatedClients,
-        productions: modulatedProductions
-      };
-    });
-
-    return {
-      ...this.project,
-      nodes: modulatedNodes
-    };
   }
 
   /**

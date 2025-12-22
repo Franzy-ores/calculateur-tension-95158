@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Link2, Unlink, Edit, Trash2, MapPin, Plus } from 'lucide-react';
+import { Search, Link2, Unlink, Edit, Trash2, MapPin, Plus, FileUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +12,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { analyzeClientPower } from '@/utils/clientsUtils';
 import { ClientType } from '@/types/network';
 
-export const ClientsPanel = () => {
+interface ClientsPanelProps {
+  onShowImporter?: () => void;
+}
+
+export const ClientsPanel = ({ onShowImporter }: ClientsPanelProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCouplage, setFilterCouplage] = useState<'ALL' | 'TRI' | 'MONO'>('ALL');
   const [filterLinked, setFilterLinked] = useState<'ALL' | 'LINKED' | 'UNLINKED'>('ALL');
@@ -39,13 +43,18 @@ export const ClientsPanel = () => {
         <div className="text-center text-muted-foreground">
           <p>Aucun client importé</p>
           <p className="text-sm mt-2">Utilisez le bouton "Importer Clients" ou créez un client manuellement</p>
-          <Button 
-            className="mt-4" 
-            onClick={() => startClientCreation()}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Créer un client
-          </Button>
+          <div className="flex gap-2 justify-center mt-4">
+            {onShowImporter && (
+              <Button variant="outline" onClick={onShowImporter}>
+                <FileUp className="h-4 w-4 mr-2" />
+                Importer Clients
+              </Button>
+            )}
+            <Button onClick={() => startClientCreation()}>
+              <Plus className="h-4 w-4 mr-2" />
+              Créer un client
+            </Button>
+          </div>
         </div>
       </Card>
     );
@@ -140,11 +149,19 @@ export const ClientsPanel = () => {
 
   return (
     <div className="h-full flex flex-col gap-4">
-      {/* Bouton de création */}
-      <Button onClick={() => startClientCreation()} className="w-full">
-        <Plus className="h-4 w-4 mr-2" />
-        Créer un client
-      </Button>
+      {/* Boutons d'actions */}
+      <div className="flex gap-2">
+        {onShowImporter && (
+          <Button variant="outline" onClick={onShowImporter} className="flex-1">
+            <FileUp className="h-4 w-4 mr-2" />
+            Importer Clients
+          </Button>
+        )}
+        <Button onClick={() => startClientCreation()} className="flex-1">
+          <Plus className="h-4 w-4 mr-2" />
+          Créer un client
+        </Button>
+      </div>
 
       {/* Légende mode de coloration */}
       <Card className="p-3">

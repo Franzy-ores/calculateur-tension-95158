@@ -556,14 +556,15 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         
         // Recalculer autoPhaseDistribution pour ce nœud (Option B: curseurs universels)
         if (linkedClients.length > 0) {
-          const distribution = calculateNodeAutoPhaseDistribution(
+        const distribution = calculateNodeAutoPhaseDistribution(
             node,
             linkedClients,
             project.manualPhaseDistribution!.charges,
             project.manualPhaseDistribution!.productions,
             project.voltageSystem,
-            undefined, // foisonnementCharges
-            undefined, // foisonnementProductions
+            project.foisonnementChargesResidentiel ?? 15, // foisonnementChargesResidentiel
+            project.foisonnementChargesIndustriel ?? 70, // foisonnementChargesIndustriel
+            project.foisonnementProductions ?? 100, // foisonnementProductions
             project.treatSmallPolyProductionsAsMono || false
           );
           node.autoPhaseDistribution = distribution;
@@ -1377,8 +1378,9 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       state.currentProject.manualPhaseDistribution?.charges || { A: 33.33, B: 33.33, C: 33.34 },
       state.currentProject.manualPhaseDistribution?.productions || { A: 33.33, B: 33.33, C: 33.34 },
       state.currentProject.voltageSystem,
-      state.currentProject.foisonnementCharges ?? 100, // ✅ Passer foisonnement charges
-      state.currentProject.foisonnementProductions ?? 100, // ✅ Passer foisonnement productions
+      state.currentProject.foisonnementChargesResidentiel ?? 15, // ✅ Foisonnement résidentiel
+      state.currentProject.foisonnementChargesIndustriel ?? 70, // ✅ Foisonnement industriel
+      state.currentProject.foisonnementProductions ?? 100, // ✅ Foisonnement productions
       state.currentProject.treatSmallPolyProductionsAsMono || false
     );
     
@@ -1587,8 +1589,9 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
             currentProject.manualPhaseDistribution?.charges || { A: 33.33, B: 33.33, C: 33.33 },
             currentProject.manualPhaseDistribution?.productions || { A: 33.33, B: 33.33, C: 33.33 },
             currentProject.voltageSystem,
-            currentProject.foisonnementCharges, // Nouveau: passer le foisonnement
-            currentProject.foisonnementProductions, // Nouveau: passer le foisonnement
+            currentProject.foisonnementChargesResidentiel ?? 15, // Foisonnement résidentiel
+            currentProject.foisonnementChargesIndustriel ?? 70, // Foisonnement industriel
+            currentProject.foisonnementProductions, // Foisonnement productions
             currentProject.treatSmallPolyProductionsAsMono || false
           );
           node.autoPhaseDistribution = autoPhaseDistribution;

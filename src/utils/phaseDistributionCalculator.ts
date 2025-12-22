@@ -279,7 +279,8 @@ export function calculateNodeAutoPhaseDistribution(
   manualPhaseDistributionCharges: { A: number; B: number; C: number }, // Répartition manuelle CHARGES (%)
   manualPhaseDistributionProductions: { A: number; B: number; C: number }, // Répartition manuelle PRODUCTIONS (%)
   networkVoltage: 'TRIPHASÉ_230V' | 'TÉTRAPHASÉ_400V' = 'TÉTRAPHASÉ_400V', // Système de tension du réseau
-  foisonnementCharges?: number,  // Coefficient de foisonnement des charges (%)
+  foisonnementChargesResidentiel?: number,  // Coefficient de foisonnement des charges résidentielles (%)
+  foisonnementChargesIndustriel?: number,   // Coefficient de foisonnement des charges industrielles (%)
   foisonnementProductions?: number,  // Coefficient de foisonnement des productions (%)
   treatSmallPolyProductionsAsMono: boolean = false  // Option pour traiter productions TRI/TETRA ≤5kVA comme MONO
 ): NodePhaseDistributionResult {
@@ -558,23 +559,110 @@ export function calculateNodeAutoPhaseDistribution(
     result.unbalancePercent = maxEcart;
   }
   
-  // === 5. CALCUL DES VALEURS FOISONNÉES AVEC CURSEURS DE DÉSÉQUILIBRE ===
+  // === 5. CALCUL DES VALEURS FOISONNÉES AVEC DIFFÉRENCIATION RÉSIDENTIEL/INDUSTRIEL ===
   // Si les coefficients de foisonnement sont fournis, calculer les valeurs foisonnées avec curseurs
-  if (foisonnementCharges !== undefined && foisonnementProductions !== undefined) {
-    // 1. Appliquer le foisonnement sur les valeurs physiques totales
-    const totalFoisonneChargeA = result.charges.total.A * (foisonnementCharges / 100);
-    const totalFoisonneChargeB = result.charges.total.B * (foisonnementCharges / 100);
-    const totalFoisonneChargeC = result.charges.total.C * (foisonnementCharges / 100);
+  if (foisonnementChargesResidentiel !== undefined && foisonnementChargesIndustriel !== undefined && foisonnementProductions !== undefined) {
+    // 1. Séparer les charges par type de client (résidentiel/industriel) et par phase
+    const chargesResidentiellesParPhase = { A: 0, B: 0, C: 0 };
+    const chargesIndustriellesParPhase = { A: 0, B: 0, C: 0 };
+    
+    // Parcourir les clients importés pour séparer par type
+    linkedClients.forEach(client => {
+      const chargeKVA = client.puissanceContractuelle_kVA;
+      const isIndustriel = client.clientType === 'industriel';
+      
+      if (client.connectionType === 'MONO') {
+        // Client MONO : utiliser la phase assignée ou le couplage
+        if (networkVoltage === 'TRIPHASÉ_230V' && client.phaseCoupling) {
+          // 230V : 50/50 sur le couplage
+          if (client.phaseCoupling === 'A-B') {
+            if (isIndustriel) {
+              chargesIndustriellesParPhase.A += chargeKVA * 0.5;
+              chargesIndustriellesParPhase.B += chargeKVA * 0.5;
+            } else {
+              chargesResidentiellesParPhase.A += chargeKVA * 0.5;
+              chargesResidentiellesParPhase.B += chargeKVA * 0.5;
+            }
+          } else if (client.phaseCoupling === 'B-C') {
+            if (isIndustriel) {
+              chargesIndustriellesParPhase.B += chargeKVA * 0.5;
+              chargesIndustriellesParPhase.C += chargeKVA * 0.5;
+            } else {
+              chargesResidentiellesParPhase.B += chargeKVA * 0.5;
+              chargesResidentiellesParPhase.C += chargeKVA * 0.5;
+            }
+          } else if (client.phaseCoupling === 'A-C') {
+            if (isIndustriel) {
+              chargesIndustriellesParPhase.A += chargeKVA * 0.5;
+              chargesIndustriellesParPhase.C += chargeKVA * 0.5;
+            } else {
+              chargesResidentiellesParPhase.A += chargeKVA * 0.5;
+              chargesResidentiellesParPhase.C += chargeKVA * 0.5;
+            }
+          }
+        } else if (client.assignedPhase) {
+          // 400V : 100% sur la phase assignée
+          if (isIndustriel) {
+            chargesIndustriellesParPhase[client.assignedPhase] += chargeKVA;
+          } else {
+            chargesResidentiellesParPhase[client.assignedPhase] += chargeKVA;
+          }
+        }
+      } else {
+        // Client TRI/TÉTRA : répartir 33.33% par phase
+        const chargeParPhase = chargeKVA / 3;
+        if (isIndustriel) {
+          chargesIndustriellesParPhase.A += chargeParPhase;
+          chargesIndustriellesParPhase.B += chargeParPhase;
+          chargesIndustriellesParPhase.C += chargeParPhase;
+        } else {
+          chargesResidentiellesParPhase.A += chargeParPhase;
+          chargesResidentiellesParPhase.B += chargeParPhase;
+          chargesResidentiellesParPhase.C += chargeParPhase;
+        }
+      }
+    });
+    
+    // Ajouter les charges manuelles du nœud (considérées comme résidentielles par défaut)
+    if (node.manualLoadType === 'MONO') {
+      node.clients.forEach(client => {
+        const chargeKVA = client.S_kVA;
+        if (client.assignedPhase) {
+          chargesResidentiellesParPhase[client.assignedPhase] += chargeKVA;
+        } else {
+          // Fallback : répartir selon curseurs
+          chargesResidentiellesParPhase.A += chargeKVA * (manualPhaseDistributionCharges.A / 100);
+          chargesResidentiellesParPhase.B += chargeKVA * (manualPhaseDistributionCharges.B / 100);
+          chargesResidentiellesParPhase.C += chargeKVA * (manualPhaseDistributionCharges.C / 100);
+        }
+      });
+    } else {
+      const manualChargeTotal = node.clients.reduce((sum, c) => sum + c.S_kVA, 0);
+      chargesResidentiellesParPhase.A += manualChargeTotal / 3;
+      chargesResidentiellesParPhase.B += manualChargeTotal / 3;
+      chargesResidentiellesParPhase.C += manualChargeTotal / 3;
+    }
+    
+    // 2. Appliquer le foisonnement différencié par phase
+    const totalFoisonneChargeA = 
+      chargesResidentiellesParPhase.A * (foisonnementChargesResidentiel / 100) +
+      chargesIndustriellesParPhase.A * (foisonnementChargesIndustriel / 100);
+    const totalFoisonneChargeB = 
+      chargesResidentiellesParPhase.B * (foisonnementChargesResidentiel / 100) +
+      chargesIndustriellesParPhase.B * (foisonnementChargesIndustriel / 100);
+    const totalFoisonneChargeC = 
+      chargesResidentiellesParPhase.C * (foisonnementChargesResidentiel / 100) +
+      chargesIndustriellesParPhase.C * (foisonnementChargesIndustriel / 100);
     
     const totalFoisonneProdA = result.productions.total.A * (foisonnementProductions / 100);
     const totalFoisonneProdB = result.productions.total.B * (foisonnementProductions / 100);
     const totalFoisonneProdC = result.productions.total.C * (foisonnementProductions / 100);
     
-    // 2. Calculer le total global foisonné
+    // 3. Calculer le total global foisonné
     const totalFoisonneChargeGlobal = totalFoisonneChargeA + totalFoisonneChargeB + totalFoisonneChargeC;
     const totalFoisonneProdGlobal = totalFoisonneProdA + totalFoisonneProdB + totalFoisonneProdC;
     
-    // 3. Redistribuer selon les curseurs de déséquilibre
+    // 4. Redistribuer selon les curseurs de déséquilibre
     result.charges.foisonneAvecCurseurs = {
       A: totalFoisonneChargeGlobal * (manualPhaseDistributionCharges.A / 100),
       B: totalFoisonneChargeGlobal * (manualPhaseDistributionCharges.B / 100),
@@ -587,7 +675,10 @@ export function calculateNodeAutoPhaseDistribution(
       C: totalFoisonneProdGlobal * (manualPhaseDistributionProductions.C / 100)
     };
     
-    console.log(`🔍 Nœud "${node.name}": Valeurs foisonnées avec curseurs calculées`);
+    console.log(`🔍 Nœud "${node.name}": Foisonnement différencié appliqué`);
+    console.log(`   🏠 Charges résidentielles: A=${chargesResidentiellesParPhase.A.toFixed(1)}, B=${chargesResidentiellesParPhase.B.toFixed(1)}, C=${chargesResidentiellesParPhase.C.toFixed(1)} kVA (foisonnement ${foisonnementChargesResidentiel}%)`);
+    console.log(`   🏭 Charges industrielles: A=${chargesIndustriellesParPhase.A.toFixed(1)}, B=${chargesIndustriellesParPhase.B.toFixed(1)}, C=${chargesIndustriellesParPhase.C.toFixed(1)} kVA (foisonnement ${foisonnementChargesIndustriel}%)`);
+    console.log(`   ⚡ Charges foisonnées: A=${totalFoisonneChargeA.toFixed(1)}, B=${totalFoisonneChargeB.toFixed(1)}, C=${totalFoisonneChargeC.toFixed(1)} kVA`);
     console.log(`   Charges foisonnées avec curseurs: A=${result.charges.foisonneAvecCurseurs.A.toFixed(1)}kVA, B=${result.charges.foisonneAvecCurseurs.B.toFixed(1)}kVA, C=${result.charges.foisonneAvecCurseurs.C.toFixed(1)}kVA`);
     console.log(`   Productions foisonnées avec curseurs: A=${result.productions.foisonneAvecCurseurs.A.toFixed(1)}kVA, B=${result.productions.foisonneAvecCurseurs.B.toFixed(1)}kVA, C=${result.productions.foisonneAvecCurseurs.C.toFixed(1)}kVA`);
   }

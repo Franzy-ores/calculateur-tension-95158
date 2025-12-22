@@ -172,7 +172,6 @@ const Index = () => {
           onSave={handleSave}
           onLoad={handleLoad}
           onSettings={handleSettings}
-          onSimulation={handleSimulation}
         />
       )}
       

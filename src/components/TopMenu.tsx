@@ -12,7 +12,6 @@ interface TopMenuProps {
   onSave: () => void;
   onLoad: () => void;
   onSettings: () => void;
-  onSimulation: () => void;
 }
 
 export const TopMenu = ({
@@ -20,7 +19,6 @@ export const TopMenu = ({
   onSave,
   onLoad,
   onSettings,
-  onSimulation
 }: TopMenuProps) => {
   const [showImporter, setShowImporter] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
@@ -36,7 +34,6 @@ export const TopMenu = ({
         onSave={onSave}
         onLoad={onLoad}
         onSettings={onSettings}
-        onSimulation={onSimulation}
         isExpanded={isExpanded}
         onToggleExpand={() => setIsExpanded(!isExpanded)}
       />

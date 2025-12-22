@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
-import { Zap, Users, Settings2, FlaskConical, FileDown } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { useNetworkStore } from "@/store/networkStore";
-import { ExcelImporter } from '@/components/ExcelImporter';
-import { TopMenuHeader, NetworkTab, RaccordementsTab, ParametersTab, SimulationTab, ExportTab } from '@/components/topMenu';
+import { TopMenuHeader } from '@/components/topMenu';
+import { TopMenuTabs } from '@/components/TopMenuTabs';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface TopMenuProps {
   onNewNetwork: () => void;
@@ -20,11 +20,22 @@ export const TopMenu = ({
   onLoad,
   onSettings,
 }: TopMenuProps) => {
-  const [showImporter, setShowImporter] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
-  const [activeTab, setActiveTab] = useState('network');
   
   const { currentProject } = useNetworkStore();
+
+  const handleDetach = () => {
+    const width = 900;
+    const height = 700;
+    const left = window.screen.width - width - 50;
+    const top = 50;
+    
+    window.open(
+      '/config-popup',
+      'ConfigWindow',
+      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
+    );
+  };
 
   return (
     <div className="bg-card border-b border-border shadow-sm">
@@ -41,76 +52,31 @@ export const TopMenu = ({
       {/* Contenu avec Tabs (collapsible) */}
       {currentProject && (
         <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-          <CollapsibleContent className="animate-accordion-down">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              {/* Navigation Tabs */}
-              <div className="border-b border-border/50 bg-muted/30">
-                <TabsList className="h-10 w-full justify-start rounded-none bg-transparent p-0 px-4">
-                  <TabsTrigger 
-                    value="network" 
-                    className="relative h-10 rounded-none border-b-2 border-transparent bg-transparent px-4 font-medium text-muted-foreground shadow-none transition-none data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none"
+          <CollapsibleContent className="animate-accordion-down relative">
+            {/* Bouton détacher */}
+            <div className="absolute top-2 right-4 z-10">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleDetach}
+                    className="h-8 px-2 text-muted-foreground hover:text-foreground"
                   >
-                    <Zap className="h-4 w-4 mr-2" />
-                    Réseau
-                  </TabsTrigger>
-                  <TabsTrigger 
-                    value="raccordements" 
-                    className="relative h-10 rounded-none border-b-2 border-transparent bg-transparent px-4 font-medium text-muted-foreground shadow-none transition-none data-[state=active]:border-emerald-500 data-[state=active]:text-emerald-500 data-[state=active]:shadow-none"
-                  >
-                    <Users className="h-4 w-4 mr-2" />
-                    Raccordements
-                  </TabsTrigger>
-                  <TabsTrigger 
-                    value="parameters" 
-                    className="relative h-10 rounded-none border-b-2 border-transparent bg-transparent px-4 font-medium text-muted-foreground shadow-none transition-none data-[state=active]:border-secondary data-[state=active]:text-secondary data-[state=active]:shadow-none"
-                  >
-                    <Settings2 className="h-4 w-4 mr-2" />
-                    Paramètres
-                  </TabsTrigger>
-                  <TabsTrigger 
-                    value="simulation" 
-                    className="relative h-10 rounded-none border-b-2 border-transparent bg-transparent px-4 font-medium text-muted-foreground shadow-none transition-none data-[state=active]:border-accent data-[state=active]:text-accent data-[state=active]:shadow-none"
-                  >
-                    <FlaskConical className="h-4 w-4 mr-2" />
-                    Simulation
-                  </TabsTrigger>
-                  <TabsTrigger 
-                    value="export" 
-                    className="relative h-10 rounded-none border-b-2 border-transparent bg-transparent px-4 font-medium text-muted-foreground shadow-none transition-none data-[state=active]:border-destructive data-[state=active]:text-destructive data-[state=active]:shadow-none"
-                  >
-                    <FileDown className="h-4 w-4 mr-2" />
-                    Export
-                  </TabsTrigger>
-                </TabsList>
-              </div>
-
-              {/* Contenu des Tabs */}
-              <TabsContent value="network" className="mt-0">
-                <NetworkTab />
-              </TabsContent>
-              <TabsContent value="raccordements" className="mt-0">
-                <RaccordementsTab onShowImporter={() => setShowImporter(true)} />
-              </TabsContent>
-              <TabsContent value="parameters" className="mt-0">
-                <ParametersTab />
-              </TabsContent>
-              <TabsContent value="simulation" className="mt-0">
-                <SimulationTab />
-              </TabsContent>
-              <TabsContent value="export" className="mt-0">
-                <ExportTab />
-              </TabsContent>
-            </Tabs>
+                    <ExternalLink className="h-4 w-4 mr-1" />
+                    <span className="text-xs">Détacher</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Ouvrir dans une nouvelle fenêtre (pour second écran)
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            
+            <TopMenuTabs />
           </CollapsibleContent>
         </Collapsible>
       )}
-
-      {/* Dialog for Excel Importer */}
-      <Dialog open={showImporter} onOpenChange={setShowImporter}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <ExcelImporter onClose={() => setShowImporter(false)} />
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

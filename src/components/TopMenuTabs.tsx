@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Zap, Users, Settings2, FlaskConical, FileDown } from "lucide-react";
+import { Zap, Users, Settings2, FlaskConical, FileDown, Clock } from "lucide-react";
 import { useNetworkStore } from "@/store/networkStore";
 import { ExcelImporter } from '@/components/ExcelImporter';
-import { NetworkTab, RaccordementsTab, ParametersTab, SimulationTab, ExportTab } from '@/components/topMenu';
+import { NetworkTab, RaccordementsTab, ParametersTab, SimulationTab, DailyProfileTab, ExportTab } from '@/components/topMenu';
 
 interface TopMenuTabsProps {
   defaultTab?: string;
@@ -60,6 +60,13 @@ export const TopMenuTabs = ({ defaultTab = 'network', className = '' }: TopMenuT
               Simulation
             </TabsTrigger>
             <TabsTrigger 
+              value="daily-profile" 
+              className="relative h-10 rounded-none border-b-2 border-transparent bg-transparent px-4 font-medium text-muted-foreground shadow-none transition-none data-[state=active]:border-orange-500 data-[state=active]:text-orange-500 data-[state=active]:shadow-none"
+            >
+              <Clock className="h-4 w-4 mr-2" />
+              Profil 24h
+            </TabsTrigger>
+            <TabsTrigger 
               value="export" 
               className="relative h-10 rounded-none border-b-2 border-transparent bg-transparent px-4 font-medium text-muted-foreground shadow-none transition-none data-[state=active]:border-destructive data-[state=active]:text-destructive data-[state=active]:shadow-none"
             >
@@ -81,6 +88,9 @@ export const TopMenuTabs = ({ defaultTab = 'network', className = '' }: TopMenuT
         </TabsContent>
         <TabsContent value="simulation" className="mt-0">
           <SimulationTab />
+        </TabsContent>
+        <TabsContent value="daily-profile" className="mt-0">
+          <DailyProfileTab />
         </TabsContent>
         <TabsContent value="export" className="mt-0">
           <ExportTab />

@@ -308,6 +308,8 @@ export interface Project {
   addEmptyNodeByDefault?: boolean;
   // Option pour traiter les productions TRI/TETRA ≤5kVA comme MONO
   treatSmallPolyProductionsAsMono?: boolean;
+  // Compteur d'imports Excel (max 2 autorisés)
+  importCount?: number;
   // Équipements de simulation (SRG2 et EQUI8)
   simulationEquipment?: SimulationEquipment;
   // Debug flags pour développement

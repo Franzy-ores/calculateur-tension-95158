@@ -28,8 +28,9 @@ export const ExcelImporter = ({ onClose }: ExcelImporterProps) => {
 
   const { importClientsFromExcel, currentProject } = useNetworkStore();
   
-  // Vérifier si des clients ont déjà été importés
-  const hasExistingClients = currentProject?.clientsImportes && currentProject.clientsImportes.length > 0;
+  // Vérifier le nombre d'imports déjà effectués (max 2)
+  const importCount = currentProject?.importCount ?? 0;
+  const hasReachedImportLimit = importCount >= 2;
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -140,21 +141,20 @@ export const ExcelImporter = ({ onClose }: ExcelImporterProps) => {
         </Button>
       </div>
 
-      {hasExistingClients ? (
+      {hasReachedImportLimit ? (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription className="space-y-3">
-            <p className="font-semibold">Importation bloquée</p>
+            <p className="font-semibold">Limite d'importation atteinte</p>
             <p>
-              Ce projet contient déjà <strong>{currentProject.clientsImportes.length} client(s)</strong> importé(s).
-              Pour des raisons de cohérence des données, vous ne pouvez pas importer de nouveaux clients dans un projet existant.
+              Vous avez déjà effectué <strong>{importCount} import(s)</strong> sur ce projet.
+              Le nombre maximum d'imports autorisés est de <strong>2</strong>.
             </p>
             <p className="text-sm">
-              <strong>Solutions :</strong>
+              <strong>Solution :</strong>
             </p>
             <ul className="text-sm list-disc list-inside space-y-1">
-              <li>Créez un nouveau projet pour importer ces clients</li>
-              <li>Ou supprimez les clients existants avant d'importer</li>
+              <li>Créez un nouveau projet pour importer d'autres clients</li>
             </ul>
             <div className="flex justify-end pt-2">
               <Button variant="outline" onClick={onClose}>

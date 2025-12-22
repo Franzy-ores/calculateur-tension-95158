@@ -1027,7 +1027,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     const updatedProject = {
       ...currentProject,
       clientsImportes: [...(currentProject.clientsImportes || []), ...normalizedClients],
-      clientLinks: currentProject.clientLinks || []
+      clientLinks: currentProject.clientLinks || [],
+      importCount: (currentProject.importCount ?? 0) + 1 // Incrémenter le compteur d'imports
     };
     
     set({ currentProject: updatedProject });

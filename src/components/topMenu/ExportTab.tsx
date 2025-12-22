@@ -1,19 +1,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FileDown, FileSpreadsheet, Eye, FileText } from "lucide-react";
+import { FileDown, Eye, FileText } from "lucide-react";
 import { useNetworkStore } from "@/store/networkStore";
 import { PDFGenerator } from "@/utils/pdfGenerator";
 import { toast } from "sonner";
 
-interface ExportTabProps {
-  onShowImporter: () => void;
-}
-
-export const ExportTab = ({ onShowImporter }: ExportTabProps) => {
+export const ExportTab = () => {
   const {
     currentProject,
     showVoltages,
@@ -64,7 +59,7 @@ export const ExportTab = ({ onShowImporter }: ExportTabProps) => {
   const hasClients = currentProject.clientsImportes && currentProject.clientsImportes.length > 0;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
       {/* Card 1: Export */}
       <Card className="bg-card/50 backdrop-blur border-border/50">
         <CardHeader className="pb-2 pt-3 px-4">
@@ -89,35 +84,7 @@ export const ExportTab = ({ onShowImporter }: ExportTabProps) => {
         </CardContent>
       </Card>
 
-      {/* Card 2: Import */}
-      <Card className="bg-card/50 backdrop-blur border-border/50">
-        <CardHeader className="pb-2 pt-3 px-4">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <FileSpreadsheet className="h-4 w-4 text-secondary" />
-            Import de données
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-4 pb-4 space-y-3">
-          <Button 
-            variant="outline" 
-            className="w-full justify-start" 
-            onClick={onShowImporter}
-          >
-            <FileSpreadsheet className="h-4 w-4 mr-2 text-success" />
-            Importer clients Excel
-          </Button>
-          {hasClients && (
-            <Badge variant="secondary" className="text-xs">
-              {currentProject.clientsImportes?.length} clients importés
-            </Badge>
-          )}
-          <p className="text-xs text-muted-foreground">
-            Importez une liste de clients depuis un fichier Excel.
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Card 3: Affichage */}
+      {/* Card 2: Affichage */}
       <Card className="bg-card/50 backdrop-blur border-border/50">
         <CardHeader className="pb-2 pt-3 px-4">
           <CardTitle className="text-sm font-medium flex items-center gap-2">

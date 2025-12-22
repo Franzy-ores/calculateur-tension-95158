@@ -98,7 +98,7 @@ export const TopMenu = ({
                 <SimulationTab />
               </TabsContent>
               <TabsContent value="export" className="mt-0">
-                <ExportTab onShowImporter={() => setShowImporter(true)} />
+                <ExportTab />
               </TabsContent>
             </Tabs>
           </CollapsibleContent>

@@ -137,9 +137,11 @@ export class DailyProfileCalculator {
    */
   private extractNodeVoltages(hour: number, result: CalculationResult, nominalVoltage: number): HourlyVoltageResult {
     const nodeId = this.options.selectedNodeId;
-    const nodeMetrics = result.nodeMetricsPerPhase?.[nodeId];
+    // Correction: nodeMetricsPerPhase est un tableau, pas un objet indexé par nodeId
+    const nodeMetrics = result.nodeMetricsPerPhase?.find(n => n.nodeId === nodeId);
 
     if (!nodeMetrics?.voltagesPerPhase) {
+      console.warn(`Heure ${hour}: Pas de métriques pour le nœud ${nodeId}`);
       return this.createDefaultHourlyResult(hour, nominalVoltage);
     }
 

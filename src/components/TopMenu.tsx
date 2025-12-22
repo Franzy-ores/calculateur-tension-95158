@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
-import { Zap, Settings2, FlaskConical, FileDown } from "lucide-react";
+import { Zap, Users, Settings2, FlaskConical, FileDown } from "lucide-react";
 import { useNetworkStore } from "@/store/networkStore";
 import { ExcelImporter } from '@/components/ExcelImporter';
-import { TopMenuHeader, NetworkTab, ParametersTab, SimulationTab, ExportTab } from '@/components/topMenu';
+import { TopMenuHeader, NetworkTab, RaccordementsTab, ParametersTab, SimulationTab, ExportTab } from '@/components/topMenu';
 
 interface TopMenuProps {
   onNewNetwork: () => void;
@@ -57,6 +57,13 @@ export const TopMenu = ({
                     Réseau
                   </TabsTrigger>
                   <TabsTrigger 
+                    value="raccordements" 
+                    className="relative h-10 rounded-none border-b-2 border-transparent bg-transparent px-4 font-medium text-muted-foreground shadow-none transition-none data-[state=active]:border-emerald-500 data-[state=active]:text-emerald-500 data-[state=active]:shadow-none"
+                  >
+                    <Users className="h-4 w-4 mr-2" />
+                    Raccordements
+                  </TabsTrigger>
+                  <TabsTrigger 
                     value="parameters" 
                     className="relative h-10 rounded-none border-b-2 border-transparent bg-transparent px-4 font-medium text-muted-foreground shadow-none transition-none data-[state=active]:border-secondary data-[state=active]:text-secondary data-[state=active]:shadow-none"
                   >
@@ -83,6 +90,9 @@ export const TopMenu = ({
               {/* Contenu des Tabs */}
               <TabsContent value="network" className="mt-0">
                 <NetworkTab />
+              </TabsContent>
+              <TabsContent value="raccordements" className="mt-0">
+                <RaccordementsTab />
               </TabsContent>
               <TabsContent value="parameters" className="mt-0">
                 <ParametersTab />

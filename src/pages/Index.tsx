@@ -1,21 +1,18 @@
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { TopMenu } from "@/components/TopMenu";
 import { MapView } from "@/components/MapView";
 import { Toolbar } from "@/components/Toolbar";
 import { ResultsPanel } from "@/components/ResultsPanel";
 import { EditPanel } from "@/components/EditPanel";
-import { ClientsPanel } from "@/components/ClientsPanel";
 import { SimulationPanel } from "@/components/SimulationPanel";
 import { ClientEditPanel } from "@/components/ClientEditPanel";
 import { GlobalAlertPopup } from "@/components/GlobalAlertPopup";
 import DebugConsole from "@/components/DebugConsole";
 import { useNetworkStore } from "@/store/networkStore";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Users, X } from "lucide-react";
+import { X } from "lucide-react";
 
 const Index = () => {
-  const [clientsPanelOpen, setClientsPanelOpen] = useState(false);
   
   const { 
     currentProject, 
@@ -188,17 +185,6 @@ const Index = () => {
           isCollapsed={!shouldShowResults}
         />
         
-        {/* Bouton pour ouvrir le panneau clients */}
-        {currentProject?.clientsImportes && currentProject.clientsImportes.length > 0 && !focusMode && (
-          <Button
-            onClick={() => setClientsPanelOpen(true)}
-            className="fixed right-20 top-20 z-20 shadow-lg"
-            size="sm"
-          >
-            <Users className="h-4 w-4 mr-2" />
-            Clients ({currentProject.clientsImportes.length})
-          </Button>
-        )}
       </div>
 
       {/* Alerte globale surcharge/injection */}
@@ -209,18 +195,6 @@ const Index = () => {
           foisonnedProduction={foisonnedProduction}
         />
       )}
-
-      {/* Clients Panel - Sheet latéral */}
-      <Sheet open={clientsPanelOpen} onOpenChange={setClientsPanelOpen} modal={false}>
-        <SheetContent side="left" className="w-96 sm:max-w-96 overflow-hidden flex flex-col">
-          <SheetHeader>
-            <SheetTitle>Gestion des Clients</SheetTitle>
-          </SheetHeader>
-          <div className="flex-1 overflow-hidden mt-4">
-            <ClientsPanel />
-          </div>
-        </SheetContent>
-      </Sheet>
       
       <EditPanel />
 

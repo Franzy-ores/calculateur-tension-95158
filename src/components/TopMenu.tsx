@@ -30,8 +30,11 @@ export const TopMenu = ({
     const left = window.screen.width - width - 50;
     const top = 50;
     
+    // Utiliser le basename correct pour GitHub Pages
+    const basename = import.meta.env.PROD ? '/calculateur-tension-95158' : '';
+    
     window.open(
-      '/config-popup',
+      `${basename}/config-popup`,
       'ConfigWindow',
       `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
     );

@@ -68,8 +68,8 @@ export const DailyProfileTab = () => {
     return DailyProfileCalculator.findCriticalHours(results).slice(0, 5);
   }, [results]);
 
-  // Tension nominale
-  const nominalVoltage = currentProject?.voltageSystem === 'TRIPHASÉ_230V' ? 230 : 400;
+  // Tension nominale : toujours 230V car on calcule en phase-neutre
+  const nominalVoltage = 230;
 
   // Nœud sélectionné
   const selectedNode = nodes.find(n => n.id === options.selectedNodeId);

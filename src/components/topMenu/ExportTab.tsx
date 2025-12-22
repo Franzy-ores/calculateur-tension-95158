@@ -105,10 +105,10 @@ export const ExportTab = () => {
             />
           </div>
 
-          {/* Coloration clients */}
+          {/* Coloration raccordements */}
           {hasClients && (
             <div className="space-y-2">
-              <Label className="text-sm">Mode coloration clients</Label>
+              <Label className="text-sm">Mode coloration raccordements</Label>
               <Select value={clientColorMode} onValueChange={(value: any) => setClientColorMode(value)}>
                 <SelectTrigger className="w-full bg-background border text-sm h-9">
                   <SelectValue />

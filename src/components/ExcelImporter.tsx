@@ -80,8 +80,8 @@ export const ExcelImporter = ({ onClose }: ExcelImporterProps) => {
       
       // Vérifier la limite de 300 clients
       if (clients.length > 300) {
-        toast.error('Clients trop nombreux, veuillez revoir votre fichier sources', {
-          description: `Le fichier contient ${clients.length} clients. Maximum autorisé : 300 clients.`
+        toast.error('Raccordements trop nombreux, veuillez revoir votre fichier sources', {
+          description: `Le fichier contient ${clients.length} raccordements. Maximum autorisé : 300 raccordements.`
         });
         setIsLoading(false);
         setFile(null);
@@ -102,8 +102,8 @@ export const ExcelImporter = ({ onClose }: ExcelImporterProps) => {
       setGeocodingReport(geocodingReport);
       
       const successMessage = geocodingReport.geocoded > 0 
-        ? `${clients.length} clients chargés (${geocodingReport.geocoded} géocodés automatiquement)`
-        : `${clients.length} clients chargés depuis le fichier`;
+        ? `${clients.length} raccordements chargés (${geocodingReport.geocoded} géocodés automatiquement)`
+        : `${clients.length} raccordements chargés depuis le fichier`;
       
       toast.success(successMessage);
     } catch (error) {
@@ -116,16 +116,16 @@ export const ExcelImporter = ({ onClose }: ExcelImporterProps) => {
   };
 
   const handleImport = () => {
-    // Filtrer les clients valides seulement
+    // Filtrer les raccordements valides seulement
     const validClients = previewData.filter(client => !validationErrors.has(client.id));
     
     if (validClients.length === 0) {
-      toast.error('Aucun client valide à importer');
+      toast.error('Aucun raccordement valide à importer');
       return;
     }
 
     importClientsFromExcel(validClients);
-    toast.success(`${validClients.length} clients importés avec succès`);
+    toast.success(`${validClients.length} raccordements importés avec succès`);
     onClose();
   };
 
@@ -135,7 +135,7 @@ export const ExcelImporter = ({ onClose }: ExcelImporterProps) => {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Importer des Clients</h2>
+        <h2 className="text-2xl font-bold">Importer des Raccordements</h2>
         <Button variant="ghost" size="icon" onClick={onClose}>
           <X className="h-4 w-4" />
         </Button>
@@ -154,7 +154,7 @@ export const ExcelImporter = ({ onClose }: ExcelImporterProps) => {
               <strong>Solution :</strong>
             </p>
             <ul className="text-sm list-disc list-inside space-y-1">
-              <li>Créez un nouveau projet pour importer d'autres clients</li>
+              <li>Créez un nouveau projet pour importer d'autres raccordements</li>
             </ul>
             <div className="flex justify-end pt-2">
               <Button variant="outline" onClick={onClose}>
@@ -241,11 +241,11 @@ export const ExcelImporter = ({ onClose }: ExcelImporterProps) => {
                   <ul className="text-sm space-y-1 text-blue-800 dark:text-blue-200">
                     <li className="flex items-center gap-2">
                       <Check className="h-3 w-3" />
-                      {geocodingReport.withGPS} clients avec GPS d'origine
+                      {geocodingReport.withGPS} raccordements avec GPS d'origine
                     </li>
                     {geocodingReport.geocoded > 0 && (
                       <li className="flex items-center gap-2 font-medium">
-                        🔍 {geocodingReport.geocoded} clients géocodés automatiquement
+                        🔍 {geocodingReport.geocoded} raccordements géocodés automatiquement
                       </li>
                     )}
                     {geocodingReport.ambiguous > 0 && (
@@ -280,7 +280,7 @@ export const ExcelImporter = ({ onClose }: ExcelImporterProps) => {
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
-                    {invalidCount} client(s) contiennent des erreurs et ne seront pas importés.
+                    {invalidCount} raccordement(s) contiennent des erreurs et ne seront pas importés.
                   </AlertDescription>
                 </Alert>
               )}
@@ -339,7 +339,7 @@ export const ExcelImporter = ({ onClose }: ExcelImporterProps) => {
                   disabled={validCount === 0}
                 >
                   <Check className="h-4 w-4 mr-2" />
-                  Importer {validCount} client(s)
+                  Importer {validCount} raccordement(s)
                 </Button>
               </div>
             </>

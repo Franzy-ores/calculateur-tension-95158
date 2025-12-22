@@ -41,18 +41,18 @@ export const ClientsPanel = ({ onShowImporter }: ClientsPanelProps) => {
     return (
       <Card className="p-6">
         <div className="text-center text-muted-foreground">
-          <p>Aucun client importé</p>
-          <p className="text-sm mt-2">Utilisez le bouton "Importer Clients" ou créez un client manuellement</p>
+          <p>Aucun raccordement importé</p>
+          <p className="text-sm mt-2">Utilisez le bouton "Importer Raccordements" ou créez un raccordement manuellement</p>
           <div className="flex gap-2 justify-center mt-4">
             {onShowImporter && (
               <Button variant="outline" onClick={onShowImporter}>
                 <FileUp className="h-4 w-4 mr-2" />
-                Importer Clients
+                Importer Raccordements
               </Button>
             )}
             <Button onClick={() => startClientCreation()}>
               <Plus className="h-4 w-4 mr-2" />
-              Créer un client
+              Créer un raccordement
             </Button>
           </div>
         </div>
@@ -137,7 +137,7 @@ export const ClientsPanel = ({ onShowImporter }: ClientsPanelProps) => {
   };
 
   const handleDelete = (clientId: string) => {
-    if (confirm('Êtes-vous sûr de vouloir supprimer ce client ?')) {
+    if (confirm('Êtes-vous sûr de vouloir supprimer ce raccordement ?')) {
       deleteClientImporte(clientId);
     }
   };
@@ -154,12 +154,12 @@ export const ClientsPanel = ({ onShowImporter }: ClientsPanelProps) => {
         {onShowImporter && (
           <Button variant="outline" onClick={onShowImporter} className="flex-1">
             <FileUp className="h-4 w-4 mr-2" />
-            Importer Clients
+            Importer Raccordements
           </Button>
         )}
         <Button onClick={() => startClientCreation()} className="flex-1">
           <Plus className="h-4 w-4 mr-2" />
-          Créer un client
+          Créer un raccordement
         </Button>
       </div>
 
@@ -258,7 +258,7 @@ export const ClientsPanel = ({ onShowImporter }: ClientsPanelProps) => {
       <Card className="p-4">
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
-            <p className="text-muted-foreground">Total clients</p>
+            <p className="text-muted-foreground">Total raccordements</p>
             <p className="text-2xl font-bold">{totalClients}</p>
           </div>
           <div>
@@ -355,12 +355,12 @@ export const ClientsPanel = ({ onShowImporter }: ClientsPanelProps) => {
         </div>
       </Card>
 
-      {/* Liste des clients */}
+      {/* Liste des raccordements */}
       <Card className="flex-1 overflow-hidden">
         <ScrollArea className="h-full">
           <div className="p-4 space-y-2">
             {filteredClients.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">Aucun client trouvé</p>
+              <p className="text-center text-muted-foreground py-8">Aucun raccordement trouvé</p>
             ) : (
               filteredClients.map(client => {
                 const link = links.find(l => l.clientId === client.id);

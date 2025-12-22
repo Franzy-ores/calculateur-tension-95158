@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Zap, Layers, Activity, Gauge } from "lucide-react";
 import { useNetworkStore } from "@/store/networkStore";
 import { useState, useEffect, useRef } from 'react';
-import type { LoadModel } from '@/types/network';
+import type { LoadModel, TransformerRating } from '@/types/network';
 
 export const NetworkTab = () => {
   const {
@@ -56,7 +56,7 @@ export const NetworkTab = () => {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-4">
-      {/* Card 1: Système de tension */}
+      {/* Card 1: Système de tension + Transformateur */}
       <Card className="bg-card/50 backdrop-blur border-border/50">
         <CardHeader className="pb-2 pt-3 px-4">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -81,6 +81,48 @@ export const NetworkTab = () => {
               {currentProject.voltageSystem === 'TRIPHASÉ_230V' ? '→ 400V' : '→ 230V'}
             </Button>
           </div>
+          
+          {/* Configuration Transformateur */}
+          <div className="pt-2 border-t border-border/50">
+            <Label className="text-xs text-muted-foreground mb-2 block">Transformateur HT1/BT</Label>
+            <Select
+              value={currentProject.transformerConfig?.rating || '250kVA'}
+              onValueChange={(value) => {
+                const powerMap: Record<string, number> = {
+                  "160kVA": 160,
+                  "250kVA": 250, 
+                  "400kVA": 400,
+                  "630kVA": 630
+                };
+                const shortCircuitMap: Record<string, number> = {
+                  "160kVA": 4.0,
+                  "250kVA": 4.0,
+                  "400kVA": 4.5,
+                  "630kVA": 4.5
+                };
+                updateProjectConfig({
+                  transformerConfig: {
+                    ...currentProject.transformerConfig,
+                    rating: value as TransformerRating,
+                    nominalPower_kVA: powerMap[value],
+                    shortCircuitVoltage_percent: shortCircuitMap[value]
+                  }
+                });
+                updateAllCalculations();
+              }}
+            >
+              <SelectTrigger className="w-full bg-background border text-sm h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border z-[10000]">
+                <SelectItem value="160kVA">160 kVA (Ucc: 4.0%)</SelectItem>
+                <SelectItem value="250kVA">250 kVA (Ucc: 4.0%)</SelectItem>
+                <SelectItem value="400kVA">400 kVA (Ucc: 4.5%)</SelectItem>
+                <SelectItem value="630kVA">630 kVA (Ucc: 4.5%)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
           <div className="text-xs text-muted-foreground">
             <div>cos φ Charges: {currentProject.cosPhiCharges ?? currentProject.cosPhi}</div>
             <div>cos φ Productions: {currentProject.cosPhiProductions ?? 1.00}</div>

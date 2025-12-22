@@ -499,8 +499,8 @@ export const EditPanel = () => {
                  </Card>
               )}
 
-              {/* NOUVEAU : Mode mixte mono/polyphasé */}
-              {currentProject?.loadModel === 'mixte_mono_poly' && (
+              {/* Mode mixte mono/polyphasé - affichage info seulement */}
+              {currentProject?.loadModel === 'mixte_mono_poly' && selectedNode?.autoPhaseDistribution && (
                 <Card className="bg-purple-50 dark:bg-purple-950 border-purple-200 dark:border-purple-800">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-base">⚡ Mode mixte</CardTitle>
@@ -529,154 +529,57 @@ export const EditPanel = () => {
                     </div>
                     
                     {/* Distribution de phase (lecture seule) */}
-                    {selectedNode?.autoPhaseDistribution && (
-                      <div className="space-y-2 pt-2 border-t">
-                        <Label className="text-sm font-medium">📊 Analyse de phase (automatique)</Label>
-                        
-                        <div className="text-xs space-y-2 p-3 bg-background rounded border">
-                          <div>
-                            <div className="font-medium text-purple-700 dark:text-purple-300 mb-1">Charges:</div>
-                            <div className="ml-2 space-y-0.5 font-mono">
-                              <div className="text-muted-foreground">
-                                MONO: A={selectedNode.autoPhaseDistribution.charges.mono.A.toFixed(1)} kVA, 
-                                B={selectedNode.autoPhaseDistribution.charges.mono.B.toFixed(1)} kVA, 
-                                C={selectedNode.autoPhaseDistribution.charges.mono.C.toFixed(1)} kVA
-                              </div>
-                              <div className="text-muted-foreground">
-                                TRI/TÉTRA: A={selectedNode.autoPhaseDistribution.charges.poly.A.toFixed(1)} kVA, 
-                                B={selectedNode.autoPhaseDistribution.charges.poly.B.toFixed(1)} kVA, 
-                                C={selectedNode.autoPhaseDistribution.charges.poly.C.toFixed(1)} kVA
-                              </div>
-                              <div className="font-semibold text-foreground">
-                                Total: A={selectedNode.autoPhaseDistribution.charges.total.A.toFixed(1)} kVA, 
-                                B={selectedNode.autoPhaseDistribution.charges.total.B.toFixed(1)} kVA, 
-                                C={selectedNode.autoPhaseDistribution.charges.total.C.toFixed(1)} kVA
-                              </div>
+                    <div className="space-y-2 pt-2 border-t">
+                      <Label className="text-sm font-medium">📊 Analyse de phase (automatique)</Label>
+                      
+                      <div className="text-xs space-y-2 p-3 bg-background rounded border">
+                        <div>
+                          <div className="font-medium text-purple-700 dark:text-purple-300 mb-1">Charges:</div>
+                          <div className="ml-2 space-y-0.5 font-mono">
+                            <div className="text-muted-foreground">
+                              MONO: A={selectedNode.autoPhaseDistribution.charges.mono.A.toFixed(1)} kVA, 
+                              B={selectedNode.autoPhaseDistribution.charges.mono.B.toFixed(1)} kVA, 
+                              C={selectedNode.autoPhaseDistribution.charges.mono.C.toFixed(1)} kVA
                             </div>
-                          </div>
-                          
-                          <div className="pt-2 border-t">
-                            <div className="font-medium text-purple-700 dark:text-purple-300 mb-1">Clients MONO par phase:</div>
-                            <div className="ml-2 font-mono text-muted-foreground">
-                              A: {selectedNode.autoPhaseDistribution.monoClientsCount.A}, 
-                              B: {selectedNode.autoPhaseDistribution.monoClientsCount.B}, 
-                              C: {selectedNode.autoPhaseDistribution.monoClientsCount.C}
+                            <div className="text-muted-foreground">
+                              TRI/TÉTRA: A={selectedNode.autoPhaseDistribution.charges.poly.A.toFixed(1)} kVA, 
+                              B={selectedNode.autoPhaseDistribution.charges.poly.B.toFixed(1)} kVA, 
+                              C={selectedNode.autoPhaseDistribution.charges.poly.C.toFixed(1)} kVA
                             </div>
-                          </div>
-                          
-                          <div className="pt-2 border-t">
-                            <div className="flex justify-between items-center">
-                              <span className="font-medium text-purple-700 dark:text-purple-300">Déséquilibre nœud:</span>
-                              <span className={`font-bold ${
-                                (selectedNode.autoPhaseDistribution.unbalancePercent || 0) < 10 ? 'text-green-600 dark:text-green-400' :
-                                (selectedNode.autoPhaseDistribution.unbalancePercent || 0) < 20 ? 'text-yellow-600 dark:text-yellow-400' :
-                                'text-red-600 dark:text-red-400'
-                              }`}>
-                                {(selectedNode.autoPhaseDistribution.unbalancePercent || 0).toFixed(1)}%
-                              </span>
+                            <div className="font-semibold text-foreground">
+                              Total: A={selectedNode.autoPhaseDistribution.charges.total.A.toFixed(1)} kVA, 
+                              B={selectedNode.autoPhaseDistribution.charges.total.B.toFixed(1)} kVA, 
+                              C={selectedNode.autoPhaseDistribution.charges.total.C.toFixed(1)} kVA
                             </div>
                           </div>
                         </div>
+                        
+                        <div className="pt-2 border-t">
+                          <div className="font-medium text-purple-700 dark:text-purple-300 mb-1">Clients MONO par phase:</div>
+                          <div className="ml-2 font-mono text-muted-foreground">
+                            A: {selectedNode.autoPhaseDistribution.monoClientsCount.A}, 
+                            B: {selectedNode.autoPhaseDistribution.monoClientsCount.B}, 
+                            C: {selectedNode.autoPhaseDistribution.monoClientsCount.C}
+                          </div>
+                        </div>
+                        
+                        <div className="pt-2 border-t">
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium text-purple-700 dark:text-purple-300">Déséquilibre nœud:</span>
+                            <span className={`font-bold ${
+                              (selectedNode.autoPhaseDistribution.unbalancePercent || 0) < 10 ? 'text-green-600 dark:text-green-400' :
+                              (selectedNode.autoPhaseDistribution.unbalancePercent || 0) < 20 ? 'text-yellow-600 dark:text-yellow-400' :
+                              'text-red-600 dark:text-red-400'
+                            }`}>
+                              {(selectedNode.autoPhaseDistribution.unbalancePercent || 0).toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                    )}
+                    </div>
                   </CardContent>
                 </Card>
               )}
-
-                 {/* Configuration Transformateur et Tension Source */}
-                 {selectedNode?.isSource && (
-                   <>
-                     {/* Configuration du Transformateur */}
-                     <Card>
-                       <CardHeader className="pb-3">
-                         <CardTitle className="text-base flex items-center gap-2">
-                           <Zap className="w-4 h-4" />
-                           Configuration Transformateur HT1/BT
-                         </CardTitle>
-                       </CardHeader>
-                       <CardContent className="space-y-3">
-                         <div className="space-y-2">
-                           <Label htmlFor="transformer-rating">Puissance du transformateur</Label>
-                           <Select
-                             value={formData.transformerConfig?.rating || currentProject?.transformerConfig?.rating}
-                             onValueChange={(value) => {
-                               const powerMap = {
-                                 "160kVA": 160,
-                                 "250kVA": 250, 
-                                 "400kVA": 400,
-                                 "630kVA": 630
-                               };
-                               const shortCircuitMap = {
-                                 "160kVA": 4.0,
-                                 "250kVA": 4.0,
-                                 "400kVA": 4.5,
-                                 "630kVA": 4.5
-                               };
-                               const nominalVoltage = currentProject?.voltageSystem === "TRIPHASÉ_230V" ? 230 : 400;
-                               
-                               setFormData({
-                                 ...formData,
-                                 transformerConfig: {
-                                   rating: value,
-                                   nominalPower_kVA: powerMap[value as keyof typeof powerMap],
-                                   nominalVoltage_V: nominalVoltage,
-                                   shortCircuitVoltage_percent: shortCircuitMap[value as keyof typeof shortCircuitMap],
-                                   cosPhi: 0.95
-                                 }
-                               });
-                             }}
-                           >
-                             <SelectTrigger>
-                               <SelectValue />
-                             </SelectTrigger>
-                             <SelectContent>
-                               <SelectItem value="160kVA">160 kVA (Ucc: 4.0%)</SelectItem>
-                               <SelectItem value="250kVA">250 kVA (Ucc: 4.0%)</SelectItem>
-                               <SelectItem value="400kVA">400 kVA (Ucc: 4.5%)</SelectItem>
-                               <SelectItem value="630kVA">630 kVA (Ucc: 4.5%)</SelectItem>
-                             </SelectContent>
-                           </Select>
-                           <p className="text-xs text-muted-foreground">
-                             Sélectionner la puissance du transformateur HT1/BT. La tension de court-circuit est définie automatiquement.
-                           </p>
-                         </div>
-                       </CardContent>
-                     </Card>
-
-                     {/* Tension Source */}
-                     <Card>
-                       <CardHeader className="pb-3">
-                         <CardTitle className="text-base flex items-center gap-2">
-                           <Target className="w-4 h-4" />
-                           Tension Source
-                         </CardTitle>
-                       </CardHeader>
-                       <CardContent className="space-y-3">
-                         <div className="space-y-2">
-                           <Label htmlFor="tension-source">Tension source (V)</Label>
-                           <Input
-                             id="tension-source"
-                             type="number"
-                             placeholder={`Ex: ${currentProject?.voltageSystem === 'TRIPHASÉ_230V' ? '230' : '400'}`}
-                             value={formData.tensionCible || ''}
-                             min={currentProject?.voltageSystem === 'TRIPHASÉ_230V' ? 218.5 : 380}
-                             max={currentProject?.voltageSystem === 'TRIPHASÉ_230V' ? 241.5 : 420}
-                             onChange={(e) => {
-                               const value = parseFloat(e.target.value);
-                               setFormData({ 
-                                 ...formData, 
-                                 tensionCible: value || undefined 
-                               });
-                             }}
-                           />
-                           <p className="text-xs text-muted-foreground">
-                             Tension de la source (±5% max). Par défaut: {currentProject?.voltageSystem === 'TRIPHASÉ_230V' ? '230V' : '400V'}
-                           </p>
-                         </div>
-                       </CardContent>
-                     </Card>
-                   </>
-                 )}
 
                 {/* Tension Cible */}
                 {!selectedNode?.isSource && (

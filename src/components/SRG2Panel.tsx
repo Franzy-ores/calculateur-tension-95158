@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { useNetworkStore } from "@/store/networkStore";
 import { SRG2Config } from "@/types/srg2";
 import { NodeSelector } from "@/components/NodeSelector";
+import { getLinkedClientsForNode } from "@/utils/clientsUtils";
 import { 
   Zap, 
   Plug,
@@ -65,26 +66,53 @@ export const SRG2Panel = () => {
   const LIMITE_CHARGE_KVA = 100;
   const LIMITE_PRODUCTION_KVA = 85;
 
-  // Fonction pour calculer les puissances foisonnées en aval
+  // Fonction pour calculer les puissances foisonnées en aval avec différenciation résidentiel/industriel
   const calculateDownstreamPowers = (srg2: SRG2Config) => {
     const downstreamNodeIds = findDownstreamNodes(srg2.nodeId);
     
     let totalChargeKVA = 0;
     let totalProductionKVA = 0;
     
+    // Récupérer les taux de foisonnement différenciés
+    const foisonnementResidentiel = currentProject.foisonnementChargesResidentiel ?? 15;
+    const foisonnementIndustriel = currentProject.foisonnementChargesIndustriel ?? 70;
+    const foisonnementProductions = currentProject.foisonnementProductions ?? 100;
+    
     downstreamNodeIds.forEach(nodeId => {
       const node = currentProject.nodes.find(n => n.id === nodeId);
       if (!node) return;
       
-      // Charges brutes
-      const chargesBrutes = node.clients.reduce((sum, client) => sum + client.S_kVA, 0);
-      const chargesFoisonnees = chargesBrutes * (currentProject.foisonnementCharges / 100);
-      totalChargeKVA += chargesFoisonnees;
+      // 1. Charges manuelles (node.clients) - considérées comme résidentielles par défaut
+      const chargesManuelles = node.clients.reduce((sum, client) => sum + client.S_kVA, 0);
+      const chargesManuellesFoisonnees = chargesManuelles * (foisonnementResidentiel / 100);
       
-      // Productions brutes
+      // 2. Clients importés liés à ce nœud - différenciation résidentiel/industriel
+      const linkedClients = getLinkedClientsForNode(
+        nodeId, 
+        currentProject.clientsImportes || [], 
+        currentProject.clientLinks || []
+      );
+      
+      let chargesImporteesFoisonnees = 0;
+      let productionsImporteesFoisonnees = 0;
+      
+      linkedClients.forEach(client => {
+        // Appliquer le foisonnement selon le type de client
+        const foisonnement = client.clientType === 'industriel' 
+          ? foisonnementIndustriel 
+          : foisonnementResidentiel;
+        
+        chargesImporteesFoisonnees += client.puissanceContractuelle_kVA * (foisonnement / 100);
+        productionsImporteesFoisonnees += client.puissancePV_kVA * (foisonnementProductions / 100);
+      });
+      
+      totalChargeKVA += chargesManuellesFoisonnees + chargesImporteesFoisonnees;
+      
+      // 3. Productions manuelles (node.productions)
       const productionsBrutes = node.productions.reduce((sum, prod) => sum + prod.S_kVA, 0);
-      const productionsFoisonnees = productionsBrutes * (currentProject.foisonnementProductions / 100);
-      totalProductionKVA += productionsFoisonnees;
+      const productionsFoisonnees = productionsBrutes * (foisonnementProductions / 100);
+      
+      totalProductionKVA += productionsFoisonnees + productionsImporteesFoisonnees;
     });
     
     // Vérification séparée de chaque limite (sans bilan net)

@@ -89,7 +89,7 @@ export const TopMenu = ({
                 <NetworkTab />
               </TabsContent>
               <TabsContent value="raccordements" className="mt-0">
-                <RaccordementsTab />
+                <RaccordementsTab onShowImporter={() => setShowImporter(true)} />
               </TabsContent>
               <TabsContent value="parameters" className="mt-0">
                 <ParametersTab />

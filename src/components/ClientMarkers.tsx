@@ -122,7 +122,7 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
       header.style.borderBottom = '2px solid #3b82f6';
       header.style.marginBottom = '8px';
       header.innerHTML = `
-        <strong style="font-size: 14px;">Groupe de ${groupe.nombreClients} clients</strong><br>
+        <strong style="font-size: 14px;">Groupe de ${groupe.nombreClients} raccordements</strong><br>
         <div style="margin-top: 4px; font-size: 12px; color: #666;">
           <strong>Charge totale:</strong> ${groupe.puissanceContractuelle_kVA.toFixed(1)} kVA<br>
           <strong>PV total:</strong> ${groupe.puissancePV_kVA.toFixed(1)} kVA
@@ -130,7 +130,7 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
       `;
       popupElement.appendChild(header);
       
-      // Liste des clients avec boutons "Éditer"
+      // Liste des raccordements avec boutons "Éditer"
       groupe.clients.forEach((c, idx) => {
         const clientRow = document.createElement('div');
         clientRow.style.padding = '6px';
@@ -335,7 +335,7 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
         // Mode normal : tooltip au survol avec les infos du groupe
         const tooltipContent = `
           <div style="font-size: 11px; line-height: 1.4; white-space: nowrap;">
-            <strong>Groupe (${groupe.nombreClients} clients)</strong><br>
+            <strong>Groupe (${groupe.nombreClients} raccordements)</strong><br>
             <span style="color: #666;">Charge: ${groupe.puissanceContractuelle_kVA.toFixed(1)} kVA</span>
             ${groupe.puissancePV_kVA > 0 ? `<br><span style="color: #666;">PV: ${groupe.puissancePV_kVA.toFixed(1)} kVA</span>` : ''}
           </div>

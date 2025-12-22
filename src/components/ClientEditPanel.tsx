@@ -113,7 +113,7 @@ export const ClientEditPanel = () => {
       if (client) {
         // En mode édition, lier directement
         linkClientToNode(client.id, nodeId);
-        toast.success('Client lié au nœud');
+        toast.success('Raccordement lié au nœud');
       }
       
       setIsSelectingNode(false);
@@ -143,7 +143,7 @@ export const ClientEditPanel = () => {
         // En mode édition, mettre à jour le client
         updateClientImporte(client.id, { lat, lng });
         setIsMovingClient(false);
-        toast.success('Position du client mise à jour');
+        toast.success('Position du raccordement mise à jour');
       }
     };
     
@@ -170,7 +170,7 @@ export const ClientEditPanel = () => {
   if (!isCreationMode && !client) {
     return (
       <div className="p-4">
-        <p className="text-muted-foreground">Aucun client sélectionné</p>
+        <p className="text-muted-foreground">Aucun raccordement sélectionné</p>
       </div>
     );
   }
@@ -196,14 +196,14 @@ export const ClientEditPanel = () => {
       clientType,
     });
     
-    toast.success('Client mis à jour');
+    toast.success('Raccordement mis à jour');
     closeEditPanel();
   };
 
   const handleCreate = () => {
     // Validations
     if (!nomCircuit.trim()) {
-      toast.error('Veuillez entrer un nom pour le client');
+      toast.error('Veuillez entrer un nom pour le raccordement');
       return;
     }
     if (!creationLocation) {
@@ -249,17 +249,17 @@ export const ClientEditPanel = () => {
   return (
     <div className="space-y-4 p-4">
       <h3 className="text-lg font-semibold">
-        {isCreationMode ? 'Nouveau Client' : 'Éditer le Client'}
+        {isCreationMode ? 'Nouveau Raccordement' : 'Éditer le Raccordement'}
       </h3>
 
       <div className="space-y-3">
         <div>
-          <Label htmlFor="nomCircuit">Nom du client *</Label>
+          <Label htmlFor="nomCircuit">Nom du raccordement *</Label>
           <Input
             id="nomCircuit"
             value={nomCircuit}
             onChange={(e) => setNomCircuit(e.target.value)}
-            placeholder="Ex: Client 1"
+            placeholder="Ex: Raccordement 1"
           />
         </div>
 
@@ -292,7 +292,7 @@ export const ClientEditPanel = () => {
         </div>
 
         <div>
-          <Label htmlFor="clientType">Type de client</Label>
+          <Label htmlFor="clientType">Type de raccordement</Label>
           <Select value={clientType} onValueChange={(v: ClientType) => setClientType(v)}>
             <SelectTrigger id="clientType">
               <SelectValue />
@@ -396,7 +396,7 @@ export const ClientEditPanel = () => {
             
             {isSelectingLocation && (
               <p className="text-xs text-amber-600 mt-2">
-                ⚡ Cliquez sur la carte pour définir la position du client. Appuyez sur ESC pour annuler.
+                ⚡ Cliquez sur la carte pour définir la position du raccordement. Appuyez sur ESC pour annuler.
               </p>
             )}
           </div>

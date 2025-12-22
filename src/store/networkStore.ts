@@ -1032,7 +1032,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     };
     
     set({ currentProject: updatedProject });
-    toast.success(`${clients.length} clients importés avec succès`);
+    toast.success(`${clients.length} raccordements importés avec succès`);
     
     // Initialiser manualPhaseDistribution avec répartition réelle en mode mixte
     if (currentProject.loadModel === 'mixte_mono_poly') {

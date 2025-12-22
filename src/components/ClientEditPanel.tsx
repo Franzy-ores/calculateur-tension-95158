@@ -54,7 +54,6 @@ export const ClientEditPanel = () => {
   
   // États spécifiques à la création
   const [creationLocation, setCreationLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [creationNodeId, setCreationNodeId] = useState<string | null>(null);
   const [isSelectingLocation, setIsSelectingLocation] = useState(false);
 
   // Initialisation des valeurs selon le mode
@@ -69,7 +68,7 @@ export const ClientEditPanel = () => {
       setConnectionType('MONO');
       setClientType('résidentiel');
       setCreationLocation(null);
-      setCreationNodeId(null);
+      
       setTensionMin(undefined);
       setTensionMax(undefined);
       setTensionMinHiver(undefined);
@@ -103,20 +102,15 @@ export const ClientEditPanel = () => {
     }
   }, [client, isCreationMode]);
 
-  // Écouter l'événement de sélection de nœud (mode édition et création)
+  // Écouter l'événement de sélection de nœud (mode édition uniquement)
   useEffect(() => {
-    if (!isSelectingNode) return;
+    if (!isSelectingNode || isCreationMode) return;
     
     const handleNodeSelected = (e: Event) => {
       const customEvent = e as CustomEvent;
       const { nodeId } = customEvent.detail;
       
-      if (isCreationMode) {
-        // En mode création, stocker le nodeId pour l'utiliser à la création
-        setCreationNodeId(nodeId);
-        const node = currentProject?.nodes.find(n => n.id === nodeId);
-        toast.success(`Point d'insertion sélectionné: ${node?.name || nodeId}`);
-      } else if (client) {
+      if (client) {
         // En mode édition, lier directement
         linkClientToNode(client.id, nodeId);
         toast.success('Client lié au nœud');
@@ -130,7 +124,7 @@ export const ClientEditPanel = () => {
     return () => {
       window.removeEventListener('nodeSelectedForClient', handleNodeSelected);
     };
-  }, [isSelectingNode, isCreationMode, client?.id, linkClientToNode, currentProject?.nodes]);
+  }, [isSelectingNode, isCreationMode, client?.id, linkClientToNode]);
   
   // Écouter l'événement de sélection de position (mode création et déplacement)
   useEffect(() => {
@@ -232,20 +226,7 @@ export const ClientEditPanel = () => {
       connectionType,
     });
     
-    // Si un nœud a été sélectionné, lier le client
-    if (creationNodeId) {
-      const state = useNetworkStore.getState();
-      const clientsImportes = state.currentProject?.clientsImportes || [];
-      const newClient = clientsImportes[clientsImportes.length - 1];
-      
-      if (newClient) {
-        linkClientToNode(newClient.id, creationNodeId);
-        toast.success(`Client "${nomCircuit}" créé et lié au réseau`);
-      }
-    } else {
-      toast.success(`Client "${nomCircuit}" créé`);
-    }
-    
+    toast.success(`Client "${nomCircuit}" créé`);
     cancelClientCreation();
   };
 
@@ -264,10 +245,6 @@ export const ClientEditPanel = () => {
     }
   };
 
-  // Récupérer le nom du nœud sélectionné en mode création
-  const selectedNodeForCreation = creationNodeId 
-    ? currentProject?.nodes.find(n => n.id === creationNodeId)
-    : null;
 
   return (
     <div className="space-y-4 p-4">
@@ -425,43 +402,7 @@ export const ClientEditPanel = () => {
           </div>
         )}
 
-        {/* Section Point d'insertion - Mode Création (optionnel) */}
-        {isCreationMode && (
-          <div className="border-t pt-3 mt-3">
-            <Label className="text-sm font-medium mb-2 block">Point d'insertion (optionnel)</Label>
-            <p className="text-xs text-muted-foreground mb-2">
-              Vous pouvez lier le client à un nœud maintenant ou plus tard
-            </p>
-            
-            {selectedNodeForCreation ? (
-              <div className="text-sm text-muted-foreground bg-muted p-2 rounded mb-2">
-                <div className="font-medium">{selectedNodeForCreation.name}</div>
-                <div className="text-xs">
-                  Position: {selectedNodeForCreation.lat.toFixed(6)}, {selectedNodeForCreation.lng.toFixed(6)}
-                </div>
-              </div>
-            ) : null}
-            
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => {
-                setIsSelectingNode(true);
-                window.dispatchEvent(new CustomEvent('startNodeSelection'));
-              }}
-              disabled={isSelectingNode}
-            >
-              <Target className="w-4 h-4 mr-2" />
-              {isSelectingNode ? 'Cliquez sur un nœud...' : selectedNodeForCreation ? 'Changer le point d\'insertion' : "Sélectionner un point d'insertion"}
-            </Button>
-            
-            {isSelectingNode && (
-              <p className="text-xs text-amber-600 mt-2">
-                ⚡ Cliquez sur un nœud de la carte. Appuyez sur ESC pour annuler.
-              </p>
-            )}
-          </div>
-        )}
+        {/* Section Point d'insertion supprimée en mode création - sera fait après via l'édition */}
 
         {/* Sections spécifiques au mode édition */}
         {!isCreationMode && client && (

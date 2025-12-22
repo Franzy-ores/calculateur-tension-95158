@@ -13,6 +13,7 @@ export const SimulationTab = () => {
     toggleSimulationActive,
     simulationEquipment,
     updateCableTypes,
+    openEditPanel,
   } = useNetworkStore();
 
   if (!currentProject) return null;
@@ -113,6 +114,17 @@ export const SimulationTab = () => {
               {hasCableReplacement ? '✓ Actif' : '✗ Inactif'}
             </Badge>
           </div>
+
+          {/* Bouton configurer */}
+          <Button 
+            variant="default"
+            size="sm"
+            onClick={() => openEditPanel('simulation')}
+            className="w-full mt-2"
+          >
+            <Settings2 className="h-4 w-4 mr-2" />
+            Configurer les équipements
+          </Button>
         </CardContent>
       </Card>
 

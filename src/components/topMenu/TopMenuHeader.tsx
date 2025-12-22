@@ -9,7 +9,6 @@ interface TopMenuHeaderProps {
   onSave: () => void;
   onLoad: () => void;
   onSettings: () => void;
-  onSimulation: () => void;
   isExpanded: boolean;
   onToggleExpand: () => void;
 }
@@ -19,7 +18,6 @@ export const TopMenuHeader = ({
   onSave,
   onLoad,
   onSettings,
-  onSimulation,
   isExpanded,
   onToggleExpand,
 }: TopMenuHeaderProps) => {
@@ -106,20 +104,6 @@ export const TopMenuHeader = ({
           </Tooltip>
 
           <div className="w-px h-6 bg-border mx-1" />
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button 
-                variant={editTarget === 'simulation' ? 'secondary' : 'ghost'} 
-                size="sm" 
-                onClick={onSimulation}
-                className={`h-8 px-2 ${editTarget === 'simulation' ? 'bg-accent/20 text-accent' : ''}`}
-              >
-                <Zap className={`h-4 w-4 ${editTarget === 'simulation' ? 'text-accent' : ''}`} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent><p>Mode simulation</p></TooltipContent>
-          </Tooltip>
 
           <Tooltip>
             <TooltipTrigger asChild>

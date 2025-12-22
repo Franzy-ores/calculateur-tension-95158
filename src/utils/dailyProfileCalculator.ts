@@ -23,7 +23,8 @@ export class DailyProfileCalculator {
    */
   calculateDailyVoltages(): HourlyVoltageResult[] {
     const results: HourlyVoltageResult[] = [];
-    const nominalVoltage = this.project.voltageSystem === 'TRIPHASÉ_230V' ? 230 : 400;
+    // Toujours 230V car on calcule en phase-neutre (seuils ±5% et ±10% basés sur 230V)
+    const nominalVoltage = 230;
 
     for (let hour = 0; hour < 24; hour++) {
       const hourlyResult = this.calculateHourlyVoltage(hour, nominalVoltage);
@@ -94,6 +95,10 @@ export class DailyProfileCalculator {
     const voltageA = A || nominalVoltage;
     const voltageB = B || nominalVoltage;
     const voltageC = C || nominalVoltage;
+
+    // Log de vérification des tensions phase-neutre
+    console.log(`📊 Profil 24h - Heure ${hour}: VA=${voltageA.toFixed(1)}V, VB=${voltageB.toFixed(1)}V, VC=${voltageC.toFixed(1)}V (nominale: ${nominalVoltage}V)`);
+
 
     const voltageAvg = (voltageA + voltageB + voltageC) / 3;
     const voltageMin = Math.min(voltageA, voltageB, voltageC);

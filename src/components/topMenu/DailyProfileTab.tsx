@@ -16,7 +16,8 @@ import { DailyProfileCalculator } from '@/utils/dailyProfileCalculator';
 import { DailyProfileChart } from '@/components/DailyProfileChart';
 import { ProfileEditor } from '@/components/ProfileEditor';
 import { DailyProfileConfig, DailySimulationOptions, HourlyVoltageResult, Season, Weather } from '@/types/dailyProfile';
-import { Clock, Sun, Cloud, Car, Factory, FileEdit, AlertTriangle } from 'lucide-react';
+import { Clock, Sun, Cloud, Car, Factory, FileEdit, AlertTriangle, Percent } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import defaultProfiles from '@/data/hourlyProfiles.json';
 
 export const DailyProfileTab = () => {
@@ -250,6 +251,54 @@ export const DailyProfileTab = () => {
                   </Badge>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Tableau foisonnement horaire */}
+        {results.length > 0 && (
+          <Card className="bg-card/50 backdrop-blur border-border/50">
+            <CardHeader className="pb-2 pt-3 px-4">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Percent className="h-4 w-4 text-primary" />
+                Foisonnement horaire utilisé
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4">
+              <ScrollArea className="h-[180px]">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-card/95">
+                    <tr className="border-b border-border">
+                      <th className="text-left py-1 px-2 font-medium text-muted-foreground">Heure</th>
+                      <th className="text-right py-1 px-2 font-medium text-orange-400">Charges %</th>
+                      <th className="text-right py-1 px-2 font-medium text-green-400">Productions %</th>
+                      <th className="text-right py-1 px-2 font-medium text-blue-400">V moy</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {results.map((r) => (
+                      <tr 
+                        key={r.hour} 
+                        className={`border-b border-border/30 ${
+                          r.status === 'critical' ? 'bg-destructive/10' : 
+                          r.status === 'warning' ? 'bg-yellow-500/10' : ''
+                        }`}
+                      >
+                        <td className="py-1 px-2 font-mono">{r.hour.toString().padStart(2, '0')}h</td>
+                        <td className="text-right py-1 px-2 font-mono text-orange-400">
+                          {r.chargesFoisonnement.toFixed(0)}%
+                        </td>
+                        <td className="text-right py-1 px-2 font-mono text-green-400">
+                          {r.productionsFoisonnement.toFixed(0)}%
+                        </td>
+                        <td className="text-right py-1 px-2 font-mono text-blue-400">
+                          {r.voltageAvg_V.toFixed(1)}V
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </ScrollArea>
             </CardContent>
           </Card>
         )}

@@ -71,34 +71,35 @@ export class DailyProfileCalculator {
         this.project.clientsImportes,
         this.project.clientLinks
       );
-      return this.extractNodeVoltages(hour, result, nominalVoltage);
+      return this.extractNodeVoltages(hour, result, nominalVoltage, chargesFoisonnement, productionsFoisonnement);
     } catch (error) {
       console.warn(`Erreur calcul heure ${hour}:`, error);
-      return this.createDefaultHourlyResult(hour, nominalVoltage);
+      return this.createDefaultHourlyResult(hour, nominalVoltage, chargesFoisonnement, productionsFoisonnement);
     }
   }
 
   /**
    * Extrait les tensions du nœud sélectionné depuis les résultats de calcul
    */
-  private extractNodeVoltages(hour: number, result: CalculationResult, nominalVoltage: number): HourlyVoltageResult {
+  private extractNodeVoltages(
+    hour: number, 
+    result: CalculationResult, 
+    nominalVoltage: number,
+    chargesFoisonnement: number,
+    productionsFoisonnement: number
+  ): HourlyVoltageResult {
     const nodeId = this.options.selectedNodeId;
-    // Correction: nodeMetricsPerPhase est un tableau, pas un objet indexé par nodeId
     const nodeMetrics = result.nodeMetricsPerPhase?.find(n => n.nodeId === nodeId);
 
     if (!nodeMetrics?.voltagesPerPhase) {
       console.warn(`Heure ${hour}: Pas de métriques pour le nœud ${nodeId}`);
-      return this.createDefaultHourlyResult(hour, nominalVoltage);
+      return this.createDefaultHourlyResult(hour, nominalVoltage, chargesFoisonnement, productionsFoisonnement);
     }
 
     const { A, B, C } = nodeMetrics.voltagesPerPhase;
     const voltageA = A || nominalVoltage;
     const voltageB = B || nominalVoltage;
     const voltageC = C || nominalVoltage;
-
-    // Log de vérification des tensions phase-neutre
-    console.log(`📊 Profil 24h - Heure ${hour}: VA=${voltageA.toFixed(1)}V, VB=${voltageB.toFixed(1)}V, VC=${voltageC.toFixed(1)}V (nominale: ${nominalVoltage}V)`);
-
 
     const voltageAvg = (voltageA + voltageB + voltageC) / 3;
     const voltageMin = Math.min(voltageA, voltageB, voltageC);
@@ -127,14 +128,21 @@ export class DailyProfileCalculator {
       voltageMin_V: voltageMin,
       voltageMax_V: voltageMax,
       deviationPercent,
-      status
+      status,
+      chargesFoisonnement,
+      productionsFoisonnement
     };
   }
 
   /**
    * Crée un résultat par défaut (tensions nominales)
    */
-  private createDefaultHourlyResult(hour: number, nominalVoltage: number): HourlyVoltageResult {
+  private createDefaultHourlyResult(
+    hour: number, 
+    nominalVoltage: number,
+    chargesFoisonnement: number,
+    productionsFoisonnement: number
+  ): HourlyVoltageResult {
     return {
       hour,
       voltageA_V: nominalVoltage,
@@ -144,7 +152,9 @@ export class DailyProfileCalculator {
       voltageMin_V: nominalVoltage,
       voltageMax_V: nominalVoltage,
       deviationPercent: 0,
-      status: 'normal'
+      status: 'normal',
+      chargesFoisonnement,
+      productionsFoisonnement
     };
   }
 

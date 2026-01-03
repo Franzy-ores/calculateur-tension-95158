@@ -43,6 +43,9 @@ export interface HourlyVoltageResult {
   voltageMax_V: number;
   deviationPercent: number;
   status: 'normal' | 'warning' | 'critical';
+  // Foisonnement appliqué pour cette heure (%)
+  chargesFoisonnement: number;
+  productionsFoisonnement: number;
 }
 
 export const defaultDailySimulationOptions: DailySimulationOptions = {

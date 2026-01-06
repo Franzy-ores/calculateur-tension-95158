@@ -14,9 +14,9 @@ import {
 import { useNetworkStore } from '@/store/networkStore';
 import { DailyProfileCalculator } from '@/utils/dailyProfileCalculator';
 import { DailyProfileChart } from '@/components/DailyProfileChart';
-import { ProfileEditor } from '@/components/ProfileEditor';
+import { ProfileVisualEditor } from '@/components/ProfileVisualEditor';
 import { DailyProfileConfig, DailySimulationOptions, HourlyVoltageResult, Season, Weather } from '@/types/dailyProfile';
-import { Clock, Sun, Cloud, Car, Factory, FileEdit, AlertTriangle, Percent } from 'lucide-react';
+import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import defaultProfiles from '@/data/hourlyProfiles.json';
 
@@ -193,7 +193,7 @@ export const DailyProfileTab = () => {
             onClick={() => setEditorOpen(true)}
             className="w-full gap-2"
           >
-            <FileEdit className="h-4 w-4" />
+            <Edit3 className="h-4 w-4" />
             Éditer les profils
           </Button>
         </CardContent>
@@ -304,8 +304,8 @@ export const DailyProfileTab = () => {
         )}
       </div>
 
-      {/* Éditeur de profils */}
-      <ProfileEditor
+      {/* Éditeur visuel de profils */}
+      <ProfileVisualEditor
         open={editorOpen}
         onOpenChange={setEditorOpen}
         profiles={customProfiles}

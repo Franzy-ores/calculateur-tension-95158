@@ -895,7 +895,7 @@ export const MapView = () => {
       if (!showVoltages) {
         const icon = L.divIcon({
           className: 'custom-node-marker',
-          html: `<div style="position: relative;"><div class="rounded-full border-2 ${iconClass}" style="width: 24px; height: 24px; ${equipmentBorderStyle}"></div>${equipmentIndicator}</div>`,
+          html: `<div style="position: relative;"><div class="rounded-lg border-2 ${iconClass}" style="width: 24px; height: 24px; ${equipmentBorderStyle}"></div>${equipmentIndicator}</div>`,
           iconSize: [24, 24],
           iconAnchor: [12, 12]
         });
@@ -1100,7 +1100,7 @@ export const MapView = () => {
       const anchorPoint: [number, number] = isPhaseDisplayMode ? [45, 45] : (hasDisplayableText ? [35, 35] : [28, 28]);
       const iconSizeClass = isPhaseDisplayMode ? 'w-[90px] h-[90px]' : (hasDisplayableText ? 'w-[70px] h-[70px]' : 'w-14 h-14');
 
-      const shapeClass = isPhaseDisplayMode ? 'rounded-md' : 'rounded-full';
+      const shapeClass = isPhaseDisplayMode ? 'rounded-md' : 'rounded-lg';
       const icon = L.divIcon({
         className: 'custom-node-marker',
         html: `<div style="position: relative;"><div class="${iconSizeClass} ${shapeClass} border-2 flex flex-col items-center justify-center text-xs font-bold ${iconClass} p-1" style="${equipmentBorderStyle}">

@@ -95,9 +95,11 @@ export const DailyProfileTab = () => {
   } = useNetworkStore();
 
   const [editorOpen, setEditorOpen] = useState(false);
+  const [comparisonMode, setComparisonMode] = useState(false);
 
   // Résultats du calcul
   const [results, setResults] = useState<HourlyVoltageResult[]>([]);
+  const [resultsWithoutSim, setResultsWithoutSim] = useState<HourlyVoltageResult[]>([]);
 
   // Liste des nœuds disponibles
   const nodes = useMemo(() => {
@@ -128,19 +130,34 @@ export const DailyProfileTab = () => {
   useEffect(() => {
     if (!currentProject || !dailyProfileOptions.selectedNodeId) {
       setResults([]);
+      setResultsWithoutSim([]);
       return;
     }
 
-    const calculator = new DailyProfileCalculator(
+    // Calcul AVEC simulation (si active)
+    const calculatorWithSim = new DailyProfileCalculator(
       currentProject, 
       dailyProfileOptions, 
       dailyProfileCustomProfiles,
       hasActiveSimulation ? simulationEquipment : undefined,
       hasActiveSimulation
     );
-    const hourlyResults = calculator.calculateDailyVoltages();
-    setResults(hourlyResults);
-  }, [currentProject, dailyProfileOptions, dailyProfileCustomProfiles, simulationEquipment, isSimulationActive, hasActiveSimulation]);
+    setResults(calculatorWithSim.calculateDailyVoltages());
+
+    // Calcul SANS simulation (pour comparaison)
+    if (hasActiveSimulation && comparisonMode) {
+      const calculatorBase = new DailyProfileCalculator(
+        currentProject, 
+        dailyProfileOptions, 
+        dailyProfileCustomProfiles,
+        undefined,
+        false
+      );
+      setResultsWithoutSim(calculatorBase.calculateDailyVoltages());
+    } else {
+      setResultsWithoutSim([]);
+    }
+  }, [currentProject, dailyProfileOptions, dailyProfileCustomProfiles, simulationEquipment, isSimulationActive, hasActiveSimulation, comparisonMode]);
 
   // Heures critiques
   const criticalHours = useMemo(() => {
@@ -315,7 +332,7 @@ export const DailyProfileTab = () => {
         {/* Graphe */}
         <Card className="bg-card/50 backdrop-blur border-border/50">
           <CardHeader className="pb-2 pt-3 px-4">
-            <CardTitle className="text-sm font-medium flex items-center justify-between">
+          <CardTitle className="text-sm font-medium flex items-center justify-between">
               <span className="flex items-center gap-2">
                 Tension au nœud {selectedNode?.name || dailyProfileOptions.selectedNodeId}
                 {hasActiveSimulation && (
@@ -325,15 +342,31 @@ export const DailyProfileTab = () => {
                   </Badge>
                 )}
               </span>
-              <Badge variant="outline" className="text-xs">
-                {nominalVoltage}V nominal
-              </Badge>
+              <div className="flex items-center gap-2">
+                {hasActiveSimulation && (
+                  <div className="flex items-center gap-1.5">
+                    <Switch
+                      id="comparison-mode"
+                      checked={comparisonMode}
+                      onCheckedChange={setComparisonMode}
+                      className="scale-75"
+                    />
+                    <Label htmlFor="comparison-mode" className="text-xs text-muted-foreground cursor-pointer">
+                      Comparer
+                    </Label>
+                  </div>
+                )}
+                <Badge variant="outline" className="text-xs">
+                  {nominalVoltage}V nominal
+                </Badge>
+              </div>
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
             {results.length > 0 ? (
               <DailyProfileChart
                 data={results}
+                comparisonData={comparisonMode ? resultsWithoutSim : undefined}
                 nominalVoltage={nominalVoltage}
               />
             ) : (

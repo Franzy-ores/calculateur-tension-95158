@@ -252,9 +252,9 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
     : 'from-green-500 to-green-300';
 
   return (
-    <div className="flex flex-col gap-3 p-3 bg-white/5 rounded border border-white/10">
+    <div className="flex flex-col gap-3 p-3 bg-slate-100 dark:bg-white/5 rounded border border-slate-300 dark:border-white/10">
       <div className="flex items-center justify-center gap-2">
-        <Label className="text-xs font-medium text-primary-foreground text-center">{title}</Label>
+        <Label className="text-xs font-medium text-foreground text-center">{title}</Label>
         {showResetButton && (
           <TooltipProvider>
             {currentProject.loadModel === 'mixte_mono_poly' && (
@@ -280,7 +280,7 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
       <div className="flex justify-center gap-4">
         {(['A', 'B', 'C'] as const).map((phase) => (
           <div key={phase} className="flex flex-col items-center gap-2">
-            <Label className="text-xs text-primary-foreground/80 font-medium">{phaseLabels[phase]}</Label>
+            <Label className="text-xs text-muted-foreground font-medium">{phaseLabels[phase]}</Label>
             
             {/* Vertical Slider avec barre colorée */}
             <div className="relative flex flex-col items-center">
@@ -313,7 +313,7 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
             
             {/* Affichage du déséquilibre */}
             <div className="text-center">
-              <div className="text-xs font-mono text-primary-foreground">
+              <div className="text-xs font-mono text-foreground">
                 {calculateUnbalancePercent(distribution[phase]) >= 0 ? '+' : ''}
                 {calculateUnbalancePercent(distribution[phase]).toFixed(1)}%
               </div>

@@ -103,8 +103,9 @@ kbd{background:var(--panel);border:1px solid var(--border);border-bottom-width:3
             <a href="#visualisation-desequilibre" class="lvl-3">Visualisation</a>
             <a href="#62-le-module-de-simulation" class="lvl-3">6.2. Le Module de Simulation</a>
             <a href="#acceder-au-module-simulation" class="lvl-3">Accéder au module simulation</a>
-            <a href="#63-equi8-compensation-de-courant-de-neutre" class="lvl-3">6.3. EQUI8 - Compensation de Courant de Neutre</a>
-            <a href="#64-srg2-regulation-de-tension-triphasee" class="lvl-3">6.4. SRG2 - Régulation de Tension Triphasée</a>
+            <a href="#63-profil-24h-analyse-journaliere" class="lvl-3">6.3. Profil 24h - Analyse Journalière</a>
+            <a href="#64-equi8-compensation-de-courant-de-neutre" class="lvl-3">6.4. EQUI8 - Compensation de Courant de Neutre</a>
+            <a href="#65-srg2-regulation-de-tension-triphasee" class="lvl-3">6.5. SRG2 - Régulation de Tension Triphasée</a>
             <a href="#7-conformite-et-support" class="lvl-2">7. Conformité et Support</a>
             <a href="#71-normes-et-limites-reglementaires" class="lvl-3">7.1. Normes et Limites Réglementaires</a>
             <a href="#limites-reglementaires" class="lvl-3">Limites réglementaires</a>
@@ -166,10 +167,26 @@ kbd{background:var(--panel);border:1px solid var(--border);border-bottom-width:3
 
 <h3 id="22-barre-doutils">2.2. Barre d'outils (à gauche)</h3>
 
-<p>- 🏠 <strong>Nœud</strong> : Ajouter un point de connexion</p>
-<p>- 🔌 <strong>Câble</strong> : Connecter deux nœuds</p>
-<p>- ✋ <strong>Sélection</strong> : Sélectionner et déplacer des éléments</p>
-<p>- 📍 <strong>Adresse</strong> : Rechercher une adresse sur la carte</p>
+<p><strong>Outils d'édition :</strong></p>
+<ul>
+<li>👆 <strong>Sélection</strong> : Sélectionner des éléments sur la carte</li>
+<li>🔵 <strong>Nœud</strong> : Ajouter un point de connexion</li>
+<li>➖ <strong>Câble</strong> : Connecter deux nœuds</li>
+<li>✏️ <strong>Édition</strong> : Modifier les propriétés d'un élément</li>
+<li>✋ <strong>Déplacer</strong> : Déplacer un nœud sur la carte</li>
+<li>🗑️ <strong>Supprimer</strong> : Supprimer un élément</li>
+</ul>
+
+<p><strong>Boutons de contrôle :</strong></p>
+<ul>
+<li>🎯 <strong>Mode Focus</strong> : Masque les éléments non sélectionnés pour se concentrer sur une zone</li>
+<li>🏷️ <strong>Étiquettes tensions</strong> : Affiche/masque les tensions des raccordements clients sur la carte</li>
+<li>🔋 <strong>Tensions nœuds</strong> : Affiche/masque les tensions sur les nœuds du réseau</li>
+<li>🎨 <strong>Mode coloration</strong> : Change le mode de coloration des raccordements (par couplage, circuit, tension, lien, statut GPS)</li>
+<li>🔢 <strong>Calculer</strong> : Lance le calcul électrique du réseau</li>
+</ul>
+
+<blockquote>💡 <strong>Astuce</strong> : Survolez un nœud avec la souris pour afficher son numéro dans une info-bulle.</blockquote>
 
 <h3 id="23-panneau-de-resultats">2.3. Panneau de résultats (à droite)</h3>
 
@@ -450,7 +467,90 @@ kbd{background:var(--panel);border:1px solid var(--border);border-bottom-width:3
 </li>
 </ol>
 
-<h3 id="63-equi8-compensation-de-courant-de-neutre">6.3. EQUI8 - Compensation de Courant de Neutre</h3>
+<h3 id="63-profil-24h-analyse-journaliere">6.3. Profil 24h - Analyse Journalière</h3>
+
+<p>📊 Module de Profil 24h</p>
+
+<h4>Qu'est-ce que le Profil 24h ?</h4>
+
+<p>Le module Profil 24h permet d'analyser l'évolution des tensions du réseau sur une journée complète (24 heures). Il calcule heure par heure les conditions de charge et de production pour visualiser les variations de tension.</p>
+
+<p><strong>Fonctionnalités principales :</strong></p>
+
+<ul>
+<li><strong>Courbes triphasées</strong> : Affichage des tensions Ph-N pour chaque phase (A, B, C) sur 24h</li>
+<li><strong>Profils saisonniers</strong> : Choix entre Hiver et Été (profils de consommation différents)</li>
+<li><strong>Conditions météo</strong> : Soleil (100% PV), Gris (70% PV), ou Nuit (0% production)</li>
+<li><strong>Bonus VE personnalisables</strong> : Ajout de charge véhicules électriques (soir 18h-21h et nuit 22h-05h)</li>
+<li><strong>Intégration simulation</strong> : Comparaison des courbes avec/sans équipements de régulation</li>
+</ul>
+
+<h4>Accéder au module</h4>
+
+<ol>
+<li>Ouvrir l'onglet <strong>"Profil 24h"</strong> dans le menu supérieur (icône horloge 🕐)</li>
+<li>Sélectionner un nœud à analyser dans la liste déroulante</li>
+<li>Les courbes de tension s'affichent automatiquement</li>
+</ol>
+
+<h4>Options de configuration</h4>
+
+<p><strong>Saison :</strong></p>
+<ul>
+<li><strong>Hiver</strong> : Profil de consommation hivernal (pointe soir plus marquée)</li>
+<li><strong>Été</strong> : Profil estival (consommation plus étalée, production PV plus importante)</li>
+</ul>
+
+<p><strong>Météo / Production :</strong></p>
+<ul>
+<li>☀️ <strong>Soleil</strong> : Production PV à 100% du profil</li>
+<li>☁️ <strong>Gris</strong> : Production PV réduite à 70%</li>
+<li>🌙 <strong>Nuit</strong> : Aucune production (0%)</li>
+</ul>
+
+<p><strong>Options supplémentaires :</strong></p>
+<ul>
+<li><strong>Recharge VE</strong> : Active le bonus de charge véhicules électriques
+  <ul>
+    <li><strong>Bonus soir (18h-21h)</strong> : Configurable via curseur (défaut +2.5%)</li>
+    <li><strong>Bonus nuit (22h-05h)</strong> : Configurable via curseur (défaut +5%)</li>
+  </ul>
+</li>
+<li><strong>PME Industriel</strong> : Active le profil de consommation industrielle (8h-18h)</li>
+</ul>
+
+<h4>Éditeur de profils visuels</h4>
+
+<p>Cliquez sur <strong>"Éditer profils"</strong> pour ouvrir l'éditeur visuel qui permet de :</p>
+
+<ul>
+<li>Modifier les profils horaires (0-100%) pour chaque heure de 0h à 23h</li>
+<li>Appliquer des modèles prédéfinis (Pointe soir, Production PV, Base constante, etc.)</li>
+<li>Utiliser le <strong>curseur global</strong> pour ajuster proportionnellement tous les points (×0.1 à ×2.0)</li>
+<li>Exporter/Importer des profils au format JSON</li>
+</ul>
+
+<h4>Tableau récapitulatif</h4>
+
+<p>Sous le graphique, un tableau affiche pour chaque heure :</p>
+<ul>
+<li><strong>Foisonnement charges (%)</strong> : Pourcentage de charge appliqué</li>
+<li><strong>Foisonnement productions (%)</strong> : Pourcentage de production appliqué</li>
+<li><strong>Puissances transitantes (kVA)</strong> : Détail par catégorie (résidentiel, industriel, PV, VE)</li>
+</ul>
+
+<h4>Zones de tension</h4>
+
+<p>Le graphique affiche des zones colorées correspondant aux limites réglementaires :</p>
+<ul>
+<li>🟢 <strong>Zone verte</strong> : Tension nominale ±3% (conforme)</li>
+<li>🟡 <strong>Zone orange</strong> : Tension ±5% (attention)</li>
+<li>🔴 <strong>Zone rouge</strong> : Hors limites ±10%</li>
+</ul>
+
+<blockquote>💡 <strong>Astuce</strong> : Activez le mode simulation pour comparer les courbes "Base" (sans équipements) et "Simulé" (avec EQUI8/SRG2 actifs).</blockquote>
+
+<h3 id="64-equi8-compensation-de-courant-de-neutre">6.4. EQUI8 - Compensation de Courant de Neutre</h3>
 
 <p>8.2 EQUI8 - Compensateur de Courant de Neutre</p>
 
@@ -555,7 +655,7 @@ kbd{background:var(--panel);border:1px solid var(--border);border-bottom-width:3
 <li>🟢 <strong>"Actif"</strong> : L'EQUI8 fonctionne normalement</li>
 </ul>
 
-<h3 id="64-srg2-regulation-de-tension-triphasee">6.4. SRG2 - Régulation de Tension Triphasée</h3>
+<h3 id="65-srg2-regulation-de-tension-triphasee">6.5. SRG2 - Régulation de Tension Triphasée</h3>
 
 <p>8.3 SRG2 - Régulateur de Tension Triphasé</p>
 

@@ -895,7 +895,7 @@ export const MapView = () => {
       if (!showVoltages) {
         const icon = L.divIcon({
           className: 'custom-node-marker',
-          html: `<div style="position: relative;"><div class="rounded-lg border-2 ${iconClass}" style="width: 24px; height: 24px; ${equipmentBorderStyle}"></div>${equipmentIndicator}</div>`,
+          html: `<div style="position: relative;"><div class="border-2 ${iconClass}" style="width: 24px; height: 24px; border-radius: 6px; ${equipmentBorderStyle}"></div>${equipmentIndicator}</div>`,
           iconSize: [24, 24],
           iconAnchor: [12, 12]
         });

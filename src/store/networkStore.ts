@@ -1844,6 +1844,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     const updatedTransformer: TransformerConfig = {
       ...(currentProject.transformerConfig || createDefaultTransformerConfig(newVoltageSystem)),
       nominalVoltage_V: newNominal,
+      sourceVoltage: newNominal,
     };
 
     // Adapter les SRG2 selon le nouveau système de tension

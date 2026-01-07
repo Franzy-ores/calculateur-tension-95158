@@ -29,7 +29,8 @@ export interface DailySimulationOptions {
   season: Season;
   weather: Weather;
   enableEV: boolean;
-  enableIndustrialPME: boolean;
+  /** @deprecated Le profil industriel est maintenant lié automatiquement aux clients industriels */
+  enableIndustrialPME?: boolean;
   selectedNodeId: string;
 }
 

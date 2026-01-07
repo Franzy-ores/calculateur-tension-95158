@@ -16,8 +16,73 @@ import { DailyProfileCalculator } from '@/utils/dailyProfileCalculator';
 import { DailyProfileChart } from '@/components/DailyProfileChart';
 import { ProfileVisualEditor } from '@/components/ProfileVisualEditor';
 import { HourlyVoltageResult } from '@/types/dailyProfile';
-import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent } from 'lucide-react';
+import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent, Home } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Project } from '@/types/network';
+
+/**
+ * Composant affichant les statistiques de clients résidentiels/industriels
+ */
+const ClientStatsDisplay = ({ project }: { project: Project }) => {
+  const stats = useMemo(() => {
+    const clients = project.clientsImportes || [];
+    const links = project.clientLinks || {};
+    
+    let residentialCount = 0;
+    let industrialCount = 0;
+    let residentialPower = 0;
+    let industrialPower = 0;
+    
+    clients.forEach(client => {
+      const isLinked = Object.values(links).some(linkedIds => 
+        Array.isArray(linkedIds) && linkedIds.includes(client.id)
+      );
+      
+      if (isLinked) {
+        if (client.clientType === 'industriel') {
+          industrialCount++;
+          industrialPower += client.puissanceContractuelle_kVA || 0;
+        } else {
+          residentialCount++;
+          residentialPower += client.puissanceContractuelle_kVA || 0;
+        }
+      }
+    });
+    
+    return { residentialCount, industrialCount, residentialPower, industrialPower };
+  }, [project.clientsImportes, project.clientLinks]);
+
+  return (
+    <div className="space-y-2 text-xs">
+      <Label className="text-xs text-muted-foreground">Clients liés (profil horaire auto)</Label>
+      <div className="flex flex-col gap-1.5 pl-1">
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <Home className="h-3 w-3" />
+            Résidentiels
+          </span>
+          <Badge variant="outline" className="text-xs px-2 py-0">
+            {stats.residentialCount} ({stats.residentialPower.toFixed(0)} kVA)
+          </Badge>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <Factory className="h-3 w-3" />
+            Industriels
+          </span>
+          <Badge variant="outline" className="text-xs px-2 py-0">
+            {stats.industrialCount} ({stats.industrialPower.toFixed(0)} kVA)
+          </Badge>
+        </div>
+      </div>
+      {stats.industrialCount > 0 && (
+        <p className="text-[10px] text-muted-foreground/70 italic pl-1">
+          Le profil industriel (8h-18h) est appliqué automatiquement aux clients industriels
+        </p>
+      )}
+    </div>
+  );
+};
 
 export const DailyProfileTab = () => {
   const { 
@@ -168,16 +233,9 @@ export const DailyProfileTab = () => {
                 onCheckedChange={(checked) => setDailyProfileOptions({ enableEV: checked })}
               />
             </div>
-            <div className="flex items-center justify-between">
-              <Label className="text-sm flex items-center gap-2">
-                <Factory className="h-4 w-4 text-muted-foreground" />
-                Industrie / PME
-              </Label>
-              <Switch
-                checked={dailyProfileOptions.enableIndustrialPME}
-                onCheckedChange={(checked) => setDailyProfileOptions({ enableIndustrialPME: checked })}
-              />
-            </div>
+            
+            {/* Statistiques clients détectés */}
+            <ClientStatsDisplay project={currentProject} />
           </div>
 
           {/* Bouton éditer profils */}

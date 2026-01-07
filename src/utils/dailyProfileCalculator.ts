@@ -35,16 +35,83 @@ export class DailyProfileCalculator {
   }
 
   /**
+   * Compte les clients industriels dans le projet
+   */
+  private countIndustrialClients(): number {
+    if (!this.project.clientsImportes) return 0;
+    return this.project.clientsImportes.filter(c => c.clientType === 'industriel').length;
+  }
+
+  /**
+   * Calcule le foisonnement pondéré en fonction du mix résidentiel/industriel
+   */
+  private calculateWeightedFoisonnement(
+    residentialProfile: number,
+    industrialProfile: number
+  ): { residential: number; industrial: number; weighted: number } {
+    const clients = this.project.clientsImportes || [];
+    const links = this.project.clientLinks || {};
+    
+    // Calculer les puissances par type de client liés au projet
+    let residentialPower = 0;
+    let industrialPower = 0;
+    
+    clients.forEach(client => {
+      // Vérifier si le client est lié à un nœud
+      const isLinked = Object.values(links).some(linkedIds => 
+        Array.isArray(linkedIds) && linkedIds.includes(client.id)
+      );
+      
+      if (isLinked) {
+        const power = client.puissanceContractuelle_kVA || 0;
+        if (client.clientType === 'industriel') {
+          industrialPower += power;
+        } else {
+          residentialPower += power;
+        }
+      }
+    });
+    
+    const totalPower = residentialPower + industrialPower;
+    
+    if (totalPower === 0) {
+      // Pas de clients liés, utiliser uniquement le profil résidentiel
+      return { residential: residentialProfile, industrial: 0, weighted: residentialProfile };
+    }
+    
+    // Pondération par puissance
+    const residentialWeight = residentialPower / totalPower;
+    const industrialWeight = industrialPower / totalPower;
+    
+    // Foisonnement pondéré
+    const weighted = (residentialProfile * residentialWeight) + (industrialProfile * industrialWeight);
+    
+    return {
+      residential: residentialProfile,
+      industrial: industrialProfile,
+      weighted
+    };
+  }
+
+  /**
    * Calcule la tension à une heure donnée
    * Utilise le foisonnement horaire du JSON directement dans le calcul électrique
+   * Applique le profil industriel aux clients industriels automatiquement
    */
   private calculateHourlyVoltage(hour: number, nominalVoltage: number): HourlyVoltageResult {
     const seasonProfile = this.profiles.profiles[this.options.season];
     const weatherFactor = this.profiles.weatherFactors[this.options.weather];
     const hourStr = hour.toString();
 
-    // Foisonnement charges = profil résidentiel horaire du JSON
-    let chargesFoisonnement = seasonProfile.residential[hourStr] || 0;
+    // Profils de base
+    const residentialProfile = seasonProfile.residential[hourStr] || 0;
+    const industrialProfile = seasonProfile.industrial_pme[hourStr] || 0;
+    
+    // Calcul du foisonnement pondéré selon le mix de clients
+    const foisonnementData = this.calculateWeightedFoisonnement(residentialProfile, industrialProfile);
+    
+    // Foisonnement charges = pondération résidentiel/industriel
+    let chargesFoisonnement = foisonnementData.weighted;
 
     // Majoration VE : +5% entre 18h et 5h si activé
     if (this.options.enableEV && (hour >= 18 || hour <= 5)) {
@@ -65,7 +132,7 @@ export class DailyProfileCalculator {
       const result = calculator.calculateScenarioWithHTConfig(
         this.project,              // Projet ORIGINAL (pas modulé)
         'MIXTE',
-        chargesFoisonnement,       // Foisonnement horaire du JSON
+        chargesFoisonnement,       // Foisonnement horaire pondéré
         productionsFoisonnement,   // Production PV horaire avec météo
         this.project.manualPhaseDistribution,  // Déséquilibre conservé
         this.project.clientsImportes,
@@ -76,6 +143,37 @@ export class DailyProfileCalculator {
       console.warn(`Erreur calcul heure ${hour}:`, error);
       return this.createDefaultHourlyResult(hour, nominalVoltage, chargesFoisonnement, productionsFoisonnement);
     }
+  }
+
+  /**
+   * Retourne les statistiques clients pour l'UI
+   */
+  getClientStats(): { residential: number; industrial: number; residentialPower: number; industrialPower: number } {
+    const clients = this.project.clientsImportes || [];
+    const links = this.project.clientLinks || {};
+    
+    let residentialCount = 0;
+    let industrialCount = 0;
+    let residentialPower = 0;
+    let industrialPower = 0;
+    
+    clients.forEach(client => {
+      const isLinked = Object.values(links).some(linkedIds => 
+        Array.isArray(linkedIds) && linkedIds.includes(client.id)
+      );
+      
+      if (isLinked) {
+        if (client.clientType === 'industriel') {
+          industrialCount++;
+          industrialPower += client.puissanceContractuelle_kVA || 0;
+        } else {
+          residentialCount++;
+          residentialPower += client.puissanceContractuelle_kVA || 0;
+        }
+      }
+    });
+    
+    return { residential: residentialCount, industrial: industrialCount, residentialPower, industrialPower };
   }
 
   /**

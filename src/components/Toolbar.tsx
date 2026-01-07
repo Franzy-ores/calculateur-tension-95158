@@ -1,4 +1,6 @@
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Label } from '@/components/ui/label';
 import { useNetworkStore } from '@/store/networkStore';
 import { toast } from 'sonner';
 
@@ -15,7 +17,19 @@ export const Toolbar = () => {
     toggleClientTensionLabels,
     showVoltages,
     setShowVoltages,
+    clientColorMode,
+    setClientColorMode,
   } = useNetworkStore();
+
+  const hasClients = currentProject?.clientsImportes && currentProject.clientsImportes.length > 0;
+
+  const colorModes = [
+    { value: 'couplage', label: 'Par couplage' },
+    { value: 'circuit', label: 'Par circuit' },
+    { value: 'tension', label: 'Par tension' },
+    { value: 'link', label: 'Par lien au nœud' },
+    { value: 'gps', label: 'Par statut GPS' },
+  ];
 
   const handleCalculate = () => {
     if (!currentProject) {
@@ -103,6 +117,37 @@ export const Toolbar = () => {
       >
         <span className="text-lg">{showVoltages ? '🔋' : '🔌'}</span>
       </Button>
+      
+      {hasClients && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              title="Mode coloration raccordements"
+              className="w-12 h-12 mb-2"
+            >
+              <span className="text-lg">🎨</span>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent side="right" align="start" className="w-48 p-2">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground px-2">Coloration</Label>
+              {colorModes.map((mode) => (
+                <Button
+                  key={mode.value}
+                  variant={clientColorMode === mode.value ? "default" : "ghost"}
+                  size="sm"
+                  className="w-full justify-start text-sm"
+                  onClick={() => setClientColorMode(mode.value as any)}
+                >
+                  {mode.label}
+                </Button>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
       
       <div className="w-full h-px bg-border mb-1" />
       

@@ -1,8 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FileDown, Eye, FileText } from "lucide-react";
+import { FileDown, FileText } from "lucide-react";
 import { useNetworkStore } from "@/store/networkStore";
 import { PDFGenerator } from "@/utils/pdfGenerator";
 import { toast } from "sonner";
@@ -15,8 +13,6 @@ export const ExportTab = () => {
     simulationResults,
     isSimulationActive,
     simulationEquipment,
-    clientColorMode,
-    setClientColorMode,
   } = useNetworkStore();
 
   const handleExportPDF = async () => {
@@ -53,12 +49,10 @@ export const ExportTab = () => {
 
   if (!currentProject) return null;
 
-  const hasClients = currentProject.clientsImportes && currentProject.clientsImportes.length > 0;
-
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
-      {/* Card 1: Export */}
-      <Card className="bg-card/50 backdrop-blur border-border/50">
+    <div className="p-4">
+      {/* Card: Export */}
+      <Card className="bg-card/50 backdrop-blur border-border/50 max-w-md">
         <CardHeader className="pb-2 pt-3 px-4">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <FileDown className="h-4 w-4 text-primary" />
@@ -80,35 +74,6 @@ export const ExportTab = () => {
           </p>
         </CardContent>
       </Card>
-
-      {/* Card 2: Affichage - Seulement si clients importés */}
-      {hasClients && (
-        <Card className="bg-card/50 backdrop-blur border-border/50">
-          <CardHeader className="pb-2 pt-3 px-4">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Eye className="h-4 w-4 text-accent" />
-              Options d'affichage
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4 space-y-4">
-            <div className="space-y-2">
-              <Label className="text-sm">Mode coloration raccordements</Label>
-              <Select value={clientColorMode} onValueChange={(value: any) => setClientColorMode(value)}>
-                <SelectTrigger className="w-full bg-background border text-sm h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-popover border z-[10000]">
-                  <SelectItem value="couplage">Par couplage</SelectItem>
-                  <SelectItem value="circuit">Par circuit</SelectItem>
-                  <SelectItem value="tension">Par tension</SelectItem>
-                  <SelectItem value="lien">Par lien</SelectItem>
-                  <SelectItem value="gps">Par GPS</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 };

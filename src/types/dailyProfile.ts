@@ -46,7 +46,13 @@ export interface HourlyVoltageResult {
   status: 'normal' | 'warning' | 'critical';
   // Foisonnement appliqué pour cette heure (%)
   chargesFoisonnement: number;
+  chargesResidentialFoisonnement: number;
+  chargesIndustrialFoisonnement: number;
   productionsFoisonnement: number;
+  // Puissances calculées en kVA (après application du foisonnement)
+  chargesResidentialPower_kVA: number;
+  chargesIndustrialPower_kVA: number;
+  productionsPower_kVA: number;
 }
 
 export const defaultDailySimulationOptions: DailySimulationOptions = {

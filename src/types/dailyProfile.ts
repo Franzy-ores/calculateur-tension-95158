@@ -8,7 +8,6 @@ export interface HourlyProfile {
 export interface SeasonProfile {
   residential: HourlyProfile;
   pv: HourlyProfile;
-  ev: HourlyProfile;
   industrial_pme: HourlyProfile;
 }
 
@@ -22,7 +21,6 @@ export interface DailyProfileConfig {
     sunny: number;
     gray: number;
   };
-  evPower_kVA: number;
 }
 
 export interface DailySimulationOptions {
@@ -55,6 +53,8 @@ export interface HourlyVoltageResult {
   chargesResidentialPower_kVA: number;
   chargesIndustrialPower_kVA: number;
   productionsPower_kVA: number;
+  // Bonus VE appliqué sur le foisonnement résidentiel (%)
+  evBonus: number;
 }
 
 export const defaultDailySimulationOptions: DailySimulationOptions = {

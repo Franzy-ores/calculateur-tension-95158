@@ -302,7 +302,8 @@ export const DailyProfileTab = () => {
             <div className="flex items-center justify-between">
               <Label className="text-sm flex items-center gap-2">
                 <Car className="h-4 w-4 text-muted-foreground" />
-                Charge VE ({dailyProfileCustomProfiles.evPower_kVA} kVA)
+                Charge VE
+                <span className="text-[10px] text-muted-foreground">(+2.5% 18-21h, +5% 22-5h)</span>
               </Label>
               <Switch
                 checked={dailyProfileOptions.enableEV}
@@ -428,6 +429,11 @@ export const DailyProfileTab = () => {
                           <Home className="h-3 w-3" /> Résidentiel
                         </span>
                       </th>
+                      <th className="text-center py-1 px-1 font-medium text-emerald-400" rowSpan={2}>
+                        <span className="flex items-center justify-center gap-1">
+                          <Car className="h-3 w-3" /> VE
+                        </span>
+                      </th>
                       <th className="text-center py-1 px-1 font-medium text-amber-500" colSpan={2}>
                         <span className="flex items-center justify-center gap-1">
                           <Factory className="h-3 w-3" /> Industriel
@@ -464,6 +470,9 @@ export const DailyProfileTab = () => {
                         </td>
                         <td className="text-right py-1 px-1 font-mono text-orange-300">
                           {r.chargesResidentialPower_kVA.toFixed(1)}
+                        </td>
+                        <td className="text-right py-1 px-1 font-mono text-emerald-400">
+                          {r.evBonus > 0 ? `+${r.evBonus.toFixed(1)}%` : '-'}
                         </td>
                         <td className="text-right py-1 px-1 font-mono text-amber-500">
                           {r.chargesIndustrialFoisonnement.toFixed(0)}%

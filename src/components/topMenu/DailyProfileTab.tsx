@@ -26,7 +26,7 @@ import { Project } from '@/types/network';
 const ClientStatsDisplay = ({ project }: { project: Project }) => {
   const stats = useMemo(() => {
     const clients = project.clientsImportes || [];
-    const links = project.clientLinks || {};
+    const links = project.clientLinks || [];
     
     let residentialCount = 0;
     let industrialCount = 0;
@@ -34,9 +34,7 @@ const ClientStatsDisplay = ({ project }: { project: Project }) => {
     let industrialPower = 0;
     
     clients.forEach(client => {
-      const isLinked = Object.values(links).some(linkedIds => 
-        Array.isArray(linkedIds) && linkedIds.includes(client.id)
-      );
+      const isLinked = links.some(link => link.clientId === client.id);
       
       if (isLinked) {
         if (client.clientType === 'industriel') {

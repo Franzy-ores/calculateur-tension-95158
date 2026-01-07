@@ -311,8 +311,11 @@ export const DailyProfileTab = () => {
             <CardHeader className="pb-2 pt-3 px-4">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Percent className="h-4 w-4 text-primary" />
-                Foisonnement horaire utilisé
+                Foisonnement horaire - Nœud {selectedNode?.name || dailyProfileOptions.selectedNodeId}
               </CardTitle>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Puissances transitantes (nœud sélectionné + aval)
+              </p>
             </CardHeader>
             <CardContent className="px-4 pb-4">
               <ScrollArea className="h-[180px]">

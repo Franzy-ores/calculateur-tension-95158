@@ -129,10 +129,18 @@ export class DailyProfileCalculator {
     const nodePowers = this.getUpstreamAndNodePowers();
     
     // Foisonnement horaire par type de client (pas de pondération !)
-    // Majoration VE : +5% entre 18h et 5h si activé (sur résidentiel uniquement)
-    const residentialFoisonnementHoraire = this.options.enableEV && (hour >= 18 || hour <= 5)
-      ? residentialProfile + 5
-      : residentialProfile;
+    // Majoration VE sur résidentiel uniquement :
+    // - +2.5% de 18h à 21h (début de soirée)
+    // - +5% de 22h à 5h (nuit profonde)
+    let evBonus = 0;
+    if (this.options.enableEV) {
+      if (hour >= 18 && hour <= 21) {
+        evBonus = 2.5;
+      } else if (hour >= 22 || hour <= 5) {
+        evBonus = 5;
+      }
+    }
+    const residentialFoisonnementHoraire = residentialProfile + evBonus;
     const industrialFoisonnementHoraire = industrialProfile;
 
     // Foisonnement productions = profil PV × facteur météo (ou 0% si zeroProduction activé)

@@ -50,7 +50,7 @@ export class DailyProfileCalculator {
     industrialProfile: number
   ): { residential: number; industrial: number; weighted: number } {
     const clients = this.project.clientsImportes || [];
-    const links = this.project.clientLinks || {};
+    const links = this.project.clientLinks || [];
     
     // Calculer les puissances par type de client liés au projet
     let residentialPower = 0;
@@ -58,9 +58,7 @@ export class DailyProfileCalculator {
     
     clients.forEach(client => {
       // Vérifier si le client est lié à un nœud
-      const isLinked = Object.values(links).some(linkedIds => 
-        Array.isArray(linkedIds) && linkedIds.includes(client.id)
-      );
+      const isLinked = links.some(link => link.clientId === client.id);
       
       if (isLinked) {
         const power = client.puissanceContractuelle_kVA || 0;
@@ -150,7 +148,7 @@ export class DailyProfileCalculator {
    */
   getClientStats(): { residential: number; industrial: number; residentialPower: number; industrialPower: number } {
     const clients = this.project.clientsImportes || [];
-    const links = this.project.clientLinks || {};
+    const links = this.project.clientLinks || [];
     
     let residentialCount = 0;
     let industrialCount = 0;
@@ -158,9 +156,7 @@ export class DailyProfileCalculator {
     let industrialPower = 0;
     
     clients.forEach(client => {
-      const isLinked = Object.values(links).some(linkedIds => 
-        Array.isArray(linkedIds) && linkedIds.includes(client.id)
-      );
+      const isLinked = links.some(link => link.clientId === client.id);
       
       if (isLinked) {
         if (client.clientType === 'industriel') {

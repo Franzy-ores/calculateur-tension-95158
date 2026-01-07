@@ -23,8 +23,8 @@ export const NetworkTab = () => {
 
   // Source voltage slider state with debounce
   const nominalVoltage = currentProject?.voltageSystem === 'TÉTRAPHASÉ_400V' ? 400 : 230;
-  const minVoltage = Math.round(nominalVoltage * 0.95 * 10) / 10;
-  const maxVoltage = Math.round(nominalVoltage * 1.05 * 10) / 10;
+  const minVoltage = nominalVoltage === 400 ? 390 : 225;
+  const maxVoltage = nominalVoltage === 400 ? 430 : 240;
   const currentSourceVoltage = currentProject?.transformerConfig?.sourceVoltage ?? nominalVoltage;
   
   const [localSourceVoltage, setLocalSourceVoltage] = useState(currentSourceVoltage);

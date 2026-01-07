@@ -48,7 +48,13 @@ export class DailyProfileCalculator {
   private calculateWeightedFoisonnement(
     residentialProfile: number,
     industrialProfile: number
-  ): { residential: number; industrial: number; weighted: number } {
+  ): { 
+    residential: number; 
+    industrial: number; 
+    weighted: number;
+    residentialPower: number;
+    industrialPower: number;
+  } {
     const clients = this.project.clientsImportes || [];
     const links = this.project.clientLinks || [];
     
@@ -74,7 +80,7 @@ export class DailyProfileCalculator {
     
     if (totalPower === 0) {
       // Pas de clients liés, utiliser uniquement le profil résidentiel
-      return { residential: residentialProfile, industrial: 0, weighted: residentialProfile };
+      return { residential: residentialProfile, industrial: 0, weighted: residentialProfile, residentialPower: 0, industrialPower: 0 };
     }
     
     // Pondération par puissance
@@ -87,7 +93,9 @@ export class DailyProfileCalculator {
     return {
       residential: residentialProfile,
       industrial: industrialProfile,
-      weighted
+      weighted,
+      residentialPower,
+      industrialPower
     };
   }
 
@@ -118,6 +126,9 @@ export class DailyProfileCalculator {
 
     // Foisonnement productions = profil PV × facteur météo
     const productionsFoisonnement = (seasonProfile.pv[hourStr] || 0) * weatherFactor;
+    
+    // Calcul de la puissance totale de production PV
+    const totalProductionPower = this.getTotalProductionPower();
 
     // Exécuter le calcul électrique avec le projet ORIGINAL et le foisonnement horaire
     const calculator = new ElectricalCalculator(
@@ -136,11 +147,46 @@ export class DailyProfileCalculator {
         this.project.clientsImportes,
         this.project.clientLinks
       );
-      return this.extractNodeVoltages(hour, result, nominalVoltage, chargesFoisonnement, productionsFoisonnement);
+      return this.extractNodeVoltages(
+        hour, 
+        result, 
+        nominalVoltage, 
+        chargesFoisonnement, 
+        productionsFoisonnement,
+        foisonnementData.residential,
+        foisonnementData.industrial,
+        foisonnementData.residentialPower,
+        foisonnementData.industrialPower,
+        totalProductionPower
+      );
     } catch (error) {
       console.warn(`Erreur calcul heure ${hour}:`, error);
-      return this.createDefaultHourlyResult(hour, nominalVoltage, chargesFoisonnement, productionsFoisonnement);
+      return this.createDefaultHourlyResult(
+        hour, 
+        nominalVoltage, 
+        chargesFoisonnement, 
+        productionsFoisonnement,
+        foisonnementData.residential,
+        foisonnementData.industrial,
+        foisonnementData.residentialPower,
+        foisonnementData.industrialPower,
+        totalProductionPower
+      );
     }
+  }
+  /**
+   * Calcule la puissance totale de production PV du projet
+   */
+  private getTotalProductionPower(): number {
+    let totalPower = 0;
+    for (const node of this.project.nodes) {
+      if (node.productions && Array.isArray(node.productions)) {
+        for (const prod of node.productions) {
+          totalPower += prod.S_kVA || 0;
+        }
+      }
+    }
+    return totalPower;
   }
 
   /**
@@ -180,14 +226,22 @@ export class DailyProfileCalculator {
     result: CalculationResult, 
     nominalVoltage: number,
     chargesFoisonnement: number,
-    productionsFoisonnement: number
+    productionsFoisonnement: number,
+    residentialFoisonnement: number,
+    industrialFoisonnement: number,
+    residentialPower: number,
+    industrialPower: number,
+    totalProductionPower: number
   ): HourlyVoltageResult {
     const nodeId = this.options.selectedNodeId;
     const nodeMetrics = result.nodeMetricsPerPhase?.find(n => n.nodeId === nodeId);
 
     if (!nodeMetrics?.voltagesPerPhase) {
       console.warn(`Heure ${hour}: Pas de métriques pour le nœud ${nodeId}`);
-      return this.createDefaultHourlyResult(hour, nominalVoltage, chargesFoisonnement, productionsFoisonnement);
+      return this.createDefaultHourlyResult(
+        hour, nominalVoltage, chargesFoisonnement, productionsFoisonnement,
+        residentialFoisonnement, industrialFoisonnement, residentialPower, industrialPower, totalProductionPower
+      );
     }
 
     const { A, B, C } = nodeMetrics.voltagesPerPhase;
@@ -213,6 +267,11 @@ export class DailyProfileCalculator {
     if (maxDeviation > 10) status = 'critical';
     else if (maxDeviation > 5) status = 'warning';
 
+    // Calcul des puissances foisonnées
+    const chargesResidentialPower_kVA = residentialPower * (residentialFoisonnement / 100);
+    const chargesIndustrialPower_kVA = industrialPower * (industrialFoisonnement / 100);
+    const productionsPower_kVA = totalProductionPower * (productionsFoisonnement / 100);
+
     return {
       hour,
       voltageA_V: voltageA,
@@ -224,7 +283,12 @@ export class DailyProfileCalculator {
       deviationPercent,
       status,
       chargesFoisonnement,
-      productionsFoisonnement
+      chargesResidentialFoisonnement: residentialFoisonnement,
+      chargesIndustrialFoisonnement: industrialFoisonnement,
+      productionsFoisonnement,
+      chargesResidentialPower_kVA,
+      chargesIndustrialPower_kVA,
+      productionsPower_kVA
     };
   }
 
@@ -235,8 +299,17 @@ export class DailyProfileCalculator {
     hour: number, 
     nominalVoltage: number,
     chargesFoisonnement: number,
-    productionsFoisonnement: number
+    productionsFoisonnement: number,
+    residentialFoisonnement: number,
+    industrialFoisonnement: number,
+    residentialPower: number,
+    industrialPower: number,
+    totalProductionPower: number
   ): HourlyVoltageResult {
+    const chargesResidentialPower_kVA = residentialPower * (residentialFoisonnement / 100);
+    const chargesIndustrialPower_kVA = industrialPower * (industrialFoisonnement / 100);
+    const productionsPower_kVA = totalProductionPower * (productionsFoisonnement / 100);
+
     return {
       hour,
       voltageA_V: nominalVoltage,
@@ -248,7 +321,12 @@ export class DailyProfileCalculator {
       deviationPercent: 0,
       status: 'normal',
       chargesFoisonnement,
-      productionsFoisonnement
+      chargesResidentialFoisonnement: residentialFoisonnement,
+      chargesIndustrialFoisonnement: industrialFoisonnement,
+      productionsFoisonnement,
+      chargesResidentialPower_kVA,
+      chargesIndustrialPower_kVA,
+      productionsPower_kVA
     };
   }
 

@@ -16,7 +16,7 @@ import { DailyProfileCalculator } from '@/utils/dailyProfileCalculator';
 import { DailyProfileChart } from '@/components/DailyProfileChart';
 import { ProfileVisualEditor } from '@/components/ProfileVisualEditor';
 import { HourlyVoltageResult } from '@/types/dailyProfile';
-import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent, Home } from 'lucide-react';
+import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent, Home, Zap } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Project } from '@/types/network';
 
@@ -319,10 +319,31 @@ export const DailyProfileTab = () => {
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-card/95">
                     <tr className="border-b border-border">
-                      <th className="text-left py-1 px-2 font-medium text-muted-foreground">Heure</th>
-                      <th className="text-right py-1 px-2 font-medium text-orange-400">Charges %</th>
-                      <th className="text-right py-1 px-2 font-medium text-green-400">Productions %</th>
-                      <th className="text-right py-1 px-2 font-medium text-blue-400">V moy</th>
+                      <th className="text-left py-1 px-1 font-medium text-muted-foreground" rowSpan={2}>Heure</th>
+                      <th className="text-center py-1 px-1 font-medium text-orange-400" colSpan={2}>
+                        <span className="flex items-center justify-center gap-1">
+                          <Home className="h-3 w-3" /> Résidentiel
+                        </span>
+                      </th>
+                      <th className="text-center py-1 px-1 font-medium text-amber-500" colSpan={2}>
+                        <span className="flex items-center justify-center gap-1">
+                          <Factory className="h-3 w-3" /> Industriel
+                        </span>
+                      </th>
+                      <th className="text-center py-1 px-1 font-medium text-green-400" colSpan={2}>
+                        <span className="flex items-center justify-center gap-1">
+                          <Sun className="h-3 w-3" /> Production
+                        </span>
+                      </th>
+                      <th className="text-right py-1 px-1 font-medium text-blue-400" rowSpan={2}>V moy</th>
+                    </tr>
+                    <tr className="border-b border-border text-[10px] text-muted-foreground">
+                      <th className="text-right px-1">%</th>
+                      <th className="text-right px-1">kVA</th>
+                      <th className="text-right px-1">%</th>
+                      <th className="text-right px-1">kVA</th>
+                      <th className="text-right px-1">%</th>
+                      <th className="text-right px-1">kVA</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -334,14 +355,26 @@ export const DailyProfileTab = () => {
                           r.status === 'warning' ? 'bg-yellow-500/10' : ''
                         }`}
                       >
-                        <td className="py-1 px-2 font-mono">{r.hour.toString().padStart(2, '0')}h</td>
-                        <td className="text-right py-1 px-2 font-mono text-orange-400">
-                          {r.chargesFoisonnement.toFixed(0)}%
+                        <td className="py-1 px-1 font-mono">{r.hour.toString().padStart(2, '0')}h</td>
+                        <td className="text-right py-1 px-1 font-mono text-orange-400">
+                          {r.chargesResidentialFoisonnement.toFixed(0)}%
                         </td>
-                        <td className="text-right py-1 px-2 font-mono text-green-400">
+                        <td className="text-right py-1 px-1 font-mono text-orange-300">
+                          {r.chargesResidentialPower_kVA.toFixed(1)}
+                        </td>
+                        <td className="text-right py-1 px-1 font-mono text-amber-500">
+                          {r.chargesIndustrialFoisonnement.toFixed(0)}%
+                        </td>
+                        <td className="text-right py-1 px-1 font-mono text-amber-300">
+                          {r.chargesIndustrialPower_kVA.toFixed(1)}
+                        </td>
+                        <td className="text-right py-1 px-1 font-mono text-green-400">
                           {r.productionsFoisonnement.toFixed(0)}%
                         </td>
-                        <td className="text-right py-1 px-2 font-mono text-blue-400">
+                        <td className="text-right py-1 px-1 font-mono text-green-300">
+                          {r.productionsPower_kVA.toFixed(1)}
+                        </td>
+                        <td className="text-right py-1 px-1 font-mono text-blue-400">
                           {r.voltageAvg_V.toFixed(1)}V
                         </td>
                       </tr>

@@ -113,11 +113,20 @@ export class DailyProfileCalculator {
     const residentialProfile = seasonProfile.residential[hourStr] || 0;
     const industrialProfile = seasonProfile.industrial_pme[hourStr] || 0;
     
-    // Calcul du foisonnement pondéré selon le mix de clients
-    const foisonnementData = this.calculateWeightedFoisonnement(residentialProfile, industrialProfile);
+    // Récupérer les puissances transitantes (nœud sélectionné + aval)
+    const nodePowers = this.getUpstreamAndNodePowers();
     
-    // Foisonnement charges = pondération résidentiel/industriel
-    let chargesFoisonnement = foisonnementData.weighted;
+    // Calcul du foisonnement pondéré
+    const totalPower = nodePowers.residentialPower + nodePowers.industrialPower;
+    let chargesFoisonnement: number;
+    
+    if (totalPower === 0) {
+      chargesFoisonnement = residentialProfile;
+    } else {
+      const residentialWeight = nodePowers.residentialPower / totalPower;
+      const industrialWeight = nodePowers.industrialPower / totalPower;
+      chargesFoisonnement = (residentialProfile * residentialWeight) + (industrialProfile * industrialWeight);
+    }
 
     // Majoration VE : +5% entre 18h et 5h si activé
     if (this.options.enableEV && (hour >= 18 || hour <= 5)) {
@@ -126,9 +135,6 @@ export class DailyProfileCalculator {
 
     // Foisonnement productions = profil PV × facteur météo
     const productionsFoisonnement = (seasonProfile.pv[hourStr] || 0) * weatherFactor;
-    
-    // Calcul de la puissance totale de production PV
-    const totalProductionPower = this.getTotalProductionPower();
 
     // Exécuter le calcul électrique avec le projet ORIGINAL et le foisonnement horaire
     const calculator = new ElectricalCalculator(
@@ -153,11 +159,11 @@ export class DailyProfileCalculator {
         nominalVoltage, 
         chargesFoisonnement, 
         productionsFoisonnement,
-        foisonnementData.residential,
-        foisonnementData.industrial,
-        foisonnementData.residentialPower,
-        foisonnementData.industrialPower,
-        totalProductionPower
+        residentialProfile,
+        industrialProfile,
+        nodePowers.residentialPower,
+        nodePowers.industrialPower,
+        nodePowers.productionPower
       );
     } catch (error) {
       console.warn(`Erreur calcul heure ${hour}:`, error);
@@ -166,45 +172,135 @@ export class DailyProfileCalculator {
         nominalVoltage, 
         chargesFoisonnement, 
         productionsFoisonnement,
-        foisonnementData.residential,
-        foisonnementData.industrial,
-        foisonnementData.residentialPower,
-        foisonnementData.industrialPower,
-        totalProductionPower
+        residentialProfile,
+        industrialProfile,
+        nodePowers.residentialPower,
+        nodePowers.industrialPower,
+        nodePowers.productionPower
       );
     }
   }
   /**
-   * Calcule la puissance totale de production PV du projet
+   * Construit une map parent pour chaque nœud (BFS depuis la source)
    */
-  /**
-   * Calcule la puissance totale de production PV du projet
-   * Inclut les productions des nœuds ET des clients importés (résidentiels + industriels)
-   */
-  private getTotalProductionPower(): number {
-    let totalPower = 0;
+  private buildParentMap(sourceId: string): Map<string, string> {
+    const parentMap = new Map<string, string>();
+    const visited = new Set<string>();
+    const queue: string[] = [sourceId];
+    visited.add(sourceId);
     
-    // 1. Productions configurées sur les nœuds
-    for (const node of this.project.nodes) {
-      if (node.productions && Array.isArray(node.productions)) {
-        for (const prod of node.productions) {
-          totalPower += prod.S_kVA || 0;
+    while (queue.length > 0) {
+      const currentId = queue.shift()!;
+      
+      const connectedCables = this.project.cables.filter(
+        c => c.nodeAId === currentId || c.nodeBId === currentId
+      );
+      
+      for (const cable of connectedCables) {
+        const nextNodeId = cable.nodeAId === currentId ? cable.nodeBId : cable.nodeAId;
+        
+        if (!visited.has(nextNodeId)) {
+          visited.add(nextNodeId);
+          parentMap.set(nextNodeId, currentId);
+          queue.push(nextNodeId);
         }
       }
     }
     
-    // 2. Productions PV des clients importés liés (résidentiels ET industriels)
+    return parentMap;
+  }
+
+  /**
+   * Trouve tous les nœuds en aval d'un nœud donné (vers les extrémités, loin de la source)
+   */
+  private findDownstreamNodes(startNodeId: string): string[] {
+    const source = this.project.nodes.find(n => n.isSource);
+    if (!source) return [];
+
+    const downstream: string[] = [];
+    const visited = new Set<string>();
+    const queue: string[] = [startNodeId];
+    visited.add(startNodeId);
+    
+    // Construire le chemin depuis la source pour déterminer l'orientation
+    const parentMap = this.buildParentMap(source.id);
+    
+    while (queue.length > 0) {
+      const currentId = queue.shift()!;
+      
+      // Trouver les câbles connectés à ce nœud
+      const connectedCables = this.project.cables.filter(
+        c => c.nodeAId === currentId || c.nodeBId === currentId
+      );
+      
+      for (const cable of connectedCables) {
+        const nextNodeId = cable.nodeAId === currentId ? cable.nodeBId : cable.nodeAId;
+        
+        // Ne prendre que les nœuds en aval (plus loin de la source)
+        if (!visited.has(nextNodeId) && parentMap.get(nextNodeId) === currentId) {
+          visited.add(nextNodeId);
+          downstream.push(nextNodeId);
+          queue.push(nextNodeId);
+        }
+      }
+    }
+    
+    return downstream;
+  }
+
+  /**
+   * Calcule les puissances du nœud sélectionné + nœuds aval (puissances transitantes)
+   * "Amont" au sens courant = ce qui transite par ce nœud vers l'aval
+   */
+  private getUpstreamAndNodePowers(): { 
+    residentialPower: number; 
+    industrialPower: number; 
+    productionPower: number;
+  } {
+    const nodeId = this.options.selectedNodeId;
     const clients = this.project.clientsImportes || [];
     const links = this.project.clientLinks || [];
-    
-    clients.forEach(client => {
-      const isLinked = links.some(link => link.clientId === client.id);
-      if (isLinked && client.puissancePV_kVA) {
-        totalPower += client.puissancePV_kVA;
+
+    // Trouver le nœud sélectionné + tous les nœuds en aval (downstream)
+    const downstreamNodeIds = this.findDownstreamNodes(nodeId);
+    const relevantNodeIds = new Set([nodeId, ...downstreamNodeIds]);
+
+    let residentialPower = 0;
+    let industrialPower = 0;
+    let productionPower = 0;
+
+    // Parcourir tous les nœuds concernés
+    for (const nId of relevantNodeIds) {
+      const node = this.project.nodes.find(n => n.id === nId);
+      
+      // 1. Productions configurées sur le nœud
+      if (node?.productions) {
+        for (const prod of node.productions) {
+          productionPower += prod.S_kVA || 0;
+        }
       }
-    });
-    
-    return totalPower;
+
+      // 2. Clients liés à ce nœud
+      const nodeLinks = links.filter(link => link.nodeId === nId);
+      
+      nodeLinks.forEach(link => {
+        const client = clients.find(c => c.id === link.clientId);
+        if (client) {
+          const power = client.puissanceContractuelle_kVA || 0;
+          if (client.clientType === 'industriel') {
+            industrialPower += power;
+          } else {
+            residentialPower += power;
+          }
+          
+          if (client.puissancePV_kVA) {
+            productionPower += client.puissancePV_kVA;
+          }
+        }
+      });
+    }
+
+    return { residentialPower, industrialPower, productionPower };
   }
 
   /**

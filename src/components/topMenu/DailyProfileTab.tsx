@@ -16,7 +16,7 @@ import { DailyProfileCalculator } from '@/utils/dailyProfileCalculator';
 import { DailyProfileChart } from '@/components/DailyProfileChart';
 import { ProfileVisualEditor } from '@/components/ProfileVisualEditor';
 import { HourlyVoltageResult } from '@/types/dailyProfile';
-import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent, Home, Zap } from 'lucide-react';
+import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent, Home, Zap, FlaskConical, Moon } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Project } from '@/types/network';
 
@@ -90,7 +90,8 @@ export const DailyProfileTab = () => {
     setDailyProfileOptions,
     setDailyProfileCustomProfiles,
     simulationEquipment,
-    isSimulationActive
+    isSimulationActive,
+    toggleSimulationActive
   } = useNetworkStore();
 
   const [editorOpen, setEditorOpen] = useState(false);
@@ -111,12 +112,17 @@ export const DailyProfileTab = () => {
     }
   }, [nodes, dailyProfileOptions.selectedNodeId, setDailyProfileOptions]);
 
+  // Compteur d'équipements de simulation
+  const srg2Count = simulationEquipment.srg2Devices?.filter(s => s.enabled).length || 0;
+  const compensatorCount = simulationEquipment.neutralCompensators?.filter(c => c.enabled).length || 0;
+  const hasCableReplacement = simulationEquipment.cableReplacement?.enabled;
+  const totalEquipment = srg2Count + compensatorCount + (hasCableReplacement ? 1 : 0);
+  const hasAnyEquipment = totalEquipment > 0 || 
+    (simulationEquipment.srg2Devices?.length || 0) > 0 || 
+    simulationEquipment.neutralCompensators.length > 0;
+
   // Vérifier si la simulation est active avec équipements
-  const hasActiveSimulation = isSimulationActive && (
-    (simulationEquipment.srg2Devices?.some(s => s.enabled)) ||
-    (simulationEquipment.neutralCompensators?.some(c => c.enabled)) ||
-    (simulationEquipment.cableReplacement?.enabled)
-  );
+  const hasActiveSimulation = isSimulationActive && totalEquipment > 0;
 
   // Calcul des tensions quand les options changent
   useEffect(() => {
@@ -209,28 +215,68 @@ export const DailyProfileTab = () => {
             </div>
           </div>
 
-          {/* Météo */}
+          {/* Météo / Production */}
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Météo</Label>
+            <Label className="text-xs text-muted-foreground">Météo / Production</Label>
             <div className="flex gap-2">
               <Button
                 size="sm"
-                variant={dailyProfileOptions.weather === 'sunny' ? 'default' : 'outline'}
-                onClick={() => setDailyProfileOptions({ weather: 'sunny' })}
+                variant={dailyProfileOptions.weather === 'sunny' && !dailyProfileOptions.zeroProduction ? 'default' : 'outline'}
+                onClick={() => setDailyProfileOptions({ weather: 'sunny', zeroProduction: false })}
                 className="flex-1 gap-1"
               >
                 <Sun className="h-4 w-4" />
-                Ensoleillé
+                Soleil
               </Button>
               <Button
                 size="sm"
-                variant={dailyProfileOptions.weather === 'gray' ? 'default' : 'outline'}
-                onClick={() => setDailyProfileOptions({ weather: 'gray' })}
+                variant={dailyProfileOptions.weather === 'gray' && !dailyProfileOptions.zeroProduction ? 'default' : 'outline'}
+                onClick={() => setDailyProfileOptions({ weather: 'gray', zeroProduction: false })}
                 className="flex-1 gap-1"
               >
                 <Cloud className="h-4 w-4" />
                 Gris
               </Button>
+              <Button
+                size="sm"
+                variant={dailyProfileOptions.zeroProduction ? 'default' : 'outline'}
+                onClick={() => setDailyProfileOptions({ zeroProduction: true })}
+                className="flex-1 gap-1"
+              >
+                <Moon className="h-4 w-4" />
+                Nuit
+              </Button>
+            </div>
+          </div>
+
+          {/* Mode simulation */}
+          <div className="space-y-2 border-t border-border pt-3">
+            <Label className="text-xs text-muted-foreground">Mode simulation</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="simulation-toggle-profile" className="text-sm font-medium flex items-center gap-2">
+                <FlaskConical className="h-4 w-4 text-accent" />
+                Activer simulation
+              </Label>
+              <Switch
+                id="simulation-toggle-profile"
+                checked={isSimulationActive}
+                onCheckedChange={toggleSimulationActive}
+                disabled={!hasAnyEquipment}
+                className="data-[state=checked]:bg-success"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge 
+                variant={isSimulationActive ? "default" : "outline"} 
+                className={`text-xs ${isSimulationActive ? 'bg-success text-success-foreground' : 'border-muted-foreground/30 text-muted-foreground'}`}
+              >
+                {isSimulationActive ? '✓ Active' : '✗ Inactive'}
+              </Badge>
+              {totalEquipment > 0 && (
+                <Badge variant="secondary" className="text-[10px]">
+                  {totalEquipment} équip.
+                </Badge>
+              )}
             </div>
           </div>
 

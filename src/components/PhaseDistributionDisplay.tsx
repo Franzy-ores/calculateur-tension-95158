@@ -442,7 +442,7 @@ export const PhaseDistributionDisplay = () => {
   }[status];
 
   return (
-    <div className="flex flex-col gap-2 p-2 bg-slate-800 dark:bg-slate-900 rounded border border-slate-600">
+    <div className="flex flex-col gap-2 p-2 bg-white dark:bg-slate-800 rounded border border-slate-300 dark:border-slate-600">
       {/* Ligne 1: Titre, badge et stats clients */}
       <div className="flex items-center gap-3">
         <Button
@@ -455,13 +455,13 @@ export const PhaseDistributionDisplay = () => {
         </Button>
         
         <div className="flex items-center gap-2">
-          <Label className="text-xs font-medium text-primary-foreground">
+          <Label className="text-xs font-medium text-foreground">
             📊 Distribution de phase
           </Label>
           <Badge variant={statusBadge.variant} className="text-xs px-1.5 py-0">
             {statusBadge.label}
           </Badge>
-          <span className="text-xs font-bold text-primary-foreground">
+          <span className="text-xs font-bold text-foreground">
             {unbalancePercent.toFixed(1)}%
           </span>
         </div>
@@ -469,24 +469,24 @@ export const PhaseDistributionDisplay = () => {
         {/* Statistiques clients */}
         <div className="flex items-center gap-2 text-xs ml-auto">
           <div className="flex items-center gap-1">
-            <span className="text-primary-foreground/60">MONO:</span>
-            <span className="font-bold text-primary-foreground">{clientStats.mono}</span>
+            <span className="text-muted-foreground">MONO:</span>
+            <span className="font-bold text-foreground">{clientStats.mono}</span>
           </div>
           <div className="flex items-center gap-1">
-            <span className="text-primary-foreground/60">TRI:</span>
-            <span className="font-bold text-primary-foreground">{clientStats.tri}</span>
+            <span className="text-muted-foreground">TRI:</span>
+            <span className="font-bold text-foreground">{clientStats.tri}</span>
           </div>
           <div className="flex items-center gap-1">
-            <span className="text-primary-foreground/60">TÉTRA:</span>
-            <span className="font-bold text-primary-foreground">{clientStats.tetra}</span>
+            <span className="text-muted-foreground">TÉTRA:</span>
+            <span className="font-bold text-foreground">{clientStats.tetra}</span>
           </div>
-          <div className="border-l border-slate-500 pl-2 flex items-center gap-1">
-            <span className="text-green-400/80">Rés:</span>
-            <span className="font-bold text-green-400">{clientStats.residentiel}</span>
+          <div className="border-l border-slate-300 dark:border-slate-500 pl-2 flex items-center gap-1">
+            <span className="text-green-600 dark:text-green-400">Rés:</span>
+            <span className="font-bold text-green-600 dark:text-green-400">{clientStats.residentiel}</span>
           </div>
           <div className="flex items-center gap-1">
-            <span className="text-orange-400/80">Ind:</span>
-            <span className="font-bold text-orange-400">{clientStats.industriel}</span>
+            <span className="text-orange-600 dark:text-orange-400">Ind:</span>
+            <span className="font-bold text-orange-600 dark:text-orange-400">{clientStats.industriel}</span>
           </div>
         </div>
 
@@ -510,15 +510,15 @@ export const PhaseDistributionDisplay = () => {
       {(highPowerClientsPerPhase.A.length > 0 || 
         highPowerClientsPerPhase.B.length > 0 || 
         highPowerClientsPerPhase.C.length > 0) && (
-        <div className="p-3 bg-orange-500/20 border border-orange-500/40 rounded">
+        <div className="p-3 bg-orange-100 dark:bg-orange-500/20 border border-orange-300 dark:border-orange-500/40 rounded">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-bold text-orange-600">⚠️ CLIENTS À FORTE PUISSANCE MONO</span>
+            <span className="text-xs font-bold text-orange-700 dark:text-orange-600">⚠️ CLIENTS À FORTE PUISSANCE MONO</span>
           </div>
           
           <div className="grid grid-cols-3 gap-2 text-xs">
             {/* L1 */}
-            <div className={`p-2 rounded ${highPowerClientsPerPhase.A.length > 0 ? 'bg-blue-500/30 border border-blue-500/50' : 'bg-slate-700/50'}`}>
-              <div className="font-medium text-blue-400 mb-1">L1</div>
+            <div className={`p-2 rounded ${highPowerClientsPerPhase.A.length > 0 ? 'bg-blue-100 dark:bg-blue-500/30 border border-blue-300 dark:border-blue-500/50' : 'bg-slate-100 dark:bg-slate-700/50'}`}>
+              <div className="font-medium text-blue-600 dark:text-blue-400 mb-1">L1</div>
               {highPowerClientsPerPhase.A.length > 0 ? (
                 <>
                   <div className="text-destructive font-bold">
@@ -550,8 +550,8 @@ export const PhaseDistributionDisplay = () => {
             </div>
             
             {/* L2 */}
-            <div className={`p-2 rounded ${highPowerClientsPerPhase.B.length > 0 ? 'bg-green-500/30 border border-green-500/50' : 'bg-slate-700/50'}`}>
-              <div className="font-medium text-green-400 mb-1">L2</div>
+            <div className={`p-2 rounded ${highPowerClientsPerPhase.B.length > 0 ? 'bg-green-100 dark:bg-green-500/30 border border-green-300 dark:border-green-500/50' : 'bg-slate-100 dark:bg-slate-700/50'}`}>
+              <div className="font-medium text-green-600 dark:text-green-400 mb-1">L2</div>
               {highPowerClientsPerPhase.B.length > 0 ? (
                 <>
                   <div className="text-destructive font-bold">
@@ -583,8 +583,8 @@ export const PhaseDistributionDisplay = () => {
             </div>
             
             {/* L3 */}
-            <div className={`p-2 rounded ${highPowerClientsPerPhase.C.length > 0 ? 'bg-red-500/30 border border-red-500/50' : 'bg-slate-700/50'}`}>
-              <div className="font-medium text-red-400 mb-1">L3</div>
+            <div className={`p-2 rounded ${highPowerClientsPerPhase.C.length > 0 ? 'bg-red-100 dark:bg-red-500/30 border border-red-300 dark:border-red-500/50' : 'bg-slate-100 dark:bg-slate-700/50'}`}>
+              <div className="font-medium text-red-600 dark:text-red-400 mb-1">L3</div>
               {highPowerClientsPerPhase.C.length > 0 ? (
                 <>
                   <div className="text-destructive font-bold">
@@ -623,37 +623,37 @@ export const PhaseDistributionDisplay = () => {
       )}
 
       {/* Résumé foisonnement par type de client */}
-      <div className="p-2 bg-slate-700/50 border border-slate-600 rounded">
+      <div className="p-2 bg-slate-100 dark:bg-slate-700/50 border border-slate-300 dark:border-slate-600 rounded">
         <div className="flex items-center justify-between text-xs">
           <div className="flex items-center gap-4">
-            <span className="font-semibold text-white">📊 Foisonnement par type :</span>
+            <span className="font-semibold text-foreground">📊 Foisonnement par type :</span>
             <div className="flex items-center gap-1">
-              <span className="text-green-400">Résidentiel ({foisonnementResidentiel}%):</span>
-              <span className="font-bold text-green-300">
+              <span className="text-green-600 dark:text-green-400">Résidentiel ({foisonnementResidentiel}%):</span>
+              <span className="font-bold text-green-700 dark:text-green-300">
                 {globalFoisonne.nbTotalResidentiel} clients, 
                 {globalFoisonne.totalChargeResidentiel.toFixed(1)} kVA → 
                 {globalFoisonne.totalChargeFoisonneResidentiel.toFixed(1)} kVA
               </span>
             </div>
             <div className="flex items-center gap-1">
-              <span className="text-orange-400">Industriel ({foisonnementIndustriel}%):</span>
-              <span className="font-bold text-orange-300">
+              <span className="text-orange-600 dark:text-orange-400">Industriel ({foisonnementIndustriel}%):</span>
+              <span className="font-bold text-orange-700 dark:text-orange-300">
                 {globalFoisonne.nbTotalIndustriel} clients, 
                 {globalFoisonne.totalChargeIndustriel.toFixed(1)} kVA → 
                 {globalFoisonne.totalChargeFoisonneIndustriel.toFixed(1)} kVA
               </span>
             </div>
           </div>
-          <div className="text-white font-semibold">
+          <div className="text-foreground font-semibold">
             Total foisonné: {globalFoisonne.totalFoisonneChargeGlobal.toFixed(1)} kVA
           </div>
         </div>
       </div>
 
       {/* Tableau consolidé par couplage */}
-      <div className="p-3 bg-slate-700/95 border border-slate-600 rounded">
+      <div className="p-3 bg-slate-50 dark:bg-slate-700/95 border border-slate-300 dark:border-slate-600 rounded">
         <div className="flex items-center gap-2 mb-3">
-          <span className="text-xs font-bold text-white">📋 RÉCAPITULATIF PAR COUPLAGE</span>
+          <span className="text-xs font-bold text-foreground">📋 RÉCAPITULATIF PAR COUPLAGE</span>
           {currentProject.voltageSystem === 'TÉTRAPHASÉ_400V' && (
             <Badge variant="outline" className="text-xs">
               Courant neutre: {neutralCurrent.toFixed(1)} A
@@ -665,19 +665,19 @@ export const PhaseDistributionDisplay = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-xs border-collapse">
             <thead>
-              <tr className="border-b border-slate-500">
-                <th className="text-left py-2 px-2 text-white font-semibold">Couplage</th>
-                <th className="text-center py-2 px-1 text-white font-semibold">Nb<br/>Total</th>
-                <th className="text-center py-2 px-1 text-green-400 font-semibold">Nb<br/>Rés.</th>
-                <th className="text-center py-2 px-1 text-orange-400 font-semibold">Nb<br/>Ind.</th>
-                <th className="text-right py-2 px-1 text-green-400 font-semibold">Ch. Rés.<br/>(kVA)</th>
-                <th className="text-right py-2 px-1 text-orange-400 font-semibold">Ch. Ind.<br/>(kVA)</th>
-                <th className="text-right py-2 px-1 text-white font-semibold">Ch. Poly<br/>33.3%</th>
-                <th className="text-right py-2 px-1 text-white font-semibold">Prod.<br/>(kVA)</th>
-                <th className="text-right py-2 px-1 text-white font-semibold">Ch.<br/>contrat</th>
-                <th className="text-right py-2 px-1 text-white font-semibold">Ch.<br/>foisonné</th>
-                <th className="text-right py-2 px-1 text-white font-semibold">Ch.<br/>déséq.</th>
-                <th className="text-right py-2 px-1 text-white font-semibold">Courant<br/>(A)</th>
+              <tr className="border-b border-slate-300 dark:border-slate-500">
+                <th className="text-left py-2 px-2 text-foreground font-semibold">Couplage</th>
+                <th className="text-center py-2 px-1 text-foreground font-semibold">Nb<br/>Total</th>
+                <th className="text-center py-2 px-1 text-green-600 dark:text-green-400 font-semibold">Nb<br/>Rés.</th>
+                <th className="text-center py-2 px-1 text-orange-600 dark:text-orange-400 font-semibold">Nb<br/>Ind.</th>
+                <th className="text-right py-2 px-1 text-green-600 dark:text-green-400 font-semibold">Ch. Rés.<br/>(kVA)</th>
+                <th className="text-right py-2 px-1 text-orange-600 dark:text-orange-400 font-semibold">Ch. Ind.<br/>(kVA)</th>
+                <th className="text-right py-2 px-1 text-foreground font-semibold">Ch. Poly<br/>33.3%</th>
+                <th className="text-right py-2 px-1 text-foreground font-semibold">Prod.<br/>(kVA)</th>
+                <th className="text-right py-2 px-1 text-foreground font-semibold">Ch.<br/>contrat</th>
+                <th className="text-right py-2 px-1 text-foreground font-semibold">Ch.<br/>foisonné</th>
+                <th className="text-right py-2 px-1 text-foreground font-semibold">Ch.<br/>déséq.</th>
+                <th className="text-right py-2 px-1 text-foreground font-semibold">Courant<br/>(A)</th>
               </tr>
             </thead>
             <tbody>
@@ -701,29 +701,29 @@ export const PhaseDistributionDisplay = () => {
                     currentProject.manualPhaseDistribution
                   );
                 
-                  const bgClass = phase === 'A' ? 'bg-blue-500/20' : phase === 'B' ? 'bg-green-500/20' : 'bg-red-500/20';
-                  const ecartChargeColor = Math.abs(data.ecartChargePercent) < 5 ? 'text-green-400' : Math.abs(data.ecartChargePercent) < 15 ? 'text-yellow-400' : 'text-red-400';
+                  const bgClass = phase === 'A' ? 'bg-blue-100 dark:bg-blue-500/20' : phase === 'B' ? 'bg-green-100 dark:bg-green-500/20' : 'bg-red-100 dark:bg-red-500/20';
+                  const ecartChargeColor = Math.abs(data.ecartChargePercent) < 5 ? 'text-green-600 dark:text-green-400' : Math.abs(data.ecartChargePercent) < 15 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400';
                   
                   return (
-                    <tr key={phase} className={`border-b border-slate-600/50 ${bgClass}`}>
-                      <td className="py-2 px-2 text-white font-semibold">{phaseLabel}</td>
-                      <td className="text-center py-2 px-1 text-white">{data.nbMono}</td>
-                      <td className="text-center py-2 px-1 text-green-300">{data.nbResidentiel}</td>
-                      <td className="text-center py-2 px-1 text-orange-300">{data.nbIndustriel}</td>
-                      <td className="text-right py-2 px-1 text-green-300">{data.chargeMonoResidentiel.toFixed(1)}</td>
-                      <td className="text-right py-2 px-1 text-orange-300">{data.chargeMonoIndustriel.toFixed(1)}</td>
-                      <td className="text-right py-2 px-1 text-white">{data.chargePoly.toFixed(1)}</td>
-                      <td className="text-right py-2 px-1 text-white">{data.productionMono.toFixed(1)}</td>
-                      <td className="text-right py-2 px-1 text-white font-semibold">{data.totalPhysiqueCharge.toFixed(1)}</td>
-                      <td className="text-right py-2 px-1 text-white font-semibold">{data.totalFoisonneCharge.toFixed(1)}</td>
-                      <td className="text-right py-2 px-1 text-white font-bold">
+                    <tr key={phase} className={`border-b border-slate-300 dark:border-slate-600/50 ${bgClass}`}>
+                      <td className="py-2 px-2 text-foreground font-semibold">{phaseLabel}</td>
+                      <td className="text-center py-2 px-1 text-foreground">{data.nbMono}</td>
+                      <td className="text-center py-2 px-1 text-green-700 dark:text-green-300">{data.nbResidentiel}</td>
+                      <td className="text-center py-2 px-1 text-orange-700 dark:text-orange-300">{data.nbIndustriel}</td>
+                      <td className="text-right py-2 px-1 text-green-700 dark:text-green-300">{data.chargeMonoResidentiel.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-orange-700 dark:text-orange-300">{data.chargeMonoIndustriel.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-foreground">{data.chargePoly.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-foreground">{data.productionMono.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-foreground font-semibold">{data.totalPhysiqueCharge.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-foreground font-semibold">{data.totalFoisonneCharge.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-foreground font-bold">
                         {data.chargeAvecCurseur.toFixed(1)}
                         <br/>
                         <span className={`${ecartChargeColor} text-[10px]`}>
                           ({data.ecartChargePercent > 0 ? '+' : ''}{data.ecartChargePercent.toFixed(1)}%)
                         </span>
                       </td>
-                      <td className="text-right py-2 px-1 text-white font-semibold">{Math.abs(data.courantTotal).toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-foreground font-semibold">{Math.abs(data.courantTotal).toFixed(1)}</td>
                     </tr>
                   );
                 });
@@ -731,50 +731,50 @@ export const PhaseDistributionDisplay = () => {
               
               {/* Ligne TRI si présent */}
               {clientsByCoupling['TRI'] && (
-                <tr className="border-b border-slate-600/50 bg-purple-500/20">
-                  <td className="py-2 px-2 text-white font-semibold">TRI</td>
-                  <td className="text-center py-2 px-1 text-white">{clientsByCoupling['TRI'].clients.length}</td>
-                  <td className="text-center py-2 px-1 text-green-300">{clientsByCoupling['TRI'].nbResidentiel}</td>
-                  <td className="text-center py-2 px-1 text-orange-300">{clientsByCoupling['TRI'].nbIndustriel}</td>
-                  <td className="text-right py-2 px-1 text-green-300">{clientsByCoupling['TRI'].chargeResidentiel.toFixed(1)}</td>
-                  <td className="text-right py-2 px-1 text-orange-300">{clientsByCoupling['TRI'].chargeIndustriel.toFixed(1)}</td>
-                  <td className="text-right py-2 px-1 text-white">-</td>
-                  <td className="text-right py-2 px-1 text-white">{clientsByCoupling['TRI'].totalProdKVA.toFixed(1)}</td>
-                  <td className="text-right py-2 px-1 text-white font-semibold">{clientsByCoupling['TRI'].totalKVA.toFixed(1)}</td>
-                  <td className="text-right py-2 px-1 text-white font-semibold">
+                <tr className="border-b border-slate-300 dark:border-slate-600/50 bg-purple-100 dark:bg-purple-500/20">
+                  <td className="py-2 px-2 text-foreground font-semibold">TRI</td>
+                  <td className="text-center py-2 px-1 text-foreground">{clientsByCoupling['TRI'].clients.length}</td>
+                  <td className="text-center py-2 px-1 text-green-700 dark:text-green-300">{clientsByCoupling['TRI'].nbResidentiel}</td>
+                  <td className="text-center py-2 px-1 text-orange-700 dark:text-orange-300">{clientsByCoupling['TRI'].nbIndustriel}</td>
+                  <td className="text-right py-2 px-1 text-green-700 dark:text-green-300">{clientsByCoupling['TRI'].chargeResidentiel.toFixed(1)}</td>
+                  <td className="text-right py-2 px-1 text-orange-700 dark:text-orange-300">{clientsByCoupling['TRI'].chargeIndustriel.toFixed(1)}</td>
+                  <td className="text-right py-2 px-1 text-foreground">-</td>
+                  <td className="text-right py-2 px-1 text-foreground">{clientsByCoupling['TRI'].totalProdKVA.toFixed(1)}</td>
+                  <td className="text-right py-2 px-1 text-foreground font-semibold">{clientsByCoupling['TRI'].totalKVA.toFixed(1)}</td>
+                  <td className="text-right py-2 px-1 text-foreground font-semibold">
                     {((clientsByCoupling['TRI'].chargeResidentiel * foisonnementResidentiel / 100) + 
                       (clientsByCoupling['TRI'].chargeIndustriel * foisonnementIndustriel / 100)).toFixed(1)}
                   </td>
-                  <td className="text-right py-2 px-1 text-white">-</td>
-                  <td className="text-right py-2 px-1 text-white font-semibold">{clientsByCoupling['TRI'].totalCurrent.toFixed(1)}</td>
+                  <td className="text-right py-2 px-1 text-foreground">-</td>
+                  <td className="text-right py-2 px-1 text-foreground font-semibold">{clientsByCoupling['TRI'].totalCurrent.toFixed(1)}</td>
                 </tr>
               )}
               
               {/* Ligne TÉTRA si présent */}
               {clientsByCoupling['TÉTRA'] && (
-                <tr className="border-b border-slate-600/50 bg-cyan-500/20">
-                  <td className="py-2 px-2 text-white font-semibold">TÉTRA</td>
-                  <td className="text-center py-2 px-1 text-white">{clientsByCoupling['TÉTRA'].clients.length}</td>
-                  <td className="text-center py-2 px-1 text-green-300">{clientsByCoupling['TÉTRA'].nbResidentiel}</td>
-                  <td className="text-center py-2 px-1 text-orange-300">{clientsByCoupling['TÉTRA'].nbIndustriel}</td>
-                  <td className="text-right py-2 px-1 text-green-300">{clientsByCoupling['TÉTRA'].chargeResidentiel.toFixed(1)}</td>
-                  <td className="text-right py-2 px-1 text-orange-300">{clientsByCoupling['TÉTRA'].chargeIndustriel.toFixed(1)}</td>
-                  <td className="text-right py-2 px-1 text-white">-</td>
-                  <td className="text-right py-2 px-1 text-white">{clientsByCoupling['TÉTRA'].totalProdKVA.toFixed(1)}</td>
-                  <td className="text-right py-2 px-1 text-white font-semibold">{clientsByCoupling['TÉTRA'].totalKVA.toFixed(1)}</td>
-                  <td className="text-right py-2 px-1 text-white font-semibold">
+                <tr className="border-b border-slate-300 dark:border-slate-600/50 bg-cyan-100 dark:bg-cyan-500/20">
+                  <td className="py-2 px-2 text-foreground font-semibold">TÉTRA</td>
+                  <td className="text-center py-2 px-1 text-foreground">{clientsByCoupling['TÉTRA'].clients.length}</td>
+                  <td className="text-center py-2 px-1 text-green-700 dark:text-green-300">{clientsByCoupling['TÉTRA'].nbResidentiel}</td>
+                  <td className="text-center py-2 px-1 text-orange-700 dark:text-orange-300">{clientsByCoupling['TÉTRA'].nbIndustriel}</td>
+                  <td className="text-right py-2 px-1 text-green-700 dark:text-green-300">{clientsByCoupling['TÉTRA'].chargeResidentiel.toFixed(1)}</td>
+                  <td className="text-right py-2 px-1 text-orange-700 dark:text-orange-300">{clientsByCoupling['TÉTRA'].chargeIndustriel.toFixed(1)}</td>
+                  <td className="text-right py-2 px-1 text-foreground">-</td>
+                  <td className="text-right py-2 px-1 text-foreground">{clientsByCoupling['TÉTRA'].totalProdKVA.toFixed(1)}</td>
+                  <td className="text-right py-2 px-1 text-foreground font-semibold">{clientsByCoupling['TÉTRA'].totalKVA.toFixed(1)}</td>
+                  <td className="text-right py-2 px-1 text-foreground font-semibold">
                     {((clientsByCoupling['TÉTRA'].chargeResidentiel * foisonnementResidentiel / 100) + 
                       (clientsByCoupling['TÉTRA'].chargeIndustriel * foisonnementIndustriel / 100)).toFixed(1)}
                   </td>
-                  <td className="text-right py-2 px-1 text-white">-</td>
-                  <td className="text-right py-2 px-1 text-white font-semibold">{clientsByCoupling['TÉTRA'].totalCurrent.toFixed(1)}</td>
+                  <td className="text-right py-2 px-1 text-foreground">-</td>
+                  <td className="text-right py-2 px-1 text-foreground font-semibold">{clientsByCoupling['TÉTRA'].totalCurrent.toFixed(1)}</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
         
-        <div className="mt-2 text-[10px] text-slate-300">
+        <div className="mt-2 text-[10px] text-muted-foreground">
           {currentProject.voltageSystem === 'TÉTRAPHASÉ_400V' 
             ? `💡 Foisonnement différencié: Résidentiel ${foisonnementResidentiel}%, Industriel ${foisonnementIndustriel}%. Le courant de neutre est calculé vectoriellement.`
             : `💡 Foisonnement différencié: Résidentiel ${foisonnementResidentiel}%, Industriel ${foisonnementIndustriel}%. Réseau 230V sans neutre.`}

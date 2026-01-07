@@ -27,6 +27,10 @@ export interface DailySimulationOptions {
   season: Season;
   weather: Weather;
   enableEV: boolean;
+  /** Bonus VE appliqué de 18h à 21h inclus (%) */
+  evBonusEvening: number;
+  /** Bonus VE appliqué de 22h à 5h inclus (%) */
+  evBonusNight: number;
   /** @deprecated Le profil industriel est maintenant lié automatiquement aux clients industriels */
   enableIndustrialPME?: boolean;
   selectedNodeId: string;
@@ -61,6 +65,8 @@ export const defaultDailySimulationOptions: DailySimulationOptions = {
   season: 'winter',
   weather: 'sunny',
   enableEV: true,
+  evBonusEvening: 2.5,
+  evBonusNight: 5,
   enableIndustrialPME: true,
   selectedNodeId: '',
   zeroProduction: false

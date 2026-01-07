@@ -297,19 +297,54 @@ export const DailyProfileTab = () => {
             </div>
           </div>
 
-          {/* Options de charge */}
+          {/* Options de charge VE */}
           <div className="space-y-3 pt-2 border-t border-border">
             <div className="flex items-center justify-between">
               <Label className="text-sm flex items-center gap-2">
                 <Car className="h-4 w-4 text-muted-foreground" />
                 Charge VE
-                <span className="text-[10px] text-muted-foreground">(+2.5% 18-21h, +5% 22-5h)</span>
               </Label>
               <Switch
                 checked={dailyProfileOptions.enableEV}
                 onCheckedChange={(checked) => setDailyProfileOptions({ enableEV: checked })}
               />
             </div>
+            
+            {/* Sliders de personnalisation des bonus VE */}
+            {dailyProfileOptions.enableEV && (
+              <div className="space-y-3 pl-4 border-l-2 border-primary/20">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Bonus 18h-21h (soirée)</span>
+                    <span className="font-medium text-primary">+{dailyProfileOptions.evBonusEvening ?? 2.5}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="15"
+                    step="0.5"
+                    value={dailyProfileOptions.evBonusEvening ?? 2.5}
+                    onChange={(e) => setDailyProfileOptions({ evBonusEvening: parseFloat(e.target.value) })}
+                    className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Bonus 22h-5h (nuit)</span>
+                    <span className="font-medium text-primary">+{dailyProfileOptions.evBonusNight ?? 5}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="20"
+                    step="0.5"
+                    value={dailyProfileOptions.evBonusNight ?? 5}
+                    onChange={(e) => setDailyProfileOptions({ evBonusNight: parseFloat(e.target.value) })}
+                    className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                  />
+                </div>
+              </div>
+            )}
             
             {/* Statistiques clients détectés */}
             <ClientStatsDisplay project={currentProject} />

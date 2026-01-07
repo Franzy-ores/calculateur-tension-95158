@@ -32,6 +32,8 @@ export interface DailySimulationOptions {
   /** @deprecated Le profil industriel est maintenant lié automatiquement aux clients industriels */
   enableIndustrialPME?: boolean;
   selectedNodeId: string;
+  /** Force le profil de production à 0% pour toutes les heures */
+  zeroProduction?: boolean;
 }
 
 export interface HourlyVoltageResult {
@@ -60,5 +62,6 @@ export const defaultDailySimulationOptions: DailySimulationOptions = {
   weather: 'sunny',
   enableEV: true,
   enableIndustrialPME: true,
-  selectedNodeId: ''
+  selectedNodeId: '',
+  zeroProduction: false
 };

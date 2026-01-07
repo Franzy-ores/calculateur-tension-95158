@@ -145,8 +145,10 @@ export class DailyProfileCalculator {
       chargesFoisonnement += 5;
     }
 
-    // Foisonnement productions = profil PV × facteur météo
-    const productionsFoisonnement = (seasonProfile.pv[hourStr] || 0) * weatherFactor;
+    // Foisonnement productions = profil PV × facteur météo (ou 0% si zeroProduction activé)
+    const productionsFoisonnement = this.options.zeroProduction 
+      ? 0 
+      : (seasonProfile.pv[hourStr] || 0) * weatherFactor;
 
     // Exécuter le calcul électrique avec le projet et le foisonnement horaire
     // Si simulation active, utiliser SimulationCalculator avec équipements

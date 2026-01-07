@@ -88,7 +88,9 @@ export const DailyProfileTab = () => {
     dailyProfileOptions, 
     dailyProfileCustomProfiles,
     setDailyProfileOptions,
-    setDailyProfileCustomProfiles 
+    setDailyProfileCustomProfiles,
+    simulationEquipment,
+    isSimulationActive
   } = useNetworkStore();
 
   const [editorOpen, setEditorOpen] = useState(false);
@@ -109,6 +111,13 @@ export const DailyProfileTab = () => {
     }
   }, [nodes, dailyProfileOptions.selectedNodeId, setDailyProfileOptions]);
 
+  // Vérifier si la simulation est active avec équipements
+  const hasActiveSimulation = isSimulationActive && (
+    (simulationEquipment.srg2Devices?.some(s => s.enabled)) ||
+    (simulationEquipment.neutralCompensators?.some(c => c.enabled)) ||
+    (simulationEquipment.cableReplacement?.enabled)
+  );
+
   // Calcul des tensions quand les options changent
   useEffect(() => {
     if (!currentProject || !dailyProfileOptions.selectedNodeId) {
@@ -116,10 +125,16 @@ export const DailyProfileTab = () => {
       return;
     }
 
-    const calculator = new DailyProfileCalculator(currentProject, dailyProfileOptions, dailyProfileCustomProfiles);
+    const calculator = new DailyProfileCalculator(
+      currentProject, 
+      dailyProfileOptions, 
+      dailyProfileCustomProfiles,
+      hasActiveSimulation ? simulationEquipment : undefined,
+      hasActiveSimulation
+    );
     const hourlyResults = calculator.calculateDailyVoltages();
     setResults(hourlyResults);
-  }, [currentProject, dailyProfileOptions, dailyProfileCustomProfiles]);
+  }, [currentProject, dailyProfileOptions, dailyProfileCustomProfiles, simulationEquipment, isSimulationActive, hasActiveSimulation]);
 
   // Heures critiques
   const criticalHours = useMemo(() => {
@@ -257,6 +272,12 @@ export const DailyProfileTab = () => {
             <CardTitle className="text-sm font-medium flex items-center justify-between">
               <span className="flex items-center gap-2">
                 Tension au nœud {selectedNode?.name || dailyProfileOptions.selectedNodeId}
+                {hasActiveSimulation && (
+                  <Badge variant="default" className="text-[10px] px-1.5 py-0 bg-success text-success-foreground">
+                    <Zap className="h-3 w-3 mr-0.5" />
+                    Simulation
+                  </Badge>
+                )}
               </span>
               <Badge variant="outline" className="text-xs">
                 {nominalVoltage}V nominal

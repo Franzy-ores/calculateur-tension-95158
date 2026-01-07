@@ -121,36 +121,41 @@ export class DailyProfileCalculator {
     const weatherFactor = this.profiles.weatherFactors[this.options.weather];
     const hourStr = hour.toString();
 
-    // Profils de base
+    // Profils horaires par type (directement depuis le JSON)
     const residentialProfile = seasonProfile.residential[hourStr] || 0;
     const industrialProfile = seasonProfile.industrial_pme[hourStr] || 0;
     
     // Récupérer les puissances transitantes (nœud sélectionné + aval)
     const nodePowers = this.getUpstreamAndNodePowers();
     
-    // Calcul du foisonnement pondéré
-    const totalPower = nodePowers.residentialPower + nodePowers.industrialPower;
-    let chargesFoisonnement: number;
-    
-    if (totalPower === 0) {
-      chargesFoisonnement = residentialProfile;
-    } else {
-      const residentialWeight = nodePowers.residentialPower / totalPower;
-      const industrialWeight = nodePowers.industrialPower / totalPower;
-      chargesFoisonnement = (residentialProfile * residentialWeight) + (industrialProfile * industrialWeight);
-    }
-
-    // Majoration VE : +5% entre 18h et 5h si activé
-    if (this.options.enableEV && (hour >= 18 || hour <= 5)) {
-      chargesFoisonnement += 5;
-    }
+    // Foisonnement horaire par type de client (pas de pondération !)
+    // Majoration VE : +5% entre 18h et 5h si activé (sur résidentiel uniquement)
+    const residentialFoisonnementHoraire = this.options.enableEV && (hour >= 18 || hour <= 5)
+      ? residentialProfile + 5
+      : residentialProfile;
+    const industrialFoisonnementHoraire = industrialProfile;
 
     // Foisonnement productions = profil PV × facteur météo (ou 0% si zeroProduction activé)
     const productionsFoisonnement = this.options.zeroProduction 
       ? 0 
       : (seasonProfile.pv[hourStr] || 0) * weatherFactor;
 
-    // Exécuter le calcul électrique avec le projet et le foisonnement horaire
+    // Créer un projet modifié avec les foisonnements horaires par type de client
+    // Cela force electricalCalculations.ts à utiliser ces valeurs horaires
+    const projectWithHourlyFoisonnement: Project = {
+      ...this.project,
+      foisonnementChargesResidentiel: residentialFoisonnementHoraire,
+      foisonnementChargesIndustriel: industrialFoisonnementHoraire,
+      foisonnementProductions: productionsFoisonnement
+    };
+
+    // Foisonnement pondéré pour affichage uniquement (pas pour le calcul)
+    const totalPower = nodePowers.residentialPower + nodePowers.industrialPower;
+    const chargesFoisonnementDisplay = totalPower === 0 
+      ? residentialFoisonnementHoraire
+      : (residentialFoisonnementHoraire * nodePowers.residentialPower + 
+         industrialFoisonnementHoraire * nodePowers.industrialPower) / totalPower;
+
     // Si simulation active, utiliser SimulationCalculator avec équipements
     const useSimulation = this.isSimulationActive && this.simulationEquipment && 
       ((this.simulationEquipment.srg2Devices?.some(s => s.enabled)) ||
@@ -161,26 +166,17 @@ export class DailyProfileCalculator {
       let result: CalculationResult;
       
       if (useSimulation && this.simulationEquipment) {
-        // Créer un projet temporaire avec le foisonnement horaire
-        const projectWithHourlyFoisonnement: Project = {
-          ...this.project,
-          foisonnementCharges: chargesFoisonnement,
-          foisonnementProductions: productionsFoisonnement
-        };
-        
         const simCalculator = new SimulationCalculator(
           this.project.cosPhi,
           this.project.cosPhiCharges,
           this.project.cosPhiProductions
         );
         
-        const simResult = simCalculator.calculateWithSimulation(
+        result = simCalculator.calculateWithSimulation(
           projectWithHourlyFoisonnement,
           'MIXTE',
           this.simulationEquipment
         );
-        
-        result = simResult;
       } else {
         const calculator = new ElectricalCalculator(
           this.project.cosPhi,
@@ -189,11 +185,11 @@ export class DailyProfileCalculator {
         );
         
         result = calculator.calculateScenarioWithHTConfig(
-          this.project,
+          projectWithHourlyFoisonnement,
           'MIXTE',
-          chargesFoisonnement,
+          residentialFoisonnementHoraire,  // Fallback pour clients manuels
           productionsFoisonnement,
-          this.project.manualPhaseDistribution,
+          this.project.manualPhaseDistribution,  // Déséquilibre conservé
           this.project.clientsImportes,
           this.project.clientLinks
         );
@@ -202,10 +198,10 @@ export class DailyProfileCalculator {
         hour, 
         result, 
         nominalVoltage, 
-        chargesFoisonnement, 
+        chargesFoisonnementDisplay, 
         productionsFoisonnement,
-        residentialProfile,
-        industrialProfile,
+        residentialFoisonnementHoraire,
+        industrialFoisonnementHoraire,
         nodePowers.residentialPower,
         nodePowers.industrialPower,
         nodePowers.productionPower
@@ -215,10 +211,10 @@ export class DailyProfileCalculator {
       return this.createDefaultHourlyResult(
         hour, 
         nominalVoltage, 
-        chargesFoisonnement, 
+        chargesFoisonnementDisplay, 
         productionsFoisonnement,
-        residentialProfile,
-        industrialProfile,
+        residentialFoisonnementHoraire,
+        industrialFoisonnementHoraire,
         nodePowers.residentialPower,
         nodePowers.industrialPower,
         nodePowers.productionPower

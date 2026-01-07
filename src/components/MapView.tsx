@@ -906,6 +906,12 @@ export const MapView = () => {
           zIndexOffset: 0
         })
           .addTo(map)
+          .bindTooltip(node.name, {
+            permanent: false,
+            direction: 'top',
+            offset: [0, -12],
+            className: 'node-tooltip'
+          })
           .bindPopup(() => {
             // Construire le contenu du popup enrichi
             let popupContent = `<div class="font-bold mb-2">${node.name}</div>`;
@@ -1206,6 +1212,12 @@ export const MapView = () => {
         zIndexOffset: 0
       })
         .addTo(map)
+        .bindTooltip(node.name, {
+          permanent: false,
+          direction: 'top',
+          offset: [0, -28],
+          className: 'node-tooltip'
+        })
         .bindPopup(() => {
           // Construire le contenu du popup enrichi
           let popupContent = `<div class="font-bold mb-2">${node.name}</div>`;

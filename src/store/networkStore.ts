@@ -19,6 +19,8 @@ import {
   LoadModel,
   ClientImporte
 } from '@/types/network';
+import { DailySimulationOptions, DailyProfileConfig, defaultDailySimulationOptions } from '@/types/dailyProfile';
+import defaultProfilesData from '@/data/hourlyProfiles.json';
 
 export type ClientColorMode = 'couplage' | 'circuit' | 'tension' | 'lien' | 'gps';
 import { SRG2Config, DEFAULT_SRG2_400_CONFIG, DEFAULT_SRG2_230_CONFIG } from '@/types/srg2';
@@ -100,6 +102,9 @@ interface NetworkStoreState extends NetworkState {
   pendingClientLocation: { lat: number; lng: number } | null;
   // Mode création de client (ouvre le panneau d'édition en mode création)
   isCreatingClient: boolean;
+  // État profil 24h persisté
+  dailyProfileOptions: DailySimulationOptions;
+  dailyProfileCustomProfiles: DailyProfileConfig;
 }
 
 interface NetworkActions {
@@ -196,6 +201,9 @@ interface NetworkActions {
   // Actions pour le mode création de client
   startClientCreation: () => void;
   cancelClientCreation: () => void;
+  // Actions profil 24h
+  setDailyProfileOptions: (options: Partial<DailySimulationOptions>) => void;
+  setDailyProfileCustomProfiles: (profiles: DailyProfileConfig) => void;
 }
 
 // Fonction utilitaire pour créer la configuration par défaut du transformateur
@@ -376,6 +384,9 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   pendingClientLocation: null,
   // Mode création de client
   isCreatingClient: false,
+  // État profil 24h persisté
+  dailyProfileOptions: { ...defaultDailySimulationOptions },
+  dailyProfileCustomProfiles: defaultProfilesData as DailyProfileConfig,
 
   // Actions
   createNewProject: (name, voltageSystem) => {
@@ -2549,5 +2560,16 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       editPanelOpen: false,
       editTarget: null
     });
+  },
+
+  // Actions profil 24h
+  setDailyProfileOptions: (options) => {
+    set(state => ({
+      dailyProfileOptions: { ...state.dailyProfileOptions, ...options }
+    }));
+  },
+
+  setDailyProfileCustomProfiles: (profiles) => {
+    set({ dailyProfileCustomProfiles: profiles });
   },
 }));

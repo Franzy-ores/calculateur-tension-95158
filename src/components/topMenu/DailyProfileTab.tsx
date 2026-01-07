@@ -15,25 +15,19 @@ import { useNetworkStore } from '@/store/networkStore';
 import { DailyProfileCalculator } from '@/utils/dailyProfileCalculator';
 import { DailyProfileChart } from '@/components/DailyProfileChart';
 import { ProfileVisualEditor } from '@/components/ProfileVisualEditor';
-import { DailyProfileConfig, DailySimulationOptions, HourlyVoltageResult, Season, Weather } from '@/types/dailyProfile';
+import { HourlyVoltageResult } from '@/types/dailyProfile';
 import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import defaultProfiles from '@/data/hourlyProfiles.json';
 
 export const DailyProfileTab = () => {
-  const { currentProject } = useNetworkStore();
+  const { 
+    currentProject, 
+    dailyProfileOptions, 
+    dailyProfileCustomProfiles,
+    setDailyProfileOptions,
+    setDailyProfileCustomProfiles 
+  } = useNetworkStore();
 
-  // Options de simulation
-  const [options, setOptions] = useState<DailySimulationOptions>({
-    season: 'winter',
-    weather: 'sunny',
-    enableEV: true,
-    enableIndustrialPME: true,
-    selectedNodeId: ''
-  });
-
-  // Profils personnalisés
-  const [customProfiles, setCustomProfiles] = useState<DailyProfileConfig>(defaultProfiles as DailyProfileConfig);
   const [editorOpen, setEditorOpen] = useState(false);
 
   // Résultats du calcul
@@ -47,22 +41,22 @@ export const DailyProfileTab = () => {
 
   // Auto-sélection du premier nœud si aucun n'est sélectionné
   useEffect(() => {
-    if (nodes.length > 0 && !options.selectedNodeId) {
-      setOptions(prev => ({ ...prev, selectedNodeId: nodes[0].id }));
+    if (nodes.length > 0 && !dailyProfileOptions.selectedNodeId) {
+      setDailyProfileOptions({ selectedNodeId: nodes[0].id });
     }
-  }, [nodes, options.selectedNodeId]);
+  }, [nodes, dailyProfileOptions.selectedNodeId, setDailyProfileOptions]);
 
   // Calcul des tensions quand les options changent
   useEffect(() => {
-    if (!currentProject || !options.selectedNodeId) {
+    if (!currentProject || !dailyProfileOptions.selectedNodeId) {
       setResults([]);
       return;
     }
 
-    const calculator = new DailyProfileCalculator(currentProject, options, customProfiles);
+    const calculator = new DailyProfileCalculator(currentProject, dailyProfileOptions, dailyProfileCustomProfiles);
     const hourlyResults = calculator.calculateDailyVoltages();
     setResults(hourlyResults);
-  }, [currentProject, options, customProfiles]);
+  }, [currentProject, dailyProfileOptions, dailyProfileCustomProfiles]);
 
   // Heures critiques
   const criticalHours = useMemo(() => {
@@ -73,7 +67,7 @@ export const DailyProfileTab = () => {
   const nominalVoltage = 230;
 
   // Nœud sélectionné
-  const selectedNode = nodes.find(n => n.id === options.selectedNodeId);
+  const selectedNode = nodes.find(n => n.id === dailyProfileOptions.selectedNodeId);
 
   if (!currentProject) {
     return (
@@ -98,8 +92,8 @@ export const DailyProfileTab = () => {
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Nœud analysé</Label>
             <Select
-              value={options.selectedNodeId}
-              onValueChange={(value) => setOptions(prev => ({ ...prev, selectedNodeId: value }))}
+              value={dailyProfileOptions.selectedNodeId}
+              onValueChange={(value) => setDailyProfileOptions({ selectedNodeId: value })}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Sélectionner un nœud" />
@@ -120,16 +114,16 @@ export const DailyProfileTab = () => {
             <div className="flex gap-2">
               <Button
                 size="sm"
-                variant={options.season === 'winter' ? 'default' : 'outline'}
-                onClick={() => setOptions(prev => ({ ...prev, season: 'winter' }))}
+                variant={dailyProfileOptions.season === 'winter' ? 'default' : 'outline'}
+                onClick={() => setDailyProfileOptions({ season: 'winter' })}
                 className="flex-1"
               >
                 ❄️ Hiver
               </Button>
               <Button
                 size="sm"
-                variant={options.season === 'summer' ? 'default' : 'outline'}
-                onClick={() => setOptions(prev => ({ ...prev, season: 'summer' }))}
+                variant={dailyProfileOptions.season === 'summer' ? 'default' : 'outline'}
+                onClick={() => setDailyProfileOptions({ season: 'summer' })}
                 className="flex-1"
               >
                 ☀️ Été
@@ -143,8 +137,8 @@ export const DailyProfileTab = () => {
             <div className="flex gap-2">
               <Button
                 size="sm"
-                variant={options.weather === 'sunny' ? 'default' : 'outline'}
-                onClick={() => setOptions(prev => ({ ...prev, weather: 'sunny' }))}
+                variant={dailyProfileOptions.weather === 'sunny' ? 'default' : 'outline'}
+                onClick={() => setDailyProfileOptions({ weather: 'sunny' })}
                 className="flex-1 gap-1"
               >
                 <Sun className="h-4 w-4" />
@@ -152,8 +146,8 @@ export const DailyProfileTab = () => {
               </Button>
               <Button
                 size="sm"
-                variant={options.weather === 'gray' ? 'default' : 'outline'}
-                onClick={() => setOptions(prev => ({ ...prev, weather: 'gray' }))}
+                variant={dailyProfileOptions.weather === 'gray' ? 'default' : 'outline'}
+                onClick={() => setDailyProfileOptions({ weather: 'gray' })}
                 className="flex-1 gap-1"
               >
                 <Cloud className="h-4 w-4" />
@@ -167,11 +161,11 @@ export const DailyProfileTab = () => {
             <div className="flex items-center justify-between">
               <Label className="text-sm flex items-center gap-2">
                 <Car className="h-4 w-4 text-muted-foreground" />
-                Charge VE ({customProfiles.evPower_kVA} kVA)
+                Charge VE ({dailyProfileCustomProfiles.evPower_kVA} kVA)
               </Label>
               <Switch
-                checked={options.enableEV}
-                onCheckedChange={(checked) => setOptions(prev => ({ ...prev, enableEV: checked }))}
+                checked={dailyProfileOptions.enableEV}
+                onCheckedChange={(checked) => setDailyProfileOptions({ enableEV: checked })}
               />
             </div>
             <div className="flex items-center justify-between">
@@ -180,8 +174,8 @@ export const DailyProfileTab = () => {
                 Industrie / PME
               </Label>
               <Switch
-                checked={options.enableIndustrialPME}
-                onCheckedChange={(checked) => setOptions(prev => ({ ...prev, enableIndustrialPME: checked }))}
+                checked={dailyProfileOptions.enableIndustrialPME}
+                onCheckedChange={(checked) => setDailyProfileOptions({ enableIndustrialPME: checked })}
               />
             </div>
           </div>
@@ -206,7 +200,7 @@ export const DailyProfileTab = () => {
           <CardHeader className="pb-2 pt-3 px-4">
             <CardTitle className="text-sm font-medium flex items-center justify-between">
               <span className="flex items-center gap-2">
-                Tension au nœud {selectedNode?.name || options.selectedNodeId}
+                Tension au nœud {selectedNode?.name || dailyProfileOptions.selectedNodeId}
               </span>
               <Badge variant="outline" className="text-xs">
                 {nominalVoltage}V nominal
@@ -308,8 +302,8 @@ export const DailyProfileTab = () => {
       <ProfileVisualEditor
         open={editorOpen}
         onOpenChange={setEditorOpen}
-        profiles={customProfiles}
-        onSave={setCustomProfiles}
+        profiles={dailyProfileCustomProfiles}
+        onSave={setDailyProfileCustomProfiles}
       />
     </div>
   );

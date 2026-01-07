@@ -212,7 +212,8 @@ export class DailyProfileCalculator {
         industrialFoisonnementHoraire,
         nodePowers.residentialPower,
         nodePowers.industrialPower,
-        nodePowers.productionPower
+        nodePowers.productionPower,
+        evBonus
       );
     } catch (error) {
       console.warn(`Erreur calcul heure ${hour}:`, error);
@@ -225,7 +226,8 @@ export class DailyProfileCalculator {
         industrialFoisonnementHoraire,
         nodePowers.residentialPower,
         nodePowers.industrialPower,
-        nodePowers.productionPower
+        nodePowers.productionPower,
+        evBonus
       );
     }
   }
@@ -394,7 +396,8 @@ export class DailyProfileCalculator {
     industrialFoisonnement: number,
     residentialPower: number,
     industrialPower: number,
-    totalProductionPower: number
+    totalProductionPower: number,
+    evBonus: number
   ): HourlyVoltageResult {
     const nodeId = this.options.selectedNodeId;
     const nodeMetrics = result.nodeMetricsPerPhase?.find(n => n.nodeId === nodeId);
@@ -403,7 +406,7 @@ export class DailyProfileCalculator {
       console.warn(`Heure ${hour}: Pas de métriques pour le nœud ${nodeId}`);
       return this.createDefaultHourlyResult(
         hour, nominalVoltage, chargesFoisonnement, productionsFoisonnement,
-        residentialFoisonnement, industrialFoisonnement, residentialPower, industrialPower, totalProductionPower
+        residentialFoisonnement, industrialFoisonnement, residentialPower, industrialPower, totalProductionPower, evBonus
       );
     }
 
@@ -451,7 +454,8 @@ export class DailyProfileCalculator {
       productionsFoisonnement,
       chargesResidentialPower_kVA,
       chargesIndustrialPower_kVA,
-      productionsPower_kVA
+      productionsPower_kVA,
+      evBonus
     };
   }
 
@@ -467,7 +471,8 @@ export class DailyProfileCalculator {
     industrialFoisonnement: number,
     residentialPower: number,
     industrialPower: number,
-    totalProductionPower: number
+    totalProductionPower: number,
+    evBonus: number
   ): HourlyVoltageResult {
     const chargesResidentialPower_kVA = residentialPower * (residentialFoisonnement / 100);
     const chargesIndustrialPower_kVA = industrialPower * (industrialFoisonnement / 100);
@@ -489,7 +494,8 @@ export class DailyProfileCalculator {
       productionsFoisonnement,
       chargesResidentialPower_kVA,
       chargesIndustrialPower_kVA,
-      productionsPower_kVA
+      productionsPower_kVA,
+      evBonus
     };
   }
 

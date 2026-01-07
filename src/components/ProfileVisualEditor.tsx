@@ -35,12 +35,11 @@ interface ProfileVisualEditorProps {
 }
 
 type Season = 'winter' | 'summer';
-type ProfileType = 'residential' | 'pv' | 'ev' | 'industrial_pme';
+type ProfileType = 'residential' | 'pv' | 'industrial_pme';
 
 const PROFILE_LABELS: Record<ProfileType, { label: string; color: string }> = {
   residential: { label: 'Résidentiel', color: '#3b82f6' },
   pv: { label: 'Production PV', color: '#f59e0b' },
-  ev: { label: 'Véhicules électriques', color: '#10b981' },
   industrial_pme: { label: 'Industriel / PME', color: '#8b5cf6' },
 };
 
@@ -161,7 +160,7 @@ export const ProfileVisualEditor = ({
     const multiplier = globalMultiplier / 100;
     const seasons: Season[] = ['winter', 'summer'];
     const profileKeys: ProfileType[] = targetProfile === 'all' 
-      ? ['residential', 'pv', 'ev', 'industrial_pme']
+      ? ['residential', 'pv', 'industrial_pme']
       : [targetProfile as ProfileType];
 
     setEditedProfiles(prev => {

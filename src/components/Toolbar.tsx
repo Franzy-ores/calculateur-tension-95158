@@ -13,6 +13,8 @@ export const Toolbar = () => {
     toggleFocusMode,
     showClientTensionLabels,
     toggleClientTensionLabels,
+    showVoltages,
+    setShowVoltages,
   } = useNetworkStore();
 
   const handleCalculate = () => {
@@ -90,6 +92,16 @@ export const Toolbar = () => {
         className="w-12 h-12 mb-2"
       >
         <span className="text-lg">{showClientTensionLabels ? '⚡' : '🔢'}</span>
+      </Button>
+      
+      <Button
+        variant={showVoltages ? "default" : "outline"}
+        size="icon"
+        onClick={() => setShowVoltages(!showVoltages)}
+        title={showVoltages ? "Masquer tensions nœuds" : "Afficher tensions nœuds"}
+        className="w-12 h-12 mb-2"
+      >
+        <span className="text-lg">{showVoltages ? '🔋' : '🔌'}</span>
       </Button>
       
       <div className="w-full h-px bg-border mb-1" />

@@ -1,6 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FileDown, Eye, FileText } from "lucide-react";
@@ -11,8 +10,6 @@ import { toast } from "sonner";
 export const ExportTab = () => {
   const {
     currentProject,
-    showVoltages,
-    setShowVoltages,
     selectedScenario,
     calculationResults,
     simulationResults,
@@ -84,29 +81,16 @@ export const ExportTab = () => {
         </CardContent>
       </Card>
 
-      {/* Card 2: Affichage */}
-      <Card className="bg-card/50 backdrop-blur border-border/50">
-        <CardHeader className="pb-2 pt-3 px-4">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Eye className="h-4 w-4 text-accent" />
-            Options d'affichage
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-4 pb-4 space-y-4">
-          {/* Toggle tensions nœuds */}
-          <div className="flex items-center justify-between">
-            <Label htmlFor="show-voltages" className="text-sm">
-              Tensions des nœuds
-            </Label>
-            <Switch
-              id="show-voltages"
-              checked={showVoltages}
-              onCheckedChange={setShowVoltages}
-            />
-          </div>
-
-          {/* Coloration raccordements */}
-          {hasClients && (
+      {/* Card 2: Affichage - Seulement si clients importés */}
+      {hasClients && (
+        <Card className="bg-card/50 backdrop-blur border-border/50">
+          <CardHeader className="pb-2 pt-3 px-4">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Eye className="h-4 w-4 text-accent" />
+              Options d'affichage
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 space-y-4">
             <div className="space-y-2">
               <Label className="text-sm">Mode coloration raccordements</Label>
               <Select value={clientColorMode} onValueChange={(value: any) => setClientColorMode(value)}>
@@ -122,9 +106,9 @@ export const ExportTab = () => {
                 </SelectContent>
               </Select>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

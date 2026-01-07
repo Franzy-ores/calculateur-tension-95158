@@ -1,21 +1,33 @@
 import { DailyProfileConfig, DailySimulationOptions, HourlyVoltageResult } from '@/types/dailyProfile';
-import { Project, Node, CalculationResult } from '@/types/network';
+import { Project, Node, CalculationResult, SimulationEquipment } from '@/types/network';
 import { ElectricalCalculator } from './electricalCalculations';
+import { SimulationCalculator } from './simulationCalculator';
 import defaultProfiles from '@/data/hourlyProfiles.json';
 
 /**
  * Service de calcul des tensions horaires sur 24h
  * Utilise le moteur de calcul électrique existant avec modulation temporelle
+ * Supporte la simulation active (remplacement de câbles, SRG2, EQUI8)
  */
 export class DailyProfileCalculator {
   private profiles: DailyProfileConfig;
   private project: Project;
   private options: DailySimulationOptions;
+  private simulationEquipment?: SimulationEquipment;
+  private isSimulationActive: boolean;
 
-  constructor(project: Project, options: DailySimulationOptions, customProfiles?: DailyProfileConfig) {
+  constructor(
+    project: Project, 
+    options: DailySimulationOptions, 
+    customProfiles?: DailyProfileConfig,
+    simulationEquipment?: SimulationEquipment,
+    isSimulationActive: boolean = false
+  ) {
     this.project = project;
     this.options = options;
     this.profiles = customProfiles || (defaultProfiles as DailyProfileConfig);
+    this.simulationEquipment = simulationEquipment;
+    this.isSimulationActive = isSimulationActive;
   }
 
   /**
@@ -136,23 +148,54 @@ export class DailyProfileCalculator {
     // Foisonnement productions = profil PV × facteur météo
     const productionsFoisonnement = (seasonProfile.pv[hourStr] || 0) * weatherFactor;
 
-    // Exécuter le calcul électrique avec le projet ORIGINAL et le foisonnement horaire
-    const calculator = new ElectricalCalculator(
-      this.project.cosPhi,
-      this.project.cosPhiCharges,
-      this.project.cosPhiProductions
-    );
+    // Exécuter le calcul électrique avec le projet et le foisonnement horaire
+    // Si simulation active, utiliser SimulationCalculator avec équipements
+    const useSimulation = this.isSimulationActive && this.simulationEquipment && 
+      ((this.simulationEquipment.srg2Devices?.some(s => s.enabled)) ||
+       (this.simulationEquipment.neutralCompensators?.some(c => c.enabled)) ||
+       (this.simulationEquipment.cableReplacement?.enabled));
 
     try {
-      const result = calculator.calculateScenarioWithHTConfig(
-        this.project,              // Projet ORIGINAL (pas modulé)
-        'MIXTE',
-        chargesFoisonnement,       // Foisonnement horaire pondéré
-        productionsFoisonnement,   // Production PV horaire avec météo
-        this.project.manualPhaseDistribution,  // Déséquilibre conservé
-        this.project.clientsImportes,
-        this.project.clientLinks
-      );
+      let result: CalculationResult;
+      
+      if (useSimulation && this.simulationEquipment) {
+        // Créer un projet temporaire avec le foisonnement horaire
+        const projectWithHourlyFoisonnement: Project = {
+          ...this.project,
+          foisonnementCharges: chargesFoisonnement,
+          foisonnementProductions: productionsFoisonnement
+        };
+        
+        const simCalculator = new SimulationCalculator(
+          this.project.cosPhi,
+          this.project.cosPhiCharges,
+          this.project.cosPhiProductions
+        );
+        
+        const simResult = simCalculator.calculateWithSimulation(
+          projectWithHourlyFoisonnement,
+          'MIXTE',
+          this.simulationEquipment
+        );
+        
+        result = simResult;
+      } else {
+        const calculator = new ElectricalCalculator(
+          this.project.cosPhi,
+          this.project.cosPhiCharges,
+          this.project.cosPhiProductions
+        );
+        
+        result = calculator.calculateScenarioWithHTConfig(
+          this.project,
+          'MIXTE',
+          chargesFoisonnement,
+          productionsFoisonnement,
+          this.project.manualPhaseDistribution,
+          this.project.clientsImportes,
+          this.project.clientLinks
+        );
+      }
       return this.extractNodeVoltages(
         hour, 
         result, 

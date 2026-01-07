@@ -177,8 +177,14 @@ export class DailyProfileCalculator {
   /**
    * Calcule la puissance totale de production PV du projet
    */
+  /**
+   * Calcule la puissance totale de production PV du projet
+   * Inclut les productions des nœuds ET des clients importés (résidentiels + industriels)
+   */
   private getTotalProductionPower(): number {
     let totalPower = 0;
+    
+    // 1. Productions configurées sur les nœuds
     for (const node of this.project.nodes) {
       if (node.productions && Array.isArray(node.productions)) {
         for (const prod of node.productions) {
@@ -186,6 +192,18 @@ export class DailyProfileCalculator {
         }
       }
     }
+    
+    // 2. Productions PV des clients importés liés (résidentiels ET industriels)
+    const clients = this.project.clientsImportes || [];
+    const links = this.project.clientLinks || [];
+    
+    clients.forEach(client => {
+      const isLinked = links.some(link => link.clientId === client.id);
+      if (isLinked && client.puissancePV_kVA) {
+        totalPower += client.puissancePV_kVA;
+      }
+    });
+    
     return totalPower;
   }
 

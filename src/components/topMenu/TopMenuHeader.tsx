@@ -96,7 +96,7 @@ export const TopMenuHeader = ({
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="sm" onClick={() => window.open('/manuel-utilisateur.html', '_blank')} className="h-8 px-2">
+              <Button variant="ghost" size="sm" onClick={() => window.open(`${import.meta.env.BASE_URL}manuel-utilisateur.html`, '_blank')} className="h-8 px-2">
                 <FileText className="h-4 w-4" />
               </Button>
             </TooltipTrigger>

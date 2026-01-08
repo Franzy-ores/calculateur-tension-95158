@@ -5,6 +5,18 @@ export interface HourlyProfile {
   [hour: string]: number; // 0-23 → pourcentage (0-100)
 }
 
+export interface MeasuredProfileMetadata {
+  name: string;
+  sourceFile: string;
+  importDate: string;
+  measurePeriod: string;
+  contractualPower_kVA: number;
+  maxMeasured_VA: number;
+  avgMeasured_VA: number;
+  peakUsagePercent: number;
+  dataPoints: number;
+}
+
 export interface SeasonProfile {
   residential: HourlyProfile;
   pv: HourlyProfile;
@@ -36,6 +48,8 @@ export interface DailySimulationOptions {
   selectedNodeId: string;
   /** Force le profil de production à 0% pour toutes les heures */
   zeroProduction?: boolean;
+  /** Utiliser le profil mesuré importé au lieu des profils théoriques */
+  useMeasuredProfile?: boolean;
 }
 
 export interface HourlyVoltageResult {

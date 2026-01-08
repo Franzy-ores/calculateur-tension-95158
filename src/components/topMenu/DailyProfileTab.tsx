@@ -15,8 +15,9 @@ import { useNetworkStore } from '@/store/networkStore';
 import { DailyProfileCalculator } from '@/utils/dailyProfileCalculator';
 import { DailyProfileChart } from '@/components/DailyProfileChart';
 import { ProfileVisualEditor } from '@/components/ProfileVisualEditor';
+import { MeasuredProfileImporter } from '@/components/MeasuredProfileImporter';
 import { HourlyVoltageResult } from '@/types/dailyProfile';
-import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent, Home, Zap, FlaskConical, Moon } from 'lucide-react';
+import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent, Home, Zap, FlaskConical, Moon, Upload, FileBarChart, X } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Project } from '@/types/network';
 
@@ -91,10 +92,14 @@ export const DailyProfileTab = () => {
     setDailyProfileCustomProfiles,
     simulationEquipment,
     isSimulationActive,
-    toggleSimulationActive
+    toggleSimulationActive,
+    measuredProfile,
+    measuredProfileMetadata,
+    clearMeasuredProfile
   } = useNetworkStore();
 
   const [editorOpen, setEditorOpen] = useState(false);
+  const [importerOpen, setImporterOpen] = useState(false);
   const [comparisonMode, setComparisonMode] = useState(false);
 
   // Résultats du calcul
@@ -140,7 +145,8 @@ export const DailyProfileTab = () => {
       dailyProfileOptions, 
       dailyProfileCustomProfiles,
       hasActiveSimulation ? simulationEquipment : undefined,
-      hasActiveSimulation
+      hasActiveSimulation,
+      dailyProfileOptions.useMeasuredProfile ? measuredProfile ?? undefined : undefined
     );
     setResults(calculatorWithSim.calculateDailyVoltages());
 
@@ -151,13 +157,14 @@ export const DailyProfileTab = () => {
         dailyProfileOptions, 
         dailyProfileCustomProfiles,
         undefined,
-        false
+        false,
+        dailyProfileOptions.useMeasuredProfile ? measuredProfile ?? undefined : undefined
       );
       setResultsWithoutSim(calculatorBase.calculateDailyVoltages());
     } else {
       setResultsWithoutSim([]);
     }
-  }, [currentProject, dailyProfileOptions, dailyProfileCustomProfiles, simulationEquipment, isSimulationActive, hasActiveSimulation, comparisonMode]);
+  }, [currentProject, dailyProfileOptions, dailyProfileCustomProfiles, simulationEquipment, isSimulationActive, hasActiveSimulation, comparisonMode, measuredProfile]);
 
   // Heures critiques
   const criticalHours = useMemo(() => {
@@ -350,6 +357,59 @@ export const DailyProfileTab = () => {
             <ClientStatsDisplay project={currentProject} />
           </div>
 
+          {/* Section profil mesuré */}
+          <div className="space-y-2 pt-2 border-t border-border">
+            <Label className="text-xs text-muted-foreground flex items-center gap-2">
+              <FileBarChart className="h-3 w-3" />
+              Profil mesuré (PQ-Box)
+            </Label>
+            
+            {measuredProfile && measuredProfileMetadata ? (
+              <div className="space-y-2">
+                {/* Infos du profil importé */}
+                <div className="bg-muted/50 rounded-lg p-2 text-xs space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium truncate flex-1">{measuredProfileMetadata.name}</span>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-5 w-5 p-0" 
+                      onClick={clearMeasuredProfile}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                  <div className="text-muted-foreground space-y-0.5">
+                    <p>{measuredProfileMetadata.contractualPower_kVA} kVA contractuel</p>
+                    <p>Pic: {measuredProfileMetadata.peakUsagePercent.toFixed(1)}% • {measuredProfileMetadata.dataPoints} pts</p>
+                  </div>
+                </div>
+                
+                {/* Switch utilisation */}
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="use-measured" className="text-sm">
+                    Utiliser profil mesuré
+                  </Label>
+                  <Switch
+                    id="use-measured"
+                    checked={dailyProfileOptions.useMeasuredProfile ?? false}
+                    onCheckedChange={(checked) => setDailyProfileOptions({ useMeasuredProfile: checked })}
+                  />
+                </div>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setImporterOpen(true)}
+                className="w-full gap-2"
+              >
+                <Upload className="h-4 w-4" />
+                Importer mesures PQ-Box
+              </Button>
+            )}
+          </div>
+
           {/* Bouton éditer profils */}
           <Button
             variant="outline"
@@ -540,6 +600,12 @@ export const DailyProfileTab = () => {
         onOpenChange={setEditorOpen}
         profiles={dailyProfileCustomProfiles}
         onSave={setDailyProfileCustomProfiles}
+      />
+
+      {/* Importeur de profil mesuré PQ-Box */}
+      <MeasuredProfileImporter
+        open={importerOpen}
+        onOpenChange={setImporterOpen}
       />
     </div>
   );

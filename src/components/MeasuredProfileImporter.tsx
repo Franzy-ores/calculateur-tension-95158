@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent } from '@/components/ui/card';
-import { Upload, FileText, Zap, Calendar, Database, AlertCircle, Check, X } from 'lucide-react';
+import { Upload, FileText, Zap, Calendar, Database, AlertCircle, Check, X, Edit3 } from 'lucide-react';
 import { parsePQBoxFile, calculateHourlyProfile, PQBoxRawData, HourlyProfileResult } from '@/utils/pqboxParser';
 import { useNetworkStore } from '@/store/networkStore';
 import { toast } from 'sonner';
@@ -24,10 +24,11 @@ import {
 interface MeasuredProfileImporterProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  editMode?: boolean; // Mode édition avec profil existant
 }
 
-export const MeasuredProfileImporter = ({ open, onOpenChange }: MeasuredProfileImporterProps) => {
-  const { setMeasuredProfile } = useNetworkStore();
+export const MeasuredProfileImporter = ({ open, onOpenChange, editMode = false }: MeasuredProfileImporterProps) => {
+  const { setMeasuredProfile, measuredProfile, measuredProfileMetadata } = useNetworkStore();
   
   const [dragActive, setDragActive] = useState(false);
   const [fileName, setFileName] = useState<string>('');
@@ -40,10 +41,63 @@ export const MeasuredProfileImporter = ({ open, onOpenChange }: MeasuredProfileI
   const [profileName, setProfileName] = useState<string>('');
   
   const [previewResult, setPreviewResult] = useState<HourlyProfileResult | null>(null);
+  
+  // Mode édition manuelle des valeurs horaires
+  const [manualValues, setManualValues] = useState<Record<number, number>>({});
+  const [isManualMode, setIsManualMode] = useState(false);
+
+  // Charger les données existantes en mode édition
+  useEffect(() => {
+    if (editMode && open && measuredProfile && measuredProfileMetadata) {
+      setProfileName(measuredProfileMetadata.name);
+      setContractualPower_kVA(measuredProfileMetadata.contractualPower_kVA);
+      setFileName(measuredProfileMetadata.sourceFile);
+      setMeasurePeriod(measuredProfileMetadata.measurePeriod);
+      setDataPoints(measuredProfileMetadata.dataPoints);
+      setIsManualMode(true);
+      
+      // Convertir le profil en valeurs manuelles
+      const values: Record<number, number> = {};
+      for (let h = 0; h < 24; h++) {
+        values[h] = measuredProfile[h.toString() as keyof typeof measuredProfile] ?? 0;
+      }
+      setManualValues(values);
+    }
+  }, [editMode, open, measuredProfile, measuredProfileMetadata]);
 
   // Calcul du profil quand les données ou la puissance contractuelle changent
   useMemo(() => {
-    if (rawData.length > 0 && contractualPower_kVA > 0) {
+    if (isManualMode && Object.keys(manualValues).length === 24 && contractualPower_kVA > 0) {
+      // Mode édition manuelle
+      const hourlyAverages = Array.from({ length: 24 }, (_, h) => ({
+        hour: h,
+        avg_VA: (manualValues[h] / 100) * contractualPower_kVA * 1000,
+        avg_kVA: (manualValues[h] / 100) * contractualPower_kVA,
+        percent: manualValues[h]
+      }));
+      
+      const profile: Record<string, number> = {};
+      hourlyAverages.forEach(h => { profile[h.hour.toString()] = h.percent; });
+      
+      const maxPercent = Math.max(...Object.values(manualValues));
+      const avgPercent = Object.values(manualValues).reduce((a, b) => a + b, 0) / 24;
+      
+      setPreviewResult({
+        profile: profile as any,
+        metadata: {
+          name: profileName || 'Profil mesuré',
+          sourceFile: fileName || 'Édition manuelle',
+          importDate: new Date().toISOString(),
+          measurePeriod: measurePeriod || 'N/A',
+          contractualPower_kVA,
+          maxMeasured_VA: (maxPercent / 100) * contractualPower_kVA * 1000,
+          avgMeasured_VA: (avgPercent / 100) * contractualPower_kVA * 1000,
+          peakUsagePercent: maxPercent,
+          dataPoints: dataPoints || 24
+        },
+        hourlyAverages
+      });
+    } else if (rawData.length > 0 && contractualPower_kVA > 0) {
       const result = calculateHourlyProfile(
         rawData,
         contractualPower_kVA,
@@ -52,10 +106,10 @@ export const MeasuredProfileImporter = ({ open, onOpenChange }: MeasuredProfileI
         measurePeriod
       );
       setPreviewResult(result);
-    } else {
+    } else if (!isManualMode) {
       setPreviewResult(null);
     }
-  }, [rawData, contractualPower_kVA, profileName, fileName, measurePeriod]);
+  }, [rawData, contractualPower_kVA, profileName, fileName, measurePeriod, isManualMode, manualValues, dataPoints]);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -129,6 +183,13 @@ export const MeasuredProfileImporter = ({ open, onOpenChange }: MeasuredProfileI
     setContractualPower_kVA(250);
     setProfileName('');
     setPreviewResult(null);
+    setManualValues({});
+    setIsManualMode(false);
+  };
+
+  // Mise à jour d'une valeur horaire manuelle
+  const handleManualValueChange = (hour: number, value: number) => {
+    setManualValues(prev => ({ ...prev, [hour]: Math.max(0, Math.min(200, value)) }));
   };
 
   const handleClose = () => {
@@ -151,18 +212,21 @@ export const MeasuredProfileImporter = ({ open, onOpenChange }: MeasuredProfileI
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Upload className="h-5 w-5 text-primary" />
-            Importer mesures PQ-Box
+            {editMode ? <Edit3 className="h-5 w-5 text-primary" /> : <Upload className="h-5 w-5 text-primary" />}
+            {editMode ? 'Éditer profil mesuré' : 'Importer mesures PQ-Box'}
           </DialogTitle>
           <DialogDescription>
-            Importez un fichier de mesures PQ-Box pour créer un profil 24h basé sur les données réelles
+            {editMode 
+              ? 'Modifiez les valeurs horaires et les paramètres du profil mesuré'
+              : 'Importez un fichier de mesures PQ-Box pour créer un profil 24h basé sur les données réelles'
+            }
           </DialogDescription>
         </DialogHeader>
 
         <ScrollArea className="flex-1 px-1">
           <div className="space-y-4 pb-4">
-            {/* Zone de drop */}
-            {rawData.length === 0 ? (
+            {/* Zone de drop - seulement si pas en mode manuel */}
+            {rawData.length === 0 && !isManualMode ? (
               <div
                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
                   dragActive ? 'border-primary bg-primary/10' : 'border-muted-foreground/30 hover:border-primary/50'
@@ -326,13 +390,14 @@ export const MeasuredProfileImporter = ({ open, onOpenChange }: MeasuredProfileI
                   </Card>
                 )}
 
-                {/* Tableau récapitulatif */}
+                {/* Tableau récapitulatif - éditable en mode manuel */}
                 {previewResult && (
                   <div className="border rounded-lg overflow-hidden">
-                    <div className="bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
-                      Moyennes horaires
+                    <div className="bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground flex items-center justify-between">
+                      <span>Valeurs horaires</span>
+                      {isManualMode && <Badge variant="outline" className="text-[10px]">Éditable</Badge>}
                     </div>
-                    <ScrollArea className="h-[150px]">
+                    <ScrollArea className="h-[200px]">
                       <table className="w-full text-xs">
                         <thead className="sticky top-0 bg-background">
                           <tr className="border-b">
@@ -347,10 +412,24 @@ export const MeasuredProfileImporter = ({ open, onOpenChange }: MeasuredProfileI
                               key={h.hour} 
                               className={`border-b border-border/50 ${h.percent > 100 ? 'bg-destructive/10' : ''}`}
                             >
-                              <td className="px-3 py-1">{h.hour}h</td>
+                              <td className="px-3 py-1 font-medium">{h.hour}h</td>
                               <td className="px-3 py-1 text-right font-mono">{h.avg_kVA.toFixed(2)}</td>
-                              <td className={`px-3 py-1 text-right font-mono ${h.percent > 100 ? 'text-destructive font-medium' : ''}`}>
-                                {h.percent.toFixed(1)}%
+                              <td className="px-3 py-1 text-right">
+                                {isManualMode ? (
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    max="200"
+                                    step="0.5"
+                                    value={manualValues[h.hour] ?? h.percent}
+                                    onChange={(e) => handleManualValueChange(h.hour, parseFloat(e.target.value) || 0)}
+                                    className="w-20 h-6 text-xs text-right font-mono py-0 px-2"
+                                  />
+                                ) : (
+                                  <span className={`font-mono ${h.percent > 100 ? 'text-destructive font-medium' : ''}`}>
+                                    {h.percent.toFixed(1)}%
+                                  </span>
+                                )}
                               </td>
                             </tr>
                           ))}

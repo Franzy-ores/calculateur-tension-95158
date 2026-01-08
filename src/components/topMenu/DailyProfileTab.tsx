@@ -100,6 +100,7 @@ export const DailyProfileTab = () => {
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [importerOpen, setImporterOpen] = useState(false);
+  const [editMeasuredOpen, setEditMeasuredOpen] = useState(false);
   const [comparisonMode, setComparisonMode] = useState(false);
 
   // Résultats du calcul
@@ -370,14 +371,26 @@ export const DailyProfileTab = () => {
                 <div className="bg-muted/50 rounded-lg p-2 text-xs space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="font-medium truncate flex-1">{measuredProfileMetadata.name}</span>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-5 w-5 p-0" 
-                      onClick={clearMeasuredProfile}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-5 w-5 p-0" 
+                        onClick={() => setEditMeasuredOpen(true)}
+                        title="Éditer le profil"
+                      >
+                        <Edit3 className="h-3 w-3" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-5 w-5 p-0" 
+                        onClick={clearMeasuredProfile}
+                        title="Supprimer le profil"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
                   </div>
                   <div className="text-muted-foreground space-y-0.5">
                     <p>{measuredProfileMetadata.contractualPower_kVA} kVA contractuel</p>
@@ -606,6 +619,13 @@ export const DailyProfileTab = () => {
       <MeasuredProfileImporter
         open={importerOpen}
         onOpenChange={setImporterOpen}
+      />
+
+      {/* Éditeur de profil mesuré existant */}
+      <MeasuredProfileImporter
+        open={editMeasuredOpen}
+        onOpenChange={setEditMeasuredOpen}
+        editMode={true}
       />
     </div>
   );

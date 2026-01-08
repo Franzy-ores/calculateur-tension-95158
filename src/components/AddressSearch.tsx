@@ -123,7 +123,7 @@ export const AddressSearch = ({ onLocationSelect }: AddressSearchProps) => {
 
       {/* Résultats de recherche */}
       {showResults && results.length > 0 && (
-        <div className="absolute top-full mt-1 w-full bg-background border border-border rounded-lg shadow-lg z-[1001] max-h-60 overflow-y-auto">
+        <div className="absolute top-full mt-1 w-full bg-background border border-border rounded-lg shadow-lg z-[999] max-h-60 overflow-y-auto">
           {results.map((result) => (
             <button
               key={result.place_id}
@@ -146,7 +146,7 @@ export const AddressSearch = ({ onLocationSelect }: AddressSearchProps) => {
 
       {/* Indicateur de chargement */}
       {isSearching && (
-        <div className="absolute top-full mt-1 w-full bg-background border border-border rounded-lg shadow-lg z-[1001] px-3 py-2">
+        <div className="absolute top-full mt-1 w-full bg-background border border-border rounded-lg shadow-lg z-[999] px-3 py-2">
           <div className="text-sm text-muted-foreground">Recherche en cours...</div>
         </div>
       )}

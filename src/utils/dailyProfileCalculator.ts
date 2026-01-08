@@ -1,4 +1,4 @@
-import { DailyProfileConfig, DailySimulationOptions, HourlyVoltageResult } from '@/types/dailyProfile';
+import { DailyProfileConfig, DailySimulationOptions, HourlyVoltageResult, HourlyProfile } from '@/types/dailyProfile';
 import { Project, Node, CalculationResult, SimulationEquipment } from '@/types/network';
 import { ElectricalCalculator } from './electricalCalculations';
 import { SimulationCalculator } from './simulationCalculator';
@@ -15,19 +15,22 @@ export class DailyProfileCalculator {
   private options: DailySimulationOptions;
   private simulationEquipment?: SimulationEquipment;
   private isSimulationActive: boolean;
+  private measuredProfile?: HourlyProfile;
 
   constructor(
     project: Project, 
     options: DailySimulationOptions, 
     customProfiles?: DailyProfileConfig,
     simulationEquipment?: SimulationEquipment,
-    isSimulationActive: boolean = false
+    isSimulationActive: boolean = false,
+    measuredProfile?: HourlyProfile
   ) {
     this.project = project;
     this.options = options;
     this.profiles = customProfiles || (defaultProfiles as DailyProfileConfig);
     this.simulationEquipment = simulationEquipment;
     this.isSimulationActive = isSimulationActive;
+    this.measuredProfile = measuredProfile;
   }
 
   /**
@@ -121,9 +124,16 @@ export class DailyProfileCalculator {
     const weatherFactor = this.profiles.weatherFactors[this.options.weather];
     const hourStr = hour.toString();
 
-    // Profils horaires par type (directement depuis le JSON)
-    const residentialProfile = seasonProfile.residential[hourStr] || 0;
-    const industrialProfile = seasonProfile.industrial_pme[hourStr] || 0;
+    // Si profil mesuré activé, utiliser le profil mesuré pour toutes les charges
+    const useMeasured = this.options.useMeasuredProfile && this.measuredProfile;
+
+    // Profils horaires par type (directement depuis le JSON ou profil mesuré)
+    const residentialProfile = useMeasured 
+      ? (this.measuredProfile![hourStr] || 0)
+      : (seasonProfile.residential[hourStr] || 0);
+    const industrialProfile = useMeasured 
+      ? (this.measuredProfile![hourStr] || 0)
+      : (seasonProfile.industrial_pme[hourStr] || 0);
     
     // Récupérer les puissances transitantes (nœud sélectionné + aval)
     const nodePowers = this.getUpstreamAndNodePowers();

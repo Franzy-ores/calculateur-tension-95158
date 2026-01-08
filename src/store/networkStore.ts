@@ -19,7 +19,7 @@ import {
   LoadModel,
   ClientImporte
 } from '@/types/network';
-import { DailySimulationOptions, DailyProfileConfig, defaultDailySimulationOptions } from '@/types/dailyProfile';
+import { DailySimulationOptions, DailyProfileConfig, defaultDailySimulationOptions, HourlyProfile, MeasuredProfileMetadata } from '@/types/dailyProfile';
 import defaultProfilesData from '@/data/hourlyProfiles.json';
 
 export type ClientColorMode = 'couplage' | 'circuit' | 'tension' | 'lien' | 'gps';
@@ -105,6 +105,9 @@ interface NetworkStoreState extends NetworkState {
   // État profil 24h persisté
   dailyProfileOptions: DailySimulationOptions;
   dailyProfileCustomProfiles: DailyProfileConfig;
+  // Profil mesuré importé
+  measuredProfile: HourlyProfile | null;
+  measuredProfileMetadata: MeasuredProfileMetadata | null;
 }
 
 interface NetworkActions {
@@ -204,6 +207,9 @@ interface NetworkActions {
   // Actions profil 24h
   setDailyProfileOptions: (options: Partial<DailySimulationOptions>) => void;
   setDailyProfileCustomProfiles: (profiles: DailyProfileConfig) => void;
+  // Actions profil mesuré
+  setMeasuredProfile: (profile: HourlyProfile, metadata: MeasuredProfileMetadata) => void;
+  clearMeasuredProfile: () => void;
 }
 
 // Fonction utilitaire pour créer la configuration par défaut du transformateur
@@ -387,6 +393,9 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   // État profil 24h persisté
   dailyProfileOptions: { ...defaultDailySimulationOptions },
   dailyProfileCustomProfiles: defaultProfilesData as DailyProfileConfig,
+  // Profil mesuré importé
+  measuredProfile: null,
+  measuredProfileMetadata: null,
 
   // Actions
   createNewProject: (name, voltageSystem) => {
@@ -2572,5 +2581,21 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
 
   setDailyProfileCustomProfiles: (profiles) => {
     set({ dailyProfileCustomProfiles: profiles });
+  },
+
+  // Actions profil mesuré
+  setMeasuredProfile: (profile, metadata) => {
+    set({ 
+      measuredProfile: profile, 
+      measuredProfileMetadata: metadata 
+    });
+  },
+
+  clearMeasuredProfile: () => {
+    set({ 
+      measuredProfile: null, 
+      measuredProfileMetadata: null,
+      dailyProfileOptions: { ...get().dailyProfileOptions, useMeasuredProfile: false }
+    });
   },
 }));

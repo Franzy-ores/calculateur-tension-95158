@@ -144,9 +144,27 @@ export const ProfileVisualEditor = ({
       reader.onload = (e) => {
         try {
           const content = e.target?.result as string;
-          const parsed = JSON.parse(content) as DailyProfileConfig;
-          setEditedProfiles(parsed);
-          toast.success('Profils importés avec succès');
+          const parsed = JSON.parse(content);
+          
+          // Détecter si c'est un profil mesuré PQ-Box
+          if (parsed.type === 'measured_profile' && parsed.profile) {
+            // Charger le profil mesuré dans le profil résidentiel actuel
+            setEditedProfiles((prev) => ({
+              ...prev,
+              profiles: {
+                ...prev.profiles,
+                [season]: {
+                  ...prev.profiles[season],
+                  residential: parsed.profile,
+                },
+              },
+            }));
+            toast.success(`Profil mesuré "${parsed.metadata?.name || 'importé'}" chargé dans Résidentiel (${season === 'winter' ? 'Hiver' : 'Été'})`);
+          } else {
+            // Import standard d'une configuration complète
+            setEditedProfiles(parsed as DailyProfileConfig);
+            toast.success('Profils importés avec succès');
+          }
         } catch {
           toast.error('Fichier JSON invalide');
         }

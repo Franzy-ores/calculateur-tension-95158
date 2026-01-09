@@ -17,7 +17,9 @@ import { DailyProfileChart } from '@/components/DailyProfileChart';
 import { ProfileVisualEditor } from '@/components/ProfileVisualEditor';
 import { MeasuredProfileImporter } from '@/components/MeasuredProfileImporter';
 import { HourlyVoltageResult } from '@/types/dailyProfile';
-import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent, Home, Zap, FlaskConical, Moon, Upload, FileBarChart, X } from 'lucide-react';
+import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent, Home, Zap, FlaskConical, Moon, Upload, FileBarChart, X, Download } from 'lucide-react';
+import { toast } from 'sonner';
+import { HourlyProfile, MeasuredProfileMetadata } from '@/types/dailyProfile';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Project } from '@/types/network';
 
@@ -372,6 +374,30 @@ export const DailyProfileTab = () => {
                   <div className="flex items-center justify-between">
                     <span className="font-medium truncate flex-1">{measuredProfileMetadata.name}</span>
                     <div className="flex items-center gap-1">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-5 w-5 p-0" 
+                        onClick={() => {
+                          const exportData = {
+                            type: 'measured_profile',
+                            version: '1.0',
+                            profile: measuredProfile,
+                            metadata: measuredProfileMetadata
+                          };
+                          const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `profil-mesure-${measuredProfileMetadata.name}.json`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                          toast.success('Profil exporté en JSON');
+                        }}
+                        title="Exporter en JSON"
+                      >
+                        <Download className="h-3 w-3" />
+                      </Button>
                       <Button 
                         variant="ghost" 
                         size="sm" 

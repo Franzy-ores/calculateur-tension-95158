@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent } from '@/components/ui/card';
-import { Upload, FileText, Zap, Calendar, Database, AlertCircle, Check, X, Edit3 } from 'lucide-react';
+import { Upload, FileText, Zap, Calendar, Database, AlertCircle, Check, X, Edit3, Download } from 'lucide-react';
 import { parsePQBoxFile, calculateHourlyProfile, PQBoxRawData, HourlyProfileResult } from '@/utils/pqboxParser';
 import { useNetworkStore } from '@/store/networkStore';
 import { toast } from 'sonner';
@@ -172,6 +172,26 @@ export const MeasuredProfileImporter = ({ open, onOpenChange, editMode = false }
     });
     onOpenChange(false);
     resetState();
+  };
+
+  const handleExportJSON = () => {
+    if (!previewResult) return;
+    
+    const exportData = {
+      type: 'measured_profile',
+      version: '1.0',
+      profile: previewResult.profile,
+      metadata: previewResult.metadata
+    };
+    
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `profil-mesure-${profileName || 'export'}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Profil exporté en JSON');
   };
 
   const resetState = () => {
@@ -473,18 +493,29 @@ export const MeasuredProfileImporter = ({ open, onOpenChange, editMode = false }
           </div>
         </ScrollArea>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={handleClose}>
-            Annuler
-          </Button>
+        <DialogFooter className="flex justify-between sm:justify-between">
           <Button 
-            onClick={handleImport} 
-            disabled={!previewResult || contractualPower_kVA <= 0}
+            variant="outline" 
+            onClick={handleExportJSON}
+            disabled={!previewResult}
             className="gap-2"
           >
-            <Check className="h-4 w-4" />
-            Importer le profil
+            <Download className="h-4 w-4" />
+            Exporter JSON
           </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleClose}>
+              Annuler
+            </Button>
+            <Button 
+              onClick={handleImport} 
+              disabled={!previewResult || contractualPower_kVA <= 0}
+              className="gap-2"
+            >
+              <Check className="h-4 w-4" />
+              Importer le profil
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

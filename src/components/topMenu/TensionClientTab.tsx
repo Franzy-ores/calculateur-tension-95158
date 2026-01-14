@@ -288,28 +288,32 @@ export const TensionClientTab = () => {
   
   // Récupérer les tensions au noeud depuis les résultats de calcul
   const nodeVoltages = useMemo(() => {
-    if (!linkedNode) return { L1: 230, L2: 230, L3: 230 };
+    const sourceVoltage = currentProject.transformerConfig?.sourceVoltage || 
+      (currentProject.voltageSystem === 'TRIPHASÉ_230V' ? 230 : 230);
+    
+    if (!linkedNode) return { L1: sourceVoltage, L2: sourceVoltage, L3: sourceVoltage };
     
     const results = isSimulationActive ? simulationResults : calculationResults;
     const scenarioResult = results[selectedScenario];
     
     if (!scenarioResult?.nodeMetricsPerPhase) {
-      // Fallback sur la tension source
-      const sourceVoltage = currentProject.transformerConfig?.sourceVoltage || 
-        (currentProject.voltageSystem === 'TRIPHASÉ_230V' ? 230 : 230);
       return { L1: sourceVoltage, L2: sourceVoltage, L3: sourceVoltage };
     }
     
-    const nodeMetrics = scenarioResult.nodeMetricsPerPhase[linkedNode.id];
-    if (!nodeMetrics) {
-      const sourceVoltage = currentProject.transformerConfig?.sourceVoltage || 230;
+    // nodeMetricsPerPhase est un tableau, chercher l'entrée correspondant au nœud
+    const nodeMetrics = Array.isArray(scenarioResult.nodeMetricsPerPhase)
+      ? scenarioResult.nodeMetricsPerPhase.find(m => m.nodeId === linkedNode.id)
+      : null;
+    
+    if (!nodeMetrics?.voltagesPerPhase) {
       return { L1: sourceVoltage, L2: sourceVoltage, L3: sourceVoltage };
     }
     
+    // Utiliser les tensions calculées par phase
     return {
-      L1: nodeMetrics.A?.voltage || 230,
-      L2: nodeMetrics.B?.voltage || 230,
-      L3: nodeMetrics.C?.voltage || 230
+      L1: nodeMetrics.voltagesPerPhase.A || sourceVoltage,
+      L2: nodeMetrics.voltagesPerPhase.B || sourceVoltage,
+      L3: nodeMetrics.voltagesPerPhase.C || sourceVoltage
     };
   }, [linkedNode, calculationResults, simulationResults, isSimulationActive, selectedScenario, currentProject]);
   

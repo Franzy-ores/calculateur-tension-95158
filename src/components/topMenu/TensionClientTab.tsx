@@ -223,12 +223,13 @@ export const TensionClientTab = () => {
     calculationResults, 
     simulationResults,
     isSimulationActive,
-    selectedScenario 
+    selectedScenario,
+    selectedClientId: globalSelectedClientId,
+    setSelectedClient
   } = useNetworkStore();
   
   // États locaux
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
-  const [selectedCableId, setSelectedCableId] = useState<string>(branchementCableTypes[0]?.id || '');
+  const [selectedBranchementCableId, setSelectedBranchementCableId] = useState<string>(branchementCableTypes[0]?.id || '');
   const [manualLength, setManualLength] = useState<number | null>(null);
   const [useManualLength, setUseManualLength] = useState(false);
   
@@ -248,11 +249,11 @@ export const TensionClientTab = () => {
     return currentProject.clientsImportes.filter(c => linkedClientIds.has(c.id));
   }, [currentProject.clientsImportes, currentProject.clientLinks]);
   
-  // Client sélectionné
+  // Client sélectionné (utilise l'état global)
   const selectedClient = useMemo(() => {
-    if (!selectedClientId) return null;
-    return linkedClients.find(c => c.id === selectedClientId) || null;
-  }, [selectedClientId, linkedClients]);
+    if (!globalSelectedClientId) return null;
+    return linkedClients.find(c => c.id === globalSelectedClientId) || null;
+  }, [globalSelectedClientId, linkedClients]);
   
   // Noeud associé au client
   const linkedNode = useMemo(() => {
@@ -262,10 +263,10 @@ export const TensionClientTab = () => {
     return currentProject.nodes.find(n => n.id === link.nodeId) || null;
   }, [selectedClient, currentProject.clientLinks, currentProject.nodes]);
   
-  // Câble sélectionné
+  // Câble de branchement sélectionné
   const selectedCable = useMemo(() => {
-    return branchementCableTypes.find(c => c.id === selectedCableId) || branchementCableTypes[0];
-  }, [selectedCableId]);
+    return branchementCableTypes.find(c => c.id === selectedBranchementCableId) || branchementCableTypes[0];
+  }, [selectedBranchementCableId]);
   
   // Câbles compatibles avec le type de raccordement du client
   const compatibleCables = useMemo(() => {
@@ -364,10 +365,10 @@ export const TensionClientTab = () => {
   
   // Reset du câble si incompatible
   useEffect(() => {
-    if (selectedClient && !compatibleCables.find(c => c.id === selectedCableId)) {
-      setSelectedCableId(compatibleCables[0]?.id || '');
+    if (selectedClient && !compatibleCables.find(c => c.id === selectedBranchementCableId)) {
+      setSelectedBranchementCableId(compatibleCables[0]?.id || '');
     }
-  }, [selectedClient, compatibleCables, selectedCableId]);
+  }, [selectedClient, compatibleCables, selectedBranchementCableId]);
   
   return (
     <div className="p-4 space-y-4">
@@ -390,7 +391,7 @@ export const TensionClientTab = () => {
               <>
                 <div className="space-y-2">
                   <Label>Raccordement</Label>
-                  <Select value={selectedClientId || ''} onValueChange={setSelectedClientId}>
+                  <Select value={globalSelectedClientId || ''} onValueChange={setSelectedClient}>
                     <SelectTrigger>
                       <SelectValue placeholder="Sélectionner un raccordement" />
                     </SelectTrigger>
@@ -455,7 +456,7 @@ export const TensionClientTab = () => {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Type de câble</Label>
-              <Select value={selectedCableId} onValueChange={setSelectedCableId}>
+              <Select value={selectedBranchementCableId} onValueChange={setSelectedBranchementCableId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Sélectionner un câble" />
                 </SelectTrigger>

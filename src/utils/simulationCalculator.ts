@@ -561,20 +561,22 @@ export class SimulationCalculator extends ElectricalCalculator {
       // Mode forcé : utiliser le nouveau processus en 2 étapes
       baselineResult = this.runForcedModeSimulation(projectToUse, scenario, equipment);
     } else {
-      // Autres modes : baseline normal
+      // Autres modes : baseline normal avec foisonnements différenciés
       baselineResult = this.calculateScenario(
         projectToUse.nodes,
         projectToUse.cables,
         projectToUse.cableTypes,
         scenario,
-        projectToUse.foisonnementCharges,
+        projectToUse.foisonnementChargesResidentiel ?? projectToUse.foisonnementCharges,
         projectToUse.foisonnementProductions,
         projectToUse.transformerConfig,
         projectToUse.loadModel,
         projectToUse.desequilibrePourcent,
         projectToUse.manualPhaseDistribution,
         projectToUse.clientsImportes,
-        projectToUse.clientLinks
+        projectToUse.clientLinks,
+        projectToUse.foisonnementChargesResidentiel,
+        projectToUse.foisonnementChargesIndustriel
       );
     }
 
@@ -634,21 +636,23 @@ export class SimulationCalculator extends ElectricalCalculator {
     const activeSRG2 = equipment.srg2Devices?.filter(srg2 => srg2.enabled) || [];
     const activeCompensators = equipment.neutralCompensators?.filter(c => c.enabled) || [];
     
-    // Cas 1: Aucun équipement actif → calcul normal (CODE EXISTANT INCHANGÉ)
+    // Cas 1: Aucun équipement actif → calcul normal avec foisonnements différenciés
     if (activeSRG2.length === 0 && activeCompensators.length === 0) {
       return this.calculateScenario(
         project.nodes,
         project.cables,
         project.cableTypes,
         scenario,
-        project.foisonnementCharges,
+        project.foisonnementChargesResidentiel ?? project.foisonnementCharges,
         project.foisonnementProductions,
         project.transformerConfig,
         project.loadModel,
         project.desequilibrePourcent,
         project.manualPhaseDistribution,
         project.clientsImportes,
-        project.clientLinks
+        project.clientLinks,
+        project.foisonnementChargesResidentiel,
+        project.foisonnementChargesIndustriel
       );
     }
     

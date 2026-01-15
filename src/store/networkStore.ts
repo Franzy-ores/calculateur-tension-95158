@@ -108,6 +108,8 @@ interface NetworkStoreState extends NetworkState {
   // Profil mesuré importé
   measuredProfile: HourlyProfile | null;
   measuredProfileMetadata: MeasuredProfileMetadata | null;
+  // Mode de sélection de nœud sur la carte (centralisé)
+  nodeSelectionMode: 'profil24h' | 'srg2' | 'equi8' | null;
 }
 
 interface NetworkActions {
@@ -210,6 +212,10 @@ interface NetworkActions {
   // Actions profil mesuré
   setMeasuredProfile: (profile: HourlyProfile, metadata: MeasuredProfileMetadata) => void;
   clearMeasuredProfile: () => void;
+  // Actions de sélection de nœud sur la carte
+  startNodeSelection: (mode: 'profil24h' | 'srg2' | 'equi8') => void;
+  cancelNodeSelection: () => void;
+  handleNodeSelectionClick: (nodeId: string) => void;
 }
 
 // Fonction utilitaire pour créer la configuration par défaut du transformateur
@@ -396,6 +402,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   // Profil mesuré importé
   measuredProfile: null,
   measuredProfileMetadata: null,
+  // Mode de sélection de nœud sur la carte
+  nodeSelectionMode: null,
 
   // Actions
   createNewProject: (name, voltageSystem) => {
@@ -2597,5 +2605,57 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       measuredProfileMetadata: null,
       dailyProfileOptions: { ...get().dailyProfileOptions, useMeasuredProfile: false }
     });
+  },
+
+  // Actions de sélection de nœud sur la carte (centralisé)
+  startNodeSelection: (mode) => {
+    console.log('🗺️ Démarrage sélection nœud, mode:', mode);
+    set({ nodeSelectionMode: mode });
+  },
+
+  cancelNodeSelection: () => {
+    console.log('🗺️ Annulation sélection nœud');
+    set({ nodeSelectionMode: null });
+  },
+
+  handleNodeSelectionClick: (nodeId) => {
+    const { nodeSelectionMode, addSRG2Device, addNeutralCompensator, simulationEquipment } = get();
+    console.log('🗺️ Nœud cliqué en mode sélection:', nodeId, 'mode:', nodeSelectionMode);
+    
+    if (!nodeSelectionMode) return;
+
+    switch (nodeSelectionMode) {
+      case 'profil24h':
+        set(state => ({
+          dailyProfileOptions: { ...state.dailyProfileOptions, selectedNodeId: nodeId },
+          nodeSelectionMode: null
+        }));
+        toast.success('Nœud sélectionné pour l\'analyse 24h');
+        break;
+        
+      case 'srg2':
+        // Vérifier si un SRG2 existe déjà sur ce nœud
+        const existingSRG2 = simulationEquipment.srg2Devices?.some(s => s.nodeId === nodeId);
+        if (existingSRG2) {
+          toast.error('Un SRG2 existe déjà sur ce nœud');
+        } else {
+          addSRG2Device(nodeId);
+          toast.success('SRG2 ajouté sur le nœud');
+        }
+        set({ nodeSelectionMode: null });
+        break;
+        
+      case 'equi8':
+        // Vérifier si un EQUI8 existe déjà sur ce nœud
+        const existingEQUI8 = simulationEquipment.neutralCompensators.some(c => c.nodeId === nodeId);
+        if (existingEQUI8) {
+          toast.error('Un compensateur EQUI8 existe déjà sur ce nœud');
+        } else {
+          addNeutralCompensator(nodeId);
+          toast.success('Compensateur EQUI8 ajouté sur le nœud');
+        }
+        set({ nodeSelectionMode: null });
+        break;
+    }
   },
 }));

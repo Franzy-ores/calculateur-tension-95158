@@ -5,7 +5,7 @@ import { useNetworkStore } from '@/store/networkStore';
 import { CableTypeSelector } from './CableTypeSelector';
 import { AddressSearch } from './AddressSearch';
 import { Button } from './ui/button';
-import { Globe, Map as MapIcon, Target, Mountain } from 'lucide-react';
+import { Globe, Map as MapIcon, Target, Mountain, X, MousePointer } from 'lucide-react';
 import { getConnectedNodes } from '@/utils/networkConnectivity';
 import { getNodeConnectionType } from '@/utils/nodeConnectionType';
 import { useClientMarkers } from './ClientMarkers';
@@ -79,6 +79,10 @@ export const MapView = () => {
     selectingLocationForNewClient,
     setClientLocation,
     cancelClientLocationSelection,
+    // Mode de sélection de nœud sur la carte
+    nodeSelectionMode,
+    handleNodeSelectionClick,
+    cancelNodeSelection,
   } = useNetworkStore();
 
   // Helper pour détecter les équipements de simulation sur un nœud
@@ -959,6 +963,12 @@ export const MapView = () => {
         marker.on('click', (e) => {
           L.DomEvent.stopPropagation(e);
           
+          // MODE SÉLECTION DE NŒUD SUR CARTE (centralisé) - profil24h, SRG2, EQUI8
+          if (nodeSelectionMode) {
+            handleNodeSelectionClick(node.id);
+            return;
+          }
+          
           // MODE SÉLECTION DE NŒUD POUR CLIENT: Émettre l'événement avec le nodeId
           if (selectingNodeForClient) {
             window.dispatchEvent(new CustomEvent('nodeSelectedForClient', { 
@@ -1733,6 +1743,30 @@ export const MapView = () => {
             <span className="font-semibold">Cliquez sur la carte pour définir la nouvelle position du client</span>
           </div>
           <p className="text-xs mt-1 opacity-90">Appuyez sur ESC pour annuler</p>
+        </div>
+      )}
+      
+      {/* Indicateur de sélection de nœud centralisé (profil24h, SRG2, EQUI8) */}
+      {nodeSelectionMode && (
+        <div 
+          className="absolute top-20 left-1/2 transform -translate-x-1/2 z-[1000] bg-primary text-primary-foreground px-4 py-2 rounded-lg shadow-lg flex items-center gap-3"
+        >
+          <div className="flex items-center gap-2">
+            <MousePointer className="w-5 h-5 animate-pulse" />
+            <span className="font-semibold">
+              {nodeSelectionMode === 'profil24h' && 'Cliquez sur un nœud pour l\'analyse 24h'}
+              {nodeSelectionMode === 'srg2' && 'Cliquez sur un nœud pour placer le SRG2'}
+              {nodeSelectionMode === 'equi8' && 'Cliquez sur un nœud pour placer le compensateur EQUI8'}
+            </span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0 hover:bg-destructive/20"
+            onClick={cancelNodeSelection}
+          >
+            <X className="w-4 h-4" />
+          </Button>
         </div>
       )}
     </div>

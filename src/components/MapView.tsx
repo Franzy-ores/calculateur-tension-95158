@@ -1398,7 +1398,7 @@ export const MapView = () => {
 
       markersRef.current.set(node.id, marker);
     });
-  }, [currentProject?.nodes, selectedTool, selectedNodeId, selectedCableType, addCable, setSelectedNode, openEditPanel, deleteNode, showVoltages, resultsToUse, selectedScenario, moveNode, routingActive, routingFromNode, routingToNode, selectedClientForLinking, linkClientToNode]);
+  }, [currentProject?.nodes, selectedTool, selectedNodeId, selectedCableType, addCable, setSelectedNode, openEditPanel, deleteNode, showVoltages, resultsToUse, selectedScenario, moveNode, routingActive, routingFromNode, routingToNode, selectedClientForLinking, linkClientToNode, nodeSelectionMode, handleNodeSelectionClick]);
 
   // Update cables
   useEffect(() => {

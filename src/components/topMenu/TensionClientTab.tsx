@@ -318,15 +318,16 @@ export const TensionClientTab = () => {
     };
   }, [linkedNode, calculationResults, simulationResults, isSimulationActive, selectedScenario, currentProject]);
   
-  // Récupérer les coefficients de foisonnement selon le type de client
+  // Récupérer les coefficients de foisonnement selon le type de client (correspondance stricte avec Paramètres)
   const foisonnementCharges = useMemo(() => {
-    if (!selectedClient) return currentProject.foisonnementChargesResidentiel || 15;
+    if (!selectedClient) return currentProject.foisonnementChargesResidentiel ?? 15;
     return selectedClient.clientType === 'industriel' 
-      ? (currentProject.foisonnementChargesIndustriel || 70)
-      : (currentProject.foisonnementChargesResidentiel || 15);
+      ? (currentProject.foisonnementChargesIndustriel ?? 70)
+      : (currentProject.foisonnementChargesResidentiel ?? 15);
   }, [selectedClient, currentProject]);
   
-  const foisonnementProductions = currentProject.foisonnementProductions || 100;
+  // foisonnementProductions: utiliser ?? pour permettre 0% (ne pas remplacer par 100 si explicitement 0)
+  const foisonnementProductions = currentProject.foisonnementProductions ?? 100;
   const cosPhiCharges = currentProject.cosPhiCharges || 0.95;
   const cosPhiProductions = currentProject.cosPhiProductions || 1.0;
   

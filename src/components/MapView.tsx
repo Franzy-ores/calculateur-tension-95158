@@ -1274,6 +1274,12 @@ export const MapView = () => {
       marker.on('click', (e) => {
         L.DomEvent.stopPropagation(e);
         
+        // MODE SÉLECTION DE NŒUD CENTRALISÉ (Profil 24h, SRG2, EQUI8)
+        if (nodeSelectionMode) {
+          handleNodeSelectionClick(node.id);
+          return; // NE PAS ouvrir le panneau de propriétés
+        }
+        
         // MODE LIAISON CLIENT: Lier le client sélectionné à ce nœud
         if (selectedTool === 'linkClient' && selectedClientForLinking) {
           linkClientToNode(selectedClientForLinking, node.id);

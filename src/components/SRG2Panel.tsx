@@ -28,7 +28,9 @@ export const SRG2Panel = () => {
     simulationEquipment,
     addSRG2Device,
     removeSRG2Device,
-    updateSRG2Device
+    updateSRG2Device,
+    startNodeSelection,
+    nodeSelectionMode,
   } = useNetworkStore();
 
   if (!currentProject) return null;
@@ -423,18 +425,30 @@ export const SRG2Panel = () => {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium">Régulateurs SRG2</h3>
-        <NodeSelector
-          nodes={currentProject.nodes}
-          onNodeSelected={(nodeId) => addSRG2Device(nodeId)}
-          title="Ajouter un SRG2"
-          description="Stabilisateur de Réseau de Génération - Régulation de tension automatique"
-          trigger={
-            <Button size="sm" variant="outline" disabled={!nodes.length}>
-              <Plus className="h-3 w-3 mr-1" />
-              Ajouter
-            </Button>
-          }
-        />
+        <div className="flex items-center gap-2">
+          <Button
+            variant={nodeSelectionMode === 'srg2' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => startNodeSelection('srg2')}
+            title="Sélectionner sur la carte"
+            disabled={!nodes.length}
+          >
+            <MapPin className="h-3 w-3 mr-1" />
+            Carte
+          </Button>
+          <NodeSelector
+            nodes={currentProject.nodes}
+            onNodeSelected={(nodeId) => addSRG2Device(nodeId)}
+            title="Ajouter un SRG2"
+            description="Stabilisateur de Réseau de Génération - Régulation de tension automatique"
+            trigger={
+              <Button size="sm" variant="outline" disabled={!nodes.length}>
+                <Plus className="h-3 w-3 mr-1" />
+                Liste
+              </Button>
+            }
+          />
+        </div>
       </div>
 
       {/* Affichage des puissances aval pour tous les SRG2 */}

@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { DocumentationPanel } from "@/components/DocumentationPanel";
 import { SRG2Panel } from "@/components/SRG2Panel";
 import { CableReplacementSimulator } from "@/components/CableReplacementSimulator";
-import { Settings, Play, RotateCcw, Trash2, Plus, AlertTriangle, CheckCircle, Cable } from "lucide-react";
+import { Settings, Play, RotateCcw, Trash2, Plus, AlertTriangle, CheckCircle, Cable, MapPin } from "lucide-react";
 import { useState } from 'react';
 
 export const SimulationPanel = () => {
@@ -36,7 +36,9 @@ export const SimulationPanel = () => {
     runSimulation,
     closeEditPanel,
     updateProjectConfig,
-    updateNode
+    updateNode,
+    startNodeSelection,
+    nodeSelectionMode,
   } = useNetworkStore();
   if (!currentProject) return null;
   const nodes = currentProject.nodes.filter(n => !n.isSource);
@@ -272,14 +274,26 @@ export const SimulationPanel = () => {
               
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-medium">Compensateurs de neutre (EQUI8)</h3>
-                <Button 
-                  size="sm" 
-                  onClick={() => setShowNodeSelector(true)}
-                  disabled={currentProject.voltageSystem !== 'TÉTRAPHASÉ_400V'}
-                >
-                  <Plus className="h-3 w-3 mr-1" />
-                  Ajouter
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={nodeSelectionMode === 'equi8' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => startNodeSelection('equi8')}
+                    title="Sélectionner sur la carte"
+                    disabled={currentProject.voltageSystem !== 'TÉTRAPHASÉ_400V'}
+                  >
+                    <MapPin className="h-3 w-3 mr-1" />
+                    Carte
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    onClick={() => setShowNodeSelector(true)}
+                    disabled={currentProject.voltageSystem !== 'TÉTRAPHASÉ_400V'}
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    Liste
+                  </Button>
+                </div>
               </div>
 
               {simulationEquipment.neutralCompensators.length === 0 ? (

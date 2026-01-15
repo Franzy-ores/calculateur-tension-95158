@@ -17,7 +17,7 @@ import { DailyProfileChart } from '@/components/DailyProfileChart';
 import { ProfileVisualEditor } from '@/components/ProfileVisualEditor';
 import { MeasuredProfileImporter } from '@/components/MeasuredProfileImporter';
 import { HourlyVoltageResult } from '@/types/dailyProfile';
-import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent, Home, Zap, FlaskConical, Moon, Upload, FileBarChart, X, Download } from 'lucide-react';
+import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent, Home, Zap, FlaskConical, Moon, Upload, FileBarChart, X, Download, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import { HourlyProfile, MeasuredProfileMetadata } from '@/types/dailyProfile';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -97,7 +97,10 @@ export const DailyProfileTab = () => {
     toggleSimulationActive,
     measuredProfile,
     measuredProfileMetadata,
-    clearMeasuredProfile
+    clearMeasuredProfile,
+    // Sélection de nœud sur carte
+    startNodeSelection,
+    nodeSelectionMode,
   } = useNetworkStore();
 
   const [editorOpen, setEditorOpen] = useState(false);
@@ -202,21 +205,32 @@ export const DailyProfileTab = () => {
           {/* Sélection du nœud */}
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Nœud analysé</Label>
-            <Select
-              value={dailyProfileOptions.selectedNodeId}
-              onValueChange={(value) => setDailyProfileOptions({ selectedNodeId: value })}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Sélectionner un nœud" />
-              </SelectTrigger>
-              <SelectContent>
-                {nodes.map(node => (
-                  <SelectItem key={node.id} value={node.id}>
-                    {node.name || node.id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex gap-2">
+              <Select
+                value={dailyProfileOptions.selectedNodeId}
+                onValueChange={(value) => setDailyProfileOptions({ selectedNodeId: value })}
+              >
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder="Sélectionner un nœud" />
+                </SelectTrigger>
+                <SelectContent>
+                  {nodes.map(node => (
+                    <SelectItem key={node.id} value={node.id}>
+                      {node.name || node.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant={nodeSelectionMode === 'profil24h' ? 'default' : 'outline'}
+                size="icon"
+                onClick={() => startNodeSelection('profil24h')}
+                title="Sélectionner sur la carte"
+                className="shrink-0"
+              >
+                <MapPin className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
           {/* Saison */}

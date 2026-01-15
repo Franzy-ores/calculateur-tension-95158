@@ -192,7 +192,8 @@ const calculateClientVoltage = (
   }
   
   // Vérification compatibilité câble
-  const cableCompatible = connectionType === 'MONO' || cable.type === 'TRI';
+  // Tous les câbles sont maintenant compatibles avec tous les types de raccordement
+  const cableCompatible = true;
   const cableOverloaded = maxCurrent > cable.maxCurrent_A;
   
   return {

@@ -1,5 +1,5 @@
 /**
- * Types de câbles de branchement NF C 14-100
+ * Types de câbles de branchement
  * Utilisés pour les raccordements entre le réseau BT et les clients
  */
 
@@ -9,131 +9,109 @@ export interface BranchementCableType {
   R_ohm_per_km: number;     // Résistance linéique (Ohm/km)
   X_ohm_per_km: number;     // Réactance linéique (Ohm/km)
   maxCurrent_A: number;     // Courant admissible maximal (A)
-  type: 'MONO' | 'TRI';     // Type de câble (monophasé ou triphasé)
-  nbConducteurs: number;    // Nombre de conducteurs (2 pour mono, 4 pour tri)
   section_mm2: number;      // Section en mm²
   materiau: 'Alu' | 'Cu';   // Matériau conducteur
 }
 
 /**
- * Liste des câbles de branchement standard NF C 14-100
- * Principalement en aluminium pour le réseau de distribution
+ * Liste des câbles de branchement
+ * BAXB = Aluminium, EXVB = Cuivre, EAXeVB = Aluminium (gros calibres)
  */
 export const branchementCableTypes: BranchementCableType[] = [
-  // Câbles monophasés (2 conducteurs) - phase + neutre ou phase-phase
+  // BAXB - Câbles aluminium
   { 
-    id: 'brcht-2x16-alu', 
-    label: '2×16 Alu', 
+    id: 'baxb-4x10-alu', 
+    label: 'BAXB 4×10 Alu', 
+    R_ohm_per_km: 1.83, 
+    X_ohm_per_km: 0.08, 
+    maxCurrent_A: 63, 
+    section_mm2: 10,
+    materiau: 'Alu'
+  },
+  { 
+    id: 'baxb-4x16-alu', 
+    label: 'BAXB 4×16 Alu', 
     R_ohm_per_km: 1.91, 
     X_ohm_per_km: 0.08, 
     maxCurrent_A: 75, 
-    type: 'MONO', 
-    nbConducteurs: 2,
     section_mm2: 16,
     materiau: 'Alu'
   },
   { 
-    id: 'brcht-2x25-alu', 
-    label: '2×25 Alu', 
+    id: 'baxb-4x25-alu', 
+    label: 'BAXB 4×25 Alu', 
     R_ohm_per_km: 1.20, 
     X_ohm_per_km: 0.08, 
     maxCurrent_A: 100, 
-    type: 'MONO', 
-    nbConducteurs: 2,
-    section_mm2: 25,
-    materiau: 'Alu'
-  },
-  
-  // Câbles triphasés/tétraphasés (4 conducteurs) - 3 phases + neutre
-  { 
-    id: 'brcht-4x16-alu', 
-    label: '4×16 Alu', 
-    R_ohm_per_km: 1.91, 
-    X_ohm_per_km: 0.08, 
-    maxCurrent_A: 75, 
-    type: 'TRI', 
-    nbConducteurs: 4,
-    section_mm2: 16,
-    materiau: 'Alu'
-  },
-  { 
-    id: 'brcht-4x25-alu', 
-    label: '4×25 Alu', 
-    R_ohm_per_km: 1.20, 
-    X_ohm_per_km: 0.08, 
-    maxCurrent_A: 100, 
-    type: 'TRI', 
-    nbConducteurs: 4,
     section_mm2: 25,
     materiau: 'Alu'
   },
   { 
-    id: 'brcht-4x35-alu', 
-    label: '4×35 Alu', 
+    id: 'baxb-4x35-alu', 
+    label: 'BAXB 4×35 Alu', 
     R_ohm_per_km: 0.868, 
     X_ohm_per_km: 0.08, 
     maxCurrent_A: 125, 
-    type: 'TRI', 
-    nbConducteurs: 4,
     section_mm2: 35,
     materiau: 'Alu'
   },
+
+  // EXVB - Câbles cuivre
   { 
-    id: 'brcht-4x50-alu', 
-    label: '4×50 Alu', 
-    R_ohm_per_km: 0.641, 
+    id: 'exvb-4x10-cu', 
+    label: 'EXVB 4×10 Cu', 
+    R_ohm_per_km: 1.83, 
     X_ohm_per_km: 0.08, 
-    maxCurrent_A: 150, 
-    type: 'TRI', 
-    nbConducteurs: 4,
-    section_mm2: 50,
-    materiau: 'Alu'
+    maxCurrent_A: 63, 
+    section_mm2: 10,
+    materiau: 'Cu'
   },
   { 
-    id: 'brcht-4x70-alu', 
-    label: '4×70 Alu', 
-    R_ohm_per_km: 0.443, 
+    id: 'exvb-4x16-cu', 
+    label: 'EXVB 4×16 Cu', 
+    R_ohm_per_km: 1.15, 
     X_ohm_per_km: 0.08, 
-    maxCurrent_A: 190, 
-    type: 'TRI', 
-    nbConducteurs: 4,
-    section_mm2: 70,
-    materiau: 'Alu'
+    maxCurrent_A: 85, 
+    section_mm2: 16,
+    materiau: 'Cu'
   },
   { 
-    id: 'brcht-4x95-alu', 
-    label: '4×95 Alu', 
+    id: 'exvb-4x25-cu', 
+    label: 'EXVB 4×25 Cu', 
+    R_ohm_per_km: 0.727, 
+    X_ohm_per_km: 0.08, 
+    maxCurrent_A: 110, 
+    section_mm2: 25,
+    materiau: 'Cu'
+  },
+  { 
+    id: 'exvb-4x35-cu', 
+    label: 'EXVB 4×35 Cu', 
+    R_ohm_per_km: 0.524, 
+    X_ohm_per_km: 0.08, 
+    maxCurrent_A: 135, 
+    section_mm2: 35,
+    materiau: 'Cu'
+  },
+
+  // EAXeVB - Câbles aluminium gros calibres (équivalent réseau)
+  { 
+    id: 'eaxevb-4g95-alu', 
+    label: 'EAXeVB 4G95 Alu', 
     R_ohm_per_km: 0.320, 
     X_ohm_per_km: 0.08, 
     maxCurrent_A: 230, 
-    type: 'TRI', 
-    nbConducteurs: 4,
     section_mm2: 95,
     materiau: 'Alu'
   },
-  
-  // Câbles cuivre (moins courants mais parfois utilisés)
   { 
-    id: 'brcht-2x10-cu', 
-    label: '2×10 Cu', 
-    R_ohm_per_km: 1.83, 
+    id: 'eaxevb-4g150-alu', 
+    label: 'EAXeVB 4G150 Alu', 
+    R_ohm_per_km: 0.206, 
     X_ohm_per_km: 0.08, 
-    maxCurrent_A: 63, 
-    type: 'MONO', 
-    nbConducteurs: 2,
-    section_mm2: 10,
-    materiau: 'Cu'
-  },
-  { 
-    id: 'brcht-4x10-cu', 
-    label: '4×10 Cu', 
-    R_ohm_per_km: 1.83, 
-    X_ohm_per_km: 0.08, 
-    maxCurrent_A: 63, 
-    type: 'TRI', 
-    nbConducteurs: 4,
-    section_mm2: 10,
-    materiau: 'Cu'
+    maxCurrent_A: 290, 
+    section_mm2: 150,
+    materiau: 'Alu'
   },
 ];
 
@@ -145,19 +123,13 @@ export const getBranchementCableById = (id: string): BranchementCableType | unde
 };
 
 /**
- * Filtre les câbles compatibles avec un type de raccordement client
- * @param connectionType Type de connexion du client (MONO, TRI, TETRA)
- * @returns Liste des câbles compatibles
+ * Retourne tous les câbles de branchement disponibles
+ * Tous les câbles sont compatibles avec tous les types de raccordement (MONO, TRI, TETRA)
  */
 export const getCompatibleBranchementCables = (
-  connectionType: 'MONO' | 'TRI' | 'TETRA'
+  _connectionType?: 'MONO' | 'TRI' | 'TETRA'
 ): BranchementCableType[] => {
-  if (connectionType === 'MONO') {
-    // MONO peut utiliser des câbles 2x (mono) ou 4x (tri)
-    return branchementCableTypes;
-  }
-  // TRI et TETRA nécessitent des câbles 4x
-  return branchementCableTypes.filter(cable => cable.type === 'TRI');
+  return branchementCableTypes;
 };
 
 /**

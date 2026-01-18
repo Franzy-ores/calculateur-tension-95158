@@ -3,7 +3,8 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
-import { Percent, BarChart3, ChevronDown, ChevronUp, Home, Factory, Sun } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Percent, BarChart3, ChevronDown, ChevronUp, Home, Factory, Sun, Activity } from "lucide-react";
 import { useNetworkStore } from "@/store/networkStore";
 import { PhaseDistributionSliders } from "@/components/PhaseDistributionSliders";
 import { PhaseDistributionDisplay } from "@/components/PhaseDistributionDisplay";
@@ -16,6 +17,8 @@ export const ParametersTab = () => {
   
   const {
     currentProject,
+    selectedScenario,
+    setSelectedScenario,
     setFoisonnementChargesResidentiel,
     setFoisonnementChargesIndustriel,
     setFoisonnementProductions,
@@ -69,6 +72,35 @@ export const ParametersTab = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className="px-3 pb-2 space-y-3">
+          {/* Sélecteur de scénario */}
+          <div className="space-y-1 pb-2 border-b border-border/50">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs flex items-center gap-1">
+                <Activity className="h-3 w-3 text-destructive" />
+                Scénario
+              </Label>
+            </div>
+            <Select 
+              value={selectedScenario || 'PRÉLÈVEMENT'} 
+              onValueChange={setSelectedScenario}
+              disabled={simulationPreview.isActive}
+            >
+              <SelectTrigger className="w-full bg-background border text-xs h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border z-[10000]">
+                <SelectItem value="PRÉLÈVEMENT">🔌 Prélèvement</SelectItem>
+                <SelectItem value="MIXTE">⚡ Mixte</SelectItem>
+                <SelectItem value="PRODUCTION">☀️ Production</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground">
+              {selectedScenario === 'PRÉLÈVEMENT' && "Consommation uniquement"}
+              {selectedScenario === 'MIXTE' && "Consommation + production"}
+              {selectedScenario === 'PRODUCTION' && "Injection maximale"}
+            </p>
+          </div>
+
           {/* Charges Résidentielles */}
           <div className="space-y-1">
             <div className="flex items-center justify-between">

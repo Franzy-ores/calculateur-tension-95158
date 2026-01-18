@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Zap, Layers, Activity, Gauge } from "lucide-react";
+import { Zap, Layers, Gauge } from "lucide-react";
 import { useNetworkStore } from "@/store/networkStore";
 import { useState, useEffect, useRef } from 'react';
 import type { LoadModel, TransformerRating } from '@/types/network';
@@ -14,7 +14,6 @@ export const NetworkTab = () => {
   const {
     currentProject,
     selectedScenario,
-    setSelectedScenario,
     changeVoltageSystem,
     updateProjectConfig,
     calculationResults,
@@ -203,35 +202,6 @@ export const NetworkTab = () => {
         </CardContent>
       </Card>
 
-      {/* Card 4: Scénario */}
-      <Card className="bg-card/50 backdrop-blur border-border/50">
-        <CardHeader className="pb-2 pt-3 px-4">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Activity className="h-4 w-4 text-destructive" />
-            Scénario
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-4 pb-3">
-          <Select 
-            value={selectedScenario || 'PRÉLÈVEMENT'} 
-            onValueChange={setSelectedScenario}
-          >
-            <SelectTrigger className="w-full bg-background border text-sm h-9">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-popover border z-[10000]">
-              <SelectItem value="PRÉLÈVEMENT">🔌 Prélèvement</SelectItem>
-              <SelectItem value="MIXTE">⚡ Mixte</SelectItem>
-              <SelectItem value="PRODUCTION">☀️ Production</SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground mt-2">
-            {selectedScenario === 'PRÉLÈVEMENT' && "Consommation uniquement"}
-            {selectedScenario === 'MIXTE' && "Conso + production solaire"}
-            {selectedScenario === 'PRODUCTION' && "Injection maximale"}
-          </p>
-        </CardContent>
-      </Card>
     </div>
   );
 };

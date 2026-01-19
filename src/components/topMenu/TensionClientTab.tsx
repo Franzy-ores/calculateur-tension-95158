@@ -804,12 +804,12 @@ export const TensionClientTab = () => {
               </table>
             </div>
             
-            {/* Warning chute de tension > 1% */}
+            {/* Warning variation de tension > ±1% */}
             {calculationResult.phases.some(phase => Math.abs(phase.deltaU_net) / phase.V_node * 100 > 1) && (
               <div className="mt-3 p-2 bg-orange-500/10 border border-orange-500/30 rounded-md flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-orange-500 flex-shrink-0" />
                 <span className="text-sm text-orange-600 dark:text-orange-400">
-                  <strong>Attention :</strong> La chute de tension entre le nœud et le raccordement dépasse 1% (maximum autorisé).
+                  <strong>Attention :</strong> La variation de tension entre le nœud et le raccordement dépasse ±1% (maximum autorisé).
                 </span>
               </div>
             )}

@@ -1644,6 +1644,61 @@ export class SimulationCalculator extends ElectricalCalculator {
 
     console.log('🎯 SRG2 calcul final terminé - marqueurs SRG2 conservés pour nodeMetricsPerPhase');
     
+    // VÉRIFICATION DE COHÉRENCE: Comparer tensionEntree avec les tensions de la carte
+    for (const srg2 of srg2Devices) {
+      if (srg2.tensionEntree) {
+        // Tensions d'entrée stockées dans le SRG2 (utilisées pour l'affichage dans le panel)
+        const entree = srg2.tensionEntree;
+        
+        // Tensions originales capturées à l'itération 1 (avant toute régulation)
+        const origVoltages = originalVoltages.get(srg2.nodeId);
+        
+        // Tensions finales sur la carte (après régulation = tensionSortie)
+        const finalNodeMetrics = finalResult.nodeMetricsPerPhase?.find(
+          nm => String(nm.nodeId) === String(srg2.nodeId)
+        );
+        
+        console.log(`\n📊 ===== COHÉRENCE SRG2 ${srg2.nodeId} (${srg2.name || srg2.id}) =====`);
+        console.log(`   📥 Tensions ENTRÉE (panel): L1-L2=${entree.A.toFixed(1)}V, L2-L3=${entree.B.toFixed(1)}V, L3-L1=${entree.C.toFixed(1)}V`);
+        
+        if (origVoltages) {
+          console.log(`   📋 Tensions ORIGINALES (iter 1): L1-L2=${origVoltages.A.toFixed(1)}V, L2-L3=${origVoltages.B.toFixed(1)}V, L3-L1=${origVoltages.C.toFixed(1)}V`);
+          
+          // Vérifier cohérence entre entrée et original
+          const diffA = Math.abs(entree.A - origVoltages.A);
+          const diffB = Math.abs(entree.B - origVoltages.B);
+          const diffC = Math.abs(entree.C - origVoltages.C);
+          if (diffA > 0.1 || diffB > 0.1 || diffC > 0.1) {
+            console.warn(`   ⚠️ INCOHÉRENCE: tensionEntree ≠ originalVoltages (diff: ${diffA.toFixed(1)}V, ${diffB.toFixed(1)}V, ${diffC.toFixed(1)}V)`);
+          } else {
+            console.log(`   ✅ COHÉRENT: tensionEntree === originalVoltages`);
+          }
+        }
+        
+        if (srg2.tensionSortie) {
+          console.log(`   📤 Tensions SORTIE (attendues): L1-L2=${srg2.tensionSortie.A.toFixed(1)}V, L2-L3=${srg2.tensionSortie.B.toFixed(1)}V, L3-L1=${srg2.tensionSortie.C.toFixed(1)}V`);
+        }
+        
+        if (finalNodeMetrics?.voltagesPerPhase) {
+          const carte = finalNodeMetrics.voltagesPerPhase;
+          console.log(`   🗺️ Tensions CARTE (après régul): L1-L2=${carte.A.toFixed(1)}V, L2-L3=${carte.B.toFixed(1)}V, L3-L1=${carte.C.toFixed(1)}V`);
+          
+          // Vérifier cohérence sortie vs carte
+          if (srg2.tensionSortie) {
+            const diffCarteA = Math.abs(carte.A - srg2.tensionSortie.A);
+            const diffCarteB = Math.abs(carte.B - srg2.tensionSortie.B);
+            const diffCarteC = Math.abs(carte.C - srg2.tensionSortie.C);
+            if (diffCarteA > 0.5 || diffCarteB > 0.5 || diffCarteC > 0.5) {
+              console.warn(`   ⚠️ INCOHÉRENCE: tensionSortie ≠ carte (diff: ${diffCarteA.toFixed(1)}V, ${diffCarteB.toFixed(1)}V, ${diffCarteC.toFixed(1)}V)`);
+            } else {
+              console.log(`   ✅ COHÉRENT: tensionSortie ≈ carte`);
+            }
+          }
+        }
+        console.log(`   ================================================\n`);
+      }
+    }
+    
     // IMPORTANT: Ne pas nettoyer les marqueurs SRG2 ici !
     // Le nettoyage se fait dans calculateWithSimulation() après avoir utilisé les résultats
     // this.cleanupSRG2Markers(workingNodes); ← Déplacé

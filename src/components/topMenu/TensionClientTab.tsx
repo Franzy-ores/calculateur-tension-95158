@@ -5,7 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { AlertCircle, CheckCircle, AlertTriangle, Cable, Zap, MapPin, User } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Slider } from '@/components/ui/slider';
+import { AlertCircle, CheckCircle, AlertTriangle, Cable, Zap, MapPin, User, Percent, RotateCcw, Plug } from 'lucide-react';
 import { useNetworkStore } from '@/store/networkStore';
 import { 
   branchementCableTypes, 
@@ -234,6 +236,10 @@ export const TensionClientTab = () => {
   const [manualLength, setManualLength] = useState<number | null>(null);
   const [useManualLength, setUseManualLength] = useState(false);
   
+  // États locaux pour le foisonnement du calcul client
+  const [localFoisonnementCharges, setLocalFoisonnementCharges] = useState<number | null>(null);
+  const [localFoisonnementProductions, setLocalFoisonnementProductions] = useState<number | null>(null);
+  
   if (!currentProject) {
     return (
       <div className="p-4 text-center text-muted-foreground">
@@ -318,16 +324,21 @@ export const TensionClientTab = () => {
     };
   }, [linkedNode, calculationResults, simulationResults, isSimulationActive, selectedScenario, currentProject]);
   
-  // Récupérer les coefficients de foisonnement selon le type de client (correspondance stricte avec Paramètres)
-  const foisonnementCharges = useMemo(() => {
+  // Récupérer les coefficients de foisonnement GLOBAUX selon le type de client (correspondance stricte avec Paramètres)
+  const globalFoisonnementCharges = useMemo(() => {
     if (!selectedClient) return currentProject.foisonnementChargesResidentiel ?? 15;
     return selectedClient.clientType === 'industriel' 
       ? (currentProject.foisonnementChargesIndustriel ?? 70)
       : (currentProject.foisonnementChargesResidentiel ?? 15);
   }, [selectedClient, currentProject]);
   
-  // foisonnementProductions: utiliser ?? pour permettre 0% (ne pas remplacer par 100 si explicitement 0)
-  const foisonnementProductions = currentProject.foisonnementProductions ?? 100;
+  // foisonnementProductions GLOBAL: utiliser ?? pour permettre 0% (ne pas remplacer par 100 si explicitement 0)
+  const globalFoisonnementProductions = currentProject.foisonnementProductions ?? 100;
+  
+  // Valeurs EFFECTIVES : local si défini, sinon global
+  const effectiveFoisonnementCharges = localFoisonnementCharges ?? globalFoisonnementCharges;
+  const effectiveFoisonnementProductions = localFoisonnementProductions ?? globalFoisonnementProductions;
+  
   const cosPhiCharges = currentProject.cosPhiCharges || 0.95;
   const cosPhiProductions = currentProject.cosPhiProductions || 1.0;
   
@@ -340,7 +351,7 @@ export const TensionClientTab = () => {
     return { A: 33.33, B: 33.33, C: 33.34 };
   }, [currentProject.manualPhaseDistribution]);
   
-  // Calcul des résultats
+  // Calcul des résultats avec foisonnement EFFECTIF (local ou global)
   const calculationResult = useMemo(() => {
     if (!selectedClient || !selectedCable || effectiveLength <= 0) return null;
     
@@ -350,8 +361,8 @@ export const TensionClientTab = () => {
       selectedCable,
       effectiveLength,
       currentProject.voltageSystem,
-      foisonnementCharges,
-      foisonnementProductions,
+      effectiveFoisonnementCharges,
+      effectiveFoisonnementProductions,
       cosPhiCharges,
       cosPhiProductions,
       desequilibre
@@ -362,8 +373,8 @@ export const TensionClientTab = () => {
     effectiveLength, 
     nodeVoltages, 
     currentProject.voltageSystem,
-    foisonnementCharges,
-    foisonnementProductions,
+    effectiveFoisonnementCharges,
+    effectiveFoisonnementProductions,
     cosPhiCharges,
     cosPhiProductions,
     desequilibre
@@ -375,6 +386,12 @@ export const TensionClientTab = () => {
       setSelectedBranchementCableId(compatibleCables[0]?.id || '');
     }
   }, [selectedClient, compatibleCables, selectedBranchementCableId]);
+  
+  // Réinitialiser les valeurs locales quand le client change
+  useEffect(() => {
+    setLocalFoisonnementCharges(null);
+    setLocalFoisonnementProductions(null);
+  }, [selectedClient?.id]);
   
   return (
     <div className="p-4 space-y-4">
@@ -568,6 +585,104 @@ export const TensionClientTab = () => {
         </Card>
       </div>
       
+      {/* Card Foisonnement client (local) */}
+      {selectedClient && (
+        <Card className="bg-card/50 backdrop-blur border-border/50">
+          <CardHeader className="pb-2 pt-3 px-4">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Percent className="h-4 w-4 text-purple-500" />
+              Foisonnement client (local)
+              <span className="text-xs font-normal text-muted-foreground ml-2">
+                Ajuste uniquement le calcul du ΔU branchement
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Foisonnement Charges */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs flex items-center gap-1">
+                    <Plug className="h-3 w-3 text-blue-500" />
+                    Charges
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-mono font-medium">
+                      {effectiveFoisonnementCharges}%
+                    </span>
+                    {localFoisonnementCharges !== null && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-6 px-2"
+                        onClick={() => setLocalFoisonnementCharges(null)}
+                        title="Revenir à la valeur globale"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <Slider
+                  value={[effectiveFoisonnementCharges]}
+                  min={0}
+                  max={100}
+                  step={1}
+                  onValueChange={([v]) => setLocalFoisonnementCharges(v)}
+                  className="py-1"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Global projet ({selectedClient.clientType === 'industriel' ? 'industriel' : 'résidentiel'}) : {globalFoisonnementCharges}%
+                  {localFoisonnementCharges !== null && (
+                    <Badge variant="outline" className="ml-2 text-[9px] px-1 py-0">Local</Badge>
+                  )}
+                </p>
+              </div>
+
+              {/* Foisonnement Productions */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs flex items-center gap-1">
+                    <Zap className="h-3 w-3 text-orange-500" />
+                    Productions
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-mono font-medium">
+                      {effectiveFoisonnementProductions}%
+                    </span>
+                    {localFoisonnementProductions !== null && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-6 px-2"
+                        onClick={() => setLocalFoisonnementProductions(null)}
+                        title="Revenir à la valeur globale"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <Slider
+                  value={[effectiveFoisonnementProductions]}
+                  min={0}
+                  max={100}
+                  step={1}
+                  onValueChange={([v]) => setLocalFoisonnementProductions(v)}
+                  className="py-1"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Global projet : {globalFoisonnementProductions}%
+                  {localFoisonnementProductions !== null && (
+                    <Badge variant="outline" className="ml-2 text-[9px] px-1 py-0">Local</Badge>
+                  )}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
       {/* Card Résultats */}
       {calculationResult && (
         <Card>
@@ -594,24 +709,31 @@ export const TensionClientTab = () => {
           <CardContent>
             {/* Puissances foisonnées */}
             <div className="mb-4 p-3 bg-muted/30 rounded-lg">
-              <div className="text-xs text-muted-foreground mb-2">Puissances foisonnées</div>
+              <div className="text-xs text-muted-foreground mb-2 flex items-center gap-2">
+                Puissances foisonnées
+                {(localFoisonnementCharges !== null || localFoisonnementProductions !== null) && (
+                  <Badge variant="secondary" className="text-[9px] px-1 py-0">Foisonnement local</Badge>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-muted-foreground">Charge :</span>
                   <span className="ml-1">
-                    {selectedClient!.puissanceContractuelle_kVA} kVA × {foisonnementCharges}% = 
+                    {selectedClient!.puissanceContractuelle_kVA} kVA × {effectiveFoisonnementCharges}% = 
                     <span className="font-medium ml-1">
-                      {(selectedClient!.puissanceContractuelle_kVA * foisonnementCharges / 100).toFixed(2)} kVA
+                      {(selectedClient!.puissanceContractuelle_kVA * effectiveFoisonnementCharges / 100).toFixed(2)} kVA
                     </span>
+                    {localFoisonnementCharges !== null && <span className="text-purple-500 text-xs ml-1">(local)</span>}
                   </span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Production :</span>
                   <span className="ml-1">
-                    {selectedClient!.puissancePV_kVA} kVA × {foisonnementProductions}% = 
+                    {selectedClient!.puissancePV_kVA} kVA × {effectiveFoisonnementProductions}% = 
                     <span className="font-medium ml-1">
-                      {(selectedClient!.puissancePV_kVA * foisonnementProductions / 100).toFixed(2)} kVA
+                      {(selectedClient!.puissancePV_kVA * effectiveFoisonnementProductions / 100).toFixed(2)} kVA
                     </span>
+                    {localFoisonnementProductions !== null && <span className="text-purple-500 text-xs ml-1">(local)</span>}
                   </span>
                 </div>
               </div>

@@ -1593,6 +1593,10 @@ export class SimulationCalculator extends ElectricalCalculator {
     // Identifier tous les nœuds en amont de tous les SRG2 (entre la source et les SRG2)
     const allUpstreamNodeIds = new Set<string>();
     
+    // COHÉRENCE: Calculer le foisonnement effectif UNE SEULE FOIS avant la boucle
+    const foisonnementChargesEffectif = project.foisonnementChargesResidentiel ?? project.foisonnementCharges;
+    console.log(`📊 COHÉRENCE SRG2: foisonnementChargesEffectif = ${foisonnementChargesEffectif}% (résidentiel: ${project.foisonnementChargesResidentiel}, legacy: ${project.foisonnementCharges})`);
+    
     while (!converged && iteration < SimulationCalculator.SIM_MAX_ITERATIONS) {
       iteration++;
       
@@ -1602,8 +1606,6 @@ export class SimulationCalculator extends ElectricalCalculator {
       }
       
       // Calculer le scénario avec l'état actuel des nœuds
-      // COHÉRENCE: Utiliser les mêmes paramètres que networkStore.updateAllCalculations
-      const foisonnementChargesEffectif = project.foisonnementChargesResidentiel ?? project.foisonnementCharges;
       
       const result = this.calculateScenario(
         workingNodes,
@@ -1714,12 +1716,13 @@ export class SimulationCalculator extends ElectricalCalculator {
     }
     
     // Recalculer une dernière fois avec les tensions finales
+    // COHÉRENCE: Utiliser les mêmes paramètres que le calcul initial
     let finalResult = this.calculateScenario(
       workingNodes,
       project.cables,
       project.cableTypes,
       scenario,
-      project.foisonnementCharges,
+      foisonnementChargesEffectif,  // CORRECTION: Utiliser le même foisonnement que le calcul initial
       project.foisonnementProductions,
       project.transformerConfig,
       project.loadModel,

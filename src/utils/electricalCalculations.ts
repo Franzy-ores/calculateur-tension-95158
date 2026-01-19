@@ -1228,27 +1228,39 @@ export class ElectricalCalculator {
               
               if (vNode?.hasSRG2Device && vNode.srg2RegulationCoefficients) {
                 // Appliquer les coefficients de régulation SRG2 aux tensions calculées
+                // CORRECTION: Utiliser une tolérance de 5° pour la détection de phase (compatibilité 230V Triangle/400V Star)
+                const ANGLE_TOLERANCE = 5;
                 let regulationCoeff = 0;
-                if (angleDeg === 0) {
-                  // Phase A
+                
+                // Normaliser l'angle entre -180° et 180°
+                let normalizedAngle = angleDeg;
+                while (normalizedAngle > 180) normalizedAngle -= 360;
+                while (normalizedAngle < -180) normalizedAngle += 360;
+                
+                if (Math.abs(normalizedAngle - 0) <= ANGLE_TOLERANCE) {
+                  // Phase A (0°)
                   regulationCoeff = vNode.srg2RegulationCoefficients.A;
-                } else if (angleDeg === -120) {
-                  // Phase B
+                  console.log(`🎯 SRG2 phase A détectée (angle=${angleDeg}°, normalisé=${normalizedAngle}°)`);
+                } else if (Math.abs(normalizedAngle - (-120)) <= ANGLE_TOLERANCE || Math.abs(normalizedAngle - 240) <= ANGLE_TOLERANCE) {
+                  // Phase B (-120° ou 240°)
                   regulationCoeff = vNode.srg2RegulationCoefficients.B;
-                } else if (angleDeg === 120) {
-                  // Phase C
+                  console.log(`🎯 SRG2 phase B détectée (angle=${angleDeg}°, normalisé=${normalizedAngle}°)`);
+                } else if (Math.abs(normalizedAngle - 120) <= ANGLE_TOLERANCE || Math.abs(normalizedAngle - (-240)) <= ANGLE_TOLERANCE) {
+                  // Phase C (120° ou -240°)
                   regulationCoeff = vNode.srg2RegulationCoefficients.C;
+                  console.log(`🎯 SRG2 phase C détectée (angle=${angleDeg}°, normalisé=${normalizedAngle}°)`);
                 } else {
-                  // Fallback: utiliser la moyenne
+                  // Fallback avec avertissement: utiliser la moyenne
                   const avgCoeff = (vNode.srg2RegulationCoefficients.A + vNode.srg2RegulationCoefficients.B + vNode.srg2RegulationCoefficients.C) / 3;
                   regulationCoeff = avgCoeff;
+                  console.warn(`⚠️ SRG2 angle non reconnu (${angleDeg}°, normalisé=${normalizedAngle}°) - utilisation moyenne: ${avgCoeff.toFixed(1)}%`);
                 }
                 
                 // Appliquer le coefficient: V_regulated = V_calculated × (1 + coefficient/100)
                 const regulationFactor = 1 + (regulationCoeff / 100);
                 const Vv_regulated = scale(Vv, regulationFactor);
                 V_node_phase.set(v, Vv_regulated);
-                console.log(`🎯 SRG2 régulation nœud ${v} (phase ${angleDeg}°): coeff=${regulationCoeff.toFixed(1)}%, V=${abs(Vv).toFixed(1)}V -> ${abs(Vv_regulated).toFixed(1)}V`);
+                console.log(`🎯 SRG2 régulation nœud ${v}: coeff=${regulationCoeff.toFixed(1)}%, V=${abs(Vv).toFixed(1)}V -> ${abs(Vv_regulated).toFixed(1)}V`);
               } else if (loadModel === "monophase_reparti" && vNode?.tensionCiblePhaseA && vNode?.tensionCiblePhaseB && vNode?.tensionCiblePhaseC) {
                 // En mode monophasé déséquilibré, utiliser les tensions par phase
                 let Vv_target: Complex;

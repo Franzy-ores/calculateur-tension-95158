@@ -140,6 +140,13 @@ export const MapView = () => {
   
   const useSimulation = isSimulationActive && activeEquipmentCount > 0;
   
+  console.log('🐛 MapView results logic:', {
+    isSimulationActive,
+    activeEquipmentCount,
+    useSimulation,
+    resultsType: useSimulation ? 'SIMULATION' : 'CALCULATION',
+    cableReplacementActive: simulationEquipment.cableReplacement?.enabled
+  });
   
   const resultsToUse = useSimulation ? simulationResults : calculationResults;
 
@@ -1138,7 +1145,34 @@ export const MapView = () => {
                 const results = resultsToUse[selectedScenario];
                 const phaseMetrics = results?.nodeMetricsPerPhase?.find(n => n.nodeId === node.id);
                 
-                const isUsingSimulation = (isSimulationActive && activeEquipmentCount > 0);
+                const isUsingSimulation = (simulationMode && activeEquipmentCount > 0);
+                
+                console.log('🐛 Phase voltages for node', node.id, {
+                  simulationMode,
+                  activeEquipmentCount,
+                  usingSimulation: isUsingSimulation,
+                  hasPhaseMetrics: !!phaseMetrics,
+                  voltages: phaseMetrics?.voltagesPerPhase
+                });
+                
+                // Comparaison spéciale pour le nœud compensateur
+                if (node.id === 'node-1756199772381') {
+                  const calcResults = calculationResults[selectedScenario];
+                  const simResults = simulationResults[selectedScenario];
+                  const calcMetrics = calcResults?.nodeMetricsPerPhase?.find(n => n.nodeId === node.id);
+                  const simMetrics = simResults?.nodeMetricsPerPhase?.find(n => n.nodeId === node.id);
+                  
+                  console.log('🔍 COMPENSATEUR COMPARISON:', {
+                    nodeId: node.id,
+                    calculation: calcMetrics?.voltagesPerPhase,
+                    simulation: simMetrics?.voltagesPerPhase,
+                    difference: {
+                      A: simMetrics?.voltagesPerPhase.A - calcMetrics?.voltagesPerPhase.A,
+                      B: simMetrics?.voltagesPerPhase.B - calcMetrics?.voltagesPerPhase.B,
+                      C: simMetrics?.voltagesPerPhase.C - calcMetrics?.voltagesPerPhase.C
+                    }
+                  });
+                }
                 
                 if (phaseMetrics) {
                   // Labels de phase selon le système de tension

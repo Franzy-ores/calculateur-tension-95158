@@ -2196,9 +2196,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       simulationEquipment: {
         ...state.simulationEquipment,
         srg2Devices: [...(state.simulationEquipment.srg2Devices || []), newSRG2]
-      },
-      // Activer automatiquement isSimulationActive quand un SRG2 est ajouté
-      isSimulationActive: true
+      }
     });
     
     toast.success(`SRG2 ${newSRG2.name} ajouté`);

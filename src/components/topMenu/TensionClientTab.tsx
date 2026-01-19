@@ -564,15 +564,15 @@ export const TensionClientTab = () => {
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-center">
                     <div className="p-2 bg-blue-500/10 rounded">
-                      <div className="text-xs text-muted-foreground">L1</div>
+                      <div className="text-xs text-muted-foreground">{currentProject?.voltageSystem === 'TRIPHASÉ_230V' ? 'L1-L2' : 'L1'}</div>
                       <div className="font-medium">{nodeVoltages.L1.toFixed(1)} V</div>
                     </div>
                     <div className="p-2 bg-green-500/10 rounded">
-                      <div className="text-xs text-muted-foreground">L2</div>
+                      <div className="text-xs text-muted-foreground">{currentProject?.voltageSystem === 'TRIPHASÉ_230V' ? 'L2-L3' : 'L2'}</div>
                       <div className="font-medium">{nodeVoltages.L2.toFixed(1)} V</div>
                     </div>
                     <div className="p-2 bg-orange-500/10 rounded">
-                      <div className="text-xs text-muted-foreground">L3</div>
+                      <div className="text-xs text-muted-foreground">{currentProject?.voltageSystem === 'TRIPHASÉ_230V' ? 'L3-L1' : 'L3'}</div>
                       <div className="font-medium">{nodeVoltages.L3.toFixed(1)} V</div>
                     </div>
                   </div>

@@ -592,7 +592,11 @@ export const TensionClientTab = () => {
                         
                         return (
                           <div key={phase.phase} className={`p-2 ${bgColors[index]} rounded relative`}>
-                            <div className="text-xs text-muted-foreground">{phase.phase}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {currentProject?.voltageSystem === 'TRIPHASÉ_230V' 
+                                ? (phase.phase === 'L1' ? 'L1-L2' : phase.phase === 'L2' ? 'L2-L3' : 'L3-L1')
+                                : phase.phase}
+                            </div>
                             <div className="font-medium">{phase.V_client.toFixed(1)} V</div>
                             <div className="text-[10px] mt-1">
                               {phase.status === 'normal' && (

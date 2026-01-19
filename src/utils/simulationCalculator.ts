@@ -1506,6 +1506,55 @@ export class SimulationCalculator extends ElectricalCalculator {
   }
 
   /**
+   * Trouve tous les nœuds EN AMONT d'un nœud donné (entre la source et ce nœud)
+   * Utilisé pour identifier les nœuds qui ne doivent PAS être affectés par le SRG2
+   */
+  private findUpstreamNodes(nodes: Node[], cables: Cable[], targetNodeId: string): string[] {
+    const upstreamNodes: string[] = [];
+    
+    // Trouver la source (nœud avec isSource = true)
+    const sourceNode = nodes.find(n => n.isSource === true);
+    if (!sourceNode || sourceNode.id === targetNodeId) {
+      return upstreamNodes;
+    }
+    
+    // Construire l'arbre du réseau (BFS depuis la source)
+    const parent = new Map<string, string>(); // nodeId -> parentNodeId
+    const visited = new Set<string>();
+    const queue: string[] = [sourceNode.id];
+    visited.add(sourceNode.id);
+    
+    while (queue.length > 0) {
+      const currentId = queue.shift()!;
+      
+      // Trouver les câbles connectés à ce nœud
+      const connectedCables = cables.filter(
+        c => c.nodeAId === currentId || c.nodeBId === currentId
+      );
+      
+      for (const cable of connectedCables) {
+        const nextNodeId = cable.nodeAId === currentId ? cable.nodeBId : cable.nodeAId;
+        
+        if (!visited.has(nextNodeId)) {
+          visited.add(nextNodeId);
+          parent.set(nextNodeId, currentId);
+          queue.push(nextNodeId);
+        }
+      }
+    }
+    
+    // Remonter depuis le nœud cible vers la source pour trouver tous les nœuds amont
+    let currentId: string | undefined = parent.get(targetNodeId);
+    while (currentId) {
+      upstreamNodes.push(currentId);
+      currentId = parent.get(currentId);
+    }
+    
+    console.log(`🔍 Nœuds AMONT de ${targetNodeId}:`, upstreamNodes);
+    return upstreamNodes;
+  }
+
+  /**
    * Calcul itératif avec régulation SRG2
    * DIAGNOSTIC ID: vérifie la cohérence des IDs pendant toute la simulation
    */
@@ -1538,6 +1587,12 @@ export class SimulationCalculator extends ElectricalCalculator {
     // Stocker les tensions originales avant toute modification SRG2
     const originalVoltages = new Map<string, {A: number, B: number, C: number}>();
     
+    // CORRECTION BUG: Stocker les tensions de TOUS les nœuds AMONT des SRG2 pour les figer
+    const upstreamNodeVoltages = new Map<string, {A: number, B: number, C: number}>();
+    
+    // Identifier tous les nœuds en amont de tous les SRG2 (entre la source et les SRG2)
+    const allUpstreamNodeIds = new Set<string>();
+    
     while (!converged && iteration < SimulationCalculator.SIM_MAX_ITERATIONS) {
       iteration++;
       
@@ -1562,8 +1617,9 @@ export class SimulationCalculator extends ElectricalCalculator {
         project.clientLinks
       );
       
-      // Stocker les tensions originales à la première itération
+      // À la première itération, stocker les tensions originales et identifier les nœuds amont
       if (iteration === 1) {
+        // Stocker les tensions de référence pour les nœuds SRG2
         for (const srg2 of srg2Devices) {
           const nodeMetricsPerPhase = result.nodeMetricsPerPhase?.find(nm => 
             String(nm.nodeId) === String(srg2.nodeId)
@@ -1576,6 +1632,27 @@ export class SimulationCalculator extends ElectricalCalculator {
               C: nodeMetricsPerPhase.voltagesPerPhase.C
             });
             console.log(`📋 Tensions originales stockées pour SRG2 ${srg2.nodeId}:`, originalVoltages.get(srg2.nodeId));
+          }
+          
+          // Identifier et stocker les tensions de tous les nœuds AMONT de ce SRG2
+          const upstreamIds = this.findUpstreamNodes(workingNodes, project.cables, srg2.nodeId);
+          for (const upstreamId of upstreamIds) {
+            allUpstreamNodeIds.add(upstreamId);
+          }
+        }
+        
+        // Stocker les tensions de tous les nœuds amont
+        for (const upstreamId of allUpstreamNodeIds) {
+          const upstreamMetrics = result.nodeMetricsPerPhase?.find(nm => 
+            String(nm.nodeId) === String(upstreamId)
+          );
+          if (upstreamMetrics?.voltagesPerPhase) {
+            upstreamNodeVoltages.set(upstreamId, {
+              A: upstreamMetrics.voltagesPerPhase.A,
+              B: upstreamMetrics.voltagesPerPhase.B,
+              C: upstreamMetrics.voltagesPerPhase.C
+            });
+            console.log(`🔒 Tensions figées pour nœud AMONT ${upstreamId}:`, upstreamNodeVoltages.get(upstreamId));
           }
         }
       }
@@ -1626,7 +1703,7 @@ export class SimulationCalculator extends ElectricalCalculator {
     }
     
     // Recalculer une dernière fois avec les tensions finales
-    const finalResult = this.calculateScenario(
+    let finalResult = this.calculateScenario(
       workingNodes,
       project.cables,
       project.cableTypes,
@@ -1640,6 +1717,27 @@ export class SimulationCalculator extends ElectricalCalculator {
       project.clientsImportes,
       project.clientLinks
     );
+    
+    // CORRECTION BUG: Restaurer les tensions des nœuds AMONT qui ne doivent pas être affectés par le SRG2
+    if (finalResult.nodeMetricsPerPhase && upstreamNodeVoltages.size > 0) {
+      console.log(`🔧 Restauration des tensions amont figées pour ${upstreamNodeVoltages.size} nœuds`);
+      finalResult = {
+        ...finalResult,
+        nodeMetricsPerPhase: finalResult.nodeMetricsPerPhase.map(nm => {
+          if (allUpstreamNodeIds.has(String(nm.nodeId))) {
+            const frozenVoltages = upstreamNodeVoltages.get(String(nm.nodeId));
+            if (frozenVoltages) {
+              console.log(`   Nœud ${nm.nodeId}: restauration à A=${frozenVoltages.A.toFixed(1)}V, B=${frozenVoltages.B.toFixed(1)}V, C=${frozenVoltages.C.toFixed(1)}V`);
+              return {
+                ...nm,
+                voltagesPerPhase: { ...frozenVoltages }
+              };
+            }
+          }
+          return nm;
+        })
+      };
+    }
 
     console.log('🎯 SRG2 calcul final terminé - marqueurs SRG2 conservés pour nodeMetricsPerPhase');
     

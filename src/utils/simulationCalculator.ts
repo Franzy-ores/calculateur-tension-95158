@@ -1602,12 +1602,15 @@ export class SimulationCalculator extends ElectricalCalculator {
       }
       
       // Calculer le scénario avec l'état actuel des nœuds
+      // COHÉRENCE: Utiliser les mêmes paramètres que networkStore.updateAllCalculations
+      const foisonnementChargesEffectif = project.foisonnementChargesResidentiel ?? project.foisonnementCharges;
+      
       const result = this.calculateScenario(
         workingNodes,
         project.cables,
         project.cableTypes,
         scenario,
-        project.foisonnementCharges,
+        foisonnementChargesEffectif,
         project.foisonnementProductions,
         project.transformerConfig,
         project.loadModel,
@@ -1631,7 +1634,15 @@ export class SimulationCalculator extends ElectricalCalculator {
               B: nodeMetricsPerPhase.voltagesPerPhase.B,
               C: nodeMetricsPerPhase.voltagesPerPhase.C
             });
-            console.log(`📋 Tensions originales stockées pour SRG2 ${srg2.nodeId}:`, originalVoltages.get(srg2.nodeId));
+            
+            // LOG COHÉRENCE: Afficher les tensions naturelles lues par le SRG2
+            console.log(`📋 COHÉRENCE SRG2 ${srg2.nodeId}: Tensions naturelles stockées:`, {
+              A: nodeMetricsPerPhase.voltagesPerPhase.A.toFixed(1),
+              B: nodeMetricsPerPhase.voltagesPerPhase.B.toFixed(1),
+              C: nodeMetricsPerPhase.voltagesPerPhase.C.toFixed(1),
+              foisonnementUtilisé: foisonnementChargesEffectif,
+              scenario: scenario
+            });
           }
           
           // Identifier et stocker les tensions de tous les nœuds AMONT de ce SRG2

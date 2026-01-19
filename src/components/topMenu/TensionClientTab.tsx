@@ -87,14 +87,15 @@ const calculateClientVoltage = (
       const coupling = client.phaseCoupling || 'A-B';
       const phaseLabel = coupling.replace(/A/g, 'L1').replace(/B/g, 'L2').replace(/C/g, 'L3');
       
-      // Tension phase-phase au noeud (utiliser la moyenne simplifiée)
+      // Tension phase-phase au noeud
+      // En 230V Triangle: L1=L1-L2, L2=L2-L3, L3=L3-L1 (=L1-L3)
       let V_node = 230;
       if (coupling.includes('A') && coupling.includes('B')) {
-        V_node = (nodeVoltages.L1 + nodeVoltages.L2) / 2;
+        V_node = nodeVoltages.L1; // L1-L2
       } else if (coupling.includes('B') && coupling.includes('C')) {
-        V_node = (nodeVoltages.L2 + nodeVoltages.L3) / 2;
+        V_node = nodeVoltages.L2; // L2-L3
       } else if (coupling.includes('A') && coupling.includes('C')) {
-        V_node = (nodeVoltages.L1 + nodeVoltages.L3) / 2;
+        V_node = nodeVoltages.L3; // L3-L1 (= L1-L3)
       }
       
       const V_client = V_node - deltaU_net;

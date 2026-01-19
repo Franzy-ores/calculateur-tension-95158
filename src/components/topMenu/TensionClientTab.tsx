@@ -768,6 +768,14 @@ export const TensionClientTab = () => {
                       <td className="text-right p-2 text-green-500">+{phase.deltaU_prod.toFixed(2)} V</td>
                       <td className="text-right p-2 font-medium">
                         {phase.deltaU_net >= 0 ? '-' : '+'}{Math.abs(phase.deltaU_net).toFixed(2)} V
+                        {(() => {
+                          const deltaUPercent = Math.abs(phase.deltaU_net) / phase.V_node * 100;
+                          return deltaUPercent > 1 ? (
+                            <span className="ml-1 text-orange-500" title="ΔU > 1% (max autorisé)">
+                              ⚠️
+                            </span>
+                          ) : null;
+                        })()}
                       </td>
                       <td className="text-right p-2 font-bold">{phase.V_client.toFixed(1)} V</td>
                       <td className="text-center p-2">
@@ -796,8 +804,18 @@ export const TensionClientTab = () => {
               </table>
             </div>
             
+            {/* Warning chute de tension > 1% */}
+            {calculationResult.phases.some(phase => Math.abs(phase.deltaU_net) / phase.V_node * 100 > 1) && (
+              <div className="mt-3 p-2 bg-orange-500/10 border border-orange-500/30 rounded-md flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-orange-500 flex-shrink-0" />
+                <span className="text-sm text-orange-600 dark:text-orange-400">
+                  <strong>Attention :</strong> La chute de tension entre le nœud et le raccordement dépasse 1% (maximum autorisé).
+                </span>
+              </div>
+            )}
+
             {/* Légende conformité */}
-            <div className="mt-4 text-xs text-muted-foreground flex gap-4">
+            <div className="mt-4 text-xs text-muted-foreground flex flex-wrap gap-4">
               <span>Conformité EN50160 :</span>
               <span className="flex items-center gap-1">
                 <CheckCircle className="h-3 w-3 text-green-500" /> Normal (207-253V)
@@ -807,6 +825,9 @@ export const TensionClientTab = () => {
               </span>
               <span className="flex items-center gap-1">
                 <AlertCircle className="h-3 w-3 text-red-500" /> Critical (±10%)
+              </span>
+              <span className="flex items-center gap-1 border-l pl-4">
+                <span className="text-orange-500">⚠️</span> ΔU nœud-client &gt; 1%
               </span>
             </div>
           </CardContent>

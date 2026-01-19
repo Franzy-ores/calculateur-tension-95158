@@ -545,33 +545,79 @@ export const TensionClientTab = () => {
           </CardContent>
         </Card>
         
-        {/* Card Tensions au nœud */}
+        {/* Card Tensions au nœud et au raccordement */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Zap className="h-4 w-4" />
-              Tensions au nœud
+              Tensions au nœud et au raccordement
             </CardTitle>
           </CardHeader>
           <CardContent>
             {linkedNode ? (
-              <div className="space-y-2">
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="p-2 bg-blue-500/10 rounded">
-                    <div className="text-xs text-muted-foreground">L1</div>
-                    <div className="font-medium">{nodeVoltages.L1.toFixed(1)} V</div>
+              <div className="space-y-4">
+                {/* Section Tensions au nœud */}
+                <div>
+                  <div className="text-xs text-muted-foreground mb-2 font-medium">
+                    Au nœud
                   </div>
-                  <div className="p-2 bg-green-500/10 rounded">
-                    <div className="text-xs text-muted-foreground">L2</div>
-                    <div className="font-medium">{nodeVoltages.L2.toFixed(1)} V</div>
-                  </div>
-                  <div className="p-2 bg-orange-500/10 rounded">
-                    <div className="text-xs text-muted-foreground">L3</div>
-                    <div className="font-medium">{nodeVoltages.L3.toFixed(1)} V</div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="p-2 bg-blue-500/10 rounded">
+                      <div className="text-xs text-muted-foreground">L1</div>
+                      <div className="font-medium">{nodeVoltages.L1.toFixed(1)} V</div>
+                    </div>
+                    <div className="p-2 bg-green-500/10 rounded">
+                      <div className="text-xs text-muted-foreground">L2</div>
+                      <div className="font-medium">{nodeVoltages.L2.toFixed(1)} V</div>
+                    </div>
+                    <div className="p-2 bg-orange-500/10 rounded">
+                      <div className="text-xs text-muted-foreground">L3</div>
+                      <div className="font-medium">{nodeVoltages.L3.toFixed(1)} V</div>
+                    </div>
                   </div>
                 </div>
                 
-                <div className="text-xs text-muted-foreground mt-2">
+                {/* Section Tensions au raccordement */}
+                {calculationResult && (
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-2 font-medium">
+                      Au raccordement
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      {calculationResult.phases.map((phase, index) => {
+                        const bgColors = ['bg-blue-500/10', 'bg-green-500/10', 'bg-orange-500/10'];
+                        const deltaUPercent = Math.abs(phase.deltaU_net) / phase.V_node * 100;
+                        const isOver1Percent = deltaUPercent > 1;
+                        
+                        return (
+                          <div key={phase.phase} className={`p-2 ${bgColors[index]} rounded relative`}>
+                            <div className="text-xs text-muted-foreground">{phase.phase}</div>
+                            <div className="font-medium">{phase.V_client.toFixed(1)} V</div>
+                            <div className="text-[10px] mt-1">
+                              {phase.status === 'normal' && (
+                                <span className="text-green-600 dark:text-green-400">✓ OK</span>
+                              )}
+                              {phase.status === 'warning' && (
+                                <span className="text-yellow-600 dark:text-yellow-400">⚠ ±5%</span>
+                              )}
+                              {phase.status === 'critical' && (
+                                <span className="text-red-600 dark:text-red-400">✗ ±10%</span>
+                              )}
+                            </div>
+                            {isOver1Percent && (
+                              <span className="absolute top-1 right-1 text-orange-500 text-xs" 
+                                    title="ΔU nœud-client > ±1%">
+                                ⚠️
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                
+                <div className="text-xs text-muted-foreground">
                   Scénario : {selectedScenario}
                   {isSimulationActive && <Badge variant="outline" className="ml-2">Simulation</Badge>}
                 </div>

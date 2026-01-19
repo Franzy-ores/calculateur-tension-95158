@@ -1147,12 +1147,16 @@ export const MapView = () => {
                 
                 const isUsingSimulation = (simulationMode && activeEquipmentCount > 0);
                 
-                console.log('🐛 Phase voltages for node', node.id, {
+                // LOG COHÉRENCE: Vérifier source des tensions affichées
+                console.log('🔍 COHÉRENCE AFFICHAGE - Nœud', node.id, {
+                  source: isUsingSimulation ? 'simulationResults' : 'calculationResults',
                   simulationMode,
                   activeEquipmentCount,
-                  usingSimulation: isUsingSimulation,
-                  hasPhaseMetrics: !!phaseMetrics,
-                  voltages: phaseMetrics?.voltagesPerPhase
+                  tensionsAffichées: phaseMetrics?.voltagesPerPhase ? {
+                    A: phaseMetrics.voltagesPerPhase.A.toFixed(1),
+                    B: phaseMetrics.voltagesPerPhase.B.toFixed(1),
+                    C: phaseMetrics.voltagesPerPhase.C.toFixed(1)
+                  } : 'N/A'
                 });
                 
                 // Comparaison spéciale pour le nœud compensateur

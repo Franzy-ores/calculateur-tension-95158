@@ -1637,14 +1637,6 @@ export class SimulationCalculator extends ElectricalCalculator {
               C: nodeMetricsPerPhase.voltagesPerPhase.C
             });
             
-            // LOG COHÉRENCE: Afficher les tensions naturelles lues par le SRG2
-            console.log(`📋 COHÉRENCE SRG2 ${srg2.nodeId}: Tensions naturelles stockées:`, {
-              A: nodeMetricsPerPhase.voltagesPerPhase.A.toFixed(1),
-              B: nodeMetricsPerPhase.voltagesPerPhase.B.toFixed(1),
-              C: nodeMetricsPerPhase.voltagesPerPhase.C.toFixed(1),
-              foisonnementUtilisé: foisonnementChargesEffectif,
-              scenario: scenario
-            });
           }
           
           // Identifier et stocker les tensions de tous les nœuds AMONT de ce SRG2
@@ -1665,7 +1657,7 @@ export class SimulationCalculator extends ElectricalCalculator {
               B: upstreamMetrics.voltagesPerPhase.B,
               C: upstreamMetrics.voltagesPerPhase.C
             });
-            console.log(`🔒 Tensions figées pour nœud AMONT ${upstreamId}:`, upstreamNodeVoltages.get(upstreamId));
+            
           }
         }
       }

@@ -140,13 +140,6 @@ export const MapView = () => {
   
   const useSimulation = isSimulationActive && activeEquipmentCount > 0;
   
-  console.log('🐛 MapView results logic:', {
-    isSimulationActive,
-    activeEquipmentCount,
-    useSimulation,
-    resultsType: useSimulation ? 'SIMULATION' : 'CALCULATION',
-    cableReplacementActive: simulationEquipment.cableReplacement?.enabled
-  });
   
   const resultsToUse = useSimulation ? simulationResults : calculationResults;
 
@@ -1145,38 +1138,7 @@ export const MapView = () => {
                 const results = resultsToUse[selectedScenario];
                 const phaseMetrics = results?.nodeMetricsPerPhase?.find(n => n.nodeId === node.id);
                 
-                const isUsingSimulation = (simulationMode && activeEquipmentCount > 0);
-                
-                // LOG COHÉRENCE: Vérifier source des tensions affichées
-                console.log('🔍 COHÉRENCE AFFICHAGE - Nœud', node.id, {
-                  source: isUsingSimulation ? 'simulationResults' : 'calculationResults',
-                  simulationMode,
-                  activeEquipmentCount,
-                  tensionsAffichées: phaseMetrics?.voltagesPerPhase ? {
-                    A: phaseMetrics.voltagesPerPhase.A.toFixed(1),
-                    B: phaseMetrics.voltagesPerPhase.B.toFixed(1),
-                    C: phaseMetrics.voltagesPerPhase.C.toFixed(1)
-                  } : 'N/A'
-                });
-                
-                // Comparaison spéciale pour le nœud compensateur
-                if (node.id === 'node-1756199772381') {
-                  const calcResults = calculationResults[selectedScenario];
-                  const simResults = simulationResults[selectedScenario];
-                  const calcMetrics = calcResults?.nodeMetricsPerPhase?.find(n => n.nodeId === node.id);
-                  const simMetrics = simResults?.nodeMetricsPerPhase?.find(n => n.nodeId === node.id);
-                  
-                  console.log('🔍 COMPENSATEUR COMPARISON:', {
-                    nodeId: node.id,
-                    calculation: calcMetrics?.voltagesPerPhase,
-                    simulation: simMetrics?.voltagesPerPhase,
-                    difference: {
-                      A: simMetrics?.voltagesPerPhase.A - calcMetrics?.voltagesPerPhase.A,
-                      B: simMetrics?.voltagesPerPhase.B - calcMetrics?.voltagesPerPhase.B,
-                      C: simMetrics?.voltagesPerPhase.C - calcMetrics?.voltagesPerPhase.C
-                    }
-                  });
-                }
+                const isUsingSimulation = (isSimulationActive && activeEquipmentCount > 0);
                 
                 if (phaseMetrics) {
                   // Labels de phase selon le système de tension

@@ -348,7 +348,13 @@ export const SRG2Panel = () => {
           </div>
 
           {/* Résultats de simulation */}
-          {srg2.tensionEntree && (
+          {srg2.tensionEntree && (() => {
+            const is230V = currentProject?.voltageSystem === 'TRIPHASÉ_230V';
+            const phaseLabels = is230V 
+              ? { A: 'L1-L2', B: 'L2-L3', C: 'L3-L1' }
+              : { A: 'L1', B: 'L2', C: 'L3' };
+            
+            return (
             <div className="bg-muted/50 p-2 rounded">
               <div className="text-xs font-medium mb-1">Résultats de régulation:</div>
               
@@ -356,9 +362,9 @@ export const SRG2Panel = () => {
               <div className="mb-2">
                 <div className="text-xs text-muted-foreground mb-1">Tensions d'entrée:</div>
                 <div className="grid grid-cols-3 gap-1 text-xs">
-                  <div>A: {srg2.tensionEntree.A.toFixed(1)}V</div>
-                  <div>B: {srg2.tensionEntree.B.toFixed(1)}V</div>
-                  <div>C: {srg2.tensionEntree.C.toFixed(1)}V</div>
+                  <div>{phaseLabels.A}: {srg2.tensionEntree.A.toFixed(1)}V</div>
+                  <div>{phaseLabels.B}: {srg2.tensionEntree.B.toFixed(1)}V</div>
+                  <div>{phaseLabels.C}: {srg2.tensionEntree.C.toFixed(1)}V</div>
                 </div>
               </div>
 
@@ -367,9 +373,9 @@ export const SRG2Panel = () => {
                 <div className="mb-2">
                   <div className="text-xs text-muted-foreground mb-1">États commutateurs:</div>
                   <div className="grid grid-cols-3 gap-1 text-xs">
-                    <div>A: <Badge variant="outline" className="text-xs">{srg2.etatCommutateur.A}</Badge></div>
-                    <div>B: <Badge variant="outline" className="text-xs">{srg2.etatCommutateur.B}</Badge></div>
-                    <div>C: <Badge variant="outline" className="text-xs">{srg2.etatCommutateur.C}</Badge></div>
+                    <div>{phaseLabels.A}: <Badge variant="outline" className="text-xs">{srg2.etatCommutateur.A}</Badge></div>
+                    <div>{phaseLabels.B}: <Badge variant="outline" className="text-xs">{srg2.etatCommutateur.B}</Badge></div>
+                    <div>{phaseLabels.C}: <Badge variant="outline" className="text-xs">{srg2.etatCommutateur.C}</Badge></div>
                   </div>
                 </div>
               )}
@@ -379,9 +385,9 @@ export const SRG2Panel = () => {
                 <div className="mb-2">
                   <div className="text-xs text-muted-foreground mb-1">Coefficients:</div>
                   <div className="grid grid-cols-3 gap-1 text-xs">
-                    <div>A: {srg2.coefficientsAppliques.A > 0 ? '+' : ''}{srg2.coefficientsAppliques.A.toFixed(1)}%</div>
-                    <div>B: {srg2.coefficientsAppliques.B > 0 ? '+' : ''}{srg2.coefficientsAppliques.B.toFixed(1)}%</div>
-                    <div>C: {srg2.coefficientsAppliques.C > 0 ? '+' : ''}{srg2.coefficientsAppliques.C.toFixed(1)}%</div>
+                    <div>{phaseLabels.A}: {srg2.coefficientsAppliques.A > 0 ? '+' : ''}{srg2.coefficientsAppliques.A.toFixed(1)}%</div>
+                    <div>{phaseLabels.B}: {srg2.coefficientsAppliques.B > 0 ? '+' : ''}{srg2.coefficientsAppliques.B.toFixed(1)}%</div>
+                    <div>{phaseLabels.C}: {srg2.coefficientsAppliques.C > 0 ? '+' : ''}{srg2.coefficientsAppliques.C.toFixed(1)}%</div>
                   </div>
                 </div>
               )}
@@ -391,9 +397,9 @@ export const SRG2Panel = () => {
                 <div className="mb-2">
                   <div className="text-xs text-muted-foreground mb-1">Tensions de sortie:</div>
                   <div className="grid grid-cols-3 gap-1 text-xs">
-                    <div>A: {srg2.tensionSortie.A.toFixed(1)}V</div>
-                    <div>B: {srg2.tensionSortie.B.toFixed(1)}V</div>
-                    <div>C: {srg2.tensionSortie.C.toFixed(1)}V</div>
+                    <div>{phaseLabels.A}: {srg2.tensionSortie.A.toFixed(1)}V</div>
+                    <div>{phaseLabels.B}: {srg2.tensionSortie.B.toFixed(1)}V</div>
+                    <div>{phaseLabels.C}: {srg2.tensionSortie.C.toFixed(1)}V</div>
                   </div>
                 </div>
               )}
@@ -415,7 +421,8 @@ export const SRG2Panel = () => {
                 </Badge>
               )}
             </div>
-          )}
+            );
+          })()}
         </CardContent>
       </Card>
     );

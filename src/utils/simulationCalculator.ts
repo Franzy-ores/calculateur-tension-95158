@@ -1607,6 +1607,7 @@ export class SimulationCalculator extends ElectricalCalculator {
           srg2.tensionEntree = regulationResult.tensionEntree;
           srg2.etatCommutateur = regulationResult.etatCommutateur;
           srg2.coefficientsAppliques = regulationResult.coefficientsAppliques;
+          srg2.tensionSortie = regulationResult.tensionSortie;
         }
       }
       

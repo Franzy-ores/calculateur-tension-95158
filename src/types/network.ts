@@ -185,6 +185,7 @@ export interface Node {
   // SRG2 regulation properties (transformer approach)
   hasSRG2Device?: boolean; // indique si ce nœud a un dispositif SRG2
   srg2RegulationCoefficients?: {A: number, B: number, C: number}; // coefficients de régulation SRG2 en % (multiplicateurs)
+  srg2TensionSortie?: {A: number, B: number, C: number}; // tensions de sortie SRG2 pré-calculées (V)
   // Répartition des charges et productions par phase (mode monophasé)
   phaseDistribution?: {
     charges?: { A: number; B: number; C: number };

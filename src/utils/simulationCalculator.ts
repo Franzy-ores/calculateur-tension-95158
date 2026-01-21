@@ -1685,11 +1685,11 @@ export class SimulationCalculator extends ElectricalCalculator {
         }
       }
       
-      // Appliquer les coefficients de régulation SRG2 aux nœuds correspondants
+      // Appliquer les coefficients et tensions de sortie SRG2 aux nœuds correspondants
       for (const srg2 of srg2Devices) {
         const coefficients = voltageChanges.get(srg2.nodeId);
-        if (coefficients) {
-          this.applySRG2Coefficients(workingNodes, srg2, coefficients);
+        if (coefficients && srg2.tensionSortie) {
+          this.applySRG2Coefficients(workingNodes, srg2, coefficients, srg2.tensionSortie);
         }
       }
       
@@ -1903,10 +1903,12 @@ export class SimulationCalculator extends ElectricalCalculator {
   private applySRG2Coefficients(
     nodes: Node[],
     srg2Device: SRG2Config,
-    coefficients: { A: number; B: number; C: number }
+    coefficients: { A: number; B: number; C: number },
+    tensionSortie: { A: number; B: number; C: number }
   ): void {
     console.log(`🎯 Application coefficients SRG2 ${srg2Device.id} sur nœud ${srg2Device.nodeId}`);
     console.log(`   Coefficients: A=${coefficients.A.toFixed(1)}%, B=${coefficients.B.toFixed(1)}%, C=${coefficients.C.toFixed(1)}%`);
+    console.log(`   Tensions sortie: A=${tensionSortie.A.toFixed(1)}V, B=${tensionSortie.B.toFixed(1)}V, C=${tensionSortie.C.toFixed(1)}V`);
 
     // Trouver le nœud correspondant
     const nodeIndex = nodes.findIndex(n => String(n.id) === String(srg2Device.nodeId));
@@ -1915,11 +1917,12 @@ export class SimulationCalculator extends ElectricalCalculator {
       return;
     }
 
-    // Marquer le nœud comme ayant un dispositif SRG2 avec ses coefficients
+    // Marquer le nœud comme ayant un dispositif SRG2 avec ses coefficients ET tensions de sortie
     nodes[nodeIndex].hasSRG2Device = true;
     nodes[nodeIndex].srg2RegulationCoefficients = { ...coefficients };
+    nodes[nodeIndex].srg2TensionSortie = { ...tensionSortie };
 
-    console.log(`✅ Nœud ${nodes[nodeIndex].id} marqué avec coefficients SRG2`);
+    console.log(`✅ Nœud ${nodes[nodeIndex].id} marqué avec coefficients et tensions SRG2`);
   }
 
   /**
@@ -1967,6 +1970,7 @@ export class SimulationCalculator extends ElectricalCalculator {
         // Nettoyer les marqueurs SRG2
         node.hasSRG2Device = undefined;
         node.srg2RegulationCoefficients = undefined;
+        node.srg2TensionSortie = undefined;
         
         // Vérifier que l'ID n'a pas été corrompu pendant le nettoyage
         if (node.id !== originalId) {

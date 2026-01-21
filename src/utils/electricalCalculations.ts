@@ -1226,29 +1226,34 @@ export class ElectricalCalculator {
               
               V_node_phase.set(v, Vv);
               
-              if (vNode?.hasSRG2Device && vNode.srg2RegulationCoefficients) {
-                // Appliquer les coefficients de régulation SRG2 aux tensions calculées
+              if (vNode?.hasSRG2Device && vNode.srg2RegulationCoefficients && vNode.srg2TensionSortie) {
+                // CORRECTION: Utiliser directement la tension de sortie pré-calculée
+                // au lieu d'appliquer le coefficient à Vv (qui peut différer de tensionEntree)
+                let tensionSortiePhase = 0;
                 let regulationCoeff = 0;
                 if (angleDeg === 0) {
                   // Phase A
+                  tensionSortiePhase = vNode.srg2TensionSortie.A;
                   regulationCoeff = vNode.srg2RegulationCoefficients.A;
                 } else if (angleDeg === -120) {
                   // Phase B
+                  tensionSortiePhase = vNode.srg2TensionSortie.B;
                   regulationCoeff = vNode.srg2RegulationCoefficients.B;
                 } else if (angleDeg === 120) {
                   // Phase C
+                  tensionSortiePhase = vNode.srg2TensionSortie.C;
                   regulationCoeff = vNode.srg2RegulationCoefficients.C;
                 } else {
                   // Fallback: utiliser la moyenne
-                  const avgCoeff = (vNode.srg2RegulationCoefficients.A + vNode.srg2RegulationCoefficients.B + vNode.srg2RegulationCoefficients.C) / 3;
-                  regulationCoeff = avgCoeff;
+                  tensionSortiePhase = (vNode.srg2TensionSortie.A + vNode.srg2TensionSortie.B + vNode.srg2TensionSortie.C) / 3;
+                  regulationCoeff = (vNode.srg2RegulationCoefficients.A + vNode.srg2RegulationCoefficients.B + vNode.srg2RegulationCoefficients.C) / 3;
                 }
                 
-                // Appliquer le coefficient: V_regulated = V_calculated × (1 + coefficient/100)
-                const regulationFactor = 1 + (regulationCoeff / 100);
-                const Vv_regulated = scale(Vv, regulationFactor);
+                // Remplacer Vv par la tension de sortie calculée (conserve l'angle de Vv)
+                const angleRad = arg(Vv);
+                const Vv_regulated = C(tensionSortiePhase * Math.cos(angleRad), tensionSortiePhase * Math.sin(angleRad));
                 V_node_phase.set(v, Vv_regulated);
-                console.log(`🎯 SRG2 régulation nœud ${v} (phase ${angleDeg}°): coeff=${regulationCoeff.toFixed(1)}%, V=${abs(Vv).toFixed(1)}V -> ${abs(Vv_regulated).toFixed(1)}V`);
+                console.log(`🎯 SRG2 nœud ${v} (phase ${angleDeg}°): coeff=${regulationCoeff.toFixed(1)}%, Vv_calc=${abs(Vv).toFixed(1)}V -> tensionSortie=${tensionSortiePhase.toFixed(1)}V`);
               } else if (loadModel === "monophase_reparti" && vNode?.tensionCiblePhaseA && vNode?.tensionCiblePhaseB && vNode?.tensionCiblePhaseC) {
                 // En mode monophasé déséquilibré, utiliser les tensions par phase
                 let Vv_target: Complex;

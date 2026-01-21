@@ -16,12 +16,14 @@ import { DailyProfileCalculator } from '@/utils/dailyProfileCalculator';
 import { DailyProfileChart } from '@/components/DailyProfileChart';
 import { ProfileVisualEditor } from '@/components/ProfileVisualEditor';
 import { MeasuredProfileImporter } from '@/components/MeasuredProfileImporter';
-import { HourlyVoltageResult } from '@/types/dailyProfile';
-import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent, Home, Zap, FlaskConical, Moon, Upload, FileBarChart, X, Download, MapPin } from 'lucide-react';
+import { HourlyVoltageResult, ClientHourlyVoltageResult } from '@/types/dailyProfile';
+import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent, Home, Zap, FlaskConical, Moon, Upload, FileBarChart, X, Download, MapPin, User, Cable } from 'lucide-react';
 import { toast } from 'sonner';
 import { HourlyProfile, MeasuredProfileMetadata } from '@/types/dailyProfile';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Project } from '@/types/network';
+import { calculateClientDailyVoltages } from '@/utils/clientDailyProfileCalculator';
+import { branchementCableTypes, calculateGeodeticDistance } from '@/data/branchementCableTypes';
 
 /**
  * Composant affichant les statistiques de clients résidentiels/industriels
@@ -101,12 +103,16 @@ export const DailyProfileTab = () => {
     // Sélection de nœud sur carte
     startNodeSelection,
     nodeSelectionMode,
+    // Client sélectionné et câble de branchement
+    selectedClientId,
+    selectedBranchementCableId,
   } = useNetworkStore();
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [importerOpen, setImporterOpen] = useState(false);
   const [editMeasuredOpen, setEditMeasuredOpen] = useState(false);
   const [comparisonMode, setComparisonMode] = useState(false);
+  const [showClientCurve, setShowClientCurve] = useState(false);
 
   // Résultats du calcul
   const [results, setResults] = useState<HourlyVoltageResult[]>([]);
@@ -182,6 +188,50 @@ export const DailyProfileTab = () => {
 
   // Nœud sélectionné
   const selectedNode = nodes.find(n => n.id === dailyProfileOptions.selectedNodeId);
+
+  // Client sélectionné et données associées
+  const selectedClient = useMemo(() => {
+    if (!selectedClientId || !currentProject?.clientsImportes) return null;
+    return currentProject.clientsImportes.find(c => c.id === selectedClientId) || null;
+  }, [selectedClientId, currentProject?.clientsImportes]);
+
+  const selectedCable = useMemo(() => {
+    if (!selectedBranchementCableId) return null;
+    return branchementCableTypes.find(c => c.id === selectedBranchementCableId) || null;
+  }, [selectedBranchementCableId]);
+
+  // Nœud lié au client sélectionné
+  const clientLinkedNode = useMemo(() => {
+    if (!selectedClient || !currentProject?.clientLinks) return null;
+    const link = currentProject.clientLinks.find(l => l.clientId === selectedClient.id);
+    if (!link) return null;
+    return currentProject.nodes.find(n => n.id === link.nodeId) || null;
+  }, [selectedClient, currentProject?.clientLinks, currentProject?.nodes]);
+
+  // Longueur du câble de branchement (distance géodésique)
+  const clientCableLength = useMemo(() => {
+    if (!selectedClient || !clientLinkedNode) return 0;
+    return calculateGeodeticDistance(
+      clientLinkedNode.lat, clientLinkedNode.lng,
+      selectedClient.lat, selectedClient.lng
+    );
+  }, [selectedClient, clientLinkedNode]);
+
+  // Calcul des tensions client horaires
+  const clientResults = useMemo((): ClientHourlyVoltageResult[] | null => {
+    if (!showClientCurve || !selectedClient || !selectedCable || !results.length) return null;
+    
+    return calculateClientDailyVoltages(
+      results,
+      selectedClient,
+      selectedCable,
+      clientCableLength,
+      currentProject.voltageSystem,
+      dailyProfileOptions,
+      dailyProfileCustomProfiles,
+      currentProject
+    );
+  }, [showClientCurve, selectedClient, selectedCable, results, clientCableLength, currentProject, dailyProfileOptions, dailyProfileCustomProfiles]);
 
   if (!currentProject) {
     return (
@@ -463,6 +513,45 @@ export const DailyProfileTab = () => {
             )}
           </div>
 
+          {/* Section Courbe Client */}
+          <div className="space-y-2 pt-2 border-t border-border">
+            <Label className="text-xs text-muted-foreground flex items-center gap-2">
+              <Cable className="h-3 w-3" />
+              Courbe Raccordement
+            </Label>
+            
+            {selectedClientId && selectedClient ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="client-curve-toggle" className="text-sm">
+                    Afficher courbe client
+                  </Label>
+                  <Switch
+                    id="client-curve-toggle"
+                    checked={showClientCurve}
+                    onCheckedChange={setShowClientCurve}
+                    disabled={!selectedCable}
+                  />
+                </div>
+                
+                {showClientCurve && selectedCable && (
+                  <div className="text-xs bg-cyan-50 dark:bg-cyan-950/50 p-2 rounded border border-cyan-200 dark:border-cyan-800">
+                    <p className="font-medium text-cyan-700 dark:text-cyan-300">{selectedClient.nomCircuit}</p>
+                    <p className="text-cyan-600 dark:text-cyan-400">
+                      {selectedClient.clientType === 'industriel' ? '🏭 Industriel' : '🏠 Résidentiel'}
+                    </p>
+                    <p className="text-muted-foreground">Câble: {selectedCable.label}</p>
+                    <p className="text-muted-foreground">Longueur: {clientCableLength.toFixed(1)}m</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground italic">
+                Sélectionnez un raccordement dans "Tension Client"
+              </p>
+            )}
+          </div>
+
           {/* Bouton éditer profils */}
           <Button
             variant="outline"
@@ -516,6 +605,7 @@ export const DailyProfileTab = () => {
               <DailyProfileChart
                 data={results}
                 comparisonData={comparisonMode ? resultsWithoutSim : undefined}
+                clientData={clientResults || undefined}
                 nominalVoltage={nominalVoltage}
               />
             ) : (

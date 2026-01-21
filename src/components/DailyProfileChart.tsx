@@ -11,16 +11,17 @@ import {
   ReferenceLine,
   ReferenceArea
 } from 'recharts';
-import { HourlyVoltageResult } from '@/types/dailyProfile';
+import { HourlyVoltageResult, ClientHourlyVoltageResult } from '@/types/dailyProfile';
 
 interface DailyProfileChartProps {
   data: HourlyVoltageResult[];
   comparisonData?: HourlyVoltageResult[];
+  clientData?: ClientHourlyVoltageResult[];
   nominalVoltage: number;
   className?: string;
 }
 
-export const DailyProfileChart = ({ data, comparisonData, nominalVoltage, className }: DailyProfileChartProps) => {
+export const DailyProfileChart = ({ data, comparisonData, clientData, nominalVoltage, className }: DailyProfileChartProps) => {
   // Calculer les limites de tension (±5% et ±10%)
   const limits = useMemo(() => ({
     warning_high: nominalVoltage * 1.05,
@@ -33,14 +34,15 @@ export const DailyProfileChart = ({ data, comparisonData, nominalVoltage, classN
   const { minY, maxY } = useMemo(() => {
     const allVoltages = data.flatMap(d => [d.voltageA_V, d.voltageB_V, d.voltageC_V]);
     const comparisonVoltages = comparisonData?.flatMap(d => [d.voltageA_V, d.voltageB_V, d.voltageC_V]) || [];
-    const minVoltage = Math.min(...allVoltages, ...comparisonVoltages, limits.critical_low);
-    const maxVoltage = Math.max(...allVoltages, ...comparisonVoltages, limits.critical_high);
+    const clientVoltages = clientData?.map(d => d.voltageClient_V) || [];
+    const minVoltage = Math.min(...allVoltages, ...comparisonVoltages, ...clientVoltages, limits.critical_low);
+    const maxVoltage = Math.max(...allVoltages, ...comparisonVoltages, ...clientVoltages, limits.critical_high);
     const padding = (maxVoltage - minVoltage) * 0.1;
     return {
       minY: Math.floor((minVoltage - padding) / 5) * 5,
       maxY: Math.ceil((maxVoltage + padding) / 5) * 5
     };
-  }, [data, comparisonData, limits]);
+  }, [data, comparisonData, clientData, limits]);
 
   // Préparer les données pour Recharts
   const chartData = useMemo(() => 
@@ -59,20 +61,27 @@ export const DailyProfileChart = ({ data, comparisonData, nominalVoltage, classN
         base['Phase C (base)'] = Math.round(comparisonData[i].voltageC_V * 10) / 10;
       }
       
+      if (clientData?.[i]) {
+        base['Point client'] = Math.round(clientData[i].voltageClient_V * 10) / 10;
+        base['clientDeltaU'] = Math.round(clientData[i].deltaU_V * 100) / 100;
+        base['clientFoisonnement'] = clientData[i].foisonnementApplied;
+      }
+      
       return base;
-    }), [data, comparisonData]);
+    }), [data, comparisonData, clientData]);
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       const hourData = data.find(d => `${d.hour}h` === label);
-      const simData = payload.filter((p: any) => !p.name.includes('(base)'));
+      const simData = payload.filter((p: any) => !p.name.includes('(base)') && p.name !== 'Point client');
       const baseData = payload.filter((p: any) => p.name.includes('(base)'));
+      const clientEntry = payload.find((p: any) => p.name === 'Point client');
       
       return (
         <div className="bg-popover border border-border rounded-lg shadow-lg p-3 text-sm">
           <p className="font-semibold text-foreground mb-2">{label}</p>
           
-          {/* Valeurs avec simulation */}
+          {/* Valeurs des phases réseau */}
           {baseData.length > 0 && (
             <p className="text-xs text-muted-foreground mb-1">Avec simulation:</p>
           )}
@@ -82,6 +91,21 @@ export const DailyProfileChart = ({ data, comparisonData, nominalVoltage, classN
               <span className="font-mono font-medium">{entry.value} V</span>
             </p>
           ))}
+          
+          {/* Courbe client */}
+          {clientEntry && (
+            <div className="border-t border-cyan-500/30 mt-2 pt-2">
+              <p style={{ color: clientEntry.color }} className="flex justify-between gap-4 font-medium">
+                <span>{clientEntry.name}:</span>
+                <span className="font-mono">{clientEntry.value} V</span>
+              </p>
+              {clientData && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  ΔU câble: {chartData.find(d => d.hour === label)?.clientDeltaU?.toFixed(2) || '-'} V
+                </p>
+              )}
+            </div>
+          )}
           
           {/* Valeurs sans simulation (comparaison) */}
           {baseData.length > 0 && (
@@ -255,20 +279,42 @@ export const DailyProfileChart = ({ data, comparisonData, nominalVoltage, classN
               />
             </>
           )}
+          
+          {/* Courbe point client (cyan) */}
+          {clientData && clientData.length > 0 && (
+            <Line 
+              type="monotone" 
+              dataKey="Point client" 
+              stroke="#06b6d4"
+              strokeWidth={2.5}
+              dot={false}
+              activeDot={{ r: 5, fill: '#06b6d4' }}
+            />
+          )}
         </LineChart>
       </ResponsiveContainer>
       
-      {/* Légende comparaison */}
-      {comparisonData && comparisonData.length > 0 && (
-        <div className="flex items-center justify-center gap-6 mt-2 text-xs text-muted-foreground">
-          <span className="flex items-center gap-2">
-            <span className="w-6 h-0.5 bg-foreground"></span>
-            Avec simulation
-          </span>
-          <span className="flex items-center gap-2">
-            <span className="w-6 h-0.5 border-t-2 border-dashed border-foreground opacity-50"></span>
-            Réseau de base
-          </span>
+      {/* Légendes supplémentaires */}
+      {(comparisonData?.length || clientData?.length) && (
+        <div className="flex items-center justify-center gap-6 mt-2 text-xs text-muted-foreground flex-wrap">
+          {comparisonData && comparisonData.length > 0 && (
+            <>
+              <span className="flex items-center gap-2">
+                <span className="w-6 h-0.5 bg-foreground"></span>
+                Avec simulation
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="w-6 h-0.5 border-t-2 border-dashed border-foreground opacity-50"></span>
+                Réseau de base
+              </span>
+            </>
+          )}
+          {clientData && clientData.length > 0 && (
+            <span className="flex items-center gap-2">
+              <span className="w-6 h-0.5 bg-cyan-500"></span>
+              Point client
+            </span>
+          )}
         </div>
       )}
     </div>

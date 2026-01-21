@@ -85,3 +85,20 @@ export const defaultDailySimulationOptions: DailySimulationOptions = {
   selectedNodeId: '',
   zeroProduction: false
 };
+
+/**
+ * Résultat de tension horaire pour un point de raccordement client
+ */
+export interface ClientHourlyVoltageResult {
+  hour: number;
+  /** Tension au point client après câble de branchement */
+  voltageClient_V: number;
+  /** Tension au nœud parent (référence) */
+  voltageNode_V: number;
+  /** Chute de tension dans le câble de branchement (V) */
+  deltaU_V: number;
+  /** Foisonnement horaire appliqué à ce client (%) */
+  foisonnementApplied: number;
+  /** Statut de conformité EN50160 */
+  status: 'normal' | 'warning' | 'critical';
+}

@@ -538,11 +538,13 @@ export class SimulationCalculator extends ElectricalCalculator {
 
   /**
    * Calcule un scénario avec équipements de simulation
+   * @param calculationResults - Résultats de calcul existants pour lecture des tensions naturelles (optionnel)
    */
   calculateWithSimulation(
     project: Project,
     scenario: CalculationScenario,
-    equipment: SimulationEquipment
+    equipment: SimulationEquipment,
+    calculationResults?: { [key: string]: CalculationResult }
   ): SimulationResult {
     // Vérifier si on a un remplacement de câbles actif
     const cableReplacement = equipment.cableReplacement;
@@ -581,10 +583,12 @@ export class SimulationCalculator extends ElectricalCalculator {
     }
 
     // Ensuite calculer avec les équipements de simulation actifs
+    // Passer calculationResults pour lecture directe des tensions naturelles
     const simulationResult = this.calculateScenarioWithEquipment(
       projectToUse,
       scenario,
-      equipment
+      equipment,
+      calculationResults
     );
 
     console.log('🎯 SRG2 simulation terminée - nettoyage des marqueurs maintenant');
@@ -625,11 +629,13 @@ export class SimulationCalculator extends ElectricalCalculator {
 
   /**
    * Calcule un scénario en intégrant les équipements de simulation avec mode itératif pour SRG2 et compensateurs
+   * @param calculationResults - Résultats de calcul existants pour lecture des tensions naturelles (optionnel)
    */
   private calculateScenarioWithEquipment(
     project: Project,
     scenario: CalculationScenario,
-    equipment: SimulationEquipment
+    equipment: SimulationEquipment,
+    calculationResults?: { [key: string]: CalculationResult }
   ): CalculationResult {
     
     // Détection des équipements actifs
@@ -656,12 +662,13 @@ export class SimulationCalculator extends ElectricalCalculator {
       );
     }
     
-    // Cas 2: Uniquement SRG2 → code existant (INCHANGÉ)
+    // Cas 2: Uniquement SRG2 → passer calculationResults pour lecture tensions naturelles
     if (activeSRG2.length > 0 && activeCompensators.length === 0) {
       return this.calculateWithSRG2Regulation(
         project,
         scenario,
-        activeSRG2
+        activeSRG2,
+        calculationResults
       );
     }
     
@@ -675,7 +682,7 @@ export class SimulationCalculator extends ElectricalCalculator {
     }
     
     // Cas 4: Les deux actifs → calcul avec SRG2 puis compensateurs
-    const srg2Result = this.calculateWithSRG2Regulation(project, scenario, activeSRG2);
+    const srg2Result = this.calculateWithSRG2Regulation(project, scenario, activeSRG2, calculationResults);
     return this.applyNeutralCompensatorsToResult(srg2Result, project, activeCompensators);
   }
 
@@ -1508,11 +1515,13 @@ export class SimulationCalculator extends ElectricalCalculator {
   /**
    * Calcul itératif avec régulation SRG2
    * DIAGNOSTIC ID: vérifie la cohérence des IDs pendant toute la simulation
+   * @param calculationResults - Résultats de calcul existants pour lecture des tensions naturelles (optionnel)
    */
   private calculateWithSRG2Regulation(
     project: Project,
     scenario: CalculationScenario,
-    srg2Devices: SRG2Config[]
+    srg2Devices: SRG2Config[],
+    calculationResults?: { [key: string]: CalculationResult }
   ): CalculationResult {
     console.log(`🔍 DIAGNOSTIC ID - Début calculateWithSRG2Regulation`);
     console.log(`📋 IDs des SRG2:`, srg2Devices.map(srg2 => `${srg2.id} -> nœud ${srg2.nodeId}`));
@@ -1538,55 +1547,84 @@ export class SimulationCalculator extends ElectricalCalculator {
     // Stocker les tensions originales avant toute modification SRG2
     const originalVoltages = new Map<string, {A: number, B: number, C: number}>();
     
-    // === CALCUL NATUREL : Obtenir les tensions AVANT activation du SRG2 ===
-    // Créer une copie des nœuds SANS le flag hasSRG2Device pour obtenir les tensions "naturelles"
-    const nodesWithoutSRG2Flag = project.nodes.map(n => ({
-      ...n,
-      hasSRG2Device: false  // Forcer à false pour obtenir le calcul naturel
-    }));
+    // === LECTURE TENSIONS NATURELLES depuis calculationResults (cohérence avec affichage) ===
+    const existingResult = calculationResults?.[scenario];
     
-    console.log('[DEBUG SRG2] === Calcul naturel (SANS flags SRG2) ===');
-    
-    const naturalResult = this.calculateScenario(
-      nodesWithoutSRG2Flag,
-      project.cables,
-      project.cableTypes,
-      scenario,
-      project.foisonnementCharges,
-      project.foisonnementProductions,
-      project.transformerConfig,
-      project.loadModel,
-      project.desequilibrePourcent,
-      project.manualPhaseDistribution,
-      project.clientsImportes,
-      project.clientLinks
-    );
-    
-    // Stocker les tensions naturelles AVANT toute modification SRG2
-    for (const srg2 of srg2Devices) {
-      const nodeMetrics = naturalResult.nodeMetricsPerPhase?.find(nm => 
-        String(nm.nodeId) === String(srg2.nodeId)
-      );
+    if (existingResult?.nodeMetricsPerPhase) {
+      console.log('[DEBUG SRG2] === Lecture tensions depuis calculationResults (COHÉRENCE AFFICHAGE) ===');
       
-      if (nodeMetrics?.voltagesPerPhase) {
-        originalVoltages.set(srg2.nodeId, {
-          A: nodeMetrics.voltagesPerPhase.A,
-          B: nodeMetrics.voltagesPerPhase.B,
-          C: nodeMetrics.voltagesPerPhase.C
-        });
-        console.log(`[DEBUG SRG2] ✅ Tensions NATURELLES (sans SRG2) pour ${srg2.nodeId}: A=${nodeMetrics.voltagesPerPhase.A.toFixed(1)}V, B=${nodeMetrics.voltagesPerPhase.B.toFixed(1)}V, C=${nodeMetrics.voltagesPerPhase.C.toFixed(1)}V`);
-      } else {
-        // Fallback sur les tensions moyennes triphasées si per-phase non disponible
-        const nodeResult = naturalResult.nodeMetrics?.find(nm => 
+      for (const srg2 of srg2Devices) {
+        const nodeMetrics = existingResult.nodeMetricsPerPhase.find(nm => 
           String(nm.nodeId) === String(srg2.nodeId)
         );
-        const fallbackVoltage = nodeResult?.V_phase_V ?? 230;
-        originalVoltages.set(srg2.nodeId, {
-          A: fallbackVoltage,
-          B: fallbackVoltage,
-          C: fallbackVoltage
-        });
-        console.log(`[DEBUG SRG2] ⚠️ Fallback tensions moyennes pour ${srg2.nodeId}: ${fallbackVoltage.toFixed(1)}V`);
+        
+        if (nodeMetrics?.voltagesPerPhase) {
+          originalVoltages.set(srg2.nodeId, {
+            A: nodeMetrics.voltagesPerPhase.A,
+            B: nodeMetrics.voltagesPerPhase.B,
+            C: nodeMetrics.voltagesPerPhase.C
+          });
+          console.log(`[DEBUG SRG2] ✅ Tensions lues depuis calculationResults pour ${srg2.nodeId}: A=${nodeMetrics.voltagesPerPhase.A.toFixed(1)}V, B=${nodeMetrics.voltagesPerPhase.B.toFixed(1)}V, C=${nodeMetrics.voltagesPerPhase.C.toFixed(1)}V`);
+        } else {
+          // Fallback sur les tensions moyennes triphasées si per-phase non disponible
+          const nodeResult = existingResult.nodeMetrics?.find(nm => 
+            String(nm.nodeId) === String(srg2.nodeId)
+          );
+          const fallbackVoltage = nodeResult?.V_phase_V ?? 230;
+          originalVoltages.set(srg2.nodeId, {
+            A: fallbackVoltage,
+            B: fallbackVoltage,
+            C: fallbackVoltage
+          });
+          console.log(`[DEBUG SRG2] ⚠️ Fallback tensions depuis calculationResults pour ${srg2.nodeId}: ${fallbackVoltage.toFixed(1)}V`);
+        }
+      }
+    } else {
+      // Fallback : calculer si calculationResults non disponible
+      console.warn('[DEBUG SRG2] ⚠️ calculationResults non disponible, calcul naturel de secours');
+      
+      const nodesWithoutSRG2Flag = project.nodes.map(n => ({
+        ...n,
+        hasSRG2Device: false
+      }));
+      
+      const naturalResult = this.calculateScenario(
+        nodesWithoutSRG2Flag,
+        project.cables,
+        project.cableTypes,
+        scenario,
+        project.foisonnementCharges,
+        project.foisonnementProductions,
+        project.transformerConfig,
+        project.loadModel,
+        project.desequilibrePourcent,
+        project.manualPhaseDistribution,
+        project.clientsImportes,
+        project.clientLinks
+      );
+      
+      for (const srg2 of srg2Devices) {
+        const nodeMetrics = naturalResult.nodeMetricsPerPhase?.find(nm => 
+          String(nm.nodeId) === String(srg2.nodeId)
+        );
+        
+        if (nodeMetrics?.voltagesPerPhase) {
+          originalVoltages.set(srg2.nodeId, {
+            A: nodeMetrics.voltagesPerPhase.A,
+            B: nodeMetrics.voltagesPerPhase.B,
+            C: nodeMetrics.voltagesPerPhase.C
+          });
+        } else {
+          const nodeResult = naturalResult.nodeMetrics?.find(nm => 
+            String(nm.nodeId) === String(srg2.nodeId)
+          );
+          const fallbackVoltage = nodeResult?.V_phase_V ?? 230;
+          originalVoltages.set(srg2.nodeId, {
+            A: fallbackVoltage,
+            B: fallbackVoltage,
+            C: fallbackVoltage
+          });
+        }
       }
     }
     

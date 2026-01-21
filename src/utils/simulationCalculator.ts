@@ -1564,10 +1564,25 @@ export class SimulationCalculator extends ElectricalCalculator {
       
       // Stocker les tensions originales à la première itération
       if (iteration === 1) {
+        console.log('[DEBUG SRG2] === Capture tensions originales (itération 1) ===');
+        console.log('[DEBUG SRG2] Nœuds avec hasSRG2Device:', 
+          project.nodes.filter(n => n.hasSRG2Device).map(n => n.id));
+        console.log('[DEBUG SRG2] workingNodes avec hasSRG2Device:', 
+          workingNodes.filter(n => n.hasSRG2Device).map(n => n.id));
+        
         for (const srg2 of srg2Devices) {
           const nodeMetricsPerPhase = result.nodeMetricsPerPhase?.find(nm => 
             String(nm.nodeId) === String(srg2.nodeId)
           );
+          
+          const srg2Node = project.nodes.find(n => n.id === srg2.nodeId);
+          console.log(`[DEBUG SRG2] Nœud ${srg2.nodeId}:`, {
+            connectionType: srg2Node?.connectionType,
+            hasSRG2Device: srg2Node?.hasSRG2Device,
+            voltageSystem: project.voltageSystem,
+            voltagesPerPhaseFound: !!nodeMetricsPerPhase?.voltagesPerPhase,
+            voltagesPerPhase: nodeMetricsPerPhase?.voltagesPerPhase
+          });
           
           if (nodeMetricsPerPhase?.voltagesPerPhase) {
             originalVoltages.set(srg2.nodeId, {
@@ -1575,7 +1590,9 @@ export class SimulationCalculator extends ElectricalCalculator {
               B: nodeMetricsPerPhase.voltagesPerPhase.B,
               C: nodeMetricsPerPhase.voltagesPerPhase.C
             });
-            console.log(`📋 Tensions originales stockées pour SRG2 ${srg2.nodeId}:`, originalVoltages.get(srg2.nodeId));
+            console.log(`[DEBUG SRG2] ✅ Tensions originales stockées pour SRG2 ${srg2.nodeId}: A=${nodeMetricsPerPhase.voltagesPerPhase.A.toFixed(1)}V, B=${nodeMetricsPerPhase.voltagesPerPhase.B.toFixed(1)}V, C=${nodeMetricsPerPhase.voltagesPerPhase.C.toFixed(1)}V`);
+          } else {
+            console.warn(`[DEBUG SRG2] ⚠️ Tensions per-phase NON TROUVÉES pour nœud ${srg2.nodeId} - calcul en mode équilibré ?`);
           }
         }
       }

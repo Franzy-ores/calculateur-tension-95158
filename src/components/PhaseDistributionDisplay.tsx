@@ -674,6 +674,7 @@ export const PhaseDistributionDisplay = () => {
                 <th className="text-right py-2 px-1 text-orange-600 dark:text-orange-400 font-semibold">Ch. Ind.<br/>(kVA)</th>
                 <th className="text-right py-2 px-1 text-foreground font-semibold">Ch. Poly<br/>33.3%</th>
                 <th className="text-right py-2 px-1 text-foreground font-semibold">Prod.<br/>(kVA)</th>
+                <th className="text-right py-2 px-1 text-purple-600 dark:text-purple-400 font-semibold">Prod.<br/>foisonné</th>
                 <th className="text-right py-2 px-1 text-foreground font-semibold">Ch.<br/>contrat</th>
                 <th className="text-right py-2 px-1 text-foreground font-semibold">Ch.<br/>foisonné</th>
                 <th className="text-right py-2 px-1 text-foreground font-semibold">Ch.<br/>déséq.</th>
@@ -714,6 +715,7 @@ export const PhaseDistributionDisplay = () => {
                       <td className="text-right py-2 px-1 text-orange-700 dark:text-orange-300">{data.chargeMonoIndustriel.toFixed(1)}</td>
                       <td className="text-right py-2 px-1 text-foreground">{data.chargePoly.toFixed(1)}</td>
                       <td className="text-right py-2 px-1 text-foreground">{data.productionMono.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-purple-700 dark:text-purple-300 font-semibold">{data.totalFoisonneProduction.toFixed(1)}</td>
                       <td className="text-right py-2 px-1 text-foreground font-semibold">{data.totalPhysiqueCharge.toFixed(1)}</td>
                       <td className="text-right py-2 px-1 text-foreground font-semibold">{data.totalFoisonneCharge.toFixed(1)}</td>
                       <td className="text-right py-2 px-1 text-foreground font-bold">
@@ -740,6 +742,7 @@ export const PhaseDistributionDisplay = () => {
                   <td className="text-right py-2 px-1 text-orange-700 dark:text-orange-300">{clientsByCoupling['TRI'].chargeIndustriel.toFixed(1)}</td>
                   <td className="text-right py-2 px-1 text-foreground">-</td>
                   <td className="text-right py-2 px-1 text-foreground">{clientsByCoupling['TRI'].totalProdKVA.toFixed(1)}</td>
+                  <td className="text-right py-2 px-1 text-purple-700 dark:text-purple-300 font-semibold">{(clientsByCoupling['TRI'].totalProdKVA * foisonnementProductions / 100).toFixed(1)}</td>
                   <td className="text-right py-2 px-1 text-foreground font-semibold">{clientsByCoupling['TRI'].totalKVA.toFixed(1)}</td>
                   <td className="text-right py-2 px-1 text-foreground font-semibold">
                     {((clientsByCoupling['TRI'].chargeResidentiel * foisonnementResidentiel / 100) + 
@@ -761,6 +764,7 @@ export const PhaseDistributionDisplay = () => {
                   <td className="text-right py-2 px-1 text-orange-700 dark:text-orange-300">{clientsByCoupling['TÉTRA'].chargeIndustriel.toFixed(1)}</td>
                   <td className="text-right py-2 px-1 text-foreground">-</td>
                   <td className="text-right py-2 px-1 text-foreground">{clientsByCoupling['TÉTRA'].totalProdKVA.toFixed(1)}</td>
+                  <td className="text-right py-2 px-1 text-purple-700 dark:text-purple-300 font-semibold">{(clientsByCoupling['TÉTRA'].totalProdKVA * foisonnementProductions / 100).toFixed(1)}</td>
                   <td className="text-right py-2 px-1 text-foreground font-semibold">{clientsByCoupling['TÉTRA'].totalKVA.toFixed(1)}</td>
                   <td className="text-right py-2 px-1 text-foreground font-semibold">
                     {((clientsByCoupling['TÉTRA'].chargeResidentiel * foisonnementResidentiel / 100) + 

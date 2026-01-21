@@ -2445,7 +2445,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   },
 
   runSimulation: () => {
-    const { currentProject, selectedScenario, simulationEquipment } = get();
+    const { currentProject, selectedScenario, simulationEquipment, calculationResults } = get();
     if (!currentProject) return;
 
     try {
@@ -2467,10 +2467,12 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       
       for (const scenario of scenarios) {
         try {
+          // Passer calculationResults pour lecture directe des tensions naturelles (cohérence avec affichage)
           const result = calculator.calculateWithSimulation(
             currentProject,
             scenario,
-            simulationEquipment
+            simulationEquipment,
+            calculationResults
           );
           newSimulationResults[scenario] = result;
         } catch (error) {

@@ -1071,7 +1071,9 @@ export class SimulationCalculator extends ElectricalCalculator {
         project.desequilibrePourcent,
         project.manualPhaseDistribution,
         project.clientsImportes,
-        project.clientLinks
+        project.clientLinks,
+        project.foisonnementChargesResidentiel,
+        project.foisonnementChargesIndustriel
       );
       
       // 🔹 À l'itération 1 : calculer et stocker les ratios fixes
@@ -1600,7 +1602,9 @@ export class SimulationCalculator extends ElectricalCalculator {
         project.desequilibrePourcent,
         project.manualPhaseDistribution,
         project.clientsImportes,
-        project.clientLinks
+        project.clientLinks,
+        project.foisonnementChargesResidentiel,
+        project.foisonnementChargesIndustriel
       );
       
       for (const srg2 of srg2Devices) {
@@ -1651,7 +1655,9 @@ export class SimulationCalculator extends ElectricalCalculator {
         project.desequilibrePourcent,
         project.manualPhaseDistribution,
         project.clientsImportes,
-        project.clientLinks
+        project.clientLinks,
+        project.foisonnementChargesResidentiel,
+        project.foisonnementChargesIndustriel
       );
 
       // Appliquer la régulation SRG2 sur chaque dispositif
@@ -1713,7 +1719,9 @@ export class SimulationCalculator extends ElectricalCalculator {
       project.desequilibrePourcent,
       project.manualPhaseDistribution,
       project.clientsImportes,
-      project.clientLinks
+      project.clientLinks,
+      project.foisonnementChargesResidentiel,
+      project.foisonnementChargesIndustriel
     );
 
     console.log('🎯 SRG2 calcul final terminé - marqueurs SRG2 conservés pour nodeMetricsPerPhase');

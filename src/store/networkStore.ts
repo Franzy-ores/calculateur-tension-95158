@@ -97,6 +97,8 @@ interface NetworkStoreState extends NetworkState {
   clientColorMode: ClientColorMode;
   circuitColorMapping: Map<string, string>;
   showClientTensionLabels: boolean;
+  // Câble de branchement sélectionné (partagé entre TensionClient et Profil24h)
+  selectedBranchementCableId: string | null;
   // État partagé pour la création de client avec sélection sur carte
   selectingLocationForNewClient: boolean;
   pendingClientLocation: { lat: number; lng: number } | null;
@@ -216,6 +218,8 @@ interface NetworkActions {
   startNodeSelection: (mode: 'profil24h' | 'srg2' | 'equi8') => void;
   cancelNodeSelection: () => void;
   handleNodeSelectionClick: (nodeId: string) => void;
+  // Action câble de branchement
+  setSelectedBranchementCableId: (cableId: string | null) => void;
 }
 
 // Fonction utilitaire pour créer la configuration par défaut du transformateur
@@ -391,6 +395,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   clientColorMode: 'couplage',
   circuitColorMapping: new Map(),
   showClientTensionLabels: false,
+  // Câble de branchement sélectionné
+  selectedBranchementCableId: null,
   // État partagé pour la création de client
   selectingLocationForNewClient: false,
   pendingClientLocation: null,
@@ -2693,4 +2699,6 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         break;
     }
   },
+  
+  setSelectedBranchementCableId: (cableId) => set({ selectedBranchementCableId: cableId }),
 }));

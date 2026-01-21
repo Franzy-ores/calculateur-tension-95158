@@ -229,11 +229,12 @@ export const TensionClientTab = () => {
     isSimulationActive,
     selectedScenario,
     selectedClientId: globalSelectedClientId,
-    setSelectedClient
+    setSelectedClient,
+    selectedBranchementCableId,
+    setSelectedBranchementCableId
   } = useNetworkStore();
   
   // États locaux
-  const [selectedBranchementCableId, setSelectedBranchementCableId] = useState<string>(branchementCableTypes[0]?.id || '');
   const [manualLength, setManualLength] = useState<number | null>(null);
   const [useManualLength, setUseManualLength] = useState(false);
   
@@ -271,10 +272,11 @@ export const TensionClientTab = () => {
     return currentProject.nodes.find(n => n.id === link.nodeId) || null;
   }, [selectedClient, currentProject.clientLinks, currentProject.nodes]);
   
-  // Câble de branchement sélectionné
+  // Câble de branchement sélectionné (utilise le store global)
+  const effectiveBranchementCableId = selectedBranchementCableId || branchementCableTypes[0]?.id || '';
   const selectedCable = useMemo(() => {
-    return branchementCableTypes.find(c => c.id === selectedBranchementCableId) || branchementCableTypes[0];
-  }, [selectedBranchementCableId]);
+    return branchementCableTypes.find(c => c.id === effectiveBranchementCableId) || branchementCableTypes[0];
+  }, [effectiveBranchementCableId]);
   
   // Câbles compatibles avec le type de raccordement du client
   const compatibleCables = useMemo(() => {
@@ -383,10 +385,10 @@ export const TensionClientTab = () => {
   
   // Reset du câble si incompatible
   useEffect(() => {
-    if (selectedClient && !compatibleCables.find(c => c.id === selectedBranchementCableId)) {
-      setSelectedBranchementCableId(compatibleCables[0]?.id || '');
+    if (selectedClient && !compatibleCables.find(c => c.id === effectiveBranchementCableId)) {
+      setSelectedBranchementCableId(compatibleCables[0]?.id || null);
     }
-  }, [selectedClient, compatibleCables, selectedBranchementCableId]);
+  }, [selectedClient, compatibleCables, effectiveBranchementCableId, setSelectedBranchementCableId]);
   
   // Réinitialiser les valeurs locales quand le client change
   useEffect(() => {
@@ -480,7 +482,7 @@ export const TensionClientTab = () => {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Type de câble</Label>
-              <Select value={selectedBranchementCableId} onValueChange={setSelectedBranchementCableId}>
+              <Select value={effectiveBranchementCableId} onValueChange={(v) => setSelectedBranchementCableId(v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Sélectionner un câble" />
                 </SelectTrigger>

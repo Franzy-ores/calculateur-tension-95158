@@ -2180,6 +2180,20 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     const state = get();
     if (!state.currentProject) return;
     
+    // Vérifier que le nœud existe
+    const nodeIndex = state.currentProject.nodes.findIndex(n => n.id === nodeId);
+    if (nodeIndex === -1) {
+      toast.error(`Nœud ${nodeId} introuvable`);
+      return;
+    }
+    
+    // ✅ CORRECTION : Marquer le nœud comme ayant un SRG2
+    const updatedNodes = state.currentProject.nodes.map((n, idx) => 
+      idx === nodeIndex ? { ...n, hasSRG2Device: true } : n
+    );
+    
+    console.log(`[DEBUG] addSRG2Device: Marquage nœud ${nodeId} avec hasSRG2Device=true`);
+    
     // Déterminer le type de SRG2 selon le système de tension
     const is400V = state.currentProject.voltageSystem === 'TÉTRAPHASÉ_400V';
     const defaultConfig = is400V ? DEFAULT_SRG2_400_CONFIG : DEFAULT_SRG2_230_CONFIG;
@@ -2193,6 +2207,10 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     } as SRG2Config;
 
     set({
+      currentProject: {
+        ...state.currentProject,
+        nodes: updatedNodes
+      },
       simulationEquipment: {
         ...state.simulationEquipment,
         srg2Devices: [...(state.simulationEquipment.srg2Devices || []), newSRG2]
@@ -2201,15 +2219,29 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     
     toast.success(`SRG2 ${newSRG2.name} ajouté`);
     
-    // Recalculer automatiquement la simulation
+    // Recalculer d'abord les calculs standard puis la simulation
+    get().updateAllCalculations();
     get().runSimulation();
   },
 
   removeSRG2Device: (srg2Id: string) => {
-    const { simulationEquipment } = get();
+    const { simulationEquipment, currentProject } = get();
     const srg2 = simulationEquipment.srg2Devices?.find(s => s.id === srg2Id);
     
+    if (!currentProject || !srg2) return;
+    
+    // ✅ CORRECTION : Retirer le flag du nœud
+    const updatedNodes = currentProject.nodes.map(n => 
+      n.id === srg2.nodeId ? { ...n, hasSRG2Device: false } : n
+    );
+    
+    console.log(`[DEBUG] removeSRG2Device: Retrait flag hasSRG2Device du nœud ${srg2.nodeId}`);
+    
     set({
+      currentProject: {
+        ...currentProject,
+        nodes: updatedNodes
+      },
       simulationEquipment: {
         ...simulationEquipment,
         srg2Devices: (simulationEquipment.srg2Devices || []).filter(s => s.id !== srg2Id)
@@ -2217,6 +2249,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     });
     
     toast.success(`SRG2 ${srg2?.name} supprimé`);
+    get().updateAllCalculations();
     get().runSimulation();
   },
 

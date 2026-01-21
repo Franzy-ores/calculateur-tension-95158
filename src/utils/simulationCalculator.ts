@@ -1538,6 +1538,60 @@ export class SimulationCalculator extends ElectricalCalculator {
     // Stocker les tensions originales avant toute modification SRG2
     const originalVoltages = new Map<string, {A: number, B: number, C: number}>();
     
+    // === CALCUL NATUREL : Obtenir les tensions AVANT activation du SRG2 ===
+    // Créer une copie des nœuds SANS le flag hasSRG2Device pour obtenir les tensions "naturelles"
+    const nodesWithoutSRG2Flag = project.nodes.map(n => ({
+      ...n,
+      hasSRG2Device: false  // Forcer à false pour obtenir le calcul naturel
+    }));
+    
+    console.log('[DEBUG SRG2] === Calcul naturel (SANS flags SRG2) ===');
+    
+    const naturalResult = this.calculateScenario(
+      nodesWithoutSRG2Flag,
+      project.cables,
+      project.cableTypes,
+      scenario,
+      project.foisonnementCharges,
+      project.foisonnementProductions,
+      project.transformerConfig,
+      project.loadModel,
+      project.desequilibrePourcent,
+      project.manualPhaseDistribution,
+      project.clientsImportes,
+      project.clientLinks
+    );
+    
+    // Stocker les tensions naturelles AVANT toute modification SRG2
+    for (const srg2 of srg2Devices) {
+      const nodeMetrics = naturalResult.nodeMetricsPerPhase?.find(nm => 
+        String(nm.nodeId) === String(srg2.nodeId)
+      );
+      
+      if (nodeMetrics?.voltagesPerPhase) {
+        originalVoltages.set(srg2.nodeId, {
+          A: nodeMetrics.voltagesPerPhase.A,
+          B: nodeMetrics.voltagesPerPhase.B,
+          C: nodeMetrics.voltagesPerPhase.C
+        });
+        console.log(`[DEBUG SRG2] ✅ Tensions NATURELLES (sans SRG2) pour ${srg2.nodeId}: A=${nodeMetrics.voltagesPerPhase.A.toFixed(1)}V, B=${nodeMetrics.voltagesPerPhase.B.toFixed(1)}V, C=${nodeMetrics.voltagesPerPhase.C.toFixed(1)}V`);
+      } else {
+        // Fallback sur les tensions moyennes triphasées si per-phase non disponible
+        const nodeResult = naturalResult.nodeMetrics?.find(nm => 
+          String(nm.nodeId) === String(srg2.nodeId)
+        );
+        const fallbackVoltage = nodeResult?.V_phase_V ?? 230;
+        originalVoltages.set(srg2.nodeId, {
+          A: fallbackVoltage,
+          B: fallbackVoltage,
+          C: fallbackVoltage
+        });
+        console.log(`[DEBUG SRG2] ⚠️ Fallback tensions moyennes pour ${srg2.nodeId}: ${fallbackVoltage.toFixed(1)}V`);
+      }
+    }
+    
+    console.log('[DEBUG SRG2] Tensions naturelles stockées pour', originalVoltages.size, 'nœuds SRG2');
+    
     while (!converged && iteration < SimulationCalculator.SIM_MAX_ITERATIONS) {
       iteration++;
       
@@ -1561,41 +1615,6 @@ export class SimulationCalculator extends ElectricalCalculator {
         project.clientsImportes,
         project.clientLinks
       );
-      
-      // Stocker les tensions originales à la première itération
-      if (iteration === 1) {
-        console.log('[DEBUG SRG2] === Capture tensions originales (itération 1) ===');
-        console.log('[DEBUG SRG2] Nœuds avec hasSRG2Device:', 
-          project.nodes.filter(n => n.hasSRG2Device).map(n => n.id));
-        console.log('[DEBUG SRG2] workingNodes avec hasSRG2Device:', 
-          workingNodes.filter(n => n.hasSRG2Device).map(n => n.id));
-        
-        for (const srg2 of srg2Devices) {
-          const nodeMetricsPerPhase = result.nodeMetricsPerPhase?.find(nm => 
-            String(nm.nodeId) === String(srg2.nodeId)
-          );
-          
-          const srg2Node = project.nodes.find(n => n.id === srg2.nodeId);
-          console.log(`[DEBUG SRG2] Nœud ${srg2.nodeId}:`, {
-            connectionType: srg2Node?.connectionType,
-            hasSRG2Device: srg2Node?.hasSRG2Device,
-            voltageSystem: project.voltageSystem,
-            voltagesPerPhaseFound: !!nodeMetricsPerPhase?.voltagesPerPhase,
-            voltagesPerPhase: nodeMetricsPerPhase?.voltagesPerPhase
-          });
-          
-          if (nodeMetricsPerPhase?.voltagesPerPhase) {
-            originalVoltages.set(srg2.nodeId, {
-              A: nodeMetricsPerPhase.voltagesPerPhase.A,
-              B: nodeMetricsPerPhase.voltagesPerPhase.B,
-              C: nodeMetricsPerPhase.voltagesPerPhase.C
-            });
-            console.log(`[DEBUG SRG2] ✅ Tensions originales stockées pour SRG2 ${srg2.nodeId}: A=${nodeMetricsPerPhase.voltagesPerPhase.A.toFixed(1)}V, B=${nodeMetricsPerPhase.voltagesPerPhase.B.toFixed(1)}V, C=${nodeMetricsPerPhase.voltagesPerPhase.C.toFixed(1)}V`);
-          } else {
-            console.warn(`[DEBUG SRG2] ⚠️ Tensions per-phase NON TROUVÉES pour nœud ${srg2.nodeId} - calcul en mode équilibré ?`);
-          }
-        }
-      }
 
       // Appliquer la régulation SRG2 sur chaque dispositif
       const voltageChanges = new Map<string, {A: number, B: number, C: number}>();

@@ -677,7 +677,8 @@ export class SimulationCalculator extends ElectricalCalculator {
       return this.calculateWithNeutralCompensationIterative(
         project,
         scenario,
-        activeCompensators
+        activeCompensators,
+        calculationResults
       );
     }
     
@@ -1039,7 +1040,8 @@ export class SimulationCalculator extends ElectricalCalculator {
   private calculateWithNeutralCompensationIterative(
     project: Project,
     scenario: CalculationScenario,
-    compensators: NeutralCompensator[]
+    compensators: NeutralCompensator[],
+    calculationResults?: { [key: string]: CalculationResult }
   ): CalculationResult {
     console.log(`🔄 Début calcul itératif EQUI8 avec ${compensators.length} compensateurs`);
     
@@ -1077,14 +1079,35 @@ export class SimulationCalculator extends ElectricalCalculator {
       );
       
       // 🔹 À l'itération 1 : calculer et stocker les ratios fixes
+      // LECTURE COHÉRENTE : Utiliser les tensions depuis calculationResults si disponible (comme SRG2)
       if (iteration === 1) {
         console.log(`🔧 EQUI8 - Calcul des ratios de compensation (iteration 1)`);
         
         for (const compensator of compensators) {
-          const nodeMetrics = result.nodeMetricsPerPhase?.find(nm => nm.nodeId === compensator.nodeId);
+          let voltagesPerPhase: { A: number; B: number; C: number } | undefined;
           
-          if (nodeMetrics?.voltagesPerPhase) {
-            const { A, B, C } = nodeMetrics.voltagesPerPhase;
+          // Priorité 1: Lire depuis calculationResults (cohérence avec affichage)
+          if (calculationResults?.[scenario]?.nodeMetricsPerPhase) {
+            const existingMetrics = calculationResults[scenario].nodeMetricsPerPhase.find(
+              nm => nm.nodeId === compensator.nodeId
+            );
+            if (existingMetrics?.voltagesPerPhase) {
+              voltagesPerPhase = existingMetrics.voltagesPerPhase;
+              console.log(`✅ EQUI8 nœud ${compensator.nodeId} - Tensions lues depuis calculationResults (cohérence affichage)`);
+            }
+          }
+          
+          // Priorité 2: Sinon utiliser les tensions du calcul courant
+          if (!voltagesPerPhase) {
+            const nodeMetrics = result.nodeMetricsPerPhase?.find(nm => nm.nodeId === compensator.nodeId);
+            if (nodeMetrics?.voltagesPerPhase) {
+              voltagesPerPhase = nodeMetrics.voltagesPerPhase;
+              console.log(`⚠️ EQUI8 nœud ${compensator.nodeId} - Tensions lues depuis calcul courant (pas de calculationResults)`);
+            }
+          }
+          
+          if (voltagesPerPhase) {
+            const { A, B, C } = voltagesPerPhase;
             
             // 📊 LOG: Tensions initiales pour calcul des ratios
             console.log(`📊 EQUI8 nœud ${compensator.nodeId} - Tensions initiales pour ratios:`, {
@@ -1172,14 +1195,16 @@ export class SimulationCalculator extends ElectricalCalculator {
       project.cables,
       project.cableTypes,
       scenario,
-      project.foisonnementCharges,
+      project.foisonnementChargesResidentiel ?? project.foisonnementCharges,
       project.foisonnementProductions,
       project.transformerConfig,
       project.loadModel,
       project.desequilibrePourcent,
       project.manualPhaseDistribution,
       project.clientsImportes,
-      project.clientLinks
+      project.clientLinks,
+      project.foisonnementChargesResidentiel,
+      project.foisonnementChargesIndustriel
     );
     
     // Nettoyer APRÈS le recalcul final (comme SRG2)

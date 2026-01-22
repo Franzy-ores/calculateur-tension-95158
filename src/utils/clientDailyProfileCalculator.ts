@@ -58,27 +58,33 @@ export function calculateClientDailyVoltages(
     const hourStr = hour.toString();
     
     // Foisonnement horaire selon le type de client
-    // Le profil industriel est automatiquement appliqué aux clients industriels
+    // Utiliser le profil "client" spécifique avec foisonnement plus élevé (jusqu'à 80%)
+    // Ce profil suit les mêmes logiques été/hiver/soleil/gris que le résidentiel
     let hourlyFoisonnement: number;
+    
+    // Profil client avec logique météo pour simuler comportement réel
+    // Le profil "client" a des valeurs plus élevées que résidentiel (jusqu'à 70-80% vs 21%)
+    let baseFoisonnement = seasonProfile.client?.[hourStr] ?? seasonProfile.residential[hourStr] ?? 0;
+    
+    // Si industriel, prendre le max entre profil client et industriel
     if (isIndustrial) {
-      hourlyFoisonnement = seasonProfile.industrial_pme[hourStr] || 0;
-    } else {
-      // Profil résidentiel avec bonus VE éventuel
-      let baseFoisonnement = seasonProfile.residential[hourStr] || 0;
-      
-      // Appliquer bonus VE si activé
-      if (options.enableEV) {
-        const bonusEvening = options.evBonusEvening ?? 2.5;
-        const bonusNight = options.evBonusNight ?? 5;
-        
-        if (hour >= 18 && hour <= 21) {
-          baseFoisonnement += bonusEvening;
-        } else if (hour >= 22 || hour <= 5) {
-          baseFoisonnement += bonusNight;
-        }
-      }
-      hourlyFoisonnement = baseFoisonnement;
+      const industrialProfile = seasonProfile.industrial_pme[hourStr] || 0;
+      baseFoisonnement = Math.max(baseFoisonnement, industrialProfile);
     }
+    
+    // Appliquer bonus VE si activé (même logique que résidentiel)
+    if (options.enableEV && !isIndustrial) {
+      const bonusEvening = options.evBonusEvening ?? 2.5;
+      const bonusNight = options.evBonusNight ?? 5;
+      
+      if (hour >= 18 && hour <= 21) {
+        baseFoisonnement += bonusEvening;
+      } else if (hour >= 22 || hour <= 5) {
+        baseFoisonnement += bonusNight;
+      }
+    }
+    
+    hourlyFoisonnement = baseFoisonnement;
     
     // Profil production (PV)
     const productionProfile = options.zeroProduction ? 0 : (seasonProfile.pv[hourStr] || 0) * weatherFactor;

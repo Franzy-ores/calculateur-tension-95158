@@ -1544,14 +1544,19 @@ export class SimulationCalculator extends ElectricalCalculator {
     const node = nodes.find(n => n.id === compensator.nodeId);
     if (!node) return;
     
-    // Marquer le nœud comme ayant une injection EQUI8
+    // Marquer le nœud comme ayant une compensation EQUI8 avec tensions cibles par phase
     if (!node.customProps) node.customProps = {};
     node.customProps['equi8_modified'] = true;
     node.customProps['equi8_current_neutral'] = equi8Result.I_EQUI8_complex;
     
-    console.log(`✅ Injection EQUI8 appliquée sur nœud ${compensator.nodeId}:`, {
+    // ✅ NOUVEAU : Stocker les tensions compensées pour imposition dans le BFS (comme SRG2)
+    node.customProps['equi8_voltage_A'] = equi8Result.UEQUI8_ph1_mag;
+    node.customProps['equi8_voltage_B'] = equi8Result.UEQUI8_ph2_mag;
+    node.customProps['equi8_voltage_C'] = equi8Result.UEQUI8_ph3_mag;
+    
+    console.log(`✅ EQUI8 tensions cibles stockées sur nœud ${compensator.nodeId}:`, {
       'I_neutre': `${abs(equi8Result.I_EQUI8_complex).toFixed(1)}A ∠${(arg(equi8Result.I_EQUI8_complex)*180/Math.PI).toFixed(0)}°`,
-      'V_cibles (affichage)': {
+      'V_cibles (imposées dans BFS)': {
         A: `${equi8Result.UEQUI8_ph1_mag.toFixed(1)}V`,
         B: `${equi8Result.UEQUI8_ph2_mag.toFixed(1)}V`,
         C: `${equi8Result.UEQUI8_ph3_mag.toFixed(1)}V`

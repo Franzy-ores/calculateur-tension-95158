@@ -2304,12 +2304,21 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     const is400V = currentProject.voltageSystem === 'TÉTRAPHASÉ_400V';
     const nodeConnectionType = getNodeConnectionType(
       currentProject.voltageSystem,
-      currentProject.loadModel || 'polyphase_equilibre',
+      currentProject.loadModel || 'mixte_mono_poly',
       node.isSource
     );
     const isMonoPN = nodeConnectionType === 'MONO_230V_PN';
-    const hasDeseq = (currentProject.loadModel ?? 'polyphase_equilibre') === 'monophase_reparti' && 
-                     (currentProject.desequilibrePourcent ?? 0) > 0;
+    
+    // Déséquilibre réel basé sur clients MONO ou curseurs manuels
+    const hasRealUnbalance = (node.autoPhaseDistribution?.unbalancePercent ?? 0) > 0;
+    const manualCharges = currentProject.manualPhaseDistribution?.charges;
+    const hasManualUnbalance = manualCharges && (
+      Math.abs(manualCharges.A - 33.33) > 0.1 ||
+      Math.abs(manualCharges.B - 33.33) > 0.1 ||
+      Math.abs(manualCharges.C - 33.33) > 0.1
+    );
+    const isMixedMode = currentProject.loadModel === 'mixte_mono_poly';
+    const hasDeseq = isMixedMode && (hasRealUnbalance || hasManualUnbalance);
     
     const eligible = is400V && isMonoPN && hasDeseq;
     

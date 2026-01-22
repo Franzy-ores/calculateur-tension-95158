@@ -14,10 +14,15 @@ const DebugConsole = () => {
         typeof a === 'object' ? JSON.stringify(a) : String(a)
       ).join(' ');
       
-      // Filtrer uniquement les logs DEBUG
-      if (message.includes('[DEBUG')) {
+      // Filtrer les logs DEBUG et EQUI8
+      if (message.includes('[DEBUG') || 
+          message.includes('EQUI8') || 
+          message.includes('🔍') ||
+          message.includes('📊') ||
+          message.includes('🔬') ||
+          message.includes('🔧')) {
         setLogs(prev => [
-          ...prev.slice(-30), 
+          ...prev.slice(-50), 
           `${new Date().toISOString().slice(11, 19)} ${message}`
         ]);
       }

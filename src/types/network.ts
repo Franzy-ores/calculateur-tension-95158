@@ -351,6 +351,10 @@ export interface NeutralCompensator {
   umin_init_V?: number;     // Min des tensions initiales
   ecart_init_V?: number;    // (Umax-Umin)init
   ecart_equi8_V?: number;   // (Umax-Umin)EQUI8 après compensation
+  // ✅ NOUVEAU : Tensions initiales par phase (avant équilibrage)
+  uinit_ph1_V?: number;     // Tension phase 1 avant EQUI8 (V)
+  uinit_ph2_V?: number;     // Tension phase 2 avant EQUI8 (V)
+  uinit_ph3_V?: number;     // Tension phase 3 avant EQUI8 (V)
   compensationQ_kVAr?: { A: number; B: number; C: number }; // Q par phase (si modélisé)
   I_EQUI8_complex?: Complex; // Phasor d'injection calculé (pour intégration physique)
 }

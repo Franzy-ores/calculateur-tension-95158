@@ -38,7 +38,11 @@ export class SimulationCalculator extends ElectricalCalculator {
     ratio_ph2: number;
     ratio_ph3: number;
     Umoy_init: number;
+    ecart_init: number;   // ✅ NOUVEAU - (Umax-Umin)init stocké pour cohérence
     ecart_equi8: number;  // (Umax-Umin)EQUI8 selon formule CME
+    Uinit_ph1: number;    // ✅ NOUVEAU - tensions initiales stockées
+    Uinit_ph2: number;    // ✅ NOUVEAU
+    Uinit_ph3: number;    // ✅ NOUVEAU
   }> = new Map();
   
   constructor(cosPhi: number = 0.95, cosPhiCharges?: number, cosPhiProductions?: number) {
@@ -706,7 +710,11 @@ export class SimulationCalculator extends ElectricalCalculator {
     ratio_ph2: number;
     ratio_ph3: number;
     Umoy_init: number;
+    ecart_init: number;    // ✅ NOUVEAU - écart initial stocké
     ecart_equi8: number;
+    Uinit_ph1: number;     // ✅ NOUVEAU - tension initiale stockée
+    Uinit_ph2: number;     // ✅ NOUVEAU
+    Uinit_ph3: number;     // ✅ NOUVEAU
   } {
     // Clamper les impédances à la condition CME (≥ 0,15Ω)
     const Zph_eff = Math.max(0.15, Zph);
@@ -751,7 +759,15 @@ export class SimulationCalculator extends ElectricalCalculator {
       'Formule complète': `(1/${denominateur.toFixed(2)}) × ${ecart_init.toFixed(2)} × ${facteur_impedance.toFixed(2)} = ${ecart_equi8.toFixed(3)}V`
     });
     
-    return { ratio_ph1, ratio_ph2, ratio_ph3, Umoy_init, ecart_equi8 };
+    return { 
+      ratio_ph1, ratio_ph2, ratio_ph3, 
+      Umoy_init, 
+      ecart_init,      // ✅ NOUVEAU - stocké pour cohérence
+      ecart_equi8,
+      Uinit_ph1,       // ✅ NOUVEAU - tensions initiales stockées
+      Uinit_ph2,
+      Uinit_ph3
+    };
   }
 
   /**
@@ -1061,12 +1077,13 @@ export class SimulationCalculator extends ElectricalCalculator {
       }
       
       // RECALCUL COMPLET DU CIRCUIT avec l'état actuel (utiliser workingNodes, pas project.nodes)
+      // ✅ CORRECTION : Utiliser foisonnements différenciés CORRECTEMENT
       const result = this.calculateScenario(
         workingNodes,
         project.cables,
         project.cableTypes,
         scenario,
-        project.foisonnementCharges,
+        project.foisonnementChargesResidentiel ?? project.foisonnementCharges,  // ✅ Priorité aux valeurs différenciées
         project.foisonnementProductions,
         project.transformerConfig,
         project.loadModel,
@@ -1372,10 +1389,31 @@ export class SimulationCalculator extends ElectricalCalculator {
       I_C_total = add(I_C_total, fromPolar(I_C_mag, 2*Math.PI/3));
     }
     
-    // Récupérer les tensions initiales
-    const Uinit_ph1 = nodeMetrics.voltagesPerPhase.A;
-    const Uinit_ph2 = nodeMetrics.voltagesPerPhase.B;
-    const Uinit_ph3 = nodeMetrics.voltagesPerPhase.C;
+    // ✅ CORRECTION : Utiliser les tensions initiales STOCKÉES dans equi8Ratios (cohérence affichage)
+    // Ces tensions ont été calculées à l'itération 1 depuis calculationResults
+    const ratiosData = this.equi8Ratios.get(compensator.nodeId);
+    
+    let Uinit_ph1: number;
+    let Uinit_ph2: number;
+    let Uinit_ph3: number;
+    
+    if (ratiosData) {
+      // Utiliser les tensions de référence stockées à l'itération 1 (cohérence avec affichage)
+      Uinit_ph1 = ratiosData.Uinit_ph1;
+      Uinit_ph2 = ratiosData.Uinit_ph2;
+      Uinit_ph3 = ratiosData.Uinit_ph3;
+      console.log(`✅ EQUI8 nœud ${compensator.nodeId} - Tensions initiales depuis ratios stockés:`, {
+        'Phase A': `${Uinit_ph1.toFixed(1)}V`,
+        'Phase B': `${Uinit_ph2.toFixed(1)}V`,
+        'Phase C': `${Uinit_ph3.toFixed(1)}V`
+      });
+    } else {
+      // Fallback: utiliser les tensions du calcul courant (ne devrait pas arriver si itération 1 ok)
+      Uinit_ph1 = nodeMetrics.voltagesPerPhase.A;
+      Uinit_ph2 = nodeMetrics.voltagesPerPhase.B;
+      Uinit_ph3 = nodeMetrics.voltagesPerPhase.C;
+      console.warn(`⚠️ EQUI8 nœud ${compensator.nodeId} - Pas de ratios stockés, utilisation tensions courantes`);
+    }
     
     // Appliquer le modèle EQUI8
     return this.applyEQUI8Compensation(

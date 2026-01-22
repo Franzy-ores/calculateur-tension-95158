@@ -1168,7 +1168,21 @@ export class ElectricalCalculator {
             const Vn = V_node_phase.get(n.id) || Vslack_phase_ph;
             const Sph = S_map.get(n.id) || C(0, 0);
             const Vsafe = abs(Vn) > ElectricalCalculator.MIN_VOLTAGE_SAFETY ? Vn : Vslack_phase_ph;
-            const Iinj = conj(div(Sph, Vsafe));
+            let Iinj = conj(div(Sph, Vsafe));
+            
+            // ✅ EQUI8 : Injection de courant correctif (-I_EQUI8/3 par phase)
+            // Principe CME : le courant neutre se répartit en ±⅓ sur chaque phase
+            if (n.customProps?.['equi8_modified']) {
+              const I_EQUI8_neutral = n.customProps['equi8_current_neutral'] as Complex | undefined;
+              if (I_EQUI8_neutral) {
+                // L'EQUI8 injecte -I_neutre/3 sur chaque phase (compensation)
+                const I_compensation = scale(I_EQUI8_neutral, -1/3);
+                Iinj = add(Iinj, I_compensation);
+                if (angleDeg === 0) {
+                  console.log(`🔌 EQUI8 nœud ${n.id} (phase ${phaseLabel}): injection -I_N/3 = ${abs(I_compensation).toFixed(2)}A ∠${(arg(I_compensation)*180/Math.PI).toFixed(0)}°`);
+                }
+              }
+            }
             
             I_inj_node_phase.set(n.id, Iinj);
           }
@@ -1211,29 +1225,11 @@ export class ElectricalCalculator {
               // Calculer tension selon Kirchhoff : V_v = V_u - Z * I_uv
               let Vv = sub(Vu, mul(Z, Iuv));
               
-              // ✅ Application EQUI8 : imposer les tensions compensées (comme SRG2)
+              // ✅ EQUI8 : Les tensions se recalculent naturellement grâce à l'injection de courant
+              // (L'injection -I_EQUI8/3 est faite dans le backward sweep, pas d'imposition ici)
               const vNode = nodeById.get(v);
-              if (vNode?.customProps?.['equi8_modified']) {
-                const equi8_voltage_A = vNode.customProps['equi8_voltage_A'];
-                const equi8_voltage_B = vNode.customProps['equi8_voltage_B'];
-                const equi8_voltage_C = vNode.customProps['equi8_voltage_C'];
-                
-                if (equi8_voltage_A !== undefined && equi8_voltage_B !== undefined && equi8_voltage_C !== undefined) {
-                  // Imposer la tension compensée selon la phase courante
-                  let equi8TargetVoltage = 0;
-                  if (angleDeg === 0) {
-                    equi8TargetVoltage = equi8_voltage_A;
-                  } else if (angleDeg === -120) {
-                    equi8TargetVoltage = equi8_voltage_B;
-                  } else if (angleDeg === 120) {
-                    equi8TargetVoltage = equi8_voltage_C;
-                  }
-                  
-                  // Remplacer Vv par la tension EQUI8 (conserver l'angle calculé)
-                  const angleRad = arg(Vv);
-                  Vv = C(equi8TargetVoltage * Math.cos(angleRad), equi8TargetVoltage * Math.sin(angleRad));
-                  console.log(`🎯 EQUI8 nœud ${v} (phase ${angleDeg}°): tension imposée ${equi8TargetVoltage.toFixed(1)}V`);
-                }
+              if (vNode?.customProps?.['equi8_modified'] && angleDeg === 0) {
+                console.log(`📊 EQUI8 nœud ${v}: tension recalculée naturellement = ${abs(Vv).toFixed(1)}V (phase A)`);
               }
               
               V_node_phase.set(v, Vv);

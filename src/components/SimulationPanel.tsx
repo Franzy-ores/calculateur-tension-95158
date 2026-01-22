@@ -155,6 +155,29 @@ export const SimulationPanel = () => {
                 <>
                   <Separator className="my-2" />
                   <div className="text-xs font-medium mb-2">Tensions nœud avant / après équilibrage:</div>
+                  {/* LOG DEBUG - temporaire */}
+                  {console.log(`🔍 UI EQUI8 Tensions affichées (${compensator.nodeId}):`, {
+                    'uinit_ph1_V (AVANT)': compensator.uinit_ph1_V?.toFixed(1),
+                    'u1p_V (APRÈS)': compensator.u1p_V?.toFixed(1),
+                    'Δ Ph1': compensator.u1p_V && compensator.uinit_ph1_V 
+                      ? (compensator.u1p_V - compensator.uinit_ph1_V).toFixed(1) : 'N/A',
+                    'uinit_ph2_V (AVANT)': compensator.uinit_ph2_V?.toFixed(1),
+                    'u2p_V (APRÈS)': compensator.u2p_V?.toFixed(1),
+                    'Δ Ph2': compensator.u2p_V && compensator.uinit_ph2_V 
+                      ? (compensator.u2p_V - compensator.uinit_ph2_V).toFixed(1) : 'N/A',
+                    'uinit_ph3_V (AVANT)': compensator.uinit_ph3_V?.toFixed(1),
+                    'u3p_V (APRÈS)': compensator.u3p_V?.toFixed(1),
+                    'Δ Ph3': compensator.u3p_V && compensator.uinit_ph3_V 
+                      ? (compensator.u3p_V - compensator.uinit_ph3_V).toFixed(1) : 'N/A',
+                    'Écart AVANT': compensator.uinit_ph1_V && compensator.uinit_ph2_V && compensator.uinit_ph3_V
+                      ? (Math.max(compensator.uinit_ph1_V, compensator.uinit_ph2_V, compensator.uinit_ph3_V) - 
+                         Math.min(compensator.uinit_ph1_V, compensator.uinit_ph2_V, compensator.uinit_ph3_V)).toFixed(1)
+                      : 'N/A',
+                    'Écart APRÈS': compensator.u1p_V && compensator.u2p_V && compensator.u3p_V
+                      ? (Math.max(compensator.u1p_V, compensator.u2p_V, compensator.u3p_V) - 
+                         Math.min(compensator.u1p_V, compensator.u2p_V, compensator.u3p_V)).toFixed(1)
+                      : 'N/A'
+                  })}
                   <div className="grid grid-cols-4 gap-1 text-xs">
                     <div className="font-medium text-muted-foreground">Phase</div>
                     <div className="font-medium text-muted-foreground text-center">Avant</div>
@@ -164,7 +187,7 @@ export const SimulationPanel = () => {
                     <div>Ph1</div>
                     <div className="text-center">{compensator.uinit_ph1_V?.toFixed(1)} V</div>
                     <div className="text-center text-green-600">{compensator.u1p_V?.toFixed(1)} V</div>
-                    <div className="text-center text-green-600">
+                    <div className={`text-center ${compensator.u1p_V && compensator.uinit_ph1_V && Math.abs(compensator.u1p_V - compensator.uinit_ph1_V) < Math.abs(compensator.uinit_ph1_V - (compensator.umoy_init_V || 230)) ? 'text-green-600' : 'text-red-600'}`}>
                       {compensator.u1p_V && compensator.uinit_ph1_V 
                         ? `${(compensator.u1p_V - compensator.uinit_ph1_V) > 0 ? '+' : ''}${(compensator.u1p_V - compensator.uinit_ph1_V).toFixed(1)}`
                         : '-'}
@@ -173,7 +196,7 @@ export const SimulationPanel = () => {
                     <div>Ph2</div>
                     <div className="text-center">{compensator.uinit_ph2_V?.toFixed(1)} V</div>
                     <div className="text-center text-green-600">{compensator.u2p_V?.toFixed(1)} V</div>
-                    <div className="text-center text-green-600">
+                    <div className={`text-center ${compensator.u2p_V && compensator.uinit_ph2_V && Math.abs(compensator.u2p_V - compensator.uinit_ph2_V) < Math.abs(compensator.uinit_ph2_V - (compensator.umoy_init_V || 230)) ? 'text-green-600' : 'text-red-600'}`}>
                       {compensator.u2p_V && compensator.uinit_ph2_V 
                         ? `${(compensator.u2p_V - compensator.uinit_ph2_V) > 0 ? '+' : ''}${(compensator.u2p_V - compensator.uinit_ph2_V).toFixed(1)}`
                         : '-'}
@@ -182,7 +205,7 @@ export const SimulationPanel = () => {
                     <div>Ph3</div>
                     <div className="text-center">{compensator.uinit_ph3_V?.toFixed(1)} V</div>
                     <div className="text-center text-green-600">{compensator.u3p_V?.toFixed(1)} V</div>
-                    <div className="text-center text-green-600">
+                    <div className={`text-center ${compensator.u3p_V && compensator.uinit_ph3_V && Math.abs(compensator.u3p_V - compensator.uinit_ph3_V) < Math.abs(compensator.uinit_ph3_V - (compensator.umoy_init_V || 230)) ? 'text-green-600' : 'text-red-600'}`}>
                       {compensator.u3p_V && compensator.uinit_ph3_V 
                         ? `${(compensator.u3p_V - compensator.uinit_ph3_V) > 0 ? '+' : ''}${(compensator.u3p_V - compensator.uinit_ph3_V).toFixed(1)}`
                         : '-'}

@@ -1213,8 +1213,9 @@ export class SimulationCalculator extends ElectricalCalculator {
         continue;
       }
       
-      // Récupérer les métriques du nœud (si mode monophasé réparti)
-      if (project.loadModel === 'monophase_reparti' && result.nodeMetricsPerPhase) {
+      // Récupérer les métriques du nœud (mode mixte ou monophasé réparti)
+      const isMixedOrUnbalanced = project.loadModel === 'mixte_mono_poly' || project.loadModel === 'monophase_reparti';
+      if (isMixedOrUnbalanced && result.nodeMetricsPerPhase) {
         const nodeMetrics = result.nodeMetricsPerPhase.find(nm => nm.nodeId === compensator.nodeId);
         if (!nodeMetrics) continue;
         

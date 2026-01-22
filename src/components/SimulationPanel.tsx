@@ -51,9 +51,19 @@ export const SimulationPanel = () => {
   }) => {
     const node = currentProject?.nodes.find(n => n.id === compensator.nodeId);
     const is400V = currentProject?.voltageSystem === 'TÉTRAPHASÉ_400V';
-    const nodeConnectionType = node && currentProject ? getNodeConnectionType(currentProject.voltageSystem, currentProject.loadModel || 'polyphase_equilibre', node.isSource) : null;
+    const nodeConnectionType = node && currentProject ? getNodeConnectionType(currentProject.voltageSystem, currentProject.loadModel || 'mixte_mono_poly', node.isSource) : null;
     const isMonoPN = nodeConnectionType === 'MONO_230V_PN';
-    const hasDeseq = (currentProject?.loadModel ?? 'polyphase_equilibre') === 'monophase_reparti' && (currentProject?.desequilibrePourcent ?? 0) > 0;
+    
+    // Vérifier déséquilibre réel (clients MONO ou curseurs manuels)
+    const hasRealUnbalance = (node?.autoPhaseDistribution?.unbalancePercent ?? 0) > 0;
+    const manualCharges = currentProject?.manualPhaseDistribution?.charges;
+    const hasManualUnbalance = manualCharges && (
+      Math.abs(manualCharges.A - 33.33) > 0.1 ||
+      Math.abs(manualCharges.B - 33.33) > 0.1 ||
+      Math.abs(manualCharges.C - 33.33) > 0.1
+    );
+    const isMixedMode = currentProject?.loadModel === 'mixte_mono_poly';
+    const hasDeseq = isMixedMode && (hasRealUnbalance || hasManualUnbalance);
     const eligible = is400V && isMonoPN && hasDeseq;
     return <Card className="mb-4">
         <CardHeader className="pb-3">
@@ -86,30 +96,22 @@ export const SimulationPanel = () => {
           {!eligible && <div className="bg-muted/50 p-2 rounded text-xs space-y-2">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-3 w-3 text-yellow-500" />
-                <span>Disponible uniquement sur réseau 400V, monophasé (PN) et en mode déséquilibré.</span>
+                <span>Disponible sur réseau 400V avec déséquilibre de phase.</span>
               </div>
               <div className="grid grid-cols-1 gap-1">
-                <div>• Réseau 400V: {is400V ? 'OK' : 'Non'}</div>
-                <div>• Nœud en MONO 230V (PN): {isMonoPN ? 'OK' : nodeConnectionType || 'Non'}</div>
-                <div>• Mode déséquilibré: {currentProject.loadModel === 'monophase_reparti' ? `OK (${currentProject.desequilibrePourcent || 0}%)` : 'Non'}</div>
+                <div>• Réseau 400V: {is400V ? '✅ OK' : '❌ Non'}</div>
+                <div>• Nœud en MONO 230V (PN): {isMonoPN ? '✅ OK' : `❌ ${nodeConnectionType || 'Non'}`}</div>
+                <div>• Déséquilibre nœud: {hasRealUnbalance 
+                  ? `✅ ${node?.autoPhaseDistribution?.unbalancePercent?.toFixed(1)}%` 
+                  : '❌ 0% (équilibré)'}</div>
+                <div>• Curseurs déséquilibre: {hasManualUnbalance ? '✅ Actif' : '⚪ Non ajusté'}</div>
               </div>
-              <div className="flex items-center gap-2 flex-wrap pt-1">
-                {!isMonoPN && node && <Button size="sm" variant="outline" onClick={() => updateProjectConfig({
-              loadModel: 'monophase_reparti'
-            })}>
-                    Activer le mode monophasé réparti
-                  </Button>}
-                {currentProject.loadModel !== 'monophase_reparti' && <Button size="sm" variant="outline" onClick={() => updateProjectConfig({
-              loadModel: 'monophase_reparti'
-            })}>
-                    Activer le mode déséquilibré
-                  </Button>}
-                {currentProject.loadModel === 'monophase_reparti' && (currentProject.desequilibrePourcent || 0) === 0 && <Button size="sm" variant="outline" onClick={() => updateProjectConfig({
-              desequilibrePourcent: 10
-            })}>
-                    Déséquilibre 10%
-                  </Button>}
-              </div>
+              {!hasRealUnbalance && !hasManualUnbalance && (
+                <p className="text-muted-foreground mt-2">
+                  💡 Ajoutez des clients MONO sur ce nœud ou ajustez les curseurs de répartition 
+                  dans l'onglet Paramètres pour créer un déséquilibre.
+                </p>
+              )}
             </div>}
           <div className="grid grid-cols-2 gap-3">
             <div>

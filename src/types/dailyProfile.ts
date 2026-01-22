@@ -1,8 +1,26 @@
+import { SRG2SwitchState } from './srg2';
+
 export type Season = 'winter' | 'summer';
 export type Weather = 'sunny' | 'gray';
 
 export interface HourlyProfile {
   [hour: string]: number; // 0-23 → pourcentage (0-100)
+}
+
+/**
+ * État d'activation SRG2 pour une heure donnée
+ */
+export interface SRG2HourlyActivation {
+  srg2Id: string;
+  nodeId: string;
+  isActive: boolean;
+  switchStates: {
+    A: SRG2SwitchState;
+    B: SRG2SwitchState;
+    C: SRG2SwitchState;
+  };
+  tensionEntree: { A: number; B: number; C: number };
+  tensionSortie?: { A: number; B: number; C: number };
 }
 
 export interface MeasuredProfileMetadata {
@@ -74,6 +92,8 @@ export interface HourlyVoltageResult {
   productionsPower_kVA: number;
   // Bonus VE appliqué sur le foisonnement résidentiel (%)
   evBonus: number;
+  // État SRG2 pour cette heure (si simulation active)
+  srg2States?: SRG2HourlyActivation[];
 }
 
 export const defaultDailySimulationOptions: DailySimulationOptions = {

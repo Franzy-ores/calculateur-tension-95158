@@ -19,6 +19,7 @@ export interface MeasuredProfileMetadata {
 
 export interface SeasonProfile {
   residential: HourlyProfile;
+  client?: HourlyProfile; // Profil client avec foisonnement plus élevé (jusqu'à 80%)
   pv: HourlyProfile;
   industrial_pme: HourlyProfile;
 }

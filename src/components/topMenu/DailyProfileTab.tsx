@@ -105,7 +105,9 @@ export const DailyProfileTab = () => {
     nodeSelectionMode,
     // Client sélectionné et câble de branchement
     selectedClientId,
+    setSelectedClient,
     selectedBranchementCableId,
+    setSelectedBranchementCableId,
   } = useNetworkStore();
 
   const [editorOpen, setEditorOpen] = useState(false);
@@ -199,6 +201,20 @@ export const DailyProfileTab = () => {
     if (!selectedBranchementCableId) return null;
     return branchementCableTypes.find(c => c.id === selectedBranchementCableId) || null;
   }, [selectedBranchementCableId]);
+
+  // Clients connectés au nœud sélectionné (pour le sélecteur dans Courbe Raccordement)
+  const clientsOnSelectedNode = useMemo(() => {
+    if (!dailyProfileOptions.selectedNodeId || !currentProject?.clientsImportes || !currentProject?.clientLinks) {
+      return [];
+    }
+    
+    const nodeId = dailyProfileOptions.selectedNodeId;
+    const linkedClientIds = currentProject.clientLinks
+      .filter(link => link.nodeId === nodeId)
+      .map(link => link.clientId);
+    
+    return currentProject.clientsImportes.filter(c => linkedClientIds.includes(c.id));
+  }, [dailyProfileOptions.selectedNodeId, currentProject?.clientsImportes, currentProject?.clientLinks]);
 
   // Nœud lié au client sélectionné
   const clientLinkedNode = useMemo(() => {
@@ -520,36 +536,82 @@ export const DailyProfileTab = () => {
               Courbe Raccordement
             </Label>
             
-            {selectedClientId && selectedClient ? (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="client-curve-toggle" className="text-sm">
-                    Afficher courbe client
-                  </Label>
-                  <Switch
-                    id="client-curve-toggle"
-                    checked={showClientCurve}
-                    onCheckedChange={setShowClientCurve}
-                    disabled={!selectedCable}
-                  />
-                </div>
-                
-                {showClientCurve && selectedCable && (
-                  <div className="text-xs bg-cyan-50 dark:bg-cyan-950/50 p-2 rounded border border-cyan-200 dark:border-cyan-800">
-                    <p className="font-medium text-cyan-700 dark:text-cyan-300">{selectedClient.nomCircuit}</p>
-                    <p className="text-cyan-600 dark:text-cyan-400">
-                      {selectedClient.clientType === 'industriel' ? '🏭 Industriel' : '🏠 Résidentiel'}
-                    </p>
-                    <p className="text-muted-foreground">Câble: {selectedCable.label}</p>
-                    <p className="text-muted-foreground">Longueur: {clientCableLength.toFixed(1)}m</p>
+            {/* Sélecteur de client parmi ceux connectés au nœud */}
+            <div className="space-y-2">
+              <Select
+                value={selectedClientId || ''}
+                onValueChange={(value) => setSelectedClient(value || null)}
+                disabled={clientsOnSelectedNode.length === 0}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder={
+                    clientsOnSelectedNode.length === 0 
+                      ? "Aucun client sur ce nœud" 
+                      : "Sélectionner un client"
+                  } />
+                </SelectTrigger>
+                <SelectContent>
+                  {clientsOnSelectedNode.map(client => (
+                    <SelectItem key={client.id} value={client.id} className="text-xs">
+                      <span className="flex items-center gap-2">
+                        {client.clientType === 'industriel' ? '🏭' : '🏠'}
+                        {client.nomCircuit}
+                        <span className="text-muted-foreground">
+                          ({client.puissanceContractuelle_kVA} kVA)
+                        </span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              {selectedClient && (
+                <>
+                  {/* Sélecteur de câble de branchement */}
+                  <Select
+                    value={selectedBranchementCableId || ''}
+                    onValueChange={(value) => setSelectedBranchementCableId(value || null)}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Câble de branchement" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {branchementCableTypes.map(cable => (
+                        <SelectItem key={cable.id} value={cable.id} className="text-xs">
+                          {cable.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="client-curve-toggle" className="text-sm">
+                      Afficher courbe client
+                    </Label>
+                    <Switch
+                      id="client-curve-toggle"
+                      checked={showClientCurve}
+                      onCheckedChange={setShowClientCurve}
+                      disabled={!selectedCable}
+                    />
                   </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground italic">
-                Sélectionnez un raccordement dans "Tension Client"
-              </p>
-            )}
+                  
+                  {showClientCurve && selectedCable && (
+                    <div className="text-xs bg-cyan-50 dark:bg-cyan-950/50 p-2 rounded border border-cyan-200 dark:border-cyan-800">
+                      <p className="font-medium text-cyan-700 dark:text-cyan-300">{selectedClient.nomCircuit}</p>
+                      <p className="text-cyan-600 dark:text-cyan-400">
+                        {selectedClient.clientType === 'industriel' ? '🏭 Industriel' : '🏠 Résidentiel'}
+                      </p>
+                      <p className="text-muted-foreground">Câble: {selectedCable.label}</p>
+                      <p className="text-muted-foreground">Longueur: {clientCableLength.toFixed(1)}m</p>
+                      <p className="text-muted-foreground mt-1 italic">
+                        Profil client horaire (jusqu'à 80%)
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
 
           {/* Bouton éditer profils */}

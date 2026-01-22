@@ -1038,19 +1038,34 @@ export class SimulationCalculator extends ElectricalCalculator {
     // Estimation des puissances réactives (pour affichage)
     const Q_per_phase = Math.min(estimatedPower_kVA, compensator.maxPower_kVA) / 3;
 
-    // ✅ Log avec comparaison tensions stockées vs paramètres
-    console.log(`📐 EQUI8 au nœud ${compensator.nodeId} (formule officielle CME):`, {
-      'Tensions INIT (stockées)': `${Uinit_ph1_stored.toFixed(1)}V / ${Uinit_ph2_stored.toFixed(1)}V / ${Uinit_ph3_stored.toFixed(1)}V`,
-      'Tensions INIT (paramètres)': `${Uinit_ph1.toFixed(1)}V / ${Uinit_ph2.toFixed(1)}V / ${Uinit_ph3.toFixed(1)}V`,
-      'Cohérence init': Math.abs(ecart_init_stored - ecart_init) < 0.1 ? '✅ OK' : `⚠️ ÉCART: ${(ecart_init_stored - ecart_init).toFixed(1)}V`,
+    // ✅ LOG DIAGNOSTIC COMPLET : Vérifier convergence des tensions
+    const ecart_final_calc = Math.max(UEQUI8_ph1_mag, UEQUI8_ph2_mag, UEQUI8_ph3_mag) - 
+                              Math.min(UEQUI8_ph1_mag, UEQUI8_ph2_mag, UEQUI8_ph3_mag);
+    const convergenceOK = ecart_final_calc < ecart_init_stored;
+    
+    console.log(`🔍 EQUI8 DIAGNOSTIC TENSIONS (nœud ${compensator.nodeId}):`, {
+      '===== TENSIONS INITIALES =====': '',
+      'Tensions INIT stockées': `${Uinit_ph1_stored.toFixed(1)}V / ${Uinit_ph2_stored.toFixed(1)}V / ${Uinit_ph3_stored.toFixed(1)}V`,
+      'Tensions INIT paramètres': `${Uinit_ph1.toFixed(1)}V / ${Uinit_ph2.toFixed(1)}V / ${Uinit_ph3.toFixed(1)}V`,
+      'Umoy_init': `${Umoy_fixed.toFixed(1)}V`,
+      'Écart init (stocké)': `${ecart_init_stored.toFixed(1)}V`,
+      'Écart init (recalculé)': `${ecart_init.toFixed(1)}V`,
+      'Cohérence écart': Math.abs(ecart_init_stored - ecart_init) < 0.1 ? '✅ OK' : `⚠️ DIVERGENCE: ${(ecart_init_stored - ecart_init).toFixed(1)}V`,
+      '===== RATIOS CME =====': '',
       'Ratios (fixes)': `A=${ratio_ph1.toFixed(3)}, B=${ratio_ph2.toFixed(3)}, C=${ratio_ph3.toFixed(3)}`,
-      'Umoy-3Ph-init': `${Umoy_fixed.toFixed(1)}V`,
-      '(Umax-Umin)init STOCKÉ': `${ecart_init_stored.toFixed(1)}V`,
-      '(Umax-Umin)EQUI8': `${ecart_equi8.toFixed(1)}V`,
-      'Tensions EQUI8': `${UEQUI8_ph1_mag.toFixed(1)}V / ${UEQUI8_ph2_mag.toFixed(1)}V / ${UEQUI8_ph3_mag.toFixed(1)}V`,
+      'Somme ratios': (ratio_ph1 + ratio_ph2 + ratio_ph3).toFixed(4),
+      '===== TENSIONS EQUI8 CALCULÉES =====': '',
+      'Écart EQUI8 (cible)': `${ecart_equi8.toFixed(1)}V`,
+      'UEQUI8 Ph1': `${UEQUI8_ph1_mag.toFixed(1)}V (Δ = ${(UEQUI8_ph1_mag - Uinit_ph1_stored).toFixed(1)}V)`,
+      'UEQUI8 Ph2': `${UEQUI8_ph2_mag.toFixed(1)}V (Δ = ${(UEQUI8_ph2_mag - Uinit_ph2_stored).toFixed(1)}V)`,
+      'UEQUI8 Ph3': `${UEQUI8_ph3_mag.toFixed(1)}V (Δ = ${(UEQUI8_ph3_mag - Uinit_ph3_stored).toFixed(1)}V)`,
+      'Écart final calculé': `${ecart_final_calc.toFixed(1)}V`,
+      '===== VALIDATION =====': '',
+      'Réduction écart': `${ecart_init_stored.toFixed(1)}V → ${ecart_final_calc.toFixed(1)}V`,
+      'CONVERGENCE': convergenceOK ? '✅ OK - Écart réduit' : '❌ PROBLÈME - Écart augmente!',
       'I-EQUI8': `${I_EQUI8_effective.toFixed(1)}A`,
       'I_N_initial': `${I_N_initial.toFixed(1)}A`,
-      'Réduction': `${reductionPercent.toFixed(1)}%`
+      'Réduction %': `${reductionPercent.toFixed(1)}%`
     });
 
     return {

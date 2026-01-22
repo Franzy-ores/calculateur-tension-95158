@@ -516,4 +516,103 @@ describe('EQUI8 - Modèle phasoriel correct', () => {
     expect(diffB2_B).toBeLessThan(0.1);
     expect(diffB2_C).toBeLessThan(0.1);
   });
+
+  /**
+   * Test 5 - Test CME Fabricant (EQUI8-easycalc.xls)
+   * Valide les formules officielles avec les données exactes du fichier Excel
+   * Entrée: Zph=Zn=0.25Ω, tensions 236.5V/205V/236.5V
+   * Sortie attendue: ~229.8V / ~217.8V / ~229.8V
+   */
+  it('Test 5: Formules CME fabricant - Données EQUI8-easycalc.xls (Page 4)', () => {
+    // Données exactes du fichier EQUI8-easycalc.xls
+    const Uinit_ph1 = 236.5;
+    const Uinit_ph2 = 205.0;
+    const Uinit_ph3 = 236.5;
+    const Zph = 0.25;  // Ohms
+    const Zn = 0.25;   // Ohms
+    
+    // === Étape 1: Calcul Umoy et écart initial ===
+    const Umoy_init = (Uinit_ph1 + Uinit_ph2 + Uinit_ph3) / 3;
+    const ecart_init = Math.max(Uinit_ph1, Uinit_ph2, Uinit_ph3) - 
+                       Math.min(Uinit_ph1, Uinit_ph2, Uinit_ph3);
+    
+    console.log('📐 Test 5 - Données fabricant:');
+    console.log(`   Tensions initiales: ${Uinit_ph1}V / ${Uinit_ph2}V / ${Uinit_ph3}V`);
+    console.log(`   Umoy_init: ${Umoy_init.toFixed(1)}V`);
+    console.log(`   Écart init: ${ecart_init.toFixed(1)}V`);
+    console.log(`   Zph = Zn = ${Zph}Ω`);
+    
+    // === Étape 2: Calcul des ratios ===
+    // Ratio-phX = (Uinit-phX - Umoy) / (Umax-Umin)init
+    const ratio_ph1 = (Uinit_ph1 - Umoy_init) / ecart_init;
+    const ratio_ph2 = (Uinit_ph2 - Umoy_init) / ecart_init;
+    const ratio_ph3 = (Uinit_ph3 - Umoy_init) / ecart_init;
+    
+    console.log(`   Ratios: A=${ratio_ph1.toFixed(4)}, B=${ratio_ph2.toFixed(4)}, C=${ratio_ph3.toFixed(4)}`);
+    console.log(`   Somme ratios: ${(ratio_ph1 + ratio_ph2 + ratio_ph3).toFixed(6)} (devrait être ~0)`);
+    
+    // Vérifier que la somme des ratios ≈ 0
+    expect(Math.abs(ratio_ph1 + ratio_ph2 + ratio_ph3)).toBeLessThan(0.0001);
+    
+    // === Étape 3: Calcul (Umax-Umin)EQUI8 selon formule CME ===
+    // (Umax-Umin)EQUI8 = 1 / [0.9119 × ln(Zph) + 3.8654] × (Umax-Umin)init × 2 × Zph / (Zph + Zn)
+    const ln_Zph = Math.log(Zph);
+    const denominateur = 0.9119 * ln_Zph + 3.8654;
+    const facteur_impedance = (2 * Zph) / (Zph + Zn);  // = 1 quand Zph = Zn
+    const ecart_equi8 = (1 / denominateur) * ecart_init * facteur_impedance;
+    
+    console.log(`   ln(Zph): ${ln_Zph.toFixed(4)}`);
+    console.log(`   Dénominateur: ${denominateur.toFixed(4)}`);
+    console.log(`   Facteur impédance: ${facteur_impedance.toFixed(2)}`);
+    console.log(`   Écart EQUI8: ${ecart_equi8.toFixed(1)}V`);
+    
+    // === Étape 4: Calcul des tensions EQUI8 ===
+    // UEQUI8-phX = Umoy-3Ph-init + Ratio-phX × (Umax-Umin)EQUI8
+    const UEQUI8_ph1 = Umoy_init + ratio_ph1 * ecart_equi8;
+    const UEQUI8_ph2 = Umoy_init + ratio_ph2 * ecart_equi8;
+    const UEQUI8_ph3 = Umoy_init + ratio_ph3 * ecart_equi8;
+    
+    console.log(`   Tensions EQUI8 calculées: ${UEQUI8_ph1.toFixed(1)}V / ${UEQUI8_ph2.toFixed(1)}V / ${UEQUI8_ph3.toFixed(1)}V`);
+    
+    // Valeurs attendues selon EQUI8-easycalc.xls (Page 4)
+    const UEQUI8_ph1_expected = 229.8;
+    const UEQUI8_ph2_expected = 217.8;
+    const UEQUI8_ph3_expected = 229.8;
+    
+    console.log(`   Tensions EQUI8 attendues: ${UEQUI8_ph1_expected}V / ${UEQUI8_ph2_expected}V / ${UEQUI8_ph3_expected}V`);
+    
+    // === Assertions (tolérance ±2V comme indiqué par fabricant) ===
+    expect(UEQUI8_ph1).toBeCloseTo(UEQUI8_ph1_expected, 0);
+    expect(UEQUI8_ph2).toBeCloseTo(UEQUI8_ph2_expected, 0);
+    expect(UEQUI8_ph3).toBeCloseTo(UEQUI8_ph3_expected, 0);
+    
+    // === Étape 5: Vérifier la réduction d'écart ===
+    const ecart_final = Math.max(UEQUI8_ph1, UEQUI8_ph2, UEQUI8_ph3) - 
+                        Math.min(UEQUI8_ph1, UEQUI8_ph2, UEQUI8_ph3);
+    const reduction_percent = (1 - ecart_final / ecart_init) * 100;
+    
+    console.log(`   Écart final: ${ecart_final.toFixed(1)}V`);
+    console.log(`   Réduction: ${reduction_percent.toFixed(1)}%`);
+    
+    // L'écart final doit être inférieur à l'écart initial
+    expect(ecart_final).toBeLessThan(ecart_init);
+    // Avec Zph=Zn=0.25, réduction attendue ~61.5% selon Excel
+    expect(ecart_final).toBeCloseTo(12.1, 0);
+    expect(reduction_percent).toBeGreaterThan(60);
+    
+    // === Étape 6: Vérifier le comportement des phases ===
+    // Ph1 (haute) doit BAISSER vers Umoy
+    expect(UEQUI8_ph1).toBeLessThan(Uinit_ph1);
+    expect(UEQUI8_ph1).toBeGreaterThan(Umoy_init);
+    
+    // Ph2 (basse) doit MONTER vers Umoy
+    expect(UEQUI8_ph2).toBeGreaterThan(Uinit_ph2);
+    expect(UEQUI8_ph2).toBeLessThan(Umoy_init);
+    
+    // Ph3 (haute) doit BAISSER vers Umoy
+    expect(UEQUI8_ph3).toBeLessThan(Uinit_ph3);
+    expect(UEQUI8_ph3).toBeGreaterThan(Umoy_init);
+    
+    console.log('✅ Test CME fabricant validé - Les tensions convergent vers Umoy');
+  });
 });

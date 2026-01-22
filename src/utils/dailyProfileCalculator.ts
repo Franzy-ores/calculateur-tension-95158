@@ -1,5 +1,6 @@
-import { DailyProfileConfig, DailySimulationOptions, HourlyVoltageResult, HourlyProfile } from '@/types/dailyProfile';
-import { Project, Node, CalculationResult, SimulationEquipment } from '@/types/network';
+import { DailyProfileConfig, DailySimulationOptions, HourlyVoltageResult, HourlyProfile, SRG2HourlyActivation } from '@/types/dailyProfile';
+import { Project, CalculationResult, SimulationEquipment, NeutralCompensator } from '@/types/network';
+import { SRG2Config, SRG2SwitchState } from '@/types/srg2';
 import { ElectricalCalculator } from './electricalCalculations';
 import { SimulationCalculator } from './simulationCalculator';
 import defaultProfiles from '@/data/hourlyProfiles.json';
@@ -118,6 +119,11 @@ export class DailyProfileCalculator {
    * Calcule la tension à une heure donnée
    * Utilise le foisonnement horaire du JSON directement dans le calcul électrique
    * Applique le profil industriel aux clients industriels automatiquement
+   * 
+   * ARCHITECTURE SRG2 HEURE PAR HEURE:
+   * - Passe 1: Calcul naturel (sans SRG2) pour obtenir les tensions au nœud SRG2
+   * - Évaluation des seuils SRG2 pour déterminer l'état (BYP, LO1, LO2, BO1, BO2)
+   * - Passe 2: Si SRG2 actif, recalcul avec régulation appliquée
    */
   private calculateHourlyVoltage(hour: number, nominalVoltage: number): HourlyVoltageResult {
     const seasonProfile = this.profiles.profiles[this.options.season];
@@ -162,7 +168,6 @@ export class DailyProfileCalculator {
       : (seasonProfile.pv[hourStr] || 0) * weatherFactor;
 
     // Créer un projet modifié avec les foisonnements horaires par type de client
-    // Cela force electricalCalculations.ts à utiliser ces valeurs horaires
     const projectWithHourlyFoisonnement: Project = {
       ...this.project,
       foisonnementChargesResidentiel: residentialFoisonnementHoraire,
@@ -177,16 +182,31 @@ export class DailyProfileCalculator {
       : (residentialFoisonnementHoraire * nodePowers.residentialPower + 
          industrialFoisonnementHoraire * nodePowers.industrialPower) / totalPower;
 
-    // Si simulation active, utiliser SimulationCalculator avec équipements
-    const useSimulation = this.isSimulationActive && this.simulationEquipment && 
-      ((this.simulationEquipment.srg2Devices?.some(s => s.enabled)) ||
-       (this.simulationEquipment.neutralCompensators?.some(c => c.enabled)) ||
+    // Déterminer si on doit évaluer SRG2 heure par heure
+    const hasSRG2 = this.isSimulationActive && this.simulationEquipment && 
+      this.simulationEquipment.srg2Devices?.some(s => s.enabled);
+    
+    // Autres équipements de simulation (câbles, EQUI8)
+    const hasOtherEquipment = this.isSimulationActive && this.simulationEquipment && 
+      ((this.simulationEquipment.neutralCompensators?.some(c => c.enabled)) ||
        (this.simulationEquipment.cableReplacement?.enabled));
 
     try {
       let result: CalculationResult;
+      let srg2States: SRG2HourlyActivation[] | undefined;
       
-      if (useSimulation && this.simulationEquipment) {
+      if (hasSRG2 && this.simulationEquipment?.srg2Devices) {
+        // === CALCUL SRG2 HEURE PAR HEURE ===
+        const srg2Result = this.calculateWithHourlySRG2Evaluation(
+          projectWithHourlyFoisonnement,
+          this.simulationEquipment.srg2Devices.filter(s => s.enabled),
+          this.simulationEquipment.neutralCompensators?.filter(c => c.enabled),
+          this.simulationEquipment.cableReplacement
+        );
+        result = srg2Result.result;
+        srg2States = srg2Result.srg2States;
+      } else if (hasOtherEquipment && this.simulationEquipment) {
+        // Simulation sans SRG2 (câbles ou EQUI8 uniquement)
         const simCalculator = new SimulationCalculator(
           this.project.cosPhi,
           this.project.cosPhiCharges,
@@ -199,6 +219,7 @@ export class DailyProfileCalculator {
           this.simulationEquipment
         );
       } else {
+        // Pas de simulation active
         const calculator = new ElectricalCalculator(
           this.project.cosPhi,
           this.project.cosPhiCharges,
@@ -215,7 +236,8 @@ export class DailyProfileCalculator {
           this.project.clientLinks
         );
       }
-      return this.extractNodeVoltages(
+      
+      const hourlyResult = this.extractNodeVoltages(
         hour, 
         result, 
         nominalVoltage, 
@@ -228,6 +250,13 @@ export class DailyProfileCalculator {
         nodePowers.productionPower,
         evBonus
       );
+      
+      // Ajouter l'état SRG2 au résultat
+      if (srg2States) {
+        hourlyResult.srg2States = srg2States;
+      }
+      
+      return hourlyResult;
     } catch (error) {
       console.warn(`Erreur calcul heure ${hour}:`, error);
       return this.createDefaultHourlyResult(
@@ -243,6 +272,299 @@ export class DailyProfileCalculator {
         evBonus
       );
     }
+  }
+
+  /**
+   * Calcul en deux passes pour évaluation SRG2 heure par heure
+   * 
+   * PASSE 1: Calcul naturel (sans régulation SRG2)
+   *   → Obtenir les tensions "naturelles" au nœud où le SRG2 est installé
+   * 
+   * ÉVALUATION: Pour chaque SRG2, déterminer l'état des commutateurs
+   *   → Comparer tensions naturelles aux seuils LO2/LO1/BO1/BO2
+   * 
+   * PASSE 2: Si au moins un SRG2 est actif (pas en bypass)
+   *   → Recalculer le réseau avec les régulations appliquées
+   */
+  private calculateWithHourlySRG2Evaluation(
+    projectWithHourlyFoisonnement: Project,
+    srg2Devices: SRG2Config[],
+    neutralCompensators?: NeutralCompensator[],
+    cableReplacement?: { enabled: boolean; targetCableTypeId: string; affectedCableIds: string[] }
+  ): { result: CalculationResult; srg2States: SRG2HourlyActivation[] } {
+    
+    // Appliquer le remplacement de câbles si actif
+    let projectToUse = projectWithHourlyFoisonnement;
+    if (cableReplacement?.enabled && cableReplacement.affectedCableIds.length > 0) {
+      projectToUse = this.applyProjectCableReplacement(projectWithHourlyFoisonnement, cableReplacement);
+    }
+    
+    // === PASSE 1: Calcul naturel sans SRG2 ===
+    const calculator = new ElectricalCalculator(
+      this.project.cosPhi,
+      this.project.cosPhiCharges,
+      this.project.cosPhiProductions
+    );
+    
+    const naturalResult = calculator.calculateScenarioWithHTConfig(
+      projectToUse,
+      'MIXTE',
+      projectToUse.foisonnementChargesResidentiel ?? projectToUse.foisonnementCharges,
+      projectToUse.foisonnementProductions,
+      projectToUse.manualPhaseDistribution,
+      projectToUse.clientsImportes,
+      projectToUse.clientLinks
+    );
+    
+    // === ÉVALUATION DES SRG2 ===
+    const srg2States: SRG2HourlyActivation[] = [];
+    let anySRG2Active = false;
+    
+    for (const srg2 of srg2Devices) {
+      const activation = this.evaluateSRG2Activation(naturalResult, srg2, projectToUse.voltageSystem);
+      srg2States.push(activation);
+      if (activation.isActive) {
+        anySRG2Active = true;
+      }
+    }
+    
+    // === PASSE 2: Recalcul avec SRG2 si actif ===
+    if (anySRG2Active) {
+      // Créer une copie des devices SRG2 avec les états d'activation calculés
+      const activatedSRG2Devices = srg2Devices.map((srg2, index) => {
+        const state = srg2States[index];
+        if (!state.isActive) {
+          // SRG2 en bypass - le désactiver pour ce calcul
+          return { ...srg2, enabled: false };
+        }
+        // SRG2 actif - mettre à jour les tensions d'entrée et états commutateurs
+        return {
+          ...srg2,
+          tensionEntree: state.tensionEntree,
+          etatCommutateur: state.switchStates,
+          tensionSortie: state.tensionSortie
+        };
+      });
+      
+      // Construire l'équipement de simulation avec états SRG2 pré-calculés
+      const simulationEquipment: SimulationEquipment = {
+        srg2Devices: activatedSRG2Devices.filter(s => s.enabled),
+        neutralCompensators: neutralCompensators || [],
+        cableUpgrades: [],
+        cableReplacement: this.simulationEquipment?.cableReplacement
+      };
+      
+      // Si au moins un SRG2 reste actif, calculer avec régulation
+      if (simulationEquipment.srg2Devices && simulationEquipment.srg2Devices.length > 0) {
+        const simCalculator = new SimulationCalculator(
+          this.project.cosPhi,
+          this.project.cosPhiCharges,
+          this.project.cosPhiProductions
+        );
+        
+        // Créer un "fake" calculationResults avec le résultat naturel pour que le SRG2
+        // lise les bonnes tensions d'entrée
+        const fakeCalcResults = { 'MIXTE': naturalResult };
+        
+        const simulatedResult = simCalculator.calculateWithSimulation(
+          projectToUse,
+          'MIXTE',
+          simulationEquipment,
+          fakeCalcResults
+        );
+        
+        // Mettre à jour les tensions de sortie depuis le résultat simulé
+        for (let i = 0; i < srg2States.length; i++) {
+          const state = srg2States[i];
+          if (state.isActive) {
+            const nodeMetrics = simulatedResult.nodeMetricsPerPhase?.find(
+              nm => nm.nodeId === state.nodeId
+            );
+            if (nodeMetrics?.voltagesPerPhase) {
+              state.tensionSortie = {
+                A: nodeMetrics.voltagesPerPhase.A,
+                B: nodeMetrics.voltagesPerPhase.B,
+                C: nodeMetrics.voltagesPerPhase.C
+              };
+            }
+          }
+        }
+        
+        return { result: simulatedResult, srg2States };
+      }
+    }
+    
+    // Pas de SRG2 actif ou tous en bypass → appliquer EQUI8 si présent
+    if (neutralCompensators && neutralCompensators.length > 0) {
+      const simCalculator = new SimulationCalculator(
+        this.project.cosPhi,
+        this.project.cosPhiCharges,
+        this.project.cosPhiProductions
+      );
+      
+      const equipmentWithoutSRG2: SimulationEquipment = {
+        srg2Devices: [],
+        neutralCompensators,
+        cableUpgrades: [],
+        cableReplacement: this.simulationEquipment?.cableReplacement
+      };
+      
+      const result = simCalculator.calculateWithSimulation(
+        projectToUse,
+        'MIXTE',
+        equipmentWithoutSRG2
+      );
+      
+      return { result, srg2States };
+    }
+    
+    return { result: naturalResult, srg2States };
+  }
+  
+  /**
+   * Évalue l'activation d'un SRG2 pour une heure donnée
+   * Compare les tensions naturelles aux seuils de régulation
+   */
+  private evaluateSRG2Activation(
+    naturalResult: CalculationResult,
+    srg2: SRG2Config,
+    voltageSystem: string
+  ): SRG2HourlyActivation {
+    // Récupérer les tensions naturelles au nœud SRG2
+    const nodeMetrics = naturalResult.nodeMetricsPerPhase?.find(
+      nm => nm.nodeId === srg2.nodeId
+    );
+    
+    if (!nodeMetrics?.voltagesPerPhase) {
+      // Nœud non trouvé → bypass par défaut
+      return {
+        srg2Id: srg2.id,
+        nodeId: srg2.nodeId,
+        isActive: false,
+        switchStates: { A: 'BYP', B: 'BYP', C: 'BYP' },
+        tensionEntree: { A: 230, B: 230, C: 230 }
+      };
+    }
+    
+    const tensions = {
+      A: nodeMetrics.voltagesPerPhase.A,
+      B: nodeMetrics.voltagesPerPhase.B,
+      C: nodeMetrics.voltagesPerPhase.C
+    };
+    
+    // Déterminer l'état de chaque phase selon les seuils
+    const stateA = this.determineSRG2SwitchState(tensions.A, srg2);
+    const stateB = this.determineSRG2SwitchState(tensions.B, srg2);
+    const stateC = this.determineSRG2SwitchState(tensions.C, srg2);
+    
+    // Appliquer les contraintes SRG2-230 si nécessaire (pas de boost et lower simultanés)
+    const finalStates = this.applySRG230Constraints(
+      { A: stateA, B: stateB, C: stateC },
+      tensions,
+      srg2
+    );
+    
+    // SRG2 actif si au moins une phase n'est pas en bypass
+    const isActive = finalStates.A !== 'BYP' || finalStates.B !== 'BYP' || finalStates.C !== 'BYP';
+    
+    // Calculer les tensions de sortie prévisionnelles
+    const tensionSortie = isActive ? {
+      A: tensions.A * (1 + this.getVoltageCoefficient(finalStates.A, srg2) / 100),
+      B: tensions.B * (1 + this.getVoltageCoefficient(finalStates.B, srg2) / 100),
+      C: tensions.C * (1 + this.getVoltageCoefficient(finalStates.C, srg2) / 100)
+    } : undefined;
+    
+    return {
+      srg2Id: srg2.id,
+      nodeId: srg2.nodeId,
+      isActive,
+      switchStates: finalStates,
+      tensionEntree: tensions,
+      tensionSortie
+    };
+  }
+  
+  /**
+   * Détermine l'état du commutateur SRG2 selon la tension
+   */
+  private determineSRG2SwitchState(tension: number, srg2: SRG2Config): SRG2SwitchState {
+    if (tension >= srg2.seuilLO2_V) return 'LO2';
+    if (tension >= srg2.seuilLO1_V) return 'LO1';
+    if (tension <= srg2.seuilBO2_V) return 'BO2';
+    if (tension <= srg2.seuilBO1_V) return 'BO1';
+    return 'BYP';
+  }
+  
+  /**
+   * Applique les contraintes SRG2-230 (pas de boost et lower simultanés sur phases différentes)
+   */
+  private applySRG230Constraints(
+    states: { A: SRG2SwitchState; B: SRG2SwitchState; C: SRG2SwitchState },
+    tensions: { A: number; B: number; C: number },
+    srg2: SRG2Config
+  ): { A: SRG2SwitchState; B: SRG2SwitchState; C: SRG2SwitchState } {
+    if (srg2.type !== 'SRG2-230') return states;
+    
+    const hasBoost = states.A === 'BO1' || states.A === 'BO2' || 
+                     states.B === 'BO1' || states.B === 'BO2' || 
+                     states.C === 'BO1' || states.C === 'BO2';
+    const hasLower = states.A === 'LO1' || states.A === 'LO2' || 
+                     states.B === 'LO1' || states.B === 'LO2' || 
+                     states.C === 'LO1' || states.C === 'LO2';
+    
+    if (hasBoost && hasLower) {
+      // Conflit: garder le mode correspondant à l'écart le plus important
+      const avgTension = (tensions.A + tensions.B + tensions.C) / 3;
+      const consigne = srg2.tensionConsigne_V;
+      
+      if (avgTension > consigne) {
+        // Privilégier LOWER (tensions trop hautes)
+        return {
+          A: (states.A === 'BO1' || states.A === 'BO2') ? 'BYP' : states.A,
+          B: (states.B === 'BO1' || states.B === 'BO2') ? 'BYP' : states.B,
+          C: (states.C === 'BO1' || states.C === 'BO2') ? 'BYP' : states.C
+        };
+      } else {
+        // Privilégier BOOST (tensions trop basses)
+        return {
+          A: (states.A === 'LO1' || states.A === 'LO2') ? 'BYP' : states.A,
+          B: (states.B === 'LO1' || states.B === 'LO2') ? 'BYP' : states.B,
+          C: (states.C === 'LO1' || states.C === 'LO2') ? 'BYP' : states.C
+        };
+      }
+    }
+    
+    return states;
+  }
+  
+  /**
+   * Retourne le coefficient de régulation selon l'état du commutateur
+   */
+  private getVoltageCoefficient(state: SRG2SwitchState, srg2: SRG2Config): number {
+    switch (state) {
+      case 'LO2': return srg2.coefficientLO2;
+      case 'LO1': return srg2.coefficientLO1;
+      case 'BO1': return srg2.coefficientBO1;
+      case 'BO2': return srg2.coefficientBO2;
+      default: return 0;
+    }
+  }
+  
+  /**
+   * Applique le remplacement de câbles au projet
+   */
+  private applyProjectCableReplacement(
+    project: Project,
+    cableReplacement: { targetCableTypeId: string; affectedCableIds: string[] }
+  ): Project {
+    const modifiedCables = project.cables.map(cable => {
+      if (cableReplacement.affectedCableIds.includes(cable.id)) {
+        return { ...cable, typeId: cableReplacement.targetCableTypeId };
+      }
+      return cable;
+    });
+    
+    return { ...project, cables: modifiedCables };
   }
   /**
    * Construit une map parent pour chaque nœud (BFS depuis la source)

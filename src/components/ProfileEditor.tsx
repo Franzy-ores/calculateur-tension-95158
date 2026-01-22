@@ -108,7 +108,7 @@ export const ProfileEditor = ({ open, onOpenChange, profiles, onSave }: ProfileE
       const multiplier = globalMultiplier / 100;
       const seasons = ['winter', 'summer'];
       const profileKeys = targetProfile === 'all' 
-        ? ['residential', 'pv', 'ev', 'industrial_pme']
+        ? ['residential', 'client', 'pv', 'ev', 'industrial_pme']
         : [targetProfile];
 
       seasons.forEach(season => {

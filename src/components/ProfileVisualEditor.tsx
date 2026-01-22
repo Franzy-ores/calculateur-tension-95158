@@ -35,11 +35,13 @@ interface ProfileVisualEditorProps {
 }
 
 type Season = 'winter' | 'summer';
-type ProfileType = 'residential' | 'pv' | 'industrial_pme';
+type ProfileType = 'residential' | 'pv' | 'industrial_pme' | 'ev' | 'client';
 
 const PROFILE_LABELS: Record<ProfileType, { label: string; color: string }> = {
   residential: { label: 'Résidentiel', color: '#3b82f6' },
+  client: { label: 'Raccordement client', color: '#06b6d4' },
   pv: { label: 'Production PV', color: '#f59e0b' },
+  ev: { label: 'Véhicules électriques', color: '#10b981' },
   industrial_pme: { label: 'Industriel / PME', color: '#8b5cf6' },
 };
 
@@ -178,7 +180,7 @@ export const ProfileVisualEditor = ({
     const multiplier = globalMultiplier / 100;
     const seasons: Season[] = ['winter', 'summer'];
     const profileKeys: ProfileType[] = targetProfile === 'all' 
-      ? ['residential', 'pv', 'industrial_pme']
+      ? ['residential', 'client', 'pv', 'ev', 'industrial_pme']
       : [targetProfile as ProfileType];
 
     setEditedProfiles(prev => {
@@ -187,12 +189,14 @@ export const ProfileVisualEditor = ({
       seasons.forEach(s => {
         updated.profiles[s] = { ...prev.profiles[s] };
         profileKeys.forEach(pk => {
-          if (prev.profiles[s][pk]) {
+          const seasonProfiles = prev.profiles[s] as unknown as Record<string, { [key: string]: number } | undefined>;
+          const profile = seasonProfiles[pk];
+          if (profile) {
             const newProfile: { [key: string]: number } = {};
-            Object.entries(prev.profiles[s][pk]!).forEach(([hour, value]) => {
+            Object.entries(profile).forEach(([hour, value]) => {
               newProfile[hour] = Math.max(0, Math.min(100, Math.round(value * multiplier)));
             });
-            updated.profiles[s][pk] = newProfile;
+            (updated.profiles[s] as unknown as Record<string, { [key: string]: number }>)[pk] = newProfile;
           }
         });
       });
@@ -273,6 +277,7 @@ export const ProfileVisualEditor = ({
                   <SelectContent>
                     <SelectItem value="all">Tous les profils</SelectItem>
                     <SelectItem value="residential">Résidentiel</SelectItem>
+                    <SelectItem value="client">Raccordement client</SelectItem>
                     <SelectItem value="pv">Production PV</SelectItem>
                     <SelectItem value="ev">Véhicules électriques</SelectItem>
                     <SelectItem value="industrial_pme">Industriel / PME</SelectItem>

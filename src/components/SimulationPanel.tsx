@@ -149,19 +149,61 @@ export const SimulationPanel = () => {
                 <div>I-EQUI8: {compensator.currentIN_A.toFixed(1)} A</div>
                 <div>Réduction: {compensator.reductionPercent?.toFixed(1)}%</div>
               </div>
-              <Separator className="my-2" />
-              <div className="text-xs font-medium mb-1">Tensions (Ph-N):</div>
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <div>Ph1: {compensator.u1p_V?.toFixed(1)} V</div>
-                <div>Ph2: {compensator.u2p_V?.toFixed(1)} V</div>
-                <div>Ph3: {compensator.u3p_V?.toFixed(1)} V</div>
-              </div>
+              
+              {/* ✅ NOUVEAU : Tableau comparatif tensions AVANT / APRÈS équilibrage */}
+              {compensator.uinit_ph1_V !== undefined && (
+                <>
+                  <Separator className="my-2" />
+                  <div className="text-xs font-medium mb-2">Tensions nœud avant / après équilibrage:</div>
+                  <div className="grid grid-cols-4 gap-1 text-xs">
+                    <div className="font-medium text-muted-foreground">Phase</div>
+                    <div className="font-medium text-muted-foreground text-center">Avant</div>
+                    <div className="font-medium text-muted-foreground text-center">Après</div>
+                    <div className="font-medium text-muted-foreground text-center">Δ</div>
+                    
+                    <div>Ph1</div>
+                    <div className="text-center">{compensator.uinit_ph1_V?.toFixed(1)} V</div>
+                    <div className="text-center text-green-600">{compensator.u1p_V?.toFixed(1)} V</div>
+                    <div className="text-center text-green-600">
+                      {compensator.u1p_V && compensator.uinit_ph1_V 
+                        ? `${(compensator.u1p_V - compensator.uinit_ph1_V) > 0 ? '+' : ''}${(compensator.u1p_V - compensator.uinit_ph1_V).toFixed(1)}`
+                        : '-'}
+                    </div>
+                    
+                    <div>Ph2</div>
+                    <div className="text-center">{compensator.uinit_ph2_V?.toFixed(1)} V</div>
+                    <div className="text-center text-green-600">{compensator.u2p_V?.toFixed(1)} V</div>
+                    <div className="text-center text-green-600">
+                      {compensator.u2p_V && compensator.uinit_ph2_V 
+                        ? `${(compensator.u2p_V - compensator.uinit_ph2_V) > 0 ? '+' : ''}${(compensator.u2p_V - compensator.uinit_ph2_V).toFixed(1)}`
+                        : '-'}
+                    </div>
+                    
+                    <div>Ph3</div>
+                    <div className="text-center">{compensator.uinit_ph3_V?.toFixed(1)} V</div>
+                    <div className="text-center text-green-600">{compensator.u3p_V?.toFixed(1)} V</div>
+                    <div className="text-center text-green-600">
+                      {compensator.u3p_V && compensator.uinit_ph3_V 
+                        ? `${(compensator.u3p_V - compensator.uinit_ph3_V) > 0 ? '+' : ''}${(compensator.u3p_V - compensator.uinit_ph3_V).toFixed(1)}`
+                        : '-'}
+                    </div>
+                  </div>
+                </>
+              )}
+              
               {compensator.umoy_init_V && <>
                   <Separator className="my-2" />
                   <div className="text-xs">
-                    <div>Umoy init: {compensator.umoy_init_V.toFixed(1)} V</div>
-                    <div>Écart init: {compensator.ecart_init_V?.toFixed(1)} V</div>
-                    <div>Écart EQUI8: {compensator.ecart_equi8_V?.toFixed(1)} V</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>Umoy init: {compensator.umoy_init_V.toFixed(1)} V</div>
+                      <div>Écart init: {compensator.ecart_init_V?.toFixed(1)} V</div>
+                    </div>
+                    <div className="text-green-600 font-medium mt-1">
+                      Écart EQUI8: {compensator.ecart_equi8_V?.toFixed(1)} V 
+                      ({compensator.ecart_init_V && compensator.ecart_equi8_V 
+                        ? `-${(compensator.ecart_init_V - compensator.ecart_equi8_V).toFixed(1)} V` 
+                        : ''})
+                    </div>
                   </div>
                 </>}
               <Separator className="my-2" />

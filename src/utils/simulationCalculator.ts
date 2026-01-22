@@ -819,6 +819,10 @@ export class SimulationCalculator extends ElectricalCalculator {
     umin_init_V: number;
     ecart_init_V: number;
     ecart_equi8_V: number;
+    // ✅ NOUVEAU : Tensions initiales par phase (avant équilibrage)
+    uinit_ph1_V: number;
+    uinit_ph2_V: number;
+    uinit_ph3_V: number;
   } {
     // Extraire et clamper les impédances
     const Zph_raw = compensator.Zph_Ohm;
@@ -868,7 +872,11 @@ export class SimulationCalculator extends ElectricalCalculator {
         umax_init_V: Math.max(Uinit_ph1, Uinit_ph2, Uinit_ph3),
         umin_init_V: Math.min(Uinit_ph1, Uinit_ph2, Uinit_ph3),
         ecart_init_V: Math.max(Uinit_ph1, Uinit_ph2, Uinit_ph3) - Math.min(Uinit_ph1, Uinit_ph2, Uinit_ph3),
-        ecart_equi8_V: Math.max(Uinit_ph1, Uinit_ph2, Uinit_ph3) - Math.min(Uinit_ph1, Uinit_ph2, Uinit_ph3)
+        ecart_equi8_V: Math.max(Uinit_ph1, Uinit_ph2, Uinit_ph3) - Math.min(Uinit_ph1, Uinit_ph2, Uinit_ph3),
+        // ✅ NOUVEAU : Tensions initiales par phase
+        uinit_ph1_V: Uinit_ph1,
+        uinit_ph2_V: Uinit_ph2,
+        uinit_ph3_V: Uinit_ph3
       };
     }
 
@@ -907,7 +915,11 @@ export class SimulationCalculator extends ElectricalCalculator {
         umax_init_V: Umax_init,
         umin_init_V: Umin_init,
         ecart_init_V: ecart_init,
-        ecart_equi8_V: ecart_init
+        ecart_equi8_V: ecart_init,
+        // ✅ NOUVEAU : Tensions initiales par phase
+        uinit_ph1_V: Uinit_ph1,
+        uinit_ph2_V: Uinit_ph2,
+        uinit_ph3_V: Uinit_ph3
       };
     }
     
@@ -939,12 +951,25 @@ export class SimulationCalculator extends ElectricalCalculator {
         umax_init_V: Umax_init,
         umin_init_V: Umin_init,
         ecart_init_V: ecart_init,
-        ecart_equi8_V: ecart_init
+        ecart_equi8_V: ecart_init,
+        // ✅ NOUVEAU : Tensions initiales par phase
+        uinit_ph1_V: Uinit_ph1,
+        uinit_ph2_V: Uinit_ph2,
+        uinit_ph3_V: Uinit_ph3
       };
     }
     
     // Utiliser les ratios FIXES et l'écart EQUI8 calculé à l'itération 1
-    const { ratio_ph1, ratio_ph2, ratio_ph3, Umoy_init: Umoy_fixed, ecart_equi8 } = ratios;
+    // ✅ CORRECTION : Extraire TOUTES les valeurs stockées à l'itération 1
+    const { 
+      ratio_ph1, ratio_ph2, ratio_ph3, 
+      Umoy_init: Umoy_fixed, 
+      ecart_init: ecart_init_stored,  // ✅ Écart initial fixe
+      ecart_equi8,
+      Uinit_ph1: Uinit_ph1_stored,    // ✅ Tensions initiales stockées
+      Uinit_ph2: Uinit_ph2_stored,
+      Uinit_ph3: Uinit_ph3_stored
+    } = ratios;
     
     // ✅ FORMULE EXACTE selon documentation EQUI8 (CME Transformateur)
     // UEQUI8-ph1 = Umoy-3Ph-init + Ratio-ph1 × (Umax-Umin)EQUI8
@@ -962,7 +987,8 @@ export class SimulationCalculator extends ElectricalCalculator {
     // ✅ FORMULE EXACTE: I-EQUI8 = 0,392 × Zph^(-0,8065) × (Umax-Umin)init × 2 × Zph / (Zph + Zn)
     const facteur_courant = 0.392 * Math.pow(Zph, -0.8065);
     const facteur_impedance_courant = (2 * Zph) / (Zph + Zn);
-    let I_EQUI8_mag = facteur_courant * ecart_init * facteur_impedance_courant;
+    // ✅ CORRECTION : Utiliser l'écart STOCKÉ pour cohérence avec formule CME
+    let I_EQUI8_mag = facteur_courant * ecart_init_stored * facteur_impedance_courant;
     
     // Construire le phasor de compensation: opposé à I_N_complex
     // L'EQUI8 injecte un courant qui s'oppose au courant de neutre
@@ -1012,13 +1038,17 @@ export class SimulationCalculator extends ElectricalCalculator {
     // Estimation des puissances réactives (pour affichage)
     const Q_per_phase = Math.min(estimatedPower_kVA, compensator.maxPower_kVA) / 3;
 
+    // ✅ Log avec comparaison tensions stockées vs paramètres
     console.log(`📐 EQUI8 au nœud ${compensator.nodeId} (formule officielle CME):`, {
+      'Tensions INIT (stockées)': `${Uinit_ph1_stored.toFixed(1)}V / ${Uinit_ph2_stored.toFixed(1)}V / ${Uinit_ph3_stored.toFixed(1)}V`,
+      'Tensions INIT (paramètres)': `${Uinit_ph1.toFixed(1)}V / ${Uinit_ph2.toFixed(1)}V / ${Uinit_ph3.toFixed(1)}V`,
+      'Cohérence init': Math.abs(ecart_init_stored - ecart_init) < 0.1 ? '✅ OK' : `⚠️ ÉCART: ${(ecart_init_stored - ecart_init).toFixed(1)}V`,
       'Ratios (fixes)': `A=${ratio_ph1.toFixed(3)}, B=${ratio_ph2.toFixed(3)}, C=${ratio_ph3.toFixed(3)}`,
       'Umoy-3Ph-init': `${Umoy_fixed.toFixed(1)}V`,
-      '(Umax-Umin)init': `${ecart_init.toFixed(1)}V`,
+      '(Umax-Umin)init STOCKÉ': `${ecart_init_stored.toFixed(1)}V`,
       '(Umax-Umin)EQUI8': `${ecart_equi8.toFixed(1)}V`,
       'Tensions EQUI8': `${UEQUI8_ph1_mag.toFixed(1)}V / ${UEQUI8_ph2_mag.toFixed(1)}V / ${UEQUI8_ph3_mag.toFixed(1)}V`,
-      'I-EQUI8': `${I_EQUI8_effective.toFixed(1)}A (formule: 0.392×Zph^-0.8065×...)`,
+      'I-EQUI8': `${I_EQUI8_effective.toFixed(1)}A`,
       'I_N_initial': `${I_N_initial.toFixed(1)}A`,
       'Réduction': `${reductionPercent.toFixed(1)}%`
     });
@@ -1038,11 +1068,16 @@ export class SimulationCalculator extends ElectricalCalculator {
       iN_absorbed_A: (I_N_initial - I_N_residual),
       isLimited,
       compensationQ_kVAr: { A: Q_per_phase, B: Q_per_phase, C: Q_per_phase },
-      umoy_init_V: Umoy_init,
-      umax_init_V: Umax_init,
-      umin_init_V: Umin_init,
-      ecart_init_V: ecart_init,
-      ecart_equi8_V: ecart_equi8
+      // ✅ CORRECTION : Retourner valeurs STOCKÉES pour cohérence affichage
+      umoy_init_V: Umoy_fixed,
+      umax_init_V: Math.max(Uinit_ph1_stored, Uinit_ph2_stored, Uinit_ph3_stored),
+      umin_init_V: Math.min(Uinit_ph1_stored, Uinit_ph2_stored, Uinit_ph3_stored),
+      ecart_init_V: ecart_init_stored,
+      ecart_equi8_V: ecart_equi8,
+      // ✅ NOUVEAU : Tensions avant équilibrage (stockées à itération 1)
+      uinit_ph1_V: Uinit_ph1_stored,
+      uinit_ph2_V: Uinit_ph2_stored,
+      uinit_ph3_V: Uinit_ph3_stored
     };
   }
 

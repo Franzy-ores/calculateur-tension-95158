@@ -1211,16 +1211,28 @@ export class ElectricalCalculator {
               // Calculer tension selon Kirchhoff : V_v = V_u - Z * I_uv
               let Vv = sub(Vu, mul(Z, Iuv));
               
-              // ✅ Application correcte EQUI8 : impact sur potentiel du neutre
+              // ✅ Application EQUI8 : imposer les tensions compensées (comme SRG2)
               const vNode = nodeById.get(v);
               if (vNode?.customProps?.['equi8_modified']) {
-                const I_EQUI8_neutre = vNode.customProps['equi8_current_neutral'];
-                if (I_EQUI8_neutre) {
-                  // L'EQUI8 modifie le potentiel du neutre, affectant toutes les phases identiquement
-                  const Z_neutre = C(0.15, 0); // Impédance du conducteur neutre
-                  const delta_V_neutre = mul(Z_neutre, I_EQUI8_neutre);
-                  // Correction identique sur toutes les phases (modification du point neutre)
-                  Vv = sub(Vv, delta_V_neutre);
+                const equi8_voltage_A = vNode.customProps['equi8_voltage_A'];
+                const equi8_voltage_B = vNode.customProps['equi8_voltage_B'];
+                const equi8_voltage_C = vNode.customProps['equi8_voltage_C'];
+                
+                if (equi8_voltage_A !== undefined && equi8_voltage_B !== undefined && equi8_voltage_C !== undefined) {
+                  // Imposer la tension compensée selon la phase courante
+                  let equi8TargetVoltage = 0;
+                  if (angleDeg === 0) {
+                    equi8TargetVoltage = equi8_voltage_A;
+                  } else if (angleDeg === -120) {
+                    equi8TargetVoltage = equi8_voltage_B;
+                  } else if (angleDeg === 120) {
+                    equi8TargetVoltage = equi8_voltage_C;
+                  }
+                  
+                  // Remplacer Vv par la tension EQUI8 (conserver l'angle calculé)
+                  const angleRad = arg(Vv);
+                  Vv = C(equi8TargetVoltage * Math.cos(angleRad), equi8TargetVoltage * Math.sin(angleRad));
+                  console.log(`🎯 EQUI8 nœud ${v} (phase ${angleDeg}°): tension imposée ${equi8TargetVoltage.toFixed(1)}V`);
                 }
               }
               

@@ -115,6 +115,7 @@ export const DailyProfileTab = () => {
   const [editMeasuredOpen, setEditMeasuredOpen] = useState(false);
   const [comparisonMode, setComparisonMode] = useState(false);
   const [showClientCurve, setShowClientCurve] = useState(false);
+  const [clientCurveMode, setClientCurveMode] = useState<'overlay' | 'solo'>('overlay');
 
   // Résultats du calcul
   const [results, setResults] = useState<HourlyVoltageResult[]>([]);
@@ -597,16 +598,37 @@ export const DailyProfileTab = () => {
                   </div>
                   
                   {showClientCurve && selectedCable && (
-                    <div className="text-xs bg-cyan-50 dark:bg-cyan-950/50 p-2 rounded border border-cyan-200 dark:border-cyan-800">
-                      <p className="font-medium text-cyan-700 dark:text-cyan-300">{selectedClient.nomCircuit}</p>
-                      <p className="text-cyan-600 dark:text-cyan-400">
-                        {selectedClient.clientType === 'industriel' ? '🏭 Industriel' : '🏠 Résidentiel'}
-                      </p>
-                      <p className="text-muted-foreground">Câble: {selectedCable.label}</p>
-                      <p className="text-muted-foreground">Longueur: {clientCableLength.toFixed(1)}m</p>
-                      <p className="text-muted-foreground mt-1 italic">
-                        Profil client horaire (jusqu'à 80%)
-                      </p>
+                    <div className="text-xs bg-cyan-50 dark:bg-cyan-950/50 p-2 rounded border border-cyan-200 dark:border-cyan-800 space-y-2">
+                      <div>
+                        <p className="font-medium text-cyan-700 dark:text-cyan-300">{selectedClient.nomCircuit}</p>
+                        <p className="text-cyan-600 dark:text-cyan-400">
+                          {selectedClient.clientType === 'industriel' ? '🏭 Industriel' : '🏠 Résidentiel'}
+                        </p>
+                        <p className="text-muted-foreground">Câble: {selectedCable.label}</p>
+                        <p className="text-muted-foreground">Longueur: {clientCableLength.toFixed(1)}m</p>
+                        <p className="text-muted-foreground mt-1 italic">
+                          Profil client horaire (jusqu'à 80%)
+                        </p>
+                      </div>
+                      {/* Mode d'affichage de la courbe */}
+                      <div className="flex gap-1 pt-1 border-t border-cyan-200 dark:border-cyan-800">
+                        <Button
+                          size="sm"
+                          variant={clientCurveMode === 'overlay' ? 'default' : 'outline'}
+                          onClick={() => setClientCurveMode('overlay')}
+                          className="flex-1 h-6 text-[10px] px-1"
+                        >
+                          Superposée
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={clientCurveMode === 'solo' ? 'default' : 'outline'}
+                          onClick={() => setClientCurveMode('solo')}
+                          className="flex-1 h-6 text-[10px] px-1"
+                        >
+                          Seule
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </>
@@ -668,6 +690,7 @@ export const DailyProfileTab = () => {
                 data={results}
                 comparisonData={comparisonMode ? resultsWithoutSim : undefined}
                 clientData={clientResults || undefined}
+                showNodeCurves={!(showClientCurve && clientCurveMode === 'solo')}
                 nominalVoltage={nominalVoltage}
               />
             ) : (

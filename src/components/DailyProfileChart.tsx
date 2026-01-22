@@ -17,11 +17,12 @@ interface DailyProfileChartProps {
   data: HourlyVoltageResult[];
   comparisonData?: HourlyVoltageResult[];
   clientData?: ClientHourlyVoltageResult[];
+  showNodeCurves?: boolean; // true par défaut, false pour mode "courbe seule"
   nominalVoltage: number;
   className?: string;
 }
 
-export const DailyProfileChart = ({ data, comparisonData, clientData, nominalVoltage, className }: DailyProfileChartProps) => {
+export const DailyProfileChart = ({ data, comparisonData, clientData, showNodeCurves = true, nominalVoltage, className }: DailyProfileChartProps) => {
   // Calculer les limites de tension (±5% et ±10%)
   const limits = useMemo(() => ({
     warning_high: nominalVoltage * 1.05,
@@ -221,34 +222,38 @@ export const DailyProfileChart = ({ data, comparisonData, clientData, nominalVol
             strokeWidth={1}
           />
 
-          {/* Courbes des 3 phases (avec simulation) */}
-          <Line 
-            type="monotone" 
-            dataKey="Phase A" 
-            stroke="#ef4444" 
-            strokeWidth={2}
-            dot={false}
-            activeDot={{ r: 4, fill: '#ef4444' }}
-          />
-          <Line 
-            type="monotone" 
-            dataKey="Phase B" 
-            stroke="#22c55e" 
-            strokeWidth={2}
-            dot={false}
-            activeDot={{ r: 4, fill: '#22c55e' }}
-          />
-          <Line 
-            type="monotone" 
-            dataKey="Phase C" 
-            stroke="#3b82f6" 
-            strokeWidth={2}
-            dot={false}
-            activeDot={{ r: 4, fill: '#3b82f6' }}
-          />
+          {/* Courbes des 3 phases (avec simulation) - masquées si showNodeCurves=false */}
+          {showNodeCurves && (
+            <>
+              <Line 
+                type="monotone" 
+                dataKey="Phase A" 
+                stroke="#ef4444" 
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4, fill: '#ef4444' }}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="Phase B" 
+                stroke="#22c55e" 
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4, fill: '#22c55e' }}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="Phase C" 
+                stroke="#3b82f6" 
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4, fill: '#3b82f6' }}
+              />
+            </>
+          )}
           
-          {/* Courbes de comparaison (réseau de base, pointillés) */}
-          {comparisonData && comparisonData.length > 0 && (
+          {/* Courbes de comparaison (réseau de base, pointillés) - masquées si showNodeCurves=false */}
+          {showNodeCurves && comparisonData && comparisonData.length > 0 && (
             <>
               <Line 
                 type="monotone" 
@@ -280,15 +285,15 @@ export const DailyProfileChart = ({ data, comparisonData, clientData, nominalVol
             </>
           )}
           
-          {/* Courbe point client (cyan) */}
+          {/* Courbe point client (cyan) - épaisseur 2× */}
           {clientData && clientData.length > 0 && (
             <Line 
               type="monotone" 
               dataKey="Point client" 
               stroke="#06b6d4"
-              strokeWidth={2.5}
+              strokeWidth={5}
               dot={false}
-              activeDot={{ r: 5, fill: '#06b6d4' }}
+              activeDot={{ r: 6, fill: '#06b6d4' }}
             />
           )}
         </LineChart>

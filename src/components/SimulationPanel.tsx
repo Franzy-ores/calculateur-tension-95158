@@ -51,8 +51,6 @@ export const SimulationPanel = () => {
   }) => {
     const node = currentProject?.nodes.find(n => n.id === compensator.nodeId);
     const is400V = currentProject?.voltageSystem === 'TÉTRAPHASÉ_400V';
-    const nodeConnectionType = node && currentProject ? getNodeConnectionType(currentProject.voltageSystem, currentProject.loadModel || 'mixte_mono_poly', node.isSource) : null;
-    const isMonoPN = nodeConnectionType === 'MONO_230V_PN';
     
     // Vérifier déséquilibre réel (clients MONO ou curseurs manuels)
     const hasRealUnbalance = (node?.autoPhaseDistribution?.unbalancePercent ?? 0) > 0;
@@ -62,9 +60,10 @@ export const SimulationPanel = () => {
       Math.abs(manualCharges.B - 33.33) > 0.1 ||
       Math.abs(manualCharges.C - 33.33) > 0.1
     );
-    const isMixedMode = currentProject?.loadModel === 'mixte_mono_poly';
-    const hasDeseq = isMixedMode && (hasRealUnbalance || hasManualUnbalance);
-    const eligible = is400V && isMonoPN && hasDeseq;
+    const hasDeseq = hasRealUnbalance || hasManualUnbalance;
+    
+    // EQUI8 éligible = réseau 400V + déséquilibre détecté (peu importe le type de nœud)
+    const eligible = is400V && hasDeseq;
     return <Card className="mb-4">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -100,7 +99,6 @@ export const SimulationPanel = () => {
               </div>
               <div className="grid grid-cols-1 gap-1">
                 <div>• Réseau 400V: {is400V ? '✅ OK' : '❌ Non'}</div>
-                <div>• Nœud en MONO 230V (PN): {isMonoPN ? '✅ OK' : `❌ ${nodeConnectionType || 'Non'}`}</div>
                 <div>• Déséquilibre nœud: {hasRealUnbalance 
                   ? `✅ ${node?.autoPhaseDistribution?.unbalancePercent?.toFixed(1)}%` 
                   : '❌ 0% (équilibré)'}</div>

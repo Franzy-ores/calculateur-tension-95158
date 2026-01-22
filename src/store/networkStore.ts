@@ -2302,12 +2302,6 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     
     // Vérifier les conditions d'éligibilité
     const is400V = currentProject.voltageSystem === 'TÉTRAPHASÉ_400V';
-    const nodeConnectionType = getNodeConnectionType(
-      currentProject.voltageSystem,
-      currentProject.loadModel || 'mixte_mono_poly',
-      node.isSource
-    );
-    const isMonoPN = nodeConnectionType === 'MONO_230V_PN';
     
     // Déséquilibre réel basé sur clients MONO ou curseurs manuels
     const hasRealUnbalance = (node.autoPhaseDistribution?.unbalancePercent ?? 0) > 0;
@@ -2317,10 +2311,10 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       Math.abs(manualCharges.B - 33.33) > 0.1 ||
       Math.abs(manualCharges.C - 33.33) > 0.1
     );
-    const isMixedMode = currentProject.loadModel === 'mixte_mono_poly';
-    const hasDeseq = isMixedMode && (hasRealUnbalance || hasManualUnbalance);
+    const hasDeseq = hasRealUnbalance || hasManualUnbalance;
     
-    const eligible = is400V && isMonoPN && hasDeseq;
+    // EQUI8 éligible = réseau 400V + déséquilibre détecté (peu importe le type de nœud)
+    const eligible = is400V && hasDeseq;
     
     // Créer le nouveau compensateur
     const newCompensator: NeutralCompensator = {
@@ -2346,8 +2340,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     } else {
       const reasons = [];
       if (!is400V) reasons.push('Réseau doit être 400V');
-      if (!isMonoPN) reasons.push(`Nœud doit être MONO_230V_PN (actuellement: ${nodeConnectionType})`);
-      if (!hasDeseq) reasons.push('Mode déséquilibré requis avec déséquilibre > 0%');
+      if (!hasDeseq) reasons.push('Déséquilibre requis (clients MONO ou curseurs)');
       
       toast.warning(
         `Compensateur EQUI8 ajouté sur ${node.name} mais inactif`,

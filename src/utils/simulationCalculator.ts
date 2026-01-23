@@ -714,8 +714,9 @@ export class SimulationCalculator extends ElectricalCalculator {
   }
 
   /**
-   * Boucle de convergence globale pour SRG2 + EQUI8 combinés
-   * Itère entre les deux équipements jusqu'à stabilisation des tensions
+   * Mode combiné SRG2 + EQUI8 : une seule passe séquentielle
+   * 1. EQUI8 équilibre les phases (réduit courant neutre)
+   * 2. SRG2 régule la tension sur la base équilibrée
    */
   private calculateWithCombinedSRG2AndEQUI8(
     project: Project,
@@ -725,90 +726,33 @@ export class SimulationCalculator extends ElectricalCalculator {
     calculationResults?: { [key: string]: CalculationResult }
   ): CalculationResult {
     
-    console.log(`🔄 Démarrage boucle convergence SRG2+EQUI8 (${srg2Devices.length} SRG2, ${compensators.length} EQUI8)`);
+    console.log(`🔧 Mode combiné SRG2+EQUI8 (${srg2Devices.length} SRG2, ${compensators.length} EQUI8)`);
     
-    let iteration = 0;
-    let converged = false;
-    let previousResult: CalculationResult | null = null;
-    let currentResult: CalculationResult;
-    
-    // Calcul initial avec SRG2 seul
-    currentResult = this.calculateWithSRG2Regulation(
-      project,
-      scenario,
-      srg2Devices,
-      calculationResults
-    );
-    
-    while (!converged && iteration < SimulationCalculator.SIM_MAX_ITERATIONS) {
-      iteration++;
-      previousResult = currentResult;
-      
-      // Étape 1: Appliquer EQUI8 sur l'état courant (post-SRG2)
-      const equi8Result = this.calculateWithNeutralCompensationIterative(
-        project,
-        scenario,
-        compensators,
-        { [scenario]: currentResult }
-      );
-      
-      // Étape 2: Recalculer SRG2 avec les nouvelles tensions (post-EQUI8)
-      // L'EQUI8 modifie le courant de neutre, ce qui affecte les tensions d'entrée du SRG2
-      currentResult = this.calculateWithSRG2Regulation(
-        project,
-        scenario,
-        srg2Devices,
-        { [scenario]: equi8Result }
-      );
-      
-      // Étape 3: Vérifier convergence globale
-      converged = this.checkGlobalSRG2EQUI8Convergence(currentResult, previousResult);
-      
-      console.log(`  🔄 SRG2+EQUI8 iter ${iteration}: ${converged ? '✅ Convergé' : '⏳ En cours...'}`);
-    }
-    
-    if (!converged) {
-      console.warn(`⚠️ SRG2+EQUI8: Non-convergence après ${iteration} itérations`);
-    } else {
-      console.log(`✅ SRG2+EQUI8: Convergence en ${iteration} itération(s)`);
-    }
-    
-    // Appliquer une dernière passe EQUI8 pour les tensions finales
-    return this.calculateWithNeutralCompensationIterative(
+    // ÉTAPE 1: Appliquer EQUI8 en premier
+    // → Équilibre les phases et réduit le courant de neutre
+    // → Utilise les tensions "naturelles" comme référence
+    console.log(`  📊 Étape 1: EQUI8 - Équilibrage des phases`);
+    const equi8Result = this.calculateWithNeutralCompensationIterative(
       project,
       scenario,
       compensators,
-      { [scenario]: currentResult }
+      calculationResults  // Tensions naturelles du calcul de base
     );
-  }
-
-  /**
-   * Vérifie la convergence globale entre deux itérations SRG2+EQUI8
-   */
-  private checkGlobalSRG2EQUI8Convergence(
-    current: CalculationResult,
-    previous: CalculationResult | null
-  ): boolean {
-    if (!previous) return false;
     
-    const currentMetrics = current.nodeMetricsPerPhase || [];
-    const previousMetrics = previous.nodeMetricsPerPhase || [];
+    // ÉTAPE 2: Appliquer SRG2 sur le résultat EQUI8
+    // → Le SRG2 voit des tensions équilibrées en entrée
+    // → Régule la tension globale avec son coefficient
+    console.log(`  📊 Étape 2: SRG2 - Régulation de tension sur base équilibrée`);
+    const finalResult = this.calculateWithSRG2Regulation(
+      project,
+      scenario,
+      srg2Devices,
+      { [scenario]: equi8Result }  // Tensions post-EQUI8
+    );
     
-    for (const curr of currentMetrics) {
-      const prev = previousMetrics.find(p => p.nodeId === curr.nodeId);
-      if (!prev) continue;
-      
-      const deltaA = Math.abs(curr.voltagesPerPhase.A - prev.voltagesPerPhase.A);
-      const deltaB = Math.abs(curr.voltagesPerPhase.B - prev.voltagesPerPhase.B);
-      const deltaC = Math.abs(curr.voltagesPerPhase.C - prev.voltagesPerPhase.C);
-      
-      // Tolérance de 0.5V pour convergence globale
-      if (deltaA > 0.5 || deltaB > 0.5 || deltaC > 0.5) {
-        return false;
-      }
-    }
+    console.log(`✅ SRG2+EQUI8: Calcul terminé (1 passe EQUI8 → SRG2)`);
     
-    return true;
+    return finalResult;
   }
 
   /**

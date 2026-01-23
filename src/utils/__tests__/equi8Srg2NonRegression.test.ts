@@ -413,7 +413,7 @@ describe('EQUI8 + SRG2 Non-Regression', () => {
     }
   });
 
-  it('should show global convergence in combined SRG2+EQUI8 mode', () => {
+  it('should show sequential EQUI8→SRG2 execution in combined mode', () => {
     const project = createSRG2Network();
     const calc = new SimulationCalculator();
 
@@ -428,8 +428,30 @@ describe('EQUI8 + SRG2 Non-Regression', () => {
       Zn_Ohm: 0.3
     };
 
-    // Exécuter plusieurs fois pour vérifier la stabilité
-    const result1 = calc.calculateWithSimulation(
+    // Calcul EQUI8 seul
+    const equi8Only = calc.calculateWithSimulation(
+      project,
+      'PRÉLÈVEMENT',
+      {
+        srg2Devices: [],
+        neutralCompensators: [compensator],
+        cableUpgrades: []
+      }
+    );
+
+    // Calcul SRG2 seul
+    const srg2Only = calc.calculateWithSimulation(
+      project,
+      'PRÉLÈVEMENT',
+      {
+        srg2Devices: project.simulationEquipment?.srg2Devices || [],
+        neutralCompensators: [],
+        cableUpgrades: []
+      }
+    );
+
+    // Calcul combiné EQUI8 → SRG2
+    const combined = calc.calculateWithSimulation(
       project,
       'PRÉLÈVEMENT',
       {
@@ -439,6 +461,7 @@ describe('EQUI8 + SRG2 Non-Regression', () => {
       }
     );
 
+    // Vérifier que le résultat combiné est déterministe
     const result2 = calc.calculateWithSimulation(
       project,
       'PRÉLÈVEMENT',
@@ -449,20 +472,51 @@ describe('EQUI8 + SRG2 Non-Regression', () => {
       }
     );
 
-    // Les résultats doivent être identiques (déterminisme)
-    const node2_r1 = result1.nodeMetricsPerPhase?.find(nm => nm.nodeId === 'node2');
+    const node2_combined = combined.nodeMetricsPerPhase?.find(nm => nm.nodeId === 'node2');
     const node2_r2 = result2.nodeMetricsPerPhase?.find(nm => nm.nodeId === 'node2');
+    const node2_equi8Only = equi8Only.nodeMetricsPerPhase?.find(nm => nm.nodeId === 'node2');
+    const node2_srg2Only = srg2Only.nodeMetricsPerPhase?.find(nm => nm.nodeId === 'node2');
 
-    if (node2_r1 && node2_r2) {
-      console.log('Stabilité SRG2+EQUI8:', {
-        'Run 1': node2_r1.voltagesPerPhase,
-        'Run 2': node2_r2.voltagesPerPhase
+    if (node2_combined && node2_r2 && node2_equi8Only && node2_srg2Only) {
+      console.log('Séquence EQUI8→SRG2:', {
+        'EQUI8 seul': node2_equi8Only.voltagesPerPhase,
+        'SRG2 seul': node2_srg2Only.voltagesPerPhase,
+        'Combiné': node2_combined.voltagesPerPhase
       });
 
-      // Les résultats doivent être identiques
-      expect(node2_r1.voltagesPerPhase.A).toBeCloseTo(node2_r2.voltagesPerPhase.A, 2);
-      expect(node2_r1.voltagesPerPhase.B).toBeCloseTo(node2_r2.voltagesPerPhase.B, 2);
-      expect(node2_r1.voltagesPerPhase.C).toBeCloseTo(node2_r2.voltagesPerPhase.C, 2);
+      // Résultats déterministes
+      expect(node2_combined.voltagesPerPhase.A).toBeCloseTo(node2_r2.voltagesPerPhase.A, 2);
+      expect(node2_combined.voltagesPerPhase.B).toBeCloseTo(node2_r2.voltagesPerPhase.B, 2);
+      expect(node2_combined.voltagesPerPhase.C).toBeCloseTo(node2_r2.voltagesPerPhase.C, 2);
+
+      // Le combiné doit montrer un meilleur équilibre que SRG2 seul (effet EQUI8)
+      const ecart_srg2Only = Math.max(
+        node2_srg2Only.voltagesPerPhase.A,
+        node2_srg2Only.voltagesPerPhase.B,
+        node2_srg2Only.voltagesPerPhase.C
+      ) - Math.min(
+        node2_srg2Only.voltagesPerPhase.A,
+        node2_srg2Only.voltagesPerPhase.B,
+        node2_srg2Only.voltagesPerPhase.C
+      );
+
+      const ecart_combined = Math.max(
+        node2_combined.voltagesPerPhase.A,
+        node2_combined.voltagesPerPhase.B,
+        node2_combined.voltagesPerPhase.C
+      ) - Math.min(
+        node2_combined.voltagesPerPhase.A,
+        node2_combined.voltagesPerPhase.B,
+        node2_combined.voltagesPerPhase.C
+      );
+
+      console.log('Effet équilibrage EQUI8 dans combiné:', {
+        'Écart SRG2 seul': `${ecart_srg2Only.toFixed(1)}V`,
+        'Écart combiné': `${ecart_combined.toFixed(1)}V`
+      });
+
+      // L'EQUI8 doit réduire l'écart même dans le mode combiné
+      expect(ecart_combined).toBeLessThanOrEqual(ecart_srg2Only);
     }
   });
 });

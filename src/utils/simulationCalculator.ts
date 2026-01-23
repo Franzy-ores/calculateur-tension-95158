@@ -1250,7 +1250,17 @@ export class SimulationCalculator extends ElectricalCalculator {
           compensator.uinit_ph3_V = equi8Result.uinit_ph3_V;
           
           // Appliquer les tensions EQUI8 au nœud dans workingNodes (phasors complets)
+          // ✅ CORRECTION : Stocker aussi le courant de compensation pour propagation amont
           this.applyEQUI8Voltages(workingNodes, compensator, equi8Result);
+          
+          // Stocker le courant de compensation EQUI8 dans le nœud pour le backward sweep
+          const equi8Node = workingNodes.find(n => n.id === compensator.nodeId);
+          if (equi8Node) {
+            if (!equi8Node.customProps) equi8Node.customProps = {};
+            equi8Node.customProps['equi8_I_compensation'] = equi8Result.I_EQUI8_A;
+            equi8Node.customProps['equi8_I_complex'] = equi8Result.I_EQUI8_complex;
+            console.log(`🔌 EQUI8 nœud ${compensator.nodeId}: I_compensation=${equi8Result.I_EQUI8_A.toFixed(1)}A stocké pour propagation`);
+          }
           
           console.log(`📊 EQUI8 iteration ${iteration} - nœud ${compensator.nodeId}:`, {
             U1p: equi8Result.UEQUI8_ph1_mag.toFixed(1) + 'V',

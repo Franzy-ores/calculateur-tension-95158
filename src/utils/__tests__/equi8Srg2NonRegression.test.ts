@@ -284,4 +284,185 @@ describe('EQUI8 + SRG2 Non-Regression', () => {
       expect(ecart_combined).toBeLessThanOrEqual(ecart_baseline);
     }
   });
+
+  it('should handle SRG2 and EQUI8 on the same node (conflict resolution)', () => {
+    const project = createSRG2Network();
+    const calc = new SimulationCalculator();
+
+    // Ajouter un EQUI8 sur le MÊME nœud que le SRG2 (node1)
+    const conflictCompensator = {
+      id: 'equi8-conflict',
+      nodeId: 'node1', // Même nœud que le SRG2
+      maxPower_kVA: 50,
+      tolerance_A: 1,
+      enabled: true,
+      Zph_Ohm: 0.3,
+      Zn_Ohm: 0.3
+    };
+
+    // Le calcul ne doit pas planter et l'EQUI8 doit être ignoré (SRG2 prioritaire)
+    const result = calc.calculateWithSimulation(
+      project,
+      'PRÉLÈVEMENT',
+      {
+        srg2Devices: project.simulationEquipment?.srg2Devices || [],
+        neutralCompensators: [conflictCompensator],
+        cableUpgrades: []
+      }
+    );
+
+    // Vérifier que le calcul a abouti
+    expect(result).toBeDefined();
+    expect(result.nodeMetricsPerPhase).toBeDefined();
+
+    // Le résultat doit être similaire à un calcul SRG2 seul (EQUI8 ignoré)
+    const srg2OnlyResult = calc.calculateWithSimulation(
+      project,
+      'PRÉLÈVEMENT',
+      {
+        srg2Devices: project.simulationEquipment?.srg2Devices || [],
+        neutralCompensators: [],
+        cableUpgrades: []
+      }
+    );
+
+    // Les tensions doivent être identiques (EQUI8 en conflit = désactivé)
+    const node1_conflict = result.nodeMetricsPerPhase?.find(nm => nm.nodeId === 'node1');
+    const node1_srg2only = srg2OnlyResult.nodeMetricsPerPhase?.find(nm => nm.nodeId === 'node1');
+
+    if (node1_conflict && node1_srg2only) {
+      console.log('Conflit SRG2+EQUI8 même nœud:', {
+        'Avec conflit': node1_conflict.voltagesPerPhase,
+        'SRG2 seul': node1_srg2only.voltagesPerPhase
+      });
+
+      // Les tensions doivent être identiques (tolérance 0.1V)
+      expect(Math.abs(node1_conflict.voltagesPerPhase.A - node1_srg2only.voltagesPerPhase.A)).toBeLessThan(0.1);
+      expect(Math.abs(node1_conflict.voltagesPerPhase.B - node1_srg2only.voltagesPerPhase.B)).toBeLessThan(0.1);
+      expect(Math.abs(node1_conflict.voltagesPerPhase.C - node1_srg2only.voltagesPerPhase.C)).toBeLessThan(0.1);
+    }
+  });
+
+  it('should converge when EQUI8 is upstream of SRG2', () => {
+    // Créer un réseau où EQUI8 est en amont du SRG2
+    const project = createSRG2Network();
+    
+    // Déplacer le SRG2 sur node2 (aval)
+    const modifiedProject = {
+      ...project,
+      nodes: project.nodes.map(n => {
+        if (n.id === 'node1') {
+          return { ...n, hasSRG2Device: false };
+        }
+        if (n.id === 'node2') {
+          return { ...n, hasSRG2Device: true };
+        }
+        return n;
+      }),
+      simulationEquipment: {
+        ...project.simulationEquipment,
+        srg2Devices: project.simulationEquipment?.srg2Devices?.map(srg2 => ({
+          ...srg2,
+          nodeId: 'node2' // SRG2 sur node2 (aval)
+        })) || []
+      }
+    };
+
+    // EQUI8 sur node1 (amont du SRG2)
+    const upstreamCompensator = {
+      id: 'equi8-upstream',
+      nodeId: 'node1', // Amont du SRG2
+      maxPower_kVA: 50,
+      tolerance_A: 1,
+      enabled: true,
+      Zph_Ohm: 0.3,
+      Zn_Ohm: 0.3
+    };
+
+    const calc = new SimulationCalculator();
+
+    const result = calc.calculateWithSimulation(
+      modifiedProject,
+      'PRÉLÈVEMENT',
+      {
+        srg2Devices: modifiedProject.simulationEquipment?.srg2Devices || [],
+        neutralCompensators: [upstreamCompensator],
+        cableUpgrades: []
+      }
+    );
+
+    // Vérifier que le calcul a convergé
+    expect(result).toBeDefined();
+    expect(result.nodeMetricsPerPhase).toBeDefined();
+
+    // Vérifier que les tensions sont réalistes (pas de divergence)
+    const node1_metrics = result.nodeMetricsPerPhase?.find(nm => nm.nodeId === 'node1');
+    const node2_metrics = result.nodeMetricsPerPhase?.find(nm => nm.nodeId === 'node2');
+
+    if (node1_metrics && node2_metrics) {
+      console.log('EQUI8 amont + SRG2 aval:', {
+        'Node1 (EQUI8)': node1_metrics.voltagesPerPhase,
+        'Node2 (SRG2)': node2_metrics.voltagesPerPhase
+      });
+
+      // Les tensions doivent être dans une plage réaliste (200-250V)
+      expect(node1_metrics.voltagesPerPhase.A).toBeGreaterThan(200);
+      expect(node1_metrics.voltagesPerPhase.A).toBeLessThan(250);
+      expect(node2_metrics.voltagesPerPhase.A).toBeGreaterThan(200);
+      expect(node2_metrics.voltagesPerPhase.A).toBeLessThan(250);
+    }
+  });
+
+  it('should show global convergence in combined SRG2+EQUI8 mode', () => {
+    const project = createSRG2Network();
+    const calc = new SimulationCalculator();
+
+    // EQUI8 sur node2 (aval du SRG2)
+    const compensator = {
+      id: 'equi8-downstream',
+      nodeId: 'node2',
+      maxPower_kVA: 50,
+      tolerance_A: 1,
+      enabled: true,
+      Zph_Ohm: 0.3,
+      Zn_Ohm: 0.3
+    };
+
+    // Exécuter plusieurs fois pour vérifier la stabilité
+    const result1 = calc.calculateWithSimulation(
+      project,
+      'PRÉLÈVEMENT',
+      {
+        srg2Devices: project.simulationEquipment?.srg2Devices || [],
+        neutralCompensators: [compensator],
+        cableUpgrades: []
+      }
+    );
+
+    const result2 = calc.calculateWithSimulation(
+      project,
+      'PRÉLÈVEMENT',
+      {
+        srg2Devices: project.simulationEquipment?.srg2Devices || [],
+        neutralCompensators: [compensator],
+        cableUpgrades: []
+      }
+    );
+
+    // Les résultats doivent être identiques (déterminisme)
+    const node2_r1 = result1.nodeMetricsPerPhase?.find(nm => nm.nodeId === 'node2');
+    const node2_r2 = result2.nodeMetricsPerPhase?.find(nm => nm.nodeId === 'node2');
+
+    if (node2_r1 && node2_r2) {
+      console.log('Stabilité SRG2+EQUI8:', {
+        'Run 1': node2_r1.voltagesPerPhase,
+        'Run 2': node2_r2.voltagesPerPhase
+      });
+
+      // Les résultats doivent être identiques
+      expect(node2_r1.voltagesPerPhase.A).toBeCloseTo(node2_r2.voltagesPerPhase.A, 2);
+      expect(node2_r1.voltagesPerPhase.B).toBeCloseTo(node2_r2.voltagesPerPhase.B, 2);
+      expect(node2_r1.voltagesPerPhase.C).toBeCloseTo(node2_r2.voltagesPerPhase.C, 2);
+    }
+  });
 });

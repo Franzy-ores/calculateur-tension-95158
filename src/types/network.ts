@@ -219,6 +219,8 @@ export interface Node {
   manualLoadType?: 'MONO' | 'POLY'; // Par défaut POLY
   // Custom properties pour marqueurs temporaires (EQUI8, etc.)
   customProps?: Record<string, any>;
+  // IDs des compensateurs EQUI8 installés sur ce nœud
+  equi8_ids?: string[];
 }
 
 export interface Cable {

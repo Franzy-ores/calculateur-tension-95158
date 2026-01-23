@@ -87,9 +87,32 @@ export const SimulationPanel = () => {
               </Button>
             </div>
           </div>
-          <CardDescription>
-            Nœud: {node?.name || compensator.nodeId}
-          </CardDescription>
+          {/* ✅ Sélecteur pour déplacer l'EQUI8 vers un autre nœud */}
+          <div className="flex items-center gap-2 mt-1">
+            <Label className="text-xs text-muted-foreground">Nœud:</Label>
+            <Select 
+              value={compensator.nodeId} 
+              onValueChange={(newNodeId) => {
+                if (newNodeId !== compensator.nodeId) {
+                  updateNeutralCompensator(compensator.id, { nodeId: newNodeId });
+                }
+              }}
+            >
+              <SelectTrigger className="h-7 text-xs flex-1">
+                <SelectValue>{node?.name || compensator.nodeId}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {nodes.map(n => (
+                  <SelectItem key={n.id} value={n.id}>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-3 w-3" />
+                      <span>{n.name || n.id}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
           {!eligible && <div className="bg-muted/50 p-2 rounded text-xs space-y-2">

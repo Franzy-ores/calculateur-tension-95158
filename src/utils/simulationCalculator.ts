@@ -1288,6 +1288,29 @@ export class SimulationCalculator extends ElectricalCalculator {
       project.foisonnementChargesIndustriel
     );
     
+    // ✅ CORRECTION : Forcer les tensions EQUI8 calculées dans nodeMetricsPerPhase
+    // pour que l'affichage sur la carte soit cohérent avec le panneau Simulation
+    if (finalResult.nodeMetricsPerPhase) {
+      for (const compensator of compensators) {
+        if (!compensator.enabled) continue;
+        
+        const nodeMetrics = finalResult.nodeMetricsPerPhase.find(
+          nm => nm.nodeId === compensator.nodeId
+        );
+        if (nodeMetrics && compensator.u1p_V !== undefined && 
+            compensator.u2p_V !== undefined && compensator.u3p_V !== undefined) {
+          // Forcer les tensions EQUI8 calculées dans les métriques finales
+          nodeMetrics.voltagesPerPhase = {
+            A: compensator.u1p_V,
+            B: compensator.u2p_V,
+            C: compensator.u3p_V
+          };
+          console.log(`✅ EQUI8 tensions finales appliquées à nodeMetrics ${compensator.nodeId}:`, 
+            `A=${compensator.u1p_V.toFixed(1)}V, B=${compensator.u2p_V.toFixed(1)}V, C=${compensator.u3p_V.toFixed(1)}V`);
+        }
+      }
+    }
+    
     // Nettoyer APRÈS le recalcul final (comme SRG2)
     this.cleanupEQUI8Markers(workingNodes);
     

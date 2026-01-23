@@ -646,6 +646,23 @@ export class SimulationCalculator extends ElectricalCalculator {
     const activeSRG2 = equipment.srg2Devices?.filter(srg2 => srg2.enabled) || [];
     const activeCompensators = equipment.neutralCompensators?.filter(c => c.enabled) || [];
     
+    // ✅ PROTECTION : Détecter conflit SRG2 + EQUI8 sur même nœud
+    const conflictNodes = activeSRG2
+      .filter(srg2 => activeCompensators.some(eq => eq.nodeId === srg2.nodeId))
+      .map(srg2 => srg2.nodeId);
+    
+    if (conflictNodes.length > 0) {
+      console.warn(`⚠️ CONFLIT: SRG2 et EQUI8 sur même(s) nœud(s): ${conflictNodes.join(', ')}`);
+      console.warn(`   → EQUI8 désactivé sur ces nœuds (SRG2 prioritaire pour régulation de tension)`);
+      // Filtrer les EQUI8 en conflit (SRG2 prioritaire)
+      const filteredCompensators = activeCompensators.filter(
+        eq => !conflictNodes.includes(eq.nodeId)
+      );
+      // Remplacer activeCompensators par la version filtrée
+      activeCompensators.length = 0;
+      activeCompensators.push(...filteredCompensators);
+    }
+    
     // Cas 1: Aucun équipement actif → calcul normal avec foisonnements différenciés
     if (activeSRG2.length === 0 && activeCompensators.length === 0) {
       return this.calculateScenario(
@@ -686,16 +703,112 @@ export class SimulationCalculator extends ElectricalCalculator {
       );
     }
     
-    // Cas 4: Les deux actifs → calcul avec SRG2 puis EQUI8 itératif
-    // ✅ CORRECTION : Utiliser la méthode itérative pour EQUI8 après SRG2
-    const srg2Result = this.calculateWithSRG2Regulation(project, scenario, activeSRG2, calculationResults);
-    // Passer le résultat SRG2 comme base pour l'itération EQUI8
+    // Cas 4: Les deux actifs → boucle de convergence globale SRG2 + EQUI8
+    return this.calculateWithCombinedSRG2AndEQUI8(
+      project,
+      scenario,
+      activeSRG2,
+      activeCompensators,
+      calculationResults
+    );
+  }
+
+  /**
+   * Boucle de convergence globale pour SRG2 + EQUI8 combinés
+   * Itère entre les deux équipements jusqu'à stabilisation des tensions
+   */
+  private calculateWithCombinedSRG2AndEQUI8(
+    project: Project,
+    scenario: CalculationScenario,
+    srg2Devices: SRG2Config[],
+    compensators: NeutralCompensator[],
+    calculationResults?: { [key: string]: CalculationResult }
+  ): CalculationResult {
+    
+    console.log(`🔄 Démarrage boucle convergence SRG2+EQUI8 (${srg2Devices.length} SRG2, ${compensators.length} EQUI8)`);
+    
+    let iteration = 0;
+    let converged = false;
+    let previousResult: CalculationResult | null = null;
+    let currentResult: CalculationResult;
+    
+    // Calcul initial avec SRG2 seul
+    currentResult = this.calculateWithSRG2Regulation(
+      project,
+      scenario,
+      srg2Devices,
+      calculationResults
+    );
+    
+    while (!converged && iteration < SimulationCalculator.SIM_MAX_ITERATIONS) {
+      iteration++;
+      previousResult = currentResult;
+      
+      // Étape 1: Appliquer EQUI8 sur l'état courant (post-SRG2)
+      const equi8Result = this.calculateWithNeutralCompensationIterative(
+        project,
+        scenario,
+        compensators,
+        { [scenario]: currentResult }
+      );
+      
+      // Étape 2: Recalculer SRG2 avec les nouvelles tensions (post-EQUI8)
+      // L'EQUI8 modifie le courant de neutre, ce qui affecte les tensions d'entrée du SRG2
+      currentResult = this.calculateWithSRG2Regulation(
+        project,
+        scenario,
+        srg2Devices,
+        { [scenario]: equi8Result }
+      );
+      
+      // Étape 3: Vérifier convergence globale
+      converged = this.checkGlobalSRG2EQUI8Convergence(currentResult, previousResult);
+      
+      console.log(`  🔄 SRG2+EQUI8 iter ${iteration}: ${converged ? '✅ Convergé' : '⏳ En cours...'}`);
+    }
+    
+    if (!converged) {
+      console.warn(`⚠️ SRG2+EQUI8: Non-convergence après ${iteration} itérations`);
+    } else {
+      console.log(`✅ SRG2+EQUI8: Convergence en ${iteration} itération(s)`);
+    }
+    
+    // Appliquer une dernière passe EQUI8 pour les tensions finales
     return this.calculateWithNeutralCompensationIterative(
       project,
       scenario,
-      activeCompensators,
-      { [scenario]: srg2Result }
+      compensators,
+      { [scenario]: currentResult }
     );
+  }
+
+  /**
+   * Vérifie la convergence globale entre deux itérations SRG2+EQUI8
+   */
+  private checkGlobalSRG2EQUI8Convergence(
+    current: CalculationResult,
+    previous: CalculationResult | null
+  ): boolean {
+    if (!previous) return false;
+    
+    const currentMetrics = current.nodeMetricsPerPhase || [];
+    const previousMetrics = previous.nodeMetricsPerPhase || [];
+    
+    for (const curr of currentMetrics) {
+      const prev = previousMetrics.find(p => p.nodeId === curr.nodeId);
+      if (!prev) continue;
+      
+      const deltaA = Math.abs(curr.voltagesPerPhase.A - prev.voltagesPerPhase.A);
+      const deltaB = Math.abs(curr.voltagesPerPhase.B - prev.voltagesPerPhase.B);
+      const deltaC = Math.abs(curr.voltagesPerPhase.C - prev.voltagesPerPhase.C);
+      
+      // Tolérance de 0.5V pour convergence globale
+      if (deltaA > 0.5 || deltaB > 0.5 || deltaC > 0.5) {
+        return false;
+      }
+    }
+    
+    return true;
   }
 
   /**

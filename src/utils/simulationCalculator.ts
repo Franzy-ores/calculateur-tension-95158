@@ -728,6 +728,31 @@ export class SimulationCalculator extends ElectricalCalculator {
     
     console.log(`🔧 Mode combiné SRG2+EQUI8 (${srg2Devices.length} SRG2, ${compensators.length} EQUI8)`);
     
+    // ✅ ÉTAPE 0: Stocker les tensions NATURELLES pour la régulation SRG2
+    // Le SRG2 doit lire ces tensions pour décider de son action (LO/BO/BYP)
+    // Pas les tensions post-EQUI8 qui masquent les surtensions/sous-tensions
+    const naturalVoltagesForSRG2 = new Map<string, {A: number, B: number, C: number}>();
+    
+    const existingResult = calculationResults?.[scenario];
+    if (existingResult?.nodeMetricsPerPhase) {
+      for (const srg2 of srg2Devices) {
+        const nodeMetrics = existingResult.nodeMetricsPerPhase.find(nm => 
+          String(nm.nodeId) === String(srg2.nodeId)
+        );
+        if (nodeMetrics?.voltagesPerPhase) {
+          naturalVoltagesForSRG2.set(srg2.nodeId, {
+            A: nodeMetrics.voltagesPerPhase.A,
+            B: nodeMetrics.voltagesPerPhase.B,
+            C: nodeMetrics.voltagesPerPhase.C
+          });
+          console.log(`📊 Tensions NATURELLES stockées pour SRG2 ${srg2.nodeId}: ` +
+            `A=${nodeMetrics.voltagesPerPhase.A.toFixed(1)}V, ` +
+            `B=${nodeMetrics.voltagesPerPhase.B.toFixed(1)}V, ` +
+            `C=${nodeMetrics.voltagesPerPhase.C.toFixed(1)}V`);
+        }
+      }
+    }
+    
     // ÉTAPE 1: Appliquer EQUI8 en premier
     // → Équilibre les phases et réduit le courant de neutre
     // → Utilise les tensions "naturelles" comme référence
@@ -739,20 +764,168 @@ export class SimulationCalculator extends ElectricalCalculator {
       calculationResults  // Tensions naturelles du calcul de base
     );
     
-    // ÉTAPE 2: Appliquer SRG2 sur le résultat EQUI8
-    // → Le SRG2 voit des tensions équilibrées en entrée
-    // → Régule la tension globale avec son coefficient
-    console.log(`  📊 Étape 2: SRG2 - Régulation de tension sur base équilibrée`);
-    const finalResult = this.calculateWithSRG2Regulation(
+    // ÉTAPE 2: Appliquer SRG2 avec les tensions NATURELLES pour la régulation
+    // → Le SRG2 lit les tensions originales pour décider de son action
+    // → Mais le recalcul BFS utilise le réseau post-EQUI8 (phases équilibrées)
+    console.log(`  📊 Étape 2: SRG2 - Régulation basée sur tensions naturelles`);
+    const finalResult = this.calculateWithSRG2RegulationCombined(
       project,
       scenario,
       srg2Devices,
-      { [scenario]: equi8Result }  // Tensions post-EQUI8
+      { [scenario]: equi8Result },  // Résultat EQUI8 pour le recalcul BFS
+      naturalVoltagesForSRG2        // Tensions naturelles pour la décision de régulation
     );
     
-    console.log(`✅ SRG2+EQUI8: Calcul terminé (1 passe EQUI8 → SRG2)`);
+    console.log(`✅ SRG2+EQUI8: Calcul terminé (EQUI8 équilibre → SRG2 régule sur naturelles)`);
     
     return finalResult;
+  }
+
+  /**
+   * Variante de calculateWithSRG2Regulation pour le mode combiné SRG2+EQUI8
+   * Utilise les tensions naturelles passées en paramètre pour la décision de régulation
+   * au lieu de les lire depuis calculationResults (qui contient les tensions post-EQUI8)
+   */
+  private calculateWithSRG2RegulationCombined(
+    project: Project,
+    scenario: CalculationScenario,
+    srg2Devices: SRG2Config[],
+    calculationResults: { [key: string]: CalculationResult },
+    naturalVoltagesForRegulation: Map<string, {A: number, B: number, C: number}>
+  ): CalculationResult {
+    console.log(`🔍 calculateWithSRG2RegulationCombined - Régulation basée sur tensions NATURELLES`);
+    
+    let iteration = 0;
+    let converged = false;
+    let previousVoltages: Map<string, {A: number, B: number, C: number}> = new Map();
+    
+    // Copie des nœuds pour modification itérative
+    const workingNodes = JSON.parse(JSON.stringify(project.nodes)) as Node[];
+    
+    // ✅ Utiliser les tensions naturelles passées en paramètre (pas celles de calculationResults)
+    const originalVoltages = naturalVoltagesForRegulation;
+    
+    console.log(`[DEBUG SRG2 Combined] Tensions naturelles utilisées:`, 
+      Array.from(originalVoltages.entries()).map(([id, v]) => 
+        `${id}: A=${v.A.toFixed(1)}V, B=${v.B.toFixed(1)}V, C=${v.C.toFixed(1)}V`
+      )
+    );
+    
+    while (!converged && iteration < SimulationCalculator.SIM_MAX_ITERATIONS) {
+      iteration++;
+      
+      // Nettoyer les modifications SRG2 précédentes
+      if (iteration > 1) {
+        this.cleanupSRG2Markers(workingNodes);
+      }
+      
+      // Calculer le scénario avec l'état actuel des nœuds
+      const result = this.calculateScenario(
+        workingNodes,
+        project.cables,
+        project.cableTypes,
+        scenario,
+        project.foisonnementCharges,
+        project.foisonnementProductions,
+        project.transformerConfig,
+        project.loadModel,
+        project.desequilibrePourcent,
+        project.manualPhaseDistribution,
+        project.clientsImportes,
+        project.clientLinks,
+        project.foisonnementChargesResidentiel,
+        project.foisonnementChargesIndustriel
+      );
+
+      // Appliquer la régulation SRG2 sur chaque dispositif
+      const voltageChanges = new Map<string, {A: number, B: number, C: number}>();
+      
+      for (const srg2 of srg2Devices) {
+        const nodeIndex = workingNodes.findIndex(n => n.id === srg2.nodeId);
+        if (nodeIndex === -1) continue;
+        
+        const srg2Node = workingNodes.find(n => n.id === srg2.nodeId);
+        if (!srg2Node) continue;
+
+        // ✅ Utiliser les tensions NATURELLES (avant EQUI8) pour la régulation
+        let nodeVoltages = originalVoltages.get(srg2.nodeId) || { A: 230, B: 230, C: 230 };
+        
+        console.log(`🔍 SRG2 ${srg2.nodeId} (Combined): utilisation tensions NATURELLES - ` +
+          `A=${nodeVoltages.A.toFixed(1)}V, B=${nodeVoltages.B.toFixed(1)}V, C=${nodeVoltages.C.toFixed(1)}V`);
+
+        // Appliquer la régulation SRG2 sur les tensions naturelles
+        const regulationResult = this.applySRG2Regulation(srg2, nodeVoltages, project.voltageSystem);
+        
+        // Stocker les coefficients de régulation pour ce nœud
+        if (regulationResult.coefficientsAppliques) {
+          voltageChanges.set(srg2.nodeId, regulationResult.coefficientsAppliques);
+          
+          // Mettre à jour les informations du SRG2
+          srg2.tensionEntree = regulationResult.tensionEntree;
+          srg2.etatCommutateur = regulationResult.etatCommutateur;
+          srg2.coefficientsAppliques = regulationResult.coefficientsAppliques;
+          srg2.tensionSortie = regulationResult.tensionSortie;
+        }
+      }
+      
+      // Appliquer les coefficients et tensions de sortie SRG2 aux nœuds
+      for (const srg2 of srg2Devices) {
+        const coefficients = voltageChanges.get(srg2.nodeId);
+        if (coefficients && srg2.tensionSortie) {
+          this.applySRG2Coefficients(workingNodes, srg2, coefficients, srg2.tensionSortie);
+        }
+      }
+      
+      // Vérifier la convergence
+      converged = this.checkSRG2Convergence(voltageChanges, previousVoltages);
+      previousVoltages = new Map(voltageChanges);
+      
+      console.log(`🔄 SRG2 Combined Iteration ${iteration}: ${converged ? 'Convergé' : 'En cours...'}`);
+    }
+    
+    // Recalculer une dernière fois avec les tensions finales
+    const finalResult = this.calculateScenario(
+      workingNodes,
+      project.cables,
+      project.cableTypes,
+      scenario,
+      project.foisonnementCharges,
+      project.foisonnementProductions,
+      project.transformerConfig,
+      project.loadModel,
+      project.desequilibrePourcent,
+      project.manualPhaseDistribution,
+      project.clientsImportes,
+      project.clientLinks,
+      project.foisonnementChargesResidentiel,
+      project.foisonnementChargesIndustriel
+    );
+
+    console.log('🎯 SRG2 Combined: calcul terminé - régulation basée sur tensions naturelles');
+
+    return {
+      ...finalResult,
+      srg2Results: srg2Devices.map(srg2 => ({
+        srg2Id: srg2.id,
+        nodeId: srg2.nodeId,
+        tensionAvant_V: srg2.tensionEntree?.A || 0,
+        tensionApres_V: srg2.tensionSortie?.A || 0,
+        puissanceReactive_kVAr: 0,
+        ameliorationTension_V: (srg2.tensionSortie?.A || 0) - (srg2.tensionEntree?.A || 0),
+        erreurRésiduelle_V: Math.abs((srg2.tensionSortie?.A || 0) - 230),
+        efficacite_percent: Math.min(100, Math.max(0, (1 - Math.abs((srg2.tensionSortie?.A || 0) - 230) / 230) * 100)),
+        tauxCharge_percent: 0,
+        regulationActive: srg2.etatCommutateur?.A !== 'BYP',
+        saturePuissance: false,
+        convergence: converged
+      })),
+      convergenceStatus: converged ? 'converged' : 'not_converged',
+      iterations: iteration
+    } as CalculationResult & {
+      srg2Results: SRG2SimulationResult[];
+      convergenceStatus: 'converged' | 'not_converged';
+      iterations: number;
+    };
   }
 
   /**

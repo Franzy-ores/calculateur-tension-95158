@@ -2366,7 +2366,46 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   },
 
   updateNeutralCompensator: (compensatorId: string, updates: Partial<NeutralCompensator>) => {
-    const { simulationEquipment, simulationMode } = get();
+    const { simulationEquipment, simulationMode, currentProject } = get();
+    
+    // ✅ Si on change le nodeId, gérer le transfert des equi8_ids
+    if (updates.nodeId && currentProject) {
+      const compensator = simulationEquipment.neutralCompensators.find(c => c.id === compensatorId);
+      if (compensator && compensator.nodeId !== updates.nodeId) {
+        const oldNodeId = compensator.nodeId;
+        const newNodeId = updates.nodeId;
+        
+        // Mettre à jour les nœuds pour transférer l'equi8_id
+        const updatedNodes = currentProject.nodes.map(n => {
+          if (n.id === oldNodeId) {
+            // Retirer l'EQUI8 de l'ancien nœud
+            return {
+              ...n,
+              equi8_ids: (n.equi8_ids || []).filter(id => id !== compensatorId)
+            };
+          }
+          if (n.id === newNodeId) {
+            // Ajouter l'EQUI8 au nouveau nœud
+            return {
+              ...n,
+              equi8_ids: [...(n.equi8_ids || []), compensatorId]
+            };
+          }
+          return n;
+        });
+        
+        set({
+          currentProject: {
+            ...currentProject,
+            nodes: updatedNodes
+          }
+        });
+        
+        console.log(`🔄 EQUI8 ${compensatorId} déplacé: ${oldNodeId} → ${newNodeId}`);
+        toast.info(`Compensateur EQUI8 déplacé vers ${currentProject.nodes.find(n => n.id === newNodeId)?.name || newNodeId}`);
+      }
+    }
+    
     set({
       simulationEquipment: {
         ...simulationEquipment,
@@ -2377,8 +2416,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     });
 
     // Déclencher le calcul de simulation lors de la (ré)activation ou de toute mise à jour pertinente
-    if (typeof updates.enabled !== 'undefined') {
-      if (updates.enabled === true && !simulationMode) {
+    if (typeof updates.enabled !== 'undefined' || updates.nodeId) {
+      if ((updates.enabled === true || updates.nodeId) && !simulationMode) {
         set({ simulationMode: true, selectedTool: 'simulation' });
       }
       get().runSimulation();

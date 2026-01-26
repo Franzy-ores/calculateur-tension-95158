@@ -741,7 +741,7 @@ export class SimulationCalculator extends ElectricalCalculator {
     
     const MAX_COUPLED_ITERATIONS = 10;
     let iteration = 0;
-    let previousUmean = 0;
+    let consecutiveNoTapChange = 0; // Compteur d'itérations consécutives sans changement de prise
     let tapChange = true; // Force première itération
     let converged = false;
     
@@ -827,14 +827,20 @@ export class SimulationCalculator extends ElectricalCalculator {
       }
       
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      // ÉTAPE 4: Vérification stabilité (critère mathématique de convergence)
-      // Stabilisé si: tap_change == 0 ET |Umean - previousUmean| < 0.5V
+      // ÉTAPE 4: Vérification stabilité (automate à seuil)
+      // Le SRG2 est stabilisé si: tap_change == 0 pendant 2 itérations consécutives
+      // (Le SRG2 est un automate à seuil, pas un régulateur PID)
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      const deltaU = Math.abs(Umean - previousUmean);
-      console.log(`  📏 Critère convergence: tap_change=${tapChange}, ΔUmean=${deltaU.toFixed(2)}V`);
+      if (!tapChange) {
+        consecutiveNoTapChange++;
+        console.log(`  📏 Critère convergence: tap_change=false, itérations consécutives sans changement=${consecutiveNoTapChange}/2`);
+      } else {
+        consecutiveNoTapChange = 0;
+        console.log(`  📏 Critère convergence: tap_change=true, compteur remis à zéro`);
+      }
       
-      if (!tapChange && deltaU < 0.5) {
-        console.log(`  ✅ CONVERGENCE ATTEINTE: Pas de changement de prise ET ΔUmean < 0.5V`);
+      if (consecutiveNoTapChange >= 2) {
+        console.log(`  ✅ CONVERGENCE ATTEINTE: 2 itérations consécutives sans changement de prise (automate stabilisé)`);
         converged = true;
         break;
       }
@@ -849,8 +855,6 @@ export class SimulationCalculator extends ElectricalCalculator {
         currentBaselineResults = { [scenario]: networkEq };
         console.log(`  🔄 Réseau mis à jour pour prochaine itération (tension source virtuelle modifiée)`);
       }
-      
-      previousUmean = Umean;
     }
     
     if (!converged) {
@@ -2394,23 +2398,27 @@ export class SimulationCalculator extends ElectricalCalculator {
   /**
    * Vérifie la convergence de la régulation SRG2
    */
+  /**
+   * Vérifie la convergence SRG2 basée sur l'état des prises (automate à seuil)
+   * Retourne true si les positions de prise sont identiques entre deux itérations
+   * (Le SRG2 est un automate à seuil, pas un régulateur PID)
+   */
   private checkSRG2Convergence(
-    currentVoltages: Map<string, {A: number, B: number, C: number}>,
-    previousVoltages: Map<string, {A: number, B: number, C: number}>
+    currentTaps: Map<string, {A: number, B: number, C: number}>,
+    previousTaps: Map<string, {A: number, B: number, C: number}>
   ): boolean {
     
-    if (previousVoltages.size === 0) return false;
+    if (previousTaps.size === 0) return false;
     
-    for (const [nodeId, current] of currentVoltages) {
-      const previous = previousVoltages.get(nodeId);
+    for (const [nodeId, current] of currentTaps) {
+      const previous = previousTaps.get(nodeId);
       if (!previous) return false;
       
-      const deltaA = Math.abs(current.A - previous.A);
-      const deltaB = Math.abs(current.B - previous.B);  
-      const deltaC = Math.abs(current.C - previous.C);
-      
-      const tolerance = SimulationCalculator.SIM_CONVERGENCE_TOLERANCE_PHASE_V;
-      if (deltaA > tolerance || deltaB > tolerance || deltaC > tolerance) {
+      // Comparaison exacte des coefficients de prise (pas de tolérance)
+      // Les coefficients sont des valeurs discrètes (ex: -7, -3.5, 0, +3.5, +7)
+      if (current.A !== previous.A || 
+          current.B !== previous.B || 
+          current.C !== previous.C) {
         return false;
       }
     }

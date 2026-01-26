@@ -32,18 +32,8 @@ export class SimulationCalculator extends ElectricalCalculator {
   
   private simCosPhi: number;
   
-  // Stockage des ratios EQUI8 fixes calculés à l'itération 1
-  private equi8Ratios: Map<string, {
-    ratio_ph1: number;
-    ratio_ph2: number;
-    ratio_ph3: number;
-    Umoy_init: number;
-    ecart_init: number;   // ✅ NOUVEAU - (Umax-Umin)init stocké pour cohérence
-    ecart_equi8: number;  // (Umax-Umin)EQUI8 selon formule CME
-    Uinit_ph1: number;    // ✅ NOUVEAU - tensions initiales stockées
-    Uinit_ph2: number;    // ✅ NOUVEAU
-    Uinit_ph3: number;    // ✅ NOUVEAU
-  }> = new Map();
+  // Note: L'EQUI8 recalcule dynamiquement ses ratios à chaque appel
+  // à partir des tensions et courants ACTUELS du réseau (pas de stockage permanent)
   
   constructor(cosPhi: number = 0.95, cosPhiCharges?: number, cosPhiProductions?: number) {
     super(cosPhi, cosPhiCharges, cosPhiProductions);
@@ -1246,8 +1236,6 @@ export class SimulationCalculator extends ElectricalCalculator {
     // Calculer le courant de neutre initial (magnitude et phasor)
     const { magnitude: I_N_initial, complex: I_N_complex } = this.calculateNeutralCurrent(I_A_total, I_B_total, I_C_total);
     
-    // ✅ CORRECTION : Récupérer ratiosData tôt pour tous les early returns
-    const ratiosData = this.equi8Ratios.get(compensator.nodeId);
     // Si en dessous du seuil de tolérance, pas de compensation
     if (I_N_initial <= compensator.tolerance_A) {
       const U_A_phasor = fromPolar(Uinit_ph1, 0);
@@ -1268,33 +1256,28 @@ export class SimulationCalculator extends ElectricalCalculator {
         iN_absorbed_A: 0,
         isLimited: false,
         compensationQ_kVAr: { A: 0, B: 0, C: 0 },
-        umoy_init_V: ratiosData?.Umoy_init ?? (Uinit_ph1 + Uinit_ph2 + Uinit_ph3) / 3,
-        umax_init_V: ratiosData ? Math.max(ratiosData.Uinit_ph1, ratiosData.Uinit_ph2, ratiosData.Uinit_ph3) : Math.max(Uinit_ph1, Uinit_ph2, Uinit_ph3),
-        umin_init_V: ratiosData ? Math.min(ratiosData.Uinit_ph1, ratiosData.Uinit_ph2, ratiosData.Uinit_ph3) : Math.min(Uinit_ph1, Uinit_ph2, Uinit_ph3),
-        ecart_init_V: ratiosData?.ecart_init ?? (Math.max(Uinit_ph1, Uinit_ph2, Uinit_ph3) - Math.min(Uinit_ph1, Uinit_ph2, Uinit_ph3)),
-        ecart_equi8_V: ratiosData?.ecart_init ?? (Math.max(Uinit_ph1, Uinit_ph2, Uinit_ph3) - Math.min(Uinit_ph1, Uinit_ph2, Uinit_ph3)),
-        // ✅ CORRECTION : Utiliser les tensions stockées si disponibles
-        uinit_ph1_V: ratiosData?.Uinit_ph1 ?? Uinit_ph1,
-        uinit_ph2_V: ratiosData?.Uinit_ph2 ?? Uinit_ph2,
-        uinit_ph3_V: ratiosData?.Uinit_ph3 ?? Uinit_ph3
+        umoy_init_V: (Uinit_ph1 + Uinit_ph2 + Uinit_ph3) / 3,
+        umax_init_V: Math.max(Uinit_ph1, Uinit_ph2, Uinit_ph3),
+        umin_init_V: Math.min(Uinit_ph1, Uinit_ph2, Uinit_ph3),
+        ecart_init_V: Math.max(Uinit_ph1, Uinit_ph2, Uinit_ph3) - Math.min(Uinit_ph1, Uinit_ph2, Uinit_ph3),
+        ecart_equi8_V: Math.max(Uinit_ph1, Uinit_ph2, Uinit_ph3) - Math.min(Uinit_ph1, Uinit_ph2, Uinit_ph3),
+        uinit_ph1_V: Uinit_ph1,
+        uinit_ph2_V: Uinit_ph2,
+        uinit_ph3_V: Uinit_ph3
       };
     }
 
-    // === CALCULS INTERMÉDIAIRES EQUI8 ===
+    // === CALCULS DYNAMIQUES EQUI8 (recalculés à chaque appel) ===
+    // L'EQUI8 recalcule les ratios à partir de l'état ACTUEL du réseau
     
-    // ✅ CORRECTION : Utiliser ratiosData déjà déclaré plus haut
-    const Umoy_init = ratiosData?.Umoy_init ?? (Uinit_ph1 + Uinit_ph2 + Uinit_ph3) / 3;
-    const Umax_init = ratiosData 
-      ? Math.max(ratiosData.Uinit_ph1, ratiosData.Uinit_ph2, ratiosData.Uinit_ph3) 
-      : Math.max(Uinit_ph1, Uinit_ph2, Uinit_ph3);
-    const Umin_init = ratiosData 
-      ? Math.min(ratiosData.Uinit_ph1, ratiosData.Uinit_ph2, ratiosData.Uinit_ph3) 
-      : Math.min(Uinit_ph1, Uinit_ph2, Uinit_ph3);
-    const ecart_init = ratiosData?.ecart_init ?? (Umax_init - Umin_init);
+    const Umoy_current = (Uinit_ph1 + Uinit_ph2 + Uinit_ph3) / 3;
+    const Umax_current = Math.max(Uinit_ph1, Uinit_ph2, Uinit_ph3);
+    const Umin_current = Math.min(Uinit_ph1, Uinit_ph2, Uinit_ph3);
+    const ecart_current = Umax_current - Umin_current;
     
     // Si pas de déséquilibre, pas de compensation nécessaire
-    if (ecart_init < 0.01) {
-      console.log(`ℹ️ EQUI8 nœud ${compensator.nodeId}: Écart initial ${ecart_init.toFixed(3)}V < 0.01V - Pas de compensation`);
+    if (ecart_current < 0.01) {
+      console.log(`ℹ️ EQUI8 nœud ${compensator.nodeId}: Écart ${ecart_current.toFixed(3)}V < 0.01V - Pas de compensation`);
       const U_A_phasor = fromPolar(Uinit_ph1, 0);
       const U_B_phasor = fromPolar(Uinit_ph2, -2*Math.PI/3);
       const U_C_phasor = fromPolar(Uinit_ph3, 2*Math.PI/3);
@@ -1313,69 +1296,38 @@ export class SimulationCalculator extends ElectricalCalculator {
         iN_absorbed_A: 0,
         isLimited: false,
         compensationQ_kVAr: { A: 0, B: 0, C: 0 },
-        umoy_init_V: Umoy_init,
-        umax_init_V: Umax_init,
-        umin_init_V: Umin_init,
-        ecart_init_V: ecart_init,
-        ecart_equi8_V: ecart_init,
-        // ✅ NOUVEAU : Tensions initiales par phase
+        umoy_init_V: Umoy_current,
+        umax_init_V: Umax_current,
+        umin_init_V: Umin_current,
+        ecart_init_V: ecart_current,
+        ecart_equi8_V: ecart_current,
         uinit_ph1_V: Uinit_ph1,
         uinit_ph2_V: Uinit_ph2,
         uinit_ph3_V: Uinit_ph3
       };
     }
     
-    // ✅ CORRECTION : Utiliser ratiosData déjà déclaré (supprime le doublon 'ratios')
-    if (!ratiosData) {
-      console.error(`❌ Pas de ratios EQUI8 pour nœud ${compensator.nodeId} - Utilisation fallback`);
-      // Fallback: retourner les tensions non modifiées
-      const U_A_phasor = fromPolar(Uinit_ph1, 0);
-      const U_B_phasor = fromPolar(Uinit_ph2, -2*Math.PI/3);
-      const U_C_phasor = fromPolar(Uinit_ph3, 2*Math.PI/3);
-      return {
-        UEQUI8_ph1_mag: Uinit_ph1,
-        UEQUI8_ph2_mag: Uinit_ph2,
-        UEQUI8_ph3_mag: Uinit_ph3,
-        UEQUI8_ph1_phasor: U_A_phasor,
-        UEQUI8_ph2_phasor: U_B_phasor,
-        UEQUI8_ph3_phasor: U_C_phasor,
-        I_EQUI8_A: I_N_initial,
-        I_EQUI8_complex: C(0, 0),
-        iN_initial_complex: I_N_complex,
-        reductionPercent: 0,
-        iN_initial_A: I_N_initial,
-        iN_absorbed_A: 0,
-        isLimited: false,
-        compensationQ_kVAr: { A: 0, B: 0, C: 0 },
-        umoy_init_V: Umoy_init,
-        umax_init_V: Umax_init,
-        umin_init_V: Umin_init,
-        ecart_init_V: ecart_init,
-        ecart_equi8_V: ecart_init,
-        // ✅ NOUVEAU : Tensions initiales par phase
-        uinit_ph1_V: Uinit_ph1,
-        uinit_ph2_V: Uinit_ph2,
-        uinit_ph3_V: Uinit_ph3
-      };
-    }
+    // Calculer les ratios DYNAMIQUEMENT à partir de l'état actuel du réseau
+    const ratiosData = this.computeEQUI8CompensationRatio(
+      Uinit_ph1, Uinit_ph2, Uinit_ph3,
+      compensator.Zph_Ohm,
+      compensator.Zn_Ohm
+    );
     
-    // Utiliser les ratios FIXES et l'écart EQUI8 calculé à l'itération 1
-    // ✅ CORRECTION : Extraire TOUTES les valeurs stockées à l'itération 1
-    const { 
-      ratio_ph1, ratio_ph2, ratio_ph3, 
-      Umoy_init: Umoy_fixed, 
-      ecart_init: ecart_init_stored,  // ✅ Écart initial fixe
-      ecart_equi8,
-      Uinit_ph1: Uinit_ph1_stored,    // ✅ Tensions initiales stockées
-      Uinit_ph2: Uinit_ph2_stored,
-      Uinit_ph3: Uinit_ph3_stored
-    } = ratiosData;
+    console.log(`📊 EQUI8 nœud ${compensator.nodeId} - Ratios calculés dynamiquement:`, {
+      'Tensions actuelles': `${Uinit_ph1.toFixed(1)}V / ${Uinit_ph2.toFixed(1)}V / ${Uinit_ph3.toFixed(1)}V`,
+      'Écart actuel': `${ecart_current.toFixed(1)}V`,
+      'Ratios': `${ratiosData.ratio_ph1.toFixed(3)} / ${ratiosData.ratio_ph2.toFixed(3)} / ${ratiosData.ratio_ph3.toFixed(3)}`
+    });
+    
+    // Extraire les valeurs calculées
+    const { ratio_ph1, ratio_ph2, ratio_ph3, ecart_equi8 } = ratiosData;
     
     // ✅ FORMULE EXACTE selon documentation EQUI8 (CME Transformateur)
-    // UEQUI8-ph1 = Umoy-3Ph-init + Ratio-ph1 × (Umax-Umin)EQUI8
-    const UEQUI8_ph1_mag = Umoy_fixed + ratio_ph1 * ecart_equi8;
-    const UEQUI8_ph2_mag = Umoy_fixed + ratio_ph2 * ecart_equi8;
-    const UEQUI8_ph3_mag = Umoy_fixed + ratio_ph3 * ecart_equi8;
+    // UEQUI8-ph = Umoy_actuel + Ratio-ph × (Umax-Umin)EQUI8
+    const UEQUI8_ph1_mag = Umoy_current + ratio_ph1 * ecart_equi8;
+    const UEQUI8_ph2_mag = Umoy_current + ratio_ph2 * ecart_equi8;
+    const UEQUI8_ph3_mag = Umoy_current + ratio_ph3 * ecart_equi8;
     
     // 5. Calculer les phasors complets avec les phases naturelles (pour affichage)
     // Phase A: 0°, Phase B: -120°, Phase C: +120°
@@ -1384,11 +1336,11 @@ export class SimulationCalculator extends ElectricalCalculator {
     const UEQUI8_ph3_phasor = fromPolar(UEQUI8_ph3_mag, 2*Math.PI/3);
     
     // 6. Calculer le courant injecté EQUI8 selon formule officielle CME
-    // ✅ FORMULE EXACTE: I-EQUI8 = 0,392 × Zph^(-0,8065) × (Umax-Umin)init × 2 × Zph / (Zph + Zn)
+    // ✅ FORMULE EXACTE: I-EQUI8 = 0,392 × Zph^(-0,8065) × (Umax-Umin)actuel × 2 × Zph / (Zph + Zn)
     const facteur_courant = 0.392 * Math.pow(Zph, -0.8065);
     const facteur_impedance_courant = (2 * Zph) / (Zph + Zn);
-    // ✅ CORRECTION : Utiliser l'écart STOCKÉ pour cohérence avec formule CME
-    let I_EQUI8_mag = facteur_courant * ecart_init_stored * facteur_impedance_courant;
+    // Utiliser l'écart ACTUEL pour le calcul dynamique
+    let I_EQUI8_mag = facteur_courant * ecart_current * facteur_impedance_courant;
     
     // Construire le phasor de compensation: opposé à I_N_complex
     // L'EQUI8 injecte un courant qui s'oppose au courant de neutre
@@ -1408,13 +1360,13 @@ export class SimulationCalculator extends ElectricalCalculator {
     // 8. Vérifier la limitation par puissance
     // La puissance demandée dépend du courant INJECTÉ par l'EQUI8
     let I_EQUI8_effective = I_EQUI8_mag;
-    let estimatedPower_kVA = (Math.sqrt(3) * Umoy_init * I_EQUI8_effective) / 1000;
+    let estimatedPower_kVA = (Math.sqrt(3) * Umoy_current * I_EQUI8_effective) / 1000;
     let isLimited = false;
     
     if (estimatedPower_kVA > compensator.maxPower_kVA) {
       isLimited = true;
       // Calculer le courant limite pour ne pas dépasser maxPower_kVA
-      const I_limit = (compensator.maxPower_kVA * 1000) / (Math.sqrt(3) * Umoy_init);
+      const I_limit = (compensator.maxPower_kVA * 1000) / (Math.sqrt(3) * Umoy_current);
       console.warn(
         `⚠️ EQUI8 limité par puissance: ${estimatedPower_kVA.toFixed(1)} kVA > ` +
         `${compensator.maxPower_kVA} kVA → I injecté borné à ${I_limit.toFixed(1)} A`
@@ -1441,27 +1393,24 @@ export class SimulationCalculator extends ElectricalCalculator {
     // ✅ LOG DIAGNOSTIC COMPLET : Vérifier convergence des tensions
     const ecart_final_calc = Math.max(UEQUI8_ph1_mag, UEQUI8_ph2_mag, UEQUI8_ph3_mag) - 
                               Math.min(UEQUI8_ph1_mag, UEQUI8_ph2_mag, UEQUI8_ph3_mag);
-    const convergenceOK = ecart_final_calc < ecart_init_stored;
+    const convergenceOK = ecart_final_calc < ecart_current;
     
     console.log(`🔍 EQUI8 DIAGNOSTIC TENSIONS (nœud ${compensator.nodeId}):`, {
-      '===== TENSIONS INITIALES =====': '',
-      'Tensions INIT stockées': `${Uinit_ph1_stored.toFixed(1)}V / ${Uinit_ph2_stored.toFixed(1)}V / ${Uinit_ph3_stored.toFixed(1)}V`,
-      'Tensions INIT paramètres': `${Uinit_ph1.toFixed(1)}V / ${Uinit_ph2.toFixed(1)}V / ${Uinit_ph3.toFixed(1)}V`,
-      'Umoy_init': `${Umoy_fixed.toFixed(1)}V`,
-      'Écart init (stocké)': `${ecart_init_stored.toFixed(1)}V`,
-      'Écart init (recalculé)': `${ecart_init.toFixed(1)}V`,
-      'Cohérence écart': Math.abs(ecart_init_stored - ecart_init) < 0.1 ? '✅ OK' : `⚠️ DIVERGENCE: ${(ecart_init_stored - ecart_init).toFixed(1)}V`,
-      '===== RATIOS CME =====': '',
-      'Ratios (fixes)': `A=${ratio_ph1.toFixed(3)}, B=${ratio_ph2.toFixed(3)}, C=${ratio_ph3.toFixed(3)}`,
+      '===== TENSIONS ACTUELLES =====': '',
+      'Tensions actuelles': `${Uinit_ph1.toFixed(1)}V / ${Uinit_ph2.toFixed(1)}V / ${Uinit_ph3.toFixed(1)}V`,
+      'Umoy_actuel': `${Umoy_current.toFixed(1)}V`,
+      'Écart actuel': `${ecart_current.toFixed(1)}V`,
+      '===== RATIOS CME (dynamiques) =====': '',
+      'Ratios': `A=${ratio_ph1.toFixed(3)}, B=${ratio_ph2.toFixed(3)}, C=${ratio_ph3.toFixed(3)}`,
       'Somme ratios': (ratio_ph1 + ratio_ph2 + ratio_ph3).toFixed(4),
       '===== TENSIONS EQUI8 CALCULÉES =====': '',
       'Écart EQUI8 (cible)': `${ecart_equi8.toFixed(1)}V`,
-      'UEQUI8 Ph1': `${UEQUI8_ph1_mag.toFixed(1)}V (Δ = ${(UEQUI8_ph1_mag - Uinit_ph1_stored).toFixed(1)}V)`,
-      'UEQUI8 Ph2': `${UEQUI8_ph2_mag.toFixed(1)}V (Δ = ${(UEQUI8_ph2_mag - Uinit_ph2_stored).toFixed(1)}V)`,
-      'UEQUI8 Ph3': `${UEQUI8_ph3_mag.toFixed(1)}V (Δ = ${(UEQUI8_ph3_mag - Uinit_ph3_stored).toFixed(1)}V)`,
+      'UEQUI8 Ph1': `${UEQUI8_ph1_mag.toFixed(1)}V (Δ = ${(UEQUI8_ph1_mag - Uinit_ph1).toFixed(1)}V)`,
+      'UEQUI8 Ph2': `${UEQUI8_ph2_mag.toFixed(1)}V (Δ = ${(UEQUI8_ph2_mag - Uinit_ph2).toFixed(1)}V)`,
+      'UEQUI8 Ph3': `${UEQUI8_ph3_mag.toFixed(1)}V (Δ = ${(UEQUI8_ph3_mag - Uinit_ph3).toFixed(1)}V)`,
       'Écart final calculé': `${ecart_final_calc.toFixed(1)}V`,
       '===== VALIDATION =====': '',
-      'Réduction écart': `${ecart_init_stored.toFixed(1)}V → ${ecart_final_calc.toFixed(1)}V`,
+      'Réduction écart': `${ecart_current.toFixed(1)}V → ${ecart_final_calc.toFixed(1)}V`,
       'CONVERGENCE': convergenceOK ? '✅ OK - Écart réduit' : '❌ PROBLÈME - Écart augmente!',
       'I-EQUI8': `${I_EQUI8_effective.toFixed(1)}A`,
       'I_N_initial': `${I_N_initial.toFixed(1)}A`,
@@ -1483,16 +1432,16 @@ export class SimulationCalculator extends ElectricalCalculator {
       iN_absorbed_A: (I_N_initial - I_N_residual),
       isLimited,
       compensationQ_kVAr: { A: Q_per_phase, B: Q_per_phase, C: Q_per_phase },
-      // ✅ CORRECTION : Retourner valeurs STOCKÉES pour cohérence affichage
-      umoy_init_V: Umoy_fixed,
-      umax_init_V: Math.max(Uinit_ph1_stored, Uinit_ph2_stored, Uinit_ph3_stored),
-      umin_init_V: Math.min(Uinit_ph1_stored, Uinit_ph2_stored, Uinit_ph3_stored),
-      ecart_init_V: ecart_init_stored,
+      // Retourner valeurs ACTUELLES (plus de stockage permanent)
+      umoy_init_V: Umoy_current,
+      umax_init_V: Umax_current,
+      umin_init_V: Umin_current,
+      ecart_init_V: ecart_current,
       ecart_equi8_V: ecart_equi8,
-      // ✅ NOUVEAU : Tensions avant équilibrage (stockées à itération 1)
-      uinit_ph1_V: Uinit_ph1_stored,
-      uinit_ph2_V: Uinit_ph2_stored,
-      uinit_ph3_V: Uinit_ph3_stored
+      // Tensions actuelles par phase (état avant équilibrage de cette itération)
+      uinit_ph1_V: Uinit_ph1,
+      uinit_ph2_V: Uinit_ph2,
+      uinit_ph3_V: Uinit_ph3
     };
   }
 
@@ -1545,65 +1494,9 @@ export class SimulationCalculator extends ElectricalCalculator {
         project.foisonnementChargesIndustriel
       );
       
-      // 🔹 À l'itération 1 : calculer et stocker les ratios fixes
-      // LECTURE COHÉRENTE : Utiliser les tensions depuis calculationResults si disponible (comme SRG2)
-      if (iteration === 1) {
-        console.log(`🔧 EQUI8 - Calcul des ratios de compensation (iteration 1)`);
-        
-        for (const compensator of compensators) {
-          let voltagesPerPhase: { A: number; B: number; C: number } | undefined;
-          
-          // Priorité 1: Lire depuis calculationResults (cohérence avec affichage)
-          if (calculationResults?.[scenario]?.nodeMetricsPerPhase) {
-            const existingMetrics = calculationResults[scenario].nodeMetricsPerPhase.find(
-              nm => nm.nodeId === compensator.nodeId
-            );
-            if (existingMetrics?.voltagesPerPhase) {
-              voltagesPerPhase = existingMetrics.voltagesPerPhase;
-              console.log(`✅ EQUI8 nœud ${compensator.nodeId} - Tensions lues depuis calculationResults (cohérence affichage)`);
-            }
-          }
-          
-          // Priorité 2: Sinon utiliser les tensions du calcul courant
-          if (!voltagesPerPhase) {
-            const nodeMetrics = result.nodeMetricsPerPhase?.find(nm => nm.nodeId === compensator.nodeId);
-            if (nodeMetrics?.voltagesPerPhase) {
-              voltagesPerPhase = nodeMetrics.voltagesPerPhase;
-              console.log(`⚠️ EQUI8 nœud ${compensator.nodeId} - Tensions lues depuis calcul courant (pas de calculationResults)`);
-            }
-          }
-          
-          if (voltagesPerPhase) {
-            const { A, B, C } = voltagesPerPhase;
-            
-            // 📊 LOG: Tensions initiales pour calcul des ratios
-            console.log(`📊 EQUI8 nœud ${compensator.nodeId} - Tensions initiales pour ratios:`, {
-              'Phase A': `${A.toFixed(1)}V`,
-              'Phase B': `${B.toFixed(1)}V`,
-              'Phase C': `${C.toFixed(1)}V`,
-              'Écart (Umax-Umin)': `${(Math.max(A, B, C) - Math.min(A, B, C)).toFixed(3)}V`
-            });
-            
-            // Calculer les ratios une seule fois
-            const ratios = this.computeEQUI8CompensationRatio(
-              A, B, C,
-              compensator.Zph_Ohm,
-              compensator.Zn_Ohm
-            );
-            
-            // Stocker dans la Map
-            this.equi8Ratios.set(compensator.nodeId, ratios);
-            
-            console.log(`✅ Ratios EQUI8 stockés pour nœud ${compensator.nodeId} (formule CME):`, {
-              ratio_A: ratios.ratio_ph1.toFixed(3),
-              ratio_B: ratios.ratio_ph2.toFixed(3),
-              ratio_C: ratios.ratio_ph3.toFixed(3),
-              Umoy_init: ratios.Umoy_init.toFixed(1) + 'V',
-              '(Umax-Umin)EQUI8': ratios.ecart_equi8.toFixed(1) + 'V'
-            });
-          }
-        }
-      }
+      // ✅ EQUI8 DYNAMIQUE : Plus de stockage des ratios
+      // Les ratios sont recalculés dynamiquement à chaque appel à applyEQUI8Compensation
+      // basé sur les tensions ACTUELLES du réseau
       
       // Appliquer les compensateurs et stocker les changements de tension
       const voltageChanges = new Map<string, {A: number, B: number, C: number}>();
@@ -1715,8 +1608,7 @@ export class SimulationCalculator extends ElectricalCalculator {
     // Nettoyer APRÈS le recalcul final (comme SRG2)
     this.cleanupEQUI8Markers(workingNodes);
     
-    // Nettoyer les ratios stockés
-    this.equi8Ratios.clear();
+    // Plus besoin de nettoyer les ratios - EQUI8 est maintenant dynamique
     
     console.log(`✅ EQUI8 simulation terminée: ${converged ? 'convergé' : 'non convergé'} après ${iteration} itérations`);
     
@@ -1900,31 +1792,17 @@ export class SimulationCalculator extends ElectricalCalculator {
       I_C_total = add(I_C_total, fromPolar(I_C_mag, 2*Math.PI/3));
     }
     
-    // ✅ CORRECTION : Utiliser les tensions initiales STOCKÉES dans equi8Ratios (cohérence affichage)
-    // Ces tensions ont été calculées à l'itération 1 depuis calculationResults
-    const ratiosData = this.equi8Ratios.get(compensator.nodeId);
+    // ✅ EQUI8 DYNAMIQUE : Utiliser les tensions ACTUELLES du réseau
+    // Plus de référence aux ratios stockés - calcul basé sur l'état courant
+    const Uinit_ph1 = nodeMetrics.voltagesPerPhase.A;
+    const Uinit_ph2 = nodeMetrics.voltagesPerPhase.B;
+    const Uinit_ph3 = nodeMetrics.voltagesPerPhase.C;
     
-    let Uinit_ph1: number;
-    let Uinit_ph2: number;
-    let Uinit_ph3: number;
-    
-    if (ratiosData) {
-      // Utiliser les tensions de référence stockées à l'itération 1 (cohérence avec affichage)
-      Uinit_ph1 = ratiosData.Uinit_ph1;
-      Uinit_ph2 = ratiosData.Uinit_ph2;
-      Uinit_ph3 = ratiosData.Uinit_ph3;
-      console.log(`✅ EQUI8 nœud ${compensator.nodeId} - Tensions initiales depuis ratios stockés:`, {
-        'Phase A': `${Uinit_ph1.toFixed(1)}V`,
-        'Phase B': `${Uinit_ph2.toFixed(1)}V`,
-        'Phase C': `${Uinit_ph3.toFixed(1)}V`
-      });
-    } else {
-      // Fallback: utiliser les tensions du calcul courant (ne devrait pas arriver si itération 1 ok)
-      Uinit_ph1 = nodeMetrics.voltagesPerPhase.A;
-      Uinit_ph2 = nodeMetrics.voltagesPerPhase.B;
-      Uinit_ph3 = nodeMetrics.voltagesPerPhase.C;
-      console.warn(`⚠️ EQUI8 nœud ${compensator.nodeId} - Pas de ratios stockés, utilisation tensions courantes`);
-    }
+    console.log(`📊 EQUI8 nœud ${compensator.nodeId} - Tensions actuelles pour calcul dynamique:`, {
+      'Phase A': `${Uinit_ph1.toFixed(1)}V`,
+      'Phase B': `${Uinit_ph2.toFixed(1)}V`,
+      'Phase C': `${Uinit_ph3.toFixed(1)}V`
+    });
     
     // Appliquer le modèle EQUI8
     return this.applyEQUI8Compensation(

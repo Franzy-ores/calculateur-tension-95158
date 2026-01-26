@@ -519,4 +519,168 @@ describe('EQUI8 + SRG2 Non-Regression', () => {
       expect(ecart_combined).toBeLessThanOrEqual(ecart_srg2Only);
     }
   });
+
+  it('should use iterative coupling loop: EQUI8 → SRG2 → iterate until convergence', () => {
+    /**
+     * Test du comportement itératif de la simulation couplée SRG2 + EQUI8
+     * 
+     * Principe physique vérifié:
+     * - L'EQUI8 agit en PERMANENCE et modifie la répartition des charges
+     * - Le SRG2 voit le réseau ÉQUILIBRÉ par l'EQUI8 pour prendre sa décision
+     * - La boucle itère: Réseau → EQUI8 → SRG2 → modification → Réseau → ...
+     * - Convergence quand: tap_change == 0 ET ΔUmean < 0.5V
+     */
+    const project = createSRG2Network();
+    const calc = new SimulationCalculator();
+
+    // EQUI8 sur node2 (aval du SRG2)
+    const compensator = {
+      id: 'equi8-coupled',
+      nodeId: 'node2',
+      maxPower_kVA: 50,
+      tolerance_A: 1,
+      enabled: true,
+      Zph_Ohm: 0.3,
+      Zn_Ohm: 0.3
+    };
+
+    // Exécuter la simulation couplée
+    const result = calc.calculateWithSimulation(
+      project,
+      'PRÉLÈVEMENT',
+      {
+        srg2Devices: project.simulationEquipment?.srg2Devices || [],
+        neutralCompensators: [compensator],
+        cableUpgrades: []
+      }
+    );
+
+    // Vérifier que la convergence a été atteinte
+    expect(result.convergenceStatus).toBe('converged');
+    expect(result.iterations).toBeDefined();
+    expect(result.iterations).toBeGreaterThanOrEqual(1);
+    expect(result.iterations).toBeLessThanOrEqual(10); // MAX_COUPLED_ITERATIONS
+
+    console.log('Simulation couplée itérative:', {
+      'Convergence': result.convergenceStatus,
+      'Itérations': result.iterations,
+      'Tensions finales node1': result.nodeMetricsPerPhase?.find(nm => nm.nodeId === 'node1')?.voltagesPerPhase,
+      'Tensions finales node2': result.nodeMetricsPerPhase?.find(nm => nm.nodeId === 'node2')?.voltagesPerPhase
+    });
+
+    // Vérifier les tensions sont réalistes (pas de divergence)
+    const node1_metrics = result.nodeMetricsPerPhase?.find(nm => nm.nodeId === 'node1');
+    const node2_metrics = result.nodeMetricsPerPhase?.find(nm => nm.nodeId === 'node2');
+
+    if (node1_metrics && node2_metrics) {
+      // Tensions dans plage EN50160 élargie (200-250V)
+      expect(node1_metrics.voltagesPerPhase.A).toBeGreaterThan(200);
+      expect(node1_metrics.voltagesPerPhase.A).toBeLessThan(250);
+      expect(node2_metrics.voltagesPerPhase.A).toBeGreaterThan(200);
+      expect(node2_metrics.voltagesPerPhase.A).toBeLessThan(250);
+    }
+  });
+
+  it('should SRG2 see EQUI8-balanced network for regulation decision', () => {
+    /**
+     * Test critique: Le SRG2 doit prendre sa décision de régulation
+     * sur le réseau ÉQUILIBRÉ par l'EQUI8, pas sur le réseau brut.
+     * 
+     * Cas de test: réseau déséquilibré avec surtension sur une phase
+     * - Sans EQUI8: SRG2 voit surtension → active LO1/LO2
+     * - Avec EQUI8: réseau équilibré → SRG2 peut rester en BYP si moyenne OK
+     */
+    const project = createSRG2Network();
+    
+    // Créer un fort déséquilibre pour tester le comportement
+    const unbalancedProject = {
+      ...project,
+      nodes: project.nodes.map(n => {
+        if (n.id === 'node1') {
+          return {
+            ...n,
+            phaseDistribution: {
+              charges: { A: 70, B: 15, C: 15 }, // Fort déséquilibre
+              productions: { A: 0, B: 0, C: 0 }
+            }
+          };
+        }
+        return n;
+      }),
+      desequilibrePourcent: 50 // Fort déséquilibre global
+    };
+
+    const calc = new SimulationCalculator();
+
+    // EQUI8 sur le même nœud où il y a le déséquilibre
+    const compensator = {
+      id: 'equi8-balance',
+      nodeId: 'node2',
+      maxPower_kVA: 50,
+      tolerance_A: 1,
+      enabled: true,
+      Zph_Ohm: 0.3,
+      Zn_Ohm: 0.3
+    };
+
+    // Calcul SRG2 seul (voit le réseau déséquilibré)
+    const srg2Only = calc.calculateWithSimulation(
+      unbalancedProject,
+      'PRÉLÈVEMENT',
+      {
+        srg2Devices: project.simulationEquipment?.srg2Devices || [],
+        neutralCompensators: [],
+        cableUpgrades: []
+      }
+    );
+
+    // Calcul combiné (SRG2 voit le réseau équilibré par EQUI8)
+    const combined = calc.calculateWithSimulation(
+      unbalancedProject,
+      'PRÉLÈVEMENT',
+      {
+        srg2Devices: project.simulationEquipment?.srg2Devices || [],
+        neutralCompensators: [compensator],
+        cableUpgrades: []
+      }
+    );
+
+    const node1_srg2Only = srg2Only.nodeMetricsPerPhase?.find(nm => nm.nodeId === 'node1');
+    const node1_combined = combined.nodeMetricsPerPhase?.find(nm => nm.nodeId === 'node1');
+
+    if (node1_srg2Only && node1_combined) {
+      const ecart_srg2Only = Math.max(
+        node1_srg2Only.voltagesPerPhase.A,
+        node1_srg2Only.voltagesPerPhase.B,
+        node1_srg2Only.voltagesPerPhase.C
+      ) - Math.min(
+        node1_srg2Only.voltagesPerPhase.A,
+        node1_srg2Only.voltagesPerPhase.B,
+        node1_srg2Only.voltagesPerPhase.C
+      );
+
+      const ecart_combined = Math.max(
+        node1_combined.voltagesPerPhase.A,
+        node1_combined.voltagesPerPhase.B,
+        node1_combined.voltagesPerPhase.C
+      ) - Math.min(
+        node1_combined.voltagesPerPhase.A,
+        node1_combined.voltagesPerPhase.B,
+        node1_combined.voltagesPerPhase.C
+      );
+
+      console.log('SRG2 sur réseau équilibré vs déséquilibré:', {
+        'SRG2 seul - écart': `${ecart_srg2Only.toFixed(1)}V`,
+        'Combiné - écart': `${ecart_combined.toFixed(1)}V`,
+        'SRG2 seul - tensions': node1_srg2Only.voltagesPerPhase,
+        'Combiné - tensions': node1_combined.voltagesPerPhase
+      });
+
+      // Le mode combiné doit avoir un meilleur équilibre (EQUI8 agit)
+      expect(ecart_combined).toBeLessThanOrEqual(ecart_srg2Only + 0.1);
+    }
+
+    // Vérifier la convergence
+    expect(combined.convergenceStatus).toBe('converged');
+  });
 });

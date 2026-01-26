@@ -526,9 +526,10 @@ describe('EQUI8 + SRG2 Non-Regression', () => {
      * 
      * Principe physique vérifié:
      * - L'EQUI8 agit en PERMANENCE et modifie la répartition des charges
+     * - L'EQUI8 est recalculé FRAIS à chaque itération (pas de mémoire/ratios)
      * - Le SRG2 voit le réseau ÉQUILIBRÉ par l'EQUI8 pour prendre sa décision
      * - La boucle itère: Réseau → EQUI8 → SRG2 → modification → Réseau → ...
-     * - Convergence quand: tap_change == 0 pendant 2 itérations consécutives
+     * - Critère d'arrêt: tap_change == 0 → stop (pas de critère tension)
      *   (Le SRG2 est un automate à seuil, pas un régulateur PID)
      */
     const project = createSRG2Network();

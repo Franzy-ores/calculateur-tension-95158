@@ -741,7 +741,6 @@ export class SimulationCalculator extends ElectricalCalculator {
     
     const MAX_COUPLED_ITERATIONS = 10;
     let iteration = 0;
-    let consecutiveNoTapChange = 0; // Compteur d'itérations consécutives sans changement de prise
     let tapChange = true; // Force première itération
     let converged = false;
     
@@ -753,6 +752,12 @@ export class SimulationCalculator extends ElectricalCalculator {
     let networkEq: CalculationResult | null = null;
     let lastTapPosition: Map<string, { A: SRG2SwitchState; B: SRG2SwitchState; C: SRG2SwitchState }> = new Map();
     
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // BOUCLE PRINCIPALE : simulateCoupledSRG2Equi8
+    // Principe: Le SRG2 corrige la tension d'un réseau DÉJÀ équilibré par l'EQUI8.
+    // L'EQUI8 est recalculé FRAIS à chaque itération (pas de mémoire/ratios).
+    // Critère d'arrêt: tap_change == 0 → stop (pas de critère tension)
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     while (iteration < MAX_COUPLED_ITERATIONS) {
       iteration++;
       console.log(`\n🔄 === ITÉRATION COUPLÉE ${iteration}/${MAX_COUPLED_ITERATIONS} ===`);
@@ -828,19 +833,11 @@ export class SimulationCalculator extends ElectricalCalculator {
       
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
       // ÉTAPE 4: Vérification stabilité (automate à seuil)
-      // Le SRG2 est stabilisé si: tap_change == 0 pendant 2 itérations consécutives
-      // (Le SRG2 est un automate à seuil, pas un régulateur PID)
+      // Critère d'arrêt: tap_change == 0 → stop (pas de critère tension)
+      // Le SRG2 est un automate à seuil, pas un régulateur PID
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
       if (!tapChange) {
-        consecutiveNoTapChange++;
-        console.log(`  📏 Critère convergence: tap_change=false, itérations consécutives sans changement=${consecutiveNoTapChange}/2`);
-      } else {
-        consecutiveNoTapChange = 0;
-        console.log(`  📏 Critère convergence: tap_change=true, compteur remis à zéro`);
-      }
-      
-      if (consecutiveNoTapChange >= 2) {
-        console.log(`  ✅ CONVERGENCE ATTEINTE: 2 itérations consécutives sans changement de prise (automate stabilisé)`);
+        console.log(`  ✅ CONVERGENCE ATTEINTE: tap_change == 0 (automate stabilisé)`);
         converged = true;
         break;
       }
@@ -849,12 +846,10 @@ export class SimulationCalculator extends ElectricalCalculator {
       // ÉTAPE 5: Appliquer la modification de prise sur le réseau
       // apply_tap(network, tap_change) → modifie la tension source BT
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      if (tapChange) {
-        // Le coefficient SRG2 modifie effectivement la tension vue en aval
-        // On met à jour currentBaselineResults pour la prochaine itération
-        currentBaselineResults = { [scenario]: networkEq };
-        console.log(`  🔄 Réseau mis à jour pour prochaine itération (tension source virtuelle modifiée)`);
-      }
+      // Le coefficient SRG2 modifie effectivement la tension vue en aval
+      // On met à jour currentBaselineResults pour la prochaine itération
+      currentBaselineResults = { [scenario]: networkEq };
+      console.log(`  🔄 Réseau mis à jour pour prochaine itération (tension source virtuelle modifiée)`);
     }
     
     if (!converged) {

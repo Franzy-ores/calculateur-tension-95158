@@ -202,7 +202,8 @@ describe('EQUI8 - Modèle phasoriel correct', () => {
 
     // L'écart devrait être réduit (mais pas nécessairement de beaucoup car l'effet diminue avec la distance)
     // On vérifie juste que l'algorithme ne fait pas empirer les choses
-    expect(ecartWith).toBeLessThanOrEqual(ecartWithout * 1.1);  // Max 10% de dégradation
+    // Note: tolérance de 1e-10 pour erreurs de floating point quand les valeurs sont ~0
+    expect(ecartWith).toBeLessThanOrEqual(ecartWithout * 1.1 + 1e-10);  // Max 10% de dégradation
   });
 
   /**

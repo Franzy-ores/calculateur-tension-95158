@@ -528,7 +528,8 @@ describe('EQUI8 + SRG2 Non-Regression', () => {
      * - L'EQUI8 agit en PERMANENCE et modifie la répartition des charges
      * - Le SRG2 voit le réseau ÉQUILIBRÉ par l'EQUI8 pour prendre sa décision
      * - La boucle itère: Réseau → EQUI8 → SRG2 → modification → Réseau → ...
-     * - Convergence quand: tap_change == 0 ET ΔUmean < 0.5V
+     * - Convergence quand: tap_change == 0 pendant 2 itérations consécutives
+     *   (Le SRG2 est un automate à seuil, pas un régulateur PID)
      */
     const project = createSRG2Network();
     const calc = new SimulationCalculator();

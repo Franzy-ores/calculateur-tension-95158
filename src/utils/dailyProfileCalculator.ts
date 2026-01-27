@@ -36,15 +36,43 @@ export class DailyProfileCalculator {
 
   /**
    * Calcule les tensions pour chaque heure (0-23)
+   * 
+   * 🔑 RÈGLE IMPORTANTE: Le SRG2 possède une mémoire mécanique.
+   * Sa position de prise doit être conservée entre les pas de simulation journalière.
+   * 
+   * - SRG2: Conserve son état (prise) entre les heures (temps long, inertie mécanique)
+   * - EQUI8: Peut être recalculé librement à chaque heure (temps réel, réponse rapide)
    */
   calculateDailyVoltages(): HourlyVoltageResult[] {
     const results: HourlyVoltageResult[] = [];
     // Toujours 230V car on calcule en phase-neutre (seuils ±5% et ±10% basés sur 230V)
     const nominalVoltage = 230;
 
+    // 🔑 Mémoire mécanique SRG2: conserver l'état des commutateurs entre les heures
+    // Initialisation: tous en bypass au démarrage de la journée
+    let currentSRG2TapPositions: Map<string, { A: SRG2SwitchState; B: SRG2SwitchState; C: SRG2SwitchState }> = new Map();
+    
+    // Initialiser les positions de prise pour chaque SRG2 actif
+    if (this.isSimulationActive && this.simulationEquipment?.srg2Devices) {
+      for (const srg2 of this.simulationEquipment.srg2Devices.filter(s => s.enabled)) {
+        // Position initiale: bypass (ou récupérer depuis l'état courant si disponible)
+        const initialState = srg2.etatCommutateur || { A: 'BYP' as SRG2SwitchState, B: 'BYP' as SRG2SwitchState, C: 'BYP' as SRG2SwitchState };
+        currentSRG2TapPositions.set(srg2.id, initialState);
+      }
+    }
+
     for (let hour = 0; hour < 24; hour++) {
-      const hourlyResult = this.calculateHourlyVoltage(hour, nominalVoltage);
+      // Passer les positions de prise actuelles au calcul horaire
+      const hourlyResult = this.calculateHourlyVoltage(hour, nominalVoltage, currentSRG2TapPositions);
       results.push(hourlyResult);
+      
+      // 🔑 Mettre à jour les positions de prise SRG2 pour l'heure suivante
+      // Le SRG2 conserve sa position (mémoire mécanique) - seul un changement de seuil la modifie
+      if (hourlyResult.srg2States) {
+        for (const srg2State of hourlyResult.srg2States) {
+          currentSRG2TapPositions.set(srg2State.srg2Id, srg2State.switchStates);
+        }
+      }
     }
 
     return results;
@@ -124,8 +152,17 @@ export class DailyProfileCalculator {
    * - Passe 1: Calcul naturel (sans SRG2) pour obtenir les tensions au nœud SRG2
    * - Évaluation des seuils SRG2 pour déterminer l'état (BYP, LO1, LO2, BO1, BO2)
    * - Passe 2: Si SRG2 actif, recalcul avec régulation appliquée
+   * 
+   * 🔑 MÉMOIRE MÉCANIQUE SRG2:
+   * - currentSRG2TapPositions contient l'état de prise de l'heure précédente
+   * - Les seuils d'hystérésis empêchent les oscillations
+   * - Le SRG2 ne change de prise que si la tension sort de la zone d'hystérésis
    */
-  private calculateHourlyVoltage(hour: number, nominalVoltage: number): HourlyVoltageResult {
+  private calculateHourlyVoltage(
+    hour: number, 
+    nominalVoltage: number,
+    currentSRG2TapPositions: Map<string, { A: SRG2SwitchState; B: SRG2SwitchState; C: SRG2SwitchState }>
+  ): HourlyVoltageResult {
     const seasonProfile = this.profiles.profiles[this.options.season];
     const weatherFactor = this.profiles.weatherFactors[this.options.weather];
     const hourStr = hour.toString();
@@ -196,12 +233,13 @@ export class DailyProfileCalculator {
       let srg2States: SRG2HourlyActivation[] | undefined;
       
       if (hasSRG2 && this.simulationEquipment?.srg2Devices) {
-        // === CALCUL SRG2 HEURE PAR HEURE ===
+        // === CALCUL SRG2 HEURE PAR HEURE AVEC MÉMOIRE MÉCANIQUE ===
         const srg2Result = this.calculateWithHourlySRG2Evaluation(
           projectWithHourlyFoisonnement,
           this.simulationEquipment.srg2Devices.filter(s => s.enabled),
           this.simulationEquipment.neutralCompensators?.filter(c => c.enabled),
-          this.simulationEquipment.cableReplacement
+          this.simulationEquipment.cableReplacement,
+          currentSRG2TapPositions  // 🔑 Positions de prise actuelles (mémoire mécanique)
         );
         result = srg2Result.result;
         srg2States = srg2Result.srg2States;
@@ -277,11 +315,16 @@ export class DailyProfileCalculator {
   /**
    * Calcul en deux passes pour évaluation SRG2 heure par heure
    * 
+   * 🔑 MÉMOIRE MÉCANIQUE SRG2:
+   * Le SRG2 possède une mémoire mécanique. Sa position de prise doit être
+   * conservée entre les pas de simulation journalière.
+   * 
    * PASSE 1: Calcul naturel (sans régulation SRG2)
    *   → Obtenir les tensions "naturelles" au nœud où le SRG2 est installé
    * 
-   * ÉVALUATION: Pour chaque SRG2, déterminer l'état des commutateurs
-   *   → Comparer tensions naturelles aux seuils LO2/LO1/BO1/BO2
+   * ÉVALUATION: Pour chaque SRG2, déterminer si un changement de prise est nécessaire
+   *   → Comparer tensions naturelles aux seuils LO2/LO1/BO1/BO2 AVEC HYSTÉRÉSIS
+   *   → Le SRG2 ne change de prise QUE si la tension sort de la zone d'hystérésis
    * 
    * PASSE 2: Si au moins un SRG2 est actif (pas en bypass)
    *   → Recalculer le réseau avec les régulations appliquées
@@ -290,7 +333,8 @@ export class DailyProfileCalculator {
     projectWithHourlyFoisonnement: Project,
     srg2Devices: SRG2Config[],
     neutralCompensators?: NeutralCompensator[],
-    cableReplacement?: { enabled: boolean; targetCableTypeId: string; affectedCableIds: string[] }
+    cableReplacement?: { enabled: boolean; targetCableTypeId: string; affectedCableIds: string[] },
+    currentTapPositions?: Map<string, { A: SRG2SwitchState; B: SRG2SwitchState; C: SRG2SwitchState }>
   ): { result: CalculationResult; srg2States: SRG2HourlyActivation[] } {
     
     // Appliquer le remplacement de câbles si actif
@@ -316,12 +360,23 @@ export class DailyProfileCalculator {
       projectToUse.clientLinks
     );
     
-    // === ÉVALUATION DES SRG2 ===
+    // === ÉVALUATION DES SRG2 AVEC MÉMOIRE MÉCANIQUE ===
+    // 🔑 Le SRG2 possède une mémoire mécanique. Sa position de prise doit être
+    // conservée entre les pas de simulation journalière.
     const srg2States: SRG2HourlyActivation[] = [];
     let anySRG2Active = false;
     
     for (const srg2 of srg2Devices) {
-      const activation = this.evaluateSRG2Activation(naturalResult, srg2, projectToUse.voltageSystem);
+      // Récupérer la position de prise actuelle (mémoire de l'heure précédente)
+      const previousTapPosition = currentTapPositions?.get(srg2.id);
+      
+      // Évaluer si un changement de prise est nécessaire (avec hystérésis)
+      const activation = this.evaluateSRG2ActivationWithMemory(
+        naturalResult, 
+        srg2, 
+        projectToUse.voltageSystem,
+        previousTapPosition
+      );
       srg2States.push(activation);
       if (activation.isActive) {
         anySRG2Active = true;
@@ -482,6 +537,141 @@ export class DailyProfileCalculator {
       tensionEntree: tensions,
       tensionSortie
     };
+  }
+  
+  /**
+   * 🔑 MÉMOIRE MÉCANIQUE SRG2: Évalue l'activation avec hystérésis
+   * 
+   * Le SRG2 possède une mémoire mécanique. Sa position de prise doit être
+   * conservée entre les pas de simulation journalière.
+   * 
+   * Le changement de prise ne s'effectue QUE si:
+   * 1. La tension sort de la zone de tolérance de la position actuelle
+   * 2. L'hystérésis (±2V par défaut) est dépassée
+   * 
+   * Cela évite les oscillations causées par des variations mineures de tension.
+   */
+  private evaluateSRG2ActivationWithMemory(
+    naturalResult: CalculationResult,
+    srg2: SRG2Config,
+    voltageSystem: string,
+    previousTapPosition?: { A: SRG2SwitchState; B: SRG2SwitchState; C: SRG2SwitchState }
+  ): SRG2HourlyActivation {
+    // Récupérer les tensions naturelles au nœud SRG2
+    const nodeMetrics = naturalResult.nodeMetricsPerPhase?.find(
+      nm => nm.nodeId === srg2.nodeId
+    );
+    
+    if (!nodeMetrics?.voltagesPerPhase) {
+      // Nœud non trouvé → conserver la position précédente ou bypass par défaut
+      return {
+        srg2Id: srg2.id,
+        nodeId: srg2.nodeId,
+        isActive: previousTapPosition ? 
+          (previousTapPosition.A !== 'BYP' || previousTapPosition.B !== 'BYP' || previousTapPosition.C !== 'BYP') : 
+          false,
+        switchStates: previousTapPosition || { A: 'BYP', B: 'BYP', C: 'BYP' },
+        tensionEntree: { A: 230, B: 230, C: 230 }
+      };
+    }
+    
+    const tensions = {
+      A: nodeMetrics.voltagesPerPhase.A,
+      B: nodeMetrics.voltagesPerPhase.B,
+      C: nodeMetrics.voltagesPerPhase.C
+    };
+    
+    // Hystérésis du SRG2 (±2V par défaut)
+    const hysteresis = srg2.hysteresis_V || 2;
+    
+    // Pour chaque phase, déterminer si un changement de prise est nécessaire
+    const stateA = this.determineSRG2SwitchStateWithHysteresis(
+      tensions.A, srg2, previousTapPosition?.A || 'BYP', hysteresis
+    );
+    const stateB = this.determineSRG2SwitchStateWithHysteresis(
+      tensions.B, srg2, previousTapPosition?.B || 'BYP', hysteresis
+    );
+    const stateC = this.determineSRG2SwitchStateWithHysteresis(
+      tensions.C, srg2, previousTapPosition?.C || 'BYP', hysteresis
+    );
+    
+    // Appliquer les contraintes SRG2-230 si nécessaire
+    const finalStates = this.applySRG230Constraints(
+      { A: stateA, B: stateB, C: stateC },
+      tensions,
+      srg2
+    );
+    
+    // SRG2 actif si au moins une phase n'est pas en bypass
+    const isActive = finalStates.A !== 'BYP' || finalStates.B !== 'BYP' || finalStates.C !== 'BYP';
+    
+    // Calculer les tensions de sortie prévisionnelles
+    const tensionSortie = isActive ? {
+      A: tensions.A * (1 + this.getVoltageCoefficient(finalStates.A, srg2) / 100),
+      B: tensions.B * (1 + this.getVoltageCoefficient(finalStates.B, srg2) / 100),
+      C: tensions.C * (1 + this.getVoltageCoefficient(finalStates.C, srg2) / 100)
+    } : undefined;
+    
+    return {
+      srg2Id: srg2.id,
+      nodeId: srg2.nodeId,
+      isActive,
+      switchStates: finalStates,
+      tensionEntree: tensions,
+      tensionSortie
+    };
+  }
+  
+  /**
+   * 🔑 Détermine l'état du commutateur SRG2 avec hystérésis
+   * 
+   * Le SRG2 ne change de prise que si la tension sort de la zone d'hystérésis
+   * de la position actuelle. Cela simule l'inertie mécanique du système.
+   */
+  private determineSRG2SwitchStateWithHysteresis(
+    tension: number, 
+    srg2: SRG2Config, 
+    currentState: SRG2SwitchState,
+    hysteresis: number
+  ): SRG2SwitchState {
+    // Calculer les seuils avec hystérésis selon la position actuelle
+    // Le SRG2 reste dans sa position sauf si la tension force un changement
+    
+    switch (currentState) {
+      case 'LO2':
+        // En LO2 (abaissement max), on reste sauf si tension tombe sous seuilLO1 - hystérésis
+        if (tension < srg2.seuilLO1_V - hysteresis) return 'LO1';
+        return 'LO2';
+        
+      case 'LO1':
+        // En LO1 (abaissement partiel)
+        if (tension >= srg2.seuilLO2_V + hysteresis) return 'LO2';
+        if (tension < srg2.seuilBO1_V + hysteresis) return 'BYP'; // Zone de bypass
+        return 'LO1';
+        
+      case 'BYP':
+        // En bypass, on évalue si on doit passer en régulation
+        if (tension >= srg2.seuilLO2_V + hysteresis) return 'LO2';
+        if (tension >= srg2.seuilLO1_V + hysteresis) return 'LO1';
+        if (tension <= srg2.seuilBO2_V - hysteresis) return 'BO2';
+        if (tension <= srg2.seuilBO1_V - hysteresis) return 'BO1';
+        return 'BYP';
+        
+      case 'BO1':
+        // En BO1 (augmentation partielle)
+        if (tension <= srg2.seuilBO2_V - hysteresis) return 'BO2';
+        if (tension > srg2.seuilLO1_V - hysteresis) return 'BYP'; // Zone de bypass
+        return 'BO1';
+        
+      case 'BO2':
+        // En BO2 (augmentation max), on reste sauf si tension monte au-dessus seuilBO1 + hystérésis
+        if (tension > srg2.seuilBO1_V + hysteresis) return 'BO1';
+        return 'BO2';
+        
+      default:
+        // État inconnu, utiliser la logique standard sans hystérésis
+        return this.determineSRG2SwitchState(tension, srg2);
+    }
   }
   
   /**

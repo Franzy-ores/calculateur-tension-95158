@@ -328,35 +328,60 @@ export interface Project {
 // Types pour les équipements de simulation
 // SUPPRIMÉ - RegulatorType et VoltageRegulator
 
+// Mode de fonctionnement EQUI8
+export type EQUI8Mode = 'CME' | 'LOAD_SHIFT' | 'NONE';
+
+// Fenêtre temporelle pour limites thermiques EQUI8
+export type EQUI8ThermalWindow = '15min' | '3h' | 'permanent';
+
 export interface NeutralCompensator {
   id: string;
   nodeId: string; // Nœud où le compensateur est installé
   maxPower_kVA: number; // Puissance totale disponible pour compensation
   tolerance_A: number; // Seuil de courant de neutre pour déclencher la compensation
   enabled: boolean; // Actif dans la simulation
+  
+  // ✅ MODE EQUI8: 'CME' (injection courant) ou 'LOAD_SHIFT' (redistribution charges)
+  mode?: EQUI8Mode; // Défaut: 'CME'
+  
+  // Fenêtre temporelle pour limites thermiques (80A/15min, 60A/3h, 45A permanent)
+  thermalWindow?: EQUI8ThermalWindow; // Défaut: 'permanent' (45A)
+  
   // Paramètres EQUI8 (modèle CME Transformateur)
   Zph_Ohm: number; // Impédance câble phase réseau (Ω) - doit être > 0,15 Ω
   Zn_Ohm: number;  // Impédance câble neutre réseau (Ω) - doit être > 0,15 Ω
+  
   // Résultats de simulation EQUI8
   currentIN_A?: number; // Courant de neutre final I-EQUI8 (A)
   reductionPercent?: number; // Pourcentage de réduction du courant de neutre
   isLimited?: boolean; // True si limitation par puissance atteinte
+  
   // Tensions et courants EQUI8
   iN_initial_A?: number;    // Courant de neutre initial (A)
   iN_absorbed_A?: number;   // Courant de neutre absorbé par EQUI8 (A)
   u1p_V?: number;           // UEQUI8-ph1 : Tension phase A après EQUI8 (V)
   u2p_V?: number;           // UEQUI8-ph2 : Tension phase B après EQUI8 (V)
   u3p_V?: number;           // UEQUI8-ph3 : Tension phase C après EQUI8 (V)
+  
   // Métriques intermédiaires EQUI8
   umoy_init_V?: number;     // Moyenne des tensions initiales
   umax_init_V?: number;     // Max des tensions initiales
   umin_init_V?: number;     // Min des tensions initiales
   ecart_init_V?: number;    // (Umax-Umin)init
   ecart_equi8_V?: number;   // (Umax-Umin)EQUI8 après compensation
-  // ✅ NOUVEAU : Tensions initiales par phase (avant équilibrage)
+  
+  // Tensions initiales par phase (avant équilibrage)
   uinit_ph1_V?: number;     // Tension phase 1 avant EQUI8 (V)
   uinit_ph2_V?: number;     // Tension phase 2 avant EQUI8 (V)
   uinit_ph3_V?: number;     // Tension phase 3 avant EQUI8 (V)
+  
+  // CME Mode spécifique
+  cme_I_injected_A?: number;      // Courant injecté par EQUI8 en mode CME (A)
+  cme_deltaU_target_V?: number;   // Écart cible ΔU_EQUI8 (V)
+  cme_deltaU_achieved_V?: number; // Écart atteint après calibration (V)
+  cme_converged?: boolean;        // Convergence atteinte
+  cme_iterations?: number;        // Nombre d'itérations de calibration
+  
   compensationQ_kVAr?: { A: number; B: number; C: number }; // Q par phase (si modélisé)
   I_EQUI8_complex?: Complex; // Phasor d'injection calculé (pour intégration physique)
 }

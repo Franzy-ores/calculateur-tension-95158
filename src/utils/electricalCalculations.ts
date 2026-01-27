@@ -541,7 +541,15 @@ export class ElectricalCalculator {
     clientsImportes?: ClientImporte[],
     clientLinks?: ClientLink[],
     foisonnementChargesResidentiel?: number,
-    foisonnementChargesIndustriel?: number
+    foisonnementChargesIndustriel?: number,
+    // ✅ EQUI8 CME: Injections de courant shunt par nœud (source de courant)
+    equi8CurrentInjections?: Map<string, { 
+      I_neutral: { re: number; im: number };   // +I_EQUI8 sur neutre
+      I_phaseA: { re: number; im: number };    // -I_EQUI8/3 sur phase A
+      I_phaseB: { re: number; im: number };    // -I_EQUI8/3 sur phase B
+      I_phaseC: { re: number; im: number };    // -I_EQUI8/3 sur phase C
+      magnitude: number;                        // Magnitude de I_EQUI8
+    }>
   ): CalculationResult {
     // Validation robuste des entrées
     this.validateInputs(nodes, cables, cableTypes, foisonnementCharges, foisonnementProductions, desequilibrePourcent);
@@ -1168,9 +1176,27 @@ export class ElectricalCalculator {
             const Vn = V_node_phase.get(n.id) || Vslack_phase_ph;
             const Sph = S_map.get(n.id) || C(0, 0);
             const Vsafe = abs(Vn) > ElectricalCalculator.MIN_VOLTAGE_SAFETY ? Vn : Vslack_phase_ph;
-            const Iinj = conj(div(Sph, Vsafe));
-            // Note: L'EQUI8 agit sur le potentiel du neutre, pas sur les courants de phase
-            // L'imposition de tension se fait dans le forward sweep
+            let Iinj = conj(div(Sph, Vsafe));
+            
+            // ✅ EQUI8 CME: Ajouter l'injection de courant shunt si présente
+            // EQUI8 modifie les courants, JAMAIS les tensions directement.
+            if (equi8CurrentInjections?.has(n.id)) {
+              const injection = equi8CurrentInjections.get(n.id)!;
+              let I_equi8_phase: Complex;
+              
+              if (phaseLabel === 'A') {
+                I_equi8_phase = C(injection.I_phaseA.re, injection.I_phaseA.im);
+              } else if (phaseLabel === 'B') {
+                I_equi8_phase = C(injection.I_phaseB.re, injection.I_phaseB.im);
+              } else {
+                I_equi8_phase = C(injection.I_phaseC.re, injection.I_phaseC.im);
+              }
+              
+              // Soustraire du courant nodal (l'injection SOUTIRE du courant des phases)
+              Iinj = add(Iinj, I_equi8_phase);
+              console.log(`🔌 EQUI8 CME nœud ${n.id} phase ${phaseLabel}: I_equi8=${abs(I_equi8_phase).toFixed(2)}A`);
+            }
+            
             I_inj_node_phase.set(n.id, Iinj);
           }
 
@@ -1299,14 +1325,25 @@ export class ElectricalCalculator {
       // Pour les réseaux 400V phase-neutre, le courant neutre crée une chute de tension supplémentaire
       // qui doit être ajoutée aux tensions phase-neutre calculées
       if (is400V) {
-        // ✅ EQUI8 : Identifier les nœuds avec compensation et leur courant I_EQUI8
-        // Construire une map des courants EQUI8 par nœud pour soustraction dans le backward sweep
+        // ✅ EQUI8 CME: Identifier les nœuds avec injection de courant
+        // Le courant injecté sur le neutre réduit directement le courant neutre dans les câbles amont
         const equi8CompensationByNode = new Map<string, number>();
+        
+        // Source 1: Injections explicites passées en paramètre (mode CME)
+        if (equi8CurrentInjections) {
+          for (const [nodeId, injection] of equi8CurrentInjections.entries()) {
+            // Le courant injecté sur le neutre = magnitude
+            equi8CompensationByNode.set(nodeId, injection.magnitude);
+            console.log(`🔌 EQUI8 CME détecté sur nœud ${nodeId}: I_injection=${injection.magnitude.toFixed(1)}A`);
+          }
+        }
+        
+        // Source 2: Legacy customProps (mode LOAD_SHIFT ou ancien modèle)
         for (const n of nodes) {
-          if (n.customProps?.['equi8_I_compensation']) {
+          if (n.customProps?.['equi8_I_compensation'] && !equi8CompensationByNode.has(n.id)) {
             const I_comp = n.customProps['equi8_I_compensation'] as number;
             equi8CompensationByNode.set(n.id, I_comp);
-            console.log(`🔌 EQUI8 détecté sur nœud ${n.id}: I_compensation=${I_comp.toFixed(1)}A`);
+            console.log(`🔌 EQUI8 legacy détecté sur nœud ${n.id}: I_compensation=${I_comp.toFixed(1)}A`);
           }
         }
         

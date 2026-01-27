@@ -11,6 +11,8 @@ import {
   SimulationEquipment,
   SimulationResult,
   CableUpgrade,
+  EQUI8Mode,
+  EQUI8ThermalWindow,
 } from '@/types/network';
 import { SRG2Config, SRG2SimulationResult, SRG2SwitchState, DEFAULT_SRG2_400_CONFIG, DEFAULT_SRG2_230_CONFIG } from '@/types/srg2';
 import { ElectricalCalculator } from '@/utils/electricalCalculations';
@@ -23,6 +25,17 @@ import {
   analyzeCurrentImbalance,
   CurrentImbalanceAnalysis 
 } from '@/utils/equi8LoadShiftCalculator';
+import {
+  computeEquivImpedancesToSource,
+  computeCME_UtargetsAndI,
+  buildEQUI8Injection,
+  clampByThermal,
+  adjustSecant,
+  logEQUI8CMEMetrics,
+  EQUI8_THERMAL_LIMITS,
+  EQUI8CMEResult,
+  EQUI8CalibrationResult,
+} from '@/utils/equi8CME';
 
 export class SimulationCalculator extends ElectricalCalculator {
   
@@ -690,14 +703,28 @@ export class SimulationCalculator extends ElectricalCalculator {
       );
     }
     
-    // Cas 3: Uniquement compensateurs → méthode itérative EQUI8
+    // Cas 3: Uniquement compensateurs → choisir selon le mode
     if (activeSRG2.length === 0 && activeCompensators.length > 0) {
-      return this.calculateWithNeutralCompensationIterative(
-        project,
-        scenario,
-        activeCompensators,
-        calculationResults
-      );
+      // Vérifier le mode du premier compensateur (on suppose tous du même mode)
+      const mode: EQUI8Mode = activeCompensators[0].mode || 'CME';
+      
+      if (mode === 'CME') {
+        console.log(`🔧 EQUI8 Mode CME: Injection de courant shunt`);
+        return this.calculateWithEQUI8_CME(
+          project,
+          scenario,
+          activeCompensators,
+          calculationResults
+        );
+      } else {
+        console.log(`🔧 EQUI8 Mode LOAD_SHIFT: Redistribution des charges mono`);
+        return this.calculateWithNeutralCompensationIterative(
+          project,
+          scenario,
+          activeCompensators,
+          calculationResults
+        );
+      }
     }
     
     // Cas 4: Les deux actifs → boucle de convergence globale SRG2 + EQUI8
@@ -1677,6 +1704,328 @@ export class SimulationCalculator extends ElectricalCalculator {
     
     console.log(`\n✅ EQUI8 simulation terminée: ${converged ? 'convergé' : 'non convergé'} après ${iteration} itérations`);
     console.log(`   🔑 Tensions = résultat NATUREL du recalcul (pas d'imposition artificielle)`);
+    
+    return {
+      ...finalResult,
+      convergenceStatus: converged ? 'converged' : 'not_converged',
+      iterations: iteration
+    };
+  }
+
+  /**
+   * ============================================================================
+   * EQUI8 MODE CME - INJECTION DE COURANT SHUNT
+   * ============================================================================
+   * 
+   * 🔑 PRINCIPE FONDAMENTAL (FOURNISSEUR):
+   * EQUI8 agit comme une SOURCE DE COURANT shunt au nœud d'installation.
+   * - +I_EQUI8 injecté sur le NEUTRE
+   * - -I_EQUI8/3 soutiré sur chaque PHASE (A, B, C)
+   * 
+   * 📊 ALGORITHME:
+   * 1. BFS SANS équipements → récupérer U1, U2, U3 au nœud EQUI8
+   * 2. Calculer Zph, Zn équivalents depuis la source
+   * 3. Appliquer formules CME → cibles U*, I_EQ_est
+   * 4. Boucle de calibration:
+   *    - Insérer injection de courant
+   *    - Recalcul BFS complet
+   *    - Vérifier ΔU_loc ≈ ΔU_EQUI8 (tolérance 0.2-0.5V)
+   *    - Ajuster I_inj par méthode sécante (borné par limites thermiques)
+   * 5. Retourner le résultat final avec métriques
+   * 
+   * CONTRAINTES FOURNISSEUR:
+   * - Zph ≥ 0.15Ω, Zn ≥ 0.15Ω (sinon abort)
+   * - Précision: ±2V sur tensions, ±5A sur courant
+   * - Limites thermiques: 80A/15min, 60A/3h, 45A permanent
+   * ============================================================================
+   */
+  private calculateWithEQUI8_CME(
+    project: Project,
+    scenario: CalculationScenario,
+    compensators: NeutralCompensator[],
+    calculationResults?: { [key: string]: CalculationResult }
+  ): CalculationResult {
+    
+    console.log(`\n════════════════════════════════════════════════════════════════`);
+    console.log(`🔧 EQUI8 MODE CME - Injection de courant shunt`);
+    console.log(`   ${compensators.length} compensateur(s) actif(s)`);
+    console.log(`════════════════════════════════════════════════════════════════\n`);
+    
+    const CME_CONVERGENCE_TOLERANCE_V = 0.5;
+    const CME_MAX_CALIBRATION_ITERATIONS = 20;
+    
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ÉTAPE 1: BFS SANS équipements → tensions naturelles U1, U2, U3
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    console.log(`📊 ÉTAPE 1: Calcul BFS sans équipements (tensions naturelles)`);
+    
+    const baselineResult = this.calculateScenario(
+      project.nodes,
+      project.cables,
+      project.cableTypes,
+      scenario,
+      project.foisonnementChargesResidentiel ?? project.foisonnementCharges,
+      project.foisonnementProductions,
+      project.transformerConfig,
+      project.loadModel,
+      project.desequilibrePourcent,
+      project.manualPhaseDistribution,
+      project.clientsImportes,
+      project.clientLinks,
+      project.foisonnementChargesResidentiel,
+      project.foisonnementChargesIndustriel
+    );
+    
+    // Collecter les données CME pour chaque compensateur
+    const cmeDataMap = new Map<string, {
+      cmeResult: EQUI8CMEResult;
+      impedances: { Zph_ohm: number; Zn_ohm: number };
+      thermalWindow: EQUI8ThermalWindow;
+      initialVoltages: { A: number; B: number; C: number };
+    }>();
+    
+    for (const compensator of compensators) {
+      if (!compensator.enabled) continue;
+      
+      // Récupérer les tensions naturelles au nœud
+      const nodeMetrics = baselineResult.nodeMetricsPerPhase?.find(nm => nm.nodeId === compensator.nodeId);
+      if (!nodeMetrics?.voltagesPerPhase) {
+        console.warn(`⚠️ EQUI8 CME: Nœud ${compensator.nodeId} non trouvé dans les résultats`);
+        continue;
+      }
+      
+      const U1 = nodeMetrics.voltagesPerPhase.A;
+      const U2 = nodeMetrics.voltagesPerPhase.B;
+      const U3 = nodeMetrics.voltagesPerPhase.C;
+      
+      console.log(`📍 EQUI8 ${compensator.id} @ nœud ${compensator.nodeId}:`);
+      console.log(`   Tensions naturelles: A=${U1.toFixed(1)}V, B=${U2.toFixed(1)}V, C=${U3.toFixed(1)}V`);
+      
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // ÉTAPE 2: Calculer Zph, Zn équivalents
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      const impedances = computeEquivImpedancesToSource(compensator.nodeId, project);
+      
+      // Utiliser les impédances du compensateur si définies, sinon les calculées
+      const Zph = compensator.Zph_Ohm > 0 ? compensator.Zph_Ohm : impedances.Zph_ohm;
+      const Zn = compensator.Zn_Ohm > 0 ? compensator.Zn_Ohm : impedances.Zn_ohm;
+      
+      console.log(`   Impédances: Zph=${Zph.toFixed(4)}Ω, Zn=${Zn.toFixed(4)}Ω`);
+      
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // ÉTAPE 3: Appliquer formules CME
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      const cmeResult = computeCME_UtargetsAndI(U1, U2, U3, Zph, Zn);
+      
+      if (cmeResult.aborted) {
+        console.error(`❌ EQUI8 CME ${compensator.id}: Calcul aborté - ${cmeResult.abortReason}`);
+        continue;
+      }
+      
+      const thermalWindow: EQUI8ThermalWindow = compensator.thermalWindow || 'permanent';
+      
+      cmeDataMap.set(compensator.id, {
+        cmeResult,
+        impedances: { Zph_ohm: Zph, Zn_ohm: Zn },
+        thermalWindow,
+        initialVoltages: { A: U1, B: U2, C: U3 }
+      });
+    }
+    
+    // Si aucun compensateur valide, retourner le résultat baseline
+    if (cmeDataMap.size === 0) {
+      console.warn(`⚠️ EQUI8 CME: Aucun compensateur valide, retour au baseline`);
+      return baselineResult;
+    }
+    
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ÉTAPE 4: Boucle de calibration BFS
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    console.log(`\n📊 ÉTAPE 4: Boucle de calibration BFS`);
+    
+    // Initialiser les courants d'injection
+    const injectionCurrents = new Map<string, number>();
+    const previousIinj = new Map<string, number>();
+    const previousDeltaU = new Map<string, number>();
+    
+    for (const [compId, data] of cmeDataMap.entries()) {
+      const { I_clamped } = clampByThermal(data.cmeResult.I_EQ_est, data.thermalWindow);
+      injectionCurrents.set(compId, I_clamped);
+      previousIinj.set(compId, 0);
+      previousDeltaU.set(compId, data.cmeResult.deltaU_init);
+    }
+    
+    let converged = false;
+    let iteration = 0;
+    let finalResult = baselineResult;
+    const calibrationResults = new Map<string, EQUI8CalibrationResult>();
+    
+    while (!converged && iteration < CME_MAX_CALIBRATION_ITERATIONS) {
+      iteration++;
+      console.log(`\n🔄 Calibration itération ${iteration}/${CME_MAX_CALIBRATION_ITERATIONS}`);
+      
+      // Construire les injections de courant pour le BFS
+      const equi8Injections = new Map<string, {
+        I_neutral: { re: number; im: number };
+        I_phaseA: { re: number; im: number };
+        I_phaseB: { re: number; im: number };
+        I_phaseC: { re: number; im: number };
+        magnitude: number;
+      }>();
+      
+      for (const [compId, Iinj] of injectionCurrents.entries()) {
+        const compensator = compensators.find(c => c.id === compId);
+        if (!compensator) continue;
+        
+        const injection = buildEQUI8Injection(compensator.nodeId, Iinj);
+        equi8Injections.set(compensator.nodeId, {
+          I_neutral: { re: injection.I_neutral.re, im: injection.I_neutral.im },
+          I_phaseA: { re: injection.I_phaseA.re, im: injection.I_phaseA.im },
+          I_phaseB: { re: injection.I_phaseB.re, im: injection.I_phaseB.im },
+          I_phaseC: { re: injection.I_phaseC.re, im: injection.I_phaseC.im },
+          magnitude: injection.magnitude
+        });
+        
+        console.log(`   EQUI8 ${compId}: I_inj=${Iinj.toFixed(2)}A`);
+      }
+      
+      // Recalcul BFS avec injections de courant
+      finalResult = this.calculateScenario(
+        project.nodes,
+        project.cables,
+        project.cableTypes,
+        scenario,
+        project.foisonnementChargesResidentiel ?? project.foisonnementCharges,
+        project.foisonnementProductions,
+        project.transformerConfig,
+        project.loadModel,
+        project.desequilibrePourcent,
+        project.manualPhaseDistribution,
+        project.clientsImportes,
+        project.clientLinks,
+        project.foisonnementChargesResidentiel,
+        project.foisonnementChargesIndustriel,
+        equi8Injections // ✅ Injections EQUI8 CME
+      );
+      
+      // Vérifier la convergence pour chaque compensateur
+      let allConverged = true;
+      
+      for (const [compId, data] of cmeDataMap.entries()) {
+        const compensator = compensators.find(c => c.id === compId);
+        if (!compensator) continue;
+        
+        const nodeMetrics = finalResult.nodeMetricsPerPhase?.find(nm => nm.nodeId === compensator.nodeId);
+        if (!nodeMetrics?.voltagesPerPhase) continue;
+        
+        const UA = nodeMetrics.voltagesPerPhase.A;
+        const UB = nodeMetrics.voltagesPerPhase.B;
+        const UC = nodeMetrics.voltagesPerPhase.C;
+        const deltaU_achieved = Math.max(UA, UB, UC) - Math.min(UA, UB, UC);
+        const deltaU_target = data.cmeResult.deltaU_EQUI8;
+        const residual = Math.abs(deltaU_achieved - deltaU_target);
+        
+        console.log(`   EQUI8 ${compId}: ΔU_achieved=${deltaU_achieved.toFixed(2)}V, ΔU_target=${deltaU_target.toFixed(2)}V, résidu=${residual.toFixed(3)}V`);
+        
+        if (residual > CME_CONVERGENCE_TOLERANCE_V) {
+          allConverged = false;
+          
+          // Ajuster le courant par méthode sécante
+          const Iinj_current = injectionCurrents.get(compId) || 0;
+          const Iinj_prev = previousIinj.get(compId) || 0;
+          const deltaU_prev = previousDeltaU.get(compId) || data.cmeResult.deltaU_init;
+          const thermalLimit = EQUI8_THERMAL_LIMITS[data.thermalWindow];
+          
+          const Iinj_next = adjustSecant(
+            Iinj_current,
+            deltaU_achieved,
+            deltaU_target,
+            Iinj_prev,
+            deltaU_prev,
+            thermalLimit
+          );
+          
+          previousIinj.set(compId, Iinj_current);
+          previousDeltaU.set(compId, deltaU_achieved);
+          injectionCurrents.set(compId, Iinj_next);
+        } else {
+          // Stocker le résultat de calibration
+          calibrationResults.set(compId, {
+            converged: true,
+            iterations: iteration,
+            finalIinj: injectionCurrents.get(compId) || 0,
+            deltaU_achieved,
+            deltaU_target,
+            residual,
+            thermalLimited: (injectionCurrents.get(compId) || 0) >= EQUI8_THERMAL_LIMITS[data.thermalWindow] * 0.99,
+            thermalLimit: EQUI8_THERMAL_LIMITS[data.thermalWindow],
+            voltagesAchieved: { A: UA, B: UB, C: UC },
+            voltagesTarget: { A: data.cmeResult.U_A_star, B: data.cmeResult.U_B_star, C: data.cmeResult.U_C_star }
+          });
+        }
+      }
+      
+      converged = allConverged;
+    }
+    
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ÉTAPE 5: Mise à jour des métriques des compensateurs
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    console.log(`\n📊 ÉTAPE 5: Mise à jour des métriques`);
+    
+    for (const [compId, data] of cmeDataMap.entries()) {
+      const compensator = compensators.find(c => c.id === compId);
+      if (!compensator) continue;
+      
+      const calibration = calibrationResults.get(compId);
+      const nodeMetrics = finalResult.nodeMetricsPerPhase?.find(nm => nm.nodeId === compensator.nodeId);
+      
+      // Stocker les résultats CME dans le compensateur
+      compensator.cme_I_injected_A = injectionCurrents.get(compId) || 0;
+      compensator.cme_deltaU_target_V = data.cmeResult.deltaU_EQUI8;
+      compensator.cme_deltaU_achieved_V = calibration?.deltaU_achieved ?? 0;
+      compensator.cme_converged = calibration?.converged ?? false;
+      compensator.cme_iterations = iteration;
+      
+      // Métriques initiales
+      compensator.uinit_ph1_V = data.initialVoltages.A;
+      compensator.uinit_ph2_V = data.initialVoltages.B;
+      compensator.uinit_ph3_V = data.initialVoltages.C;
+      compensator.ecart_init_V = data.cmeResult.deltaU_init;
+      
+      // Tensions finales
+      if (nodeMetrics?.voltagesPerPhase) {
+        compensator.u1p_V = nodeMetrics.voltagesPerPhase.A;
+        compensator.u2p_V = nodeMetrics.voltagesPerPhase.B;
+        compensator.u3p_V = nodeMetrics.voltagesPerPhase.C;
+        compensator.ecart_equi8_V = Math.max(
+          nodeMetrics.voltagesPerPhase.A, nodeMetrics.voltagesPerPhase.B, nodeMetrics.voltagesPerPhase.C
+        ) - Math.min(
+          nodeMetrics.voltagesPerPhase.A, nodeMetrics.voltagesPerPhase.B, nodeMetrics.voltagesPerPhase.C
+        );
+        compensator.umoy_init_V = (nodeMetrics.voltagesPerPhase.A + nodeMetrics.voltagesPerPhase.B + nodeMetrics.voltagesPerPhase.C) / 3;
+      }
+      
+      // Courant et réduction
+      compensator.currentIN_A = compensator.cme_I_injected_A;
+      compensator.isLimited = (compensator.cme_I_injected_A || 0) >= EQUI8_THERMAL_LIMITS[data.thermalWindow] * 0.99;
+      
+      if (data.cmeResult.deltaU_init > 0) {
+        compensator.reductionPercent = ((data.cmeResult.deltaU_init - (compensator.ecart_equi8_V || 0)) / data.cmeResult.deltaU_init) * 100;
+      }
+      
+      // Log final avec rappel des précisions
+      logEQUI8CMEMetrics(
+        compId,
+        compensator.nodeId,
+        data.cmeResult,
+        calibration,
+        data.thermalWindow
+      );
+    }
+    
+    console.log(`\n✅ EQUI8 CME terminé: ${converged ? 'convergé' : 'non convergé'} après ${iteration} itérations`);
+    console.log(`   🔑 Tensions = résultat NATUREL du BFS avec injection de courant (pas d'imposition)`);
     
     return {
       ...finalResult,

@@ -1212,34 +1212,11 @@ export class ElectricalCalculator {
               // Calculer tension selon Kirchhoff : V_v = V_u - Z * I_uv
               let Vv = sub(Vu, mul(Z, Iuv));
               
-              // ✅ EQUI8 : Imposer les tensions compensées calculées par formule CME
-              // L'EQUI8 modifie le potentiel du neutre, ce qui impose directement les tensions phase-neutre
+              // ✅ EQUI8 NOUVEAU MODÈLE: 
+              // L'EQUI8 modifie les charges, JAMAIS les tensions.
+              // Les tensions résultent du recalcul du réseau avec charges redistribuées.
+              // Plus d'imposition de tension artificielle.
               const vNode = nodeById.get(v);
-              if (vNode?.customProps?.['equi8_modified']) {
-                const equi8_voltage_A = vNode.customProps['equi8_voltage_A'] as number | undefined;
-                const equi8_voltage_B = vNode.customProps['equi8_voltage_B'] as number | undefined;
-                const equi8_voltage_C = vNode.customProps['equi8_voltage_C'] as number | undefined;
-                
-                if (equi8_voltage_A !== undefined && equi8_voltage_B !== undefined && equi8_voltage_C !== undefined) {
-                  // Sélectionner la tension cible selon la phase courante
-                  let equi8TargetVoltage = 0;
-                  if (angleDeg === 0) {
-                    equi8TargetVoltage = equi8_voltage_A;
-                  } else if (angleDeg === -120) {
-                    equi8TargetVoltage = equi8_voltage_B;
-                  } else if (angleDeg === 120) {
-                    equi8TargetVoltage = equi8_voltage_C;
-                  }
-                  
-                  // Remplacer Vv par la tension EQUI8 (conserver l'angle calculé par Kirchhoff)
-                  const angleRad = arg(Vv);
-                  Vv = C(equi8TargetVoltage * Math.cos(angleRad), equi8TargetVoltage * Math.sin(angleRad));
-                  
-                  if (angleDeg === 0) {
-                    console.log(`🎯 EQUI8 nœud ${v}: V_kirchhoff=${abs(sub(Vu, mul(Z, Iuv))).toFixed(1)}V → V_equi8=${equi8TargetVoltage.toFixed(1)}V (phase A)`);
-                  }
-                }
-              }
               
               V_node_phase.set(v, Vv);
               

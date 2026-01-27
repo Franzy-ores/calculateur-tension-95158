@@ -471,6 +471,14 @@ export interface CalculationResult {
     productions: { A: number; B: number; C: number };
     constraints: { min: number; max: number; total: number };
   };
+  // Injections de courant EQUI8 CME calibrées pour réutilisation (couplage SRG2)
+  equi8Injections?: Map<string, {
+    I_neutral: { re: number; im: number };
+    I_phaseA: { re: number; im: number };
+    I_phaseB: { re: number; im: number };
+    I_phaseC: { re: number; im: number };
+    magnitude: number;
+  }>;
 }
 
 export interface NetworkState {

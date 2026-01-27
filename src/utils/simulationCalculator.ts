@@ -16,6 +16,13 @@ import { SRG2Config, SRG2SimulationResult, SRG2SwitchState, DEFAULT_SRG2_400_CON
 import { ElectricalCalculator } from '@/utils/electricalCalculations';
 import { Complex, C, add, sub, mul, div, abs, fromPolar, scale, normalize, arg } from '@/utils/complex';
 import { getCircuitNodes } from '@/utils/networkConnectivity';
+import { 
+  calculateEQUI8LoadShift, 
+  extractNodeCurrents, 
+  extractNodeMonoDistribution,
+  analyzeCurrentImbalance,
+  CurrentImbalanceAnalysis 
+} from '@/utils/equi8LoadShiftCalculator';
 
 export class SimulationCalculator extends ElectricalCalculator {
   
@@ -1445,11 +1452,22 @@ export class SimulationCalculator extends ElectricalCalculator {
   }
 
   /**
-   * Calcule un scénario avec compensation de neutre uniquement
-   */
-  /**
-   * Calcul itératif avec compensateurs de neutre (méthode EQUI8)
-   * Similaire à calculateWithSRG2Regulation, recalcule le circuit complet à chaque itération
+   * ============================================================================
+   * NOUVEAU MODÈLE EQUI8 : Redistribution des charges mono
+   * ============================================================================
+   * 
+   * 🔑 PRINCIPE FONDAMENTAL:
+   * EQUI8 modifie les charges, JAMAIS les tensions.
+   * 
+   * 📊 ALGORITHME:
+   * 1. Calculer le réseau brut
+   * 2. Lire les courants par phase: I1, I2, I3
+   * 3. Identifier la phase max (surchargée) et min (sous-chargée)
+   * 4. Déplacer une fraction des charges mono de phase max → phase min
+   * 5. Recalculer le réseau complet avec charges redistribuées
+   * 6. Répéter jusqu'à déséquilibre courant < seuil
+   * 
+   * ============================================================================
    */
   private calculateWithNeutralCompensationIterative(
     project: Project,
@@ -1457,159 +1475,208 @@ export class SimulationCalculator extends ElectricalCalculator {
     compensators: NeutralCompensator[],
     calculationResults?: { [key: string]: CalculationResult }
   ): CalculationResult {
-    console.log(`🔄 Début calcul itératif EQUI8 avec ${compensators.length} compensateurs`);
+    console.log(`🔄 EQUI8 NOUVEAU MODÈLE - Redistribution des charges mono`);
+    console.log(`   📊 ${compensators.length} compensateurs actifs`);
+    console.log(`   🔑 Principe: EQUI8 modifie les charges, JAMAIS les tensions`);
+    
+    const MAX_EQUI8_ITERATIONS = 20;
+    const CURRENT_IMBALANCE_THRESHOLD_A = 0.5; // Seuil de convergence en Ampères
     
     let iteration = 0;
     let converged = false;
-    let previousVoltages: Map<string, {A: number, B: number, C: number}> = new Map();
+    let previousImbalances: Map<string, number> = new Map();
     
-    // Copie des nœuds pour modification itérative
-    const workingNodes = JSON.parse(JSON.stringify(project.nodes)) as Node[];
+    // Copie de travail du projet pour modification des distributions
+    let workingProject = JSON.parse(JSON.stringify(project)) as Project;
     
-    while (!converged && iteration < SimulationCalculator.SIM_MAX_ITERATIONS) {
+    // Stocker les analyses pour les métriques finales
+    const compensatorAnalyses: Map<string, CurrentImbalanceAnalysis> = new Map();
+    const initialAnalyses: Map<string, CurrentImbalanceAnalysis> = new Map();
+    
+    while (!converged && iteration < MAX_EQUI8_ITERATIONS) {
       iteration++;
+      console.log(`\n🔄 === EQUI8 ITÉRATION ${iteration}/${MAX_EQUI8_ITERATIONS} ===`);
       
-      // Nettoyer les marqueurs EQUI8 précédents si iteration > 1
-      if (iteration > 1) {
-        this.cleanupEQUI8Markers(workingNodes);
-      }
-      
-      // RECALCUL COMPLET DU CIRCUIT avec l'état actuel (utiliser workingNodes, pas project.nodes)
-      // ✅ CORRECTION : Utiliser foisonnements différenciés CORRECTEMENT
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // ÉTAPE 1: Calculer le réseau avec l'état actuel des charges
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
       const result = this.calculateScenario(
-        workingNodes,
-        project.cables,
-        project.cableTypes,
+        workingProject.nodes,
+        workingProject.cables,
+        workingProject.cableTypes,
         scenario,
-        project.foisonnementChargesResidentiel ?? project.foisonnementCharges,  // ✅ Priorité aux valeurs différenciées
-        project.foisonnementProductions,
-        project.transformerConfig,
-        project.loadModel,
-        project.desequilibrePourcent,
-        project.manualPhaseDistribution,
-        project.clientsImportes,
-        project.clientLinks,
-        project.foisonnementChargesResidentiel,
-        project.foisonnementChargesIndustriel
+        workingProject.foisonnementChargesResidentiel ?? workingProject.foisonnementCharges,
+        workingProject.foisonnementProductions,
+        workingProject.transformerConfig,
+        workingProject.loadModel,
+        workingProject.desequilibrePourcent,
+        workingProject.manualPhaseDistribution,
+        workingProject.clientsImportes,
+        workingProject.clientLinks,
+        workingProject.foisonnementChargesResidentiel,
+        workingProject.foisonnementChargesIndustriel
       );
       
-      // ✅ EQUI8 DYNAMIQUE : Plus de stockage des ratios
-      // Les ratios sont recalculés dynamiquement à chaque appel à applyEQUI8Compensation
-      // basé sur les tensions ACTUELLES du réseau
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // ÉTAPE 2: Pour chaque compensateur, analyser et redistribuer
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      let anyRedistribution = false;
+      let maxImbalanceChange = 0;
       
-      // Appliquer les compensateurs et stocker les changements de tension
-      const voltageChanges = new Map<string, {A: number, B: number, C: number}>();
-      
-      for (const compensator of compensators) {
-        // Calculer la compensation EQUI8
-        const equi8Result = this.calculateEQUI8ForNode(result, project, compensator);
-        
-        if (equi8Result) {
-          voltageChanges.set(compensator.nodeId, {
-            A: equi8Result.UEQUI8_ph1_mag,
-            B: equi8Result.UEQUI8_ph2_mag,
-            C: equi8Result.UEQUI8_ph3_mag
-          });
-          
-          // Mettre à jour les métriques du compensateur
-          compensator.iN_initial_A = equi8Result.iN_initial_A;
-          compensator.iN_absorbed_A = equi8Result.iN_absorbed_A;
-          compensator.currentIN_A = equi8Result.I_EQUI8_A;
-          compensator.reductionPercent = equi8Result.reductionPercent;
-          compensator.isLimited = equi8Result.isLimited;
-          compensator.compensationQ_kVAr = equi8Result.compensationQ_kVAr;
-          compensator.umoy_init_V = equi8Result.umoy_init_V;
-          compensator.umax_init_V = equi8Result.umax_init_V;
-          compensator.umin_init_V = equi8Result.umin_init_V;
-          compensator.ecart_init_V = equi8Result.ecart_init_V;
-          compensator.ecart_equi8_V = equi8Result.ecart_equi8_V;
-          compensator.u1p_V = equi8Result.UEQUI8_ph1_mag;
-          compensator.u2p_V = equi8Result.UEQUI8_ph2_mag;
-          compensator.u3p_V = equi8Result.UEQUI8_ph3_mag;
-          
-          // ✅ CORRECTION : Tensions initiales par phase pour affichage avant/après
-          compensator.uinit_ph1_V = equi8Result.uinit_ph1_V;
-          compensator.uinit_ph2_V = equi8Result.uinit_ph2_V;
-          compensator.uinit_ph3_V = equi8Result.uinit_ph3_V;
-          
-          // Appliquer les tensions EQUI8 au nœud dans workingNodes (phasors complets)
-          // ✅ CORRECTION : Stocker aussi le courant de compensation pour propagation amont
-          this.applyEQUI8Voltages(workingNodes, compensator, equi8Result);
-          
-          // Stocker le courant de compensation EQUI8 dans le nœud pour le backward sweep
-          const equi8Node = workingNodes.find(n => n.id === compensator.nodeId);
-          if (equi8Node) {
-            if (!equi8Node.customProps) equi8Node.customProps = {};
-            equi8Node.customProps['equi8_I_compensation'] = equi8Result.I_EQUI8_A;
-            equi8Node.customProps['equi8_I_complex'] = equi8Result.I_EQUI8_complex;
-            console.log(`🔌 EQUI8 nœud ${compensator.nodeId}: I_compensation=${equi8Result.I_EQUI8_A.toFixed(1)}A stocké pour propagation`);
-          }
-          
-          console.log(`📊 EQUI8 iteration ${iteration} - nœud ${compensator.nodeId}:`, {
-            U1p: equi8Result.UEQUI8_ph1_mag.toFixed(1) + 'V',
-            U2p: equi8Result.UEQUI8_ph2_mag.toFixed(1) + 'V',
-            U3p: equi8Result.UEQUI8_ph3_mag.toFixed(1) + 'V',
-            'I_N': equi8Result.I_EQUI8_A.toFixed(1) + 'A',
-            'Réduction': equi8Result.reductionPercent.toFixed(1) + '%'
-          });
-        }
-      }
-      
-      // Vérifier convergence
-      converged = this.checkEQUI8Convergence(voltageChanges, previousVoltages);
-      previousVoltages = new Map(voltageChanges);
-      
-      console.log(`🔄 EQUI8 Iteration ${iteration}: ${converged ? 'Convergé ✓' : 'En cours...'}`);
-    }
-    
-    // Recalcul final avec les tensions stabilisées
-    // NE PAS nettoyer les marqueurs avant le recalcul final (comme SRG2)
-    const finalResult = this.calculateScenario(
-      workingNodes,
-      project.cables,
-      project.cableTypes,
-      scenario,
-      project.foisonnementChargesResidentiel ?? project.foisonnementCharges,
-      project.foisonnementProductions,
-      project.transformerConfig,
-      project.loadModel,
-      project.desequilibrePourcent,
-      project.manualPhaseDistribution,
-      project.clientsImportes,
-      project.clientLinks,
-      project.foisonnementChargesResidentiel,
-      project.foisonnementChargesIndustriel
-    );
-    
-    // ✅ CORRECTION : Forcer les tensions EQUI8 calculées dans nodeMetricsPerPhase
-    // pour que l'affichage sur la carte soit cohérent avec le panneau Simulation
-    if (finalResult.nodeMetricsPerPhase) {
       for (const compensator of compensators) {
         if (!compensator.enabled) continue;
         
-        const nodeMetrics = finalResult.nodeMetricsPerPhase.find(
-          nm => nm.nodeId === compensator.nodeId
-        );
-        if (nodeMetrics && compensator.u1p_V !== undefined && 
-            compensator.u2p_V !== undefined && compensator.u3p_V !== undefined) {
-          // Forcer les tensions EQUI8 calculées dans les métriques finales
-          nodeMetrics.voltagesPerPhase = {
-            A: compensator.u1p_V,
-            B: compensator.u2p_V,
-            C: compensator.u3p_V
-          };
-          console.log(`✅ EQUI8 tensions finales appliquées à nodeMetrics ${compensator.nodeId}:`, 
-            `A=${compensator.u1p_V.toFixed(1)}V, B=${compensator.u2p_V.toFixed(1)}V, C=${compensator.u3p_V.toFixed(1)}V`);
+        // Extraire les courants de phase au nœud du compensateur
+        const currents = extractNodeCurrents(result, workingProject, compensator.nodeId);
+        if (!currents) {
+          console.warn(`⚠️ EQUI8: Impossible d'extraire les courants pour nœud ${compensator.nodeId}`);
+          continue;
         }
+        
+        // Extraire la distribution actuelle des charges mono
+        const currentDistribution = extractNodeMonoDistribution(workingProject, compensator.nodeId);
+        
+        // Calculer la redistribution EQUI8
+        const loadShiftResult = calculateEQUI8LoadShift(
+          compensator.nodeId,
+          currents,
+          currentDistribution,
+          compensator
+        );
+        
+        // Stocker l'analyse initiale (première itération)
+        if (iteration === 1) {
+          initialAnalyses.set(compensator.nodeId, loadShiftResult.imbalanceAnalysis);
+        }
+        
+        // Stocker l'analyse courante
+        compensatorAnalyses.set(compensator.nodeId, loadShiftResult.imbalanceAnalysis);
+        
+        // Si redistribution nécessaire, appliquer au projet de travail
+        if (loadShiftResult.shouldRedistribute) {
+          anyRedistribution = true;
+          
+          // Appliquer la nouvelle distribution au nœud
+          const workingNode = workingProject.nodes.find(n => n.id === compensator.nodeId);
+          if (workingNode) {
+            if (!workingNode.autoPhaseDistribution) {
+              workingNode.autoPhaseDistribution = {
+                charges: { mono: { A: 0, B: 0, C: 0 }, poly: { A: 0, B: 0, C: 0 }, total: { A: 0, B: 0, C: 0 } },
+                productions: { mono: { A: 0, B: 0, C: 0 }, poly: { A: 0, B: 0, C: 0 }, total: { A: 0, B: 0, C: 0 } },
+                monoClientsCount: { A: 0, B: 0, C: 0 },
+                polyClientsCount: 0,
+                unbalancePercent: 0
+              };
+            }
+            
+            // Mettre à jour la distribution mono avec les valeurs ajustées
+            workingNode.autoPhaseDistribution.charges.mono = loadShiftResult.adjustedDistribution.charges;
+            workingNode.autoPhaseDistribution.productions.mono = loadShiftResult.adjustedDistribution.productions;
+            
+            // Recalculer le total
+            const poly = workingNode.autoPhaseDistribution.charges.poly || { A: 0, B: 0, C: 0 };
+            workingNode.autoPhaseDistribution.charges.total = {
+              A: loadShiftResult.adjustedDistribution.charges.A + poly.A,
+              B: loadShiftResult.adjustedDistribution.charges.B + poly.B,
+              C: loadShiftResult.adjustedDistribution.charges.C + poly.C
+            };
+            
+            console.log(`  ✅ EQUI8 ${compensator.nodeId}: Redistribution appliquée`);
+          }
+          
+          // Mettre à jour les métriques du compensateur
+          compensator.isLimited = loadShiftResult.isLimited;
+        }
+        
+        // Calculer le changement de déséquilibre
+        const previousImbalance = previousImbalances.get(compensator.nodeId) || loadShiftResult.imbalanceAnalysis.neutralCurrent_A;
+        const imbalanceChange = Math.abs(loadShiftResult.imbalanceAnalysis.neutralCurrent_A - previousImbalance);
+        maxImbalanceChange = Math.max(maxImbalanceChange, imbalanceChange);
+        previousImbalances.set(compensator.nodeId, loadShiftResult.imbalanceAnalysis.neutralCurrent_A);
+      }
+      
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // ÉTAPE 3: Vérifier la convergence
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // Convergence si:
+      // - Aucune redistribution n'est nécessaire (déséquilibre sous le seuil)
+      // - OU la variation de déséquilibre est négligeable
+      if (!anyRedistribution || maxImbalanceChange < CURRENT_IMBALANCE_THRESHOLD_A) {
+        converged = true;
+        console.log(`  ✅ CONVERGENCE ATTEINTE: ${!anyRedistribution ? 'Pas de redistribution nécessaire' : `Variation < ${CURRENT_IMBALANCE_THRESHOLD_A}A`}`);
       }
     }
     
-    // Nettoyer APRÈS le recalcul final (comme SRG2)
-    this.cleanupEQUI8Markers(workingNodes);
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // CALCUL FINAL avec les charges redistribuées
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    const finalResult = this.calculateScenario(
+      workingProject.nodes,
+      workingProject.cables,
+      workingProject.cableTypes,
+      scenario,
+      workingProject.foisonnementChargesResidentiel ?? workingProject.foisonnementCharges,
+      workingProject.foisonnementProductions,
+      workingProject.transformerConfig,
+      workingProject.loadModel,
+      workingProject.desequilibrePourcent,
+      workingProject.manualPhaseDistribution,
+      workingProject.clientsImportes,
+      workingProject.clientLinks,
+      workingProject.foisonnementChargesResidentiel,
+      workingProject.foisonnementChargesIndustriel
+    );
     
-    // Plus besoin de nettoyer les ratios - EQUI8 est maintenant dynamique
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MISE À JOUR DES MÉTRIQUES des compensateurs
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    for (const compensator of compensators) {
+      if (!compensator.enabled) continue;
+      
+      const initialAnalysis = initialAnalyses.get(compensator.nodeId);
+      const finalAnalysis = compensatorAnalyses.get(compensator.nodeId);
+      
+      if (initialAnalysis && finalAnalysis) {
+        // Métriques basées sur les courants (pas les tensions)
+        compensator.iN_initial_A = initialAnalysis.neutralCurrent_A;
+        compensator.currentIN_A = finalAnalysis.neutralCurrent_A;
+        compensator.iN_absorbed_A = initialAnalysis.neutralCurrent_A - finalAnalysis.neutralCurrent_A;
+        
+        compensator.reductionPercent = initialAnalysis.neutralCurrent_A > 0
+          ? ((initialAnalysis.neutralCurrent_A - finalAnalysis.neutralCurrent_A) / initialAnalysis.neutralCurrent_A) * 100
+          : 0;
+        
+        // Récupérer les tensions finales depuis le résultat (calculées naturellement, pas imposées)
+        const nodeMetrics = finalResult.nodeMetricsPerPhase?.find(nm => nm.nodeId === compensator.nodeId);
+        if (nodeMetrics?.voltagesPerPhase) {
+          compensator.u1p_V = nodeMetrics.voltagesPerPhase.A;
+          compensator.u2p_V = nodeMetrics.voltagesPerPhase.B;
+          compensator.u3p_V = nodeMetrics.voltagesPerPhase.C;
+          
+          const Umoy = (nodeMetrics.voltagesPerPhase.A + nodeMetrics.voltagesPerPhase.B + nodeMetrics.voltagesPerPhase.C) / 3;
+          const Umax = Math.max(nodeMetrics.voltagesPerPhase.A, nodeMetrics.voltagesPerPhase.B, nodeMetrics.voltagesPerPhase.C);
+          const Umin = Math.min(nodeMetrics.voltagesPerPhase.A, nodeMetrics.voltagesPerPhase.B, nodeMetrics.voltagesPerPhase.C);
+          
+          compensator.umoy_init_V = Umoy;
+          compensator.umax_init_V = Umax;
+          compensator.umin_init_V = Umin;
+          compensator.ecart_init_V = Umax - Umin;
+          compensator.ecart_equi8_V = Umax - Umin; // Même valeur car tensions naturelles
+        }
+        
+        console.log(`📊 EQUI8 ${compensator.nodeId} RÉSULTAT FINAL:`, {
+          'I_N initial': `${compensator.iN_initial_A?.toFixed(1)}A`,
+          'I_N final': `${compensator.currentIN_A?.toFixed(1)}A`,
+          'Réduction': `${compensator.reductionPercent?.toFixed(1)}%`,
+          'Tensions (naturelles)': compensator.u1p_V ? 
+            `A=${compensator.u1p_V.toFixed(1)}V, B=${compensator.u2p_V?.toFixed(1)}V, C=${compensator.u3p_V?.toFixed(1)}V` : 
+            'N/A'
+        });
+      }
+    }
     
-    console.log(`✅ EQUI8 simulation terminée: ${converged ? 'convergé' : 'non convergé'} après ${iteration} itérations`);
+    console.log(`\n✅ EQUI8 simulation terminée: ${converged ? 'convergé' : 'non convergé'} après ${iteration} itérations`);
+    console.log(`   🔑 Tensions = résultat NATUREL du recalcul (pas d'imposition artificielle)`);
     
     return {
       ...finalResult,

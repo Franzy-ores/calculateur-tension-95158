@@ -894,12 +894,13 @@ export class SimulationCalculator extends ElectricalCalculator {
     }
     
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // ÉTAPE FINALE: Dernier équilibrage pour état final
-    // network_final = simulate_equi8(network)
+    // ÉTAPE FINALE: Calcul BFS avec EQUI8 CME + coefficients SRG2
+    // Les deux effets sont appliqués SIMULTANÉMENT pour cohérence des tensions
+    // ✅ CORRECTION: Injections EQUI8 passées au calculateScenario final
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     console.log(`\n  📊 Étape finale: Équilibrage EQUI8 final + application coefficients SRG2`);
     
-    // Recalculer avec EQUI8 CME sur l'état final
+    // 1. Recalculer avec EQUI8 CME pour obtenir les injections calibrées
     const equi8FinalResult = networkEq || this.calculateWithEQUI8_CME(
       workingProject,
       scenario,
@@ -907,7 +908,17 @@ export class SimulationCalculator extends ElectricalCalculator {
       currentBaselineResults
     );
     
-    // Appliquer les coefficients SRG2 sur le réseau équilibré final
+    // 2. Récupérer les injections EQUI8 calibrées du résultat CME
+    const equi8FinalInjections = equi8FinalResult.equi8Injections || new Map();
+    
+    console.log(`   📤 Injections EQUI8 calibrées récupérées: ${equi8FinalInjections.size} compensateur(s)`);
+    if (equi8FinalInjections.size > 0) {
+      for (const [nodeId, injection] of equi8FinalInjections.entries()) {
+        console.log(`      - Nœud ${nodeId}: I_inj=${injection.magnitude.toFixed(2)}A`);
+      }
+    }
+    
+    // 3. Préparer les nœuds avec les marqueurs SRG2 (coefficients + tensions sortie)
     const workingNodes = JSON.parse(JSON.stringify(workingProject.nodes)) as Node[];
     
     for (const srg2 of srg2Devices) {
@@ -916,13 +927,14 @@ export class SimulationCalculator extends ElectricalCalculator {
       }
     }
     
-    // Calcul final avec les nœuds modifiés
+    // 4. Calcul final avec EQUI8 + SRG2 actifs simultanément
+    // ✅ Les injections EQUI8 sont passées au BFS pour calcul cohérent
     const finalResult = this.calculateScenario(
       workingNodes,
       workingProject.cables,
       workingProject.cableTypes,
       scenario,
-      workingProject.foisonnementCharges,
+      workingProject.foisonnementChargesResidentiel ?? workingProject.foisonnementCharges,
       workingProject.foisonnementProductions,
       workingProject.transformerConfig,
       workingProject.loadModel,
@@ -931,7 +943,8 @@ export class SimulationCalculator extends ElectricalCalculator {
       workingProject.clientsImportes,
       workingProject.clientLinks,
       workingProject.foisonnementChargesResidentiel,
-      workingProject.foisonnementChargesIndustriel
+      workingProject.foisonnementChargesIndustriel,
+      equi8FinalInjections // ✅ Injections EQUI8 CME incluses dans le calcul final
     );
     
     console.log(`\n✅ SIMULATION COUPLÉE TERMINÉE:`);
@@ -1830,13 +1843,41 @@ export class SimulationCalculator extends ElectricalCalculator {
       );
     }
     
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ÉTAPE 6: Construire les injections finales pour réutilisation externe
+    // Ces injections peuvent être passées à d'autres calculs (couplage SRG2)
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    const finalEqui8Injections = new Map<string, {
+      I_neutral: { re: number; im: number };
+      I_phaseA: { re: number; im: number };
+      I_phaseB: { re: number; im: number };
+      I_phaseC: { re: number; im: number };
+      magnitude: number;
+    }>();
+    
+    for (const [compId, Iinj] of injectionCurrents.entries()) {
+      const compensator = compensators.find(c => c.id === compId);
+      if (!compensator) continue;
+      
+      const injection = buildEQUI8Injection(compensator.nodeId, Iinj);
+      finalEqui8Injections.set(compensator.nodeId, {
+        I_neutral: { re: injection.I_neutral.re, im: injection.I_neutral.im },
+        I_phaseA: { re: injection.I_phaseA.re, im: injection.I_phaseA.im },
+        I_phaseB: { re: injection.I_phaseB.re, im: injection.I_phaseB.im },
+        I_phaseC: { re: injection.I_phaseC.re, im: injection.I_phaseC.im },
+        magnitude: injection.magnitude
+      });
+    }
+    
     console.log(`\n✅ EQUI8 CME terminé: ${converged ? 'convergé' : 'non convergé'} après ${iteration} itérations`);
     console.log(`   🔑 Tensions = résultat NATUREL du BFS avec injection de courant (pas d'imposition)`);
+    console.log(`   📤 ${finalEqui8Injections.size} injection(s) disponibles pour calcul final couplé`);
     
     return {
       ...finalResult,
       convergenceStatus: converged ? 'converged' : 'not_converged',
-      iterations: iteration
+      iterations: iteration,
+      equi8Injections: finalEqui8Injections // ✅ Injections calibrées pour réutilisation
     };
   }
 
@@ -1948,12 +1989,16 @@ export class SimulationCalculator extends ElectricalCalculator {
           console.log(`✅ EQUI8 OK: Écart réduit de ${ecart_avant.toFixed(1)}V → ${ecart_apres.toFixed(1)}V (${((1 - ecart_apres/ecart_avant)*100).toFixed(0)}%)`);
         }
         
-        // Appliquer les tensions EQUI8 au nœud du compensateur (effet local)
-        nodeMetrics.voltagesPerPhase.A = equi8Result.UEQUI8_ph1_mag;
-        nodeMetrics.voltagesPerPhase.B = equi8Result.UEQUI8_ph2_mag;
-        nodeMetrics.voltagesPerPhase.C = equi8Result.UEQUI8_ph3_mag;
+        // ❌ SUPPRIMÉ: Imposition directe de tensions - Violation du principe CME
+        // En mode CME, les tensions doivent résulter NATURELLEMENT du BFS avec injection de courant
+        // On ne lit les tensions que pour les métadonnées d'affichage, on ne les écrit JAMAIS
+        // nodeMetrics.voltagesPerPhase.A = equi8Result.UEQUI8_ph1_mag; // ← VIOLATION CME
+        // nodeMetrics.voltagesPerPhase.B = equi8Result.UEQUI8_ph2_mag; // ← VIOLATION CME
+        // nodeMetrics.voltagesPerPhase.C = equi8Result.UEQUI8_ph3_mag; // ← VIOLATION CME
         
-        console.log(`📊 EQUI8 tensions finales au nœud ${compensator.nodeId}:`, {
+        // ✅ MODE CME: Lecture seule des tensions calculées par BFS
+        // Les tensions au nœud sont déjà le résultat du BFS avec injections EQUI8
+        console.log(`📊 EQUI8 tensions finales au nœud ${compensator.nodeId} (résultat BFS naturel):`, {
           U1p: compensator.u1p_V.toFixed(1) + 'V',
           U2p: compensator.u2p_V.toFixed(1) + 'V',
           U3p: compensator.u3p_V.toFixed(1) + 'V',

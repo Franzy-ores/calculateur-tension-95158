@@ -440,11 +440,34 @@ export function clampByThermal(
 }
 
 // ============================================================================
-// MÉTHODE SÉCANTE POUR CALIBRATION
+// MÉTHODE SÉCANTE POUR CALIBRATION (AVEC DAMPING)
 // ============================================================================
 
 /**
- * Ajuste le courant d'injection par méthode sécante
+ * Facteur d'amortissement pour éviter l'oscillation lorsque SRG2 agit ensuite
+ */
+const SECANT_DAMPING_FACTOR = 0.7;
+
+/**
+ * Limitation de la variation de courant par itération (±20%)
+ */
+const SECANT_MAX_CHANGE_RATIO = 0.20;
+
+/**
+ * Ajuste le courant d'injection par méthode sécante avec damping
+ * 
+ * Le damping est nécessaire pour:
+ * 1. Éviter l'oscillation lorsque SRG2 agit ensuite dans la boucle couplée
+ * 2. Assurer une convergence stable même avec des impédances faibles
+ * 3. Respecter strictement les bornes thermiques (80/60/45 A)
+ * 
+ * @param Iinj_current Courant d'injection actuel (A)
+ * @param deltaU_achieved Écart de tension obtenu (V)
+ * @param deltaU_target Écart de tension cible (V)
+ * @param Iinj_prev Courant d'injection précédent (A)
+ * @param deltaU_prev Écart de tension précédent (V)
+ * @param thermalLimit Limite thermique (A)
+ * @returns Nouveau courant d'injection (A)
  */
 export function adjustSecant(
   Iinj_current: number,
@@ -454,23 +477,46 @@ export function adjustSecant(
   deltaU_prev: number,
   thermalLimit: number
 ): number {
-  // Si première itération ou valeurs identiques, ajustement proportionnel
+  // Si première itération ou valeurs identiques, ajustement proportionnel amorti
   if (Iinj_prev === 0 || Math.abs(deltaU_achieved - deltaU_prev) < 1e-6) {
     const ratio = deltaU_target > 0 ? deltaU_achieved / deltaU_target : 1;
-    const adjustment = Iinj_current * (1 + (1 - ratio) * 0.5);
-    return Math.min(adjustment, thermalLimit);
+    // Ajustement proportionnel avec damping
+    const rawAdjustment = Iinj_current * (1 + (1 - ratio) * 0.5);
+    const dampedAdjustment = Iinj_current + (rawAdjustment - Iinj_current) * SECANT_DAMPING_FACTOR;
+    return Math.min(dampedAdjustment, thermalLimit);
   }
   
-  // Méthode sécante
+  // Méthode sécante classique
   const slope = (deltaU_achieved - deltaU_prev) / (Iinj_current - Iinj_prev);
   if (Math.abs(slope) < 1e-6) {
-    return Math.min(Iinj_current * 1.1, thermalLimit);
+    // Pente trop faible, petit incrément
+    const smallStep = Iinj_current * 1.05;
+    return Math.min(smallStep, thermalLimit);
   }
   
-  const Iinj_next = Iinj_current - (deltaU_achieved - deltaU_target) / slope;
+  const Iinj_raw = Iinj_current - (deltaU_achieved - deltaU_target) / slope;
   
-  // Borner le résultat
-  return Math.max(0, Math.min(Iinj_next, thermalLimit));
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // DAMPING: Limiter la variation à ±20% par itération
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  const deltaI = Iinj_raw - Iinj_current;
+  const maxDelta = Math.abs(Iinj_current) * SECANT_MAX_CHANGE_RATIO;
+  const clampedDelta = Math.max(-maxDelta, Math.min(maxDelta, deltaI));
+  
+  // Appliquer le facteur d'amortissement
+  const dampedDelta = clampedDelta * SECANT_DAMPING_FACTOR;
+  
+  const Iinj_next = Iinj_current + dampedDelta;
+  
+  // Borner le résultat aux limites thermiques
+  const result = Math.max(0, Math.min(Iinj_next, thermalLimit));
+  
+  // Log si limitation appliquée
+  if (Math.abs(deltaI) > maxDelta) {
+    console.log(`🔧 EQUI8 CME: ΔI_inj limité de ${deltaI.toFixed(2)}A à ${dampedDelta.toFixed(2)}A (damping ${SECANT_DAMPING_FACTOR})`);
+  }
+  
+  return result;
 }
 
 // ============================================================================

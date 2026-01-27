@@ -1439,15 +1439,14 @@ export class ElectricalCalculator {
         
         // Corriger les tensions phase-neutre en soustrayant la tension du neutre
         // V_phase_neutre_corrigé = V_phase - V_neutral
-        // ✅ EQUI8 : Ne PAS corriger les nœuds EQUI8 (leurs tensions sont déjà imposées)
+        // ============================================================================
+        // NOTE: En mode EQUI8 CME, les tensions résultent naturellement du BFS
+        // avec injection de courant. Aucune imposition directe de tensions.
+        // L'ancien check "equi8_modified" qui sautait la correction neutre a été
+        // supprimé car il n'est plus utilisé en mode CME.
+        // ============================================================================
         for (const n of nodes) {
           if (n.id === source.id) continue; // La source n'a pas besoin de correction
-          
-          // ✅ EQUI8 : Sauter les nœuds avec tensions imposées par EQUI8
-          if (n.customProps?.['equi8_modified']) {
-            console.log(`🎯 EQUI8 nœud ${n.id}: tensions imposées, pas de correction neutre`);
-            continue;
-          }
           
           const Vn = V_neutral.get(n.id);
           if (!Vn) continue;

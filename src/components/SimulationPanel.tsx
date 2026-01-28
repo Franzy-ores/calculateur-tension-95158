@@ -17,17 +17,20 @@ import { toast } from "sonner";
 import { DocumentationPanel } from "@/components/DocumentationPanel";
 import { SRG2Panel } from "@/components/SRG2Panel";
 import { CableReplacementSimulator } from "@/components/CableReplacementSimulator";
-import { Settings, Play, RotateCcw, Trash2, Plus, AlertTriangle, CheckCircle, Cable, MapPin } from "lucide-react";
-import { useState } from 'react';
+import { Settings, Play, RotateCcw, Trash2, Plus, AlertTriangle, CheckCircle, Cable, MapPin, Sparkles, Target } from "lucide-react";
+import { useState, useMemo } from 'react';
+import { findOptimalEqui8Node, OptimalEqui8Analysis } from "@/utils/optimalEqui8Finder";
 
 export const SimulationPanel = () => {
   const [showNodeSelector, setShowNodeSelector] = useState(false);
+  const [showOptimalSuggestion, setShowOptimalSuggestion] = useState(false);
   const {
     currentProject,
     simulationMode,
     simulationEquipment,
     simulationResults,
     selectedScenario,
+    calculationResults,
     toggleSimulationMode,
     addNeutralCompensator,
     removeNeutralCompensator,
@@ -44,6 +47,30 @@ export const SimulationPanel = () => {
   const nodes = currentProject.nodes.filter(n => !n.isSource);
   const currentResult = simulationResults[selectedScenario];
   const baseline = currentResult?.baselineResult;
+  
+  // Calcul du nœud optimal pour EQUI8
+  const optimalEqui8Analysis = useMemo<OptimalEqui8Analysis | null>(() => {
+    // Utiliser le baseline (sans équipements) ou le résultat de calcul standard
+    const baseResult = baseline || calculationResults[selectedScenario];
+    if (!baseResult || !currentProject) return null;
+    
+    return findOptimalEqui8Node(currentProject, baseResult);
+  }, [currentProject, baseline, calculationResults, selectedScenario]);
+  
+  const handleAddOptimalNode = () => {
+    if (optimalEqui8Analysis?.optimalNode) {
+      const nodeId = optimalEqui8Analysis.optimalNode.nodeId;
+      const usedNodeIds = simulationEquipment.neutralCompensators.map(c => c.nodeId);
+      if (usedNodeIds.includes(nodeId)) {
+        toast.error('Un compensateur existe déjà sur ce nœud');
+        return;
+      }
+      addNeutralCompensator(nodeId);
+      setShowOptimalSuggestion(false);
+      toast.success(`EQUI8 ajouté sur ${optimalEqui8Analysis.optimalNode.nodeName}`);
+    }
+  };
+  
   const CompensatorCard = ({
     compensator
   }: {
@@ -360,6 +387,79 @@ export const SimulationPanel = () => {
                 </Card>
               )}
               
+              {/* Suggestion automatique du nœud optimal */}
+              {currentProject.voltageSystem === 'TÉTRAPHASÉ_400V' && optimalEqui8Analysis && (
+                <Card className="bg-accent/20 border-accent/50">
+                  <CardHeader className="pb-2 pt-3 px-4">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-accent" />
+                        Suggestion automatique
+                      </CardTitle>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setShowOptimalSuggestion(!showOptimalSuggestion)}
+                      >
+                        {showOptimalSuggestion ? 'Masquer' : 'Détails'}
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3 pt-0">
+                    {optimalEqui8Analysis.optimalNode ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Target className="h-4 w-4 text-primary" />
+                            <span className="font-medium text-sm">{optimalEqui8Analysis.optimalNode.nodeName}</span>
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={handleAddOptimalNode}
+                            disabled={simulationEquipment.neutralCompensators.some(
+                              c => c.nodeId === optimalEqui8Analysis.optimalNode?.nodeId
+                            )}
+                          >
+                            <Plus className="h-3 w-3 mr-1" />
+                            Ajouter
+                          </Button>
+                        </div>
+                        
+                        {showOptimalSuggestion && (
+                          <div className="bg-background/50 rounded p-2 text-xs space-y-1">
+                            <div className="grid grid-cols-2 gap-x-4">
+                              <div>I neutre: <span className="font-mono">{optimalEqui8Analysis.optimalNode.neutralCurrent_A.toFixed(1)} A</span></div>
+                              <div>Z amont: <span className="font-mono">{optimalEqui8Analysis.optimalNode.upstreamImpedance_Zph_Ohm.toFixed(3)} Ω</span></div>
+                              <div>Score: <span className="font-mono">{optimalEqui8Analysis.optimalNode.score.toFixed(2)}</span></div>
+                              <div>Position: <span className="font-mono">{(optimalEqui8Analysis.optimalNode.positionRatio * 100).toFixed(0)}%</span></div>
+                            </div>
+                            <Separator className="my-1" />
+                            <p className="text-muted-foreground">
+                              💡 Score = I_N / Z_up. Un score élevé indique un fort déséquilibre proche de la source.
+                            </p>
+                            {optimalEqui8Analysis.candidates.length > 1 && (
+                              <>
+                                <div className="font-medium mt-2">Autres candidats:</div>
+                                {optimalEqui8Analysis.candidates.slice(1, 4).map((c, i) => (
+                                  <div key={c.nodeId} className="flex justify-between text-muted-foreground">
+                                    <span>{i + 2}. {c.nodeName}</span>
+                                    <span className="font-mono">{c.score.toFixed(2)}</span>
+                                  </div>
+                                ))}
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        {optimalEqui8Analysis.noResultReason || 'Aucun nœud optimal trouvé'}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-medium">Compensateurs de neutre (EQUI8)</h3>
                 <div className="flex items-center gap-2">

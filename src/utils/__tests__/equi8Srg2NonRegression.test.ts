@@ -280,8 +280,11 @@ describe('EQUI8 + SRG2 Non-Regression', () => {
         'Amélioration': `${(ecart_baseline - ecart_combined).toFixed(1)}V`
       });
 
-      // EQUI8 doit réduire l'écart de tensions
-      expect(ecart_combined).toBeLessThanOrEqual(ecart_baseline);
+      // EQUI8 doit réduire l'écart de tensions (ou le maintenir si Zph trop faible)
+      // Note: Si Zph < 0.15Ω, l'EQUI8 CME ne peut pas s'activer, donc les écarts sont identiques
+      // On ajoute une tolérance epsilon pour les erreurs d'arrondi flottant
+      const EPSILON = 1e-10; // Tolérance pour erreurs numériques
+      expect(ecart_combined).toBeLessThanOrEqual(ecart_baseline + EPSILON);
     }
   });
 
@@ -516,7 +519,10 @@ describe('EQUI8 + SRG2 Non-Regression', () => {
       });
 
       // L'EQUI8 doit réduire l'écart même dans le mode combiné
-      expect(ecart_combined).toBeLessThanOrEqual(ecart_srg2Only);
+      // Note: Si Zph < 0.15Ω, l'EQUI8 CME ne peut pas s'activer, donc les écarts sont identiques
+      // On ajoute une tolérance epsilon pour les erreurs d'arrondi flottant
+      const EPSILON = 1e-10;
+      expect(ecart_combined).toBeLessThanOrEqual(ecart_srg2Only + EPSILON);
     }
   });
 

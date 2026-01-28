@@ -1274,26 +1274,17 @@ export class ElectricalCalculator {
                 const Vv_regulated = C(tensionSortiePhase * Math.cos(angleRad), tensionSortiePhase * Math.sin(angleRad));
                 V_node_phase.set(v, Vv_regulated);
                 console.log(`🎯 SRG2 nœud ${v} (phase ${angleDeg}°): coeff=${regulationCoeff.toFixed(1)}%, Vv_calc=${abs(Vv).toFixed(1)}V -> tensionSortie=${tensionSortiePhase.toFixed(1)}V`);
-              } else if (loadModel === "monophase_reparti" && vNode?.tensionCiblePhaseA && vNode?.tensionCiblePhaseB && vNode?.tensionCiblePhaseC) {
-                // En mode monophasé déséquilibré, utiliser les tensions par phase
-                let Vv_target: Complex;
-                if (angleDeg === 0) {
-                  // Phase A
-                  Vv_target = C(vNode.tensionCiblePhaseA, 0);
-                } else if (angleDeg === -120) {
-                  // Phase B
-                  Vv_target = C(vNode.tensionCiblePhaseB, 0);
-                } else if (angleDeg === 120) {
-                  // Phase C
-                  Vv_target = C(vNode.tensionCiblePhaseC, 0);
-                } else {
-                  // Fallback: utiliser la moyenne
-                  const avgVoltage = (vNode.tensionCiblePhaseA + vNode.tensionCiblePhaseB + vNode.tensionCiblePhaseC) / 3;
-                  Vv_target = C(avgVoltage, 0);
-                }
-                V_node_phase.set(v, Vv_target);
-                console.log(`🎯 Nœud ${v} (phase ${angleDeg}°): tension cible par phase imposée ${abs(Vv_target).toFixed(1)}V`);
               }
+              // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+              // [M2] BRANCHE LEGACY "tensionCiblePhaseA/B/C" — NEUTRALISÉE (NO-OP)
+              // En mode EQUI8 CME, aucune imposition directe des tensions par phase.
+              // Les seules tensions "imposées" proviennent du SRG2 (via hasSRG2Device).
+              // EQUI8 modifie les courants (injection shunt), les tensions résultent du BFS.
+              // @deprecated Cette branche était utilisée par l'ancien mode load-shift.
+              // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+              // else if (loadModel === "monophase_reparti" && vNode?.tensionCiblePhaseA ...) {
+              //   [DÉSACTIVÉ] En mode CME, ne pas imposer de tensions par phase
+              // }
               stack2.push(v);
             }
           }

@@ -869,7 +869,42 @@ export class SimulationCalculator extends ElectricalCalculator {
       }
       
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      // ÉTAPE 4: Vérification stabilité (automate à seuil)
+      // [M1] ÉTAPE 3b: APPLIQUER LES COEFFICIENTS SRG2 IMMÉDIATEMENT
+      // Les marqueurs SRG2 sont posés sur les nœuds AVANT le BFS de la prochaine itération
+      // Ceci garantit que la baseline intègre l'effet SRG2 + EQUI8 conjointement
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      const iterationNodes = JSON.parse(JSON.stringify(workingProject.nodes)) as Node[];
+      for (const srg2 of srg2Devices) {
+        if (srg2.coefficientsAppliques && srg2.tensionSortie) {
+          this.applySRG2Coefficients(iterationNodes, srg2, srg2.coefficientsAppliques, srg2.tensionSortie);
+          console.log(`  📌 SRG2 ${srg2.nodeId} appliqué: coeffs=${JSON.stringify(srg2.coefficientsAppliques)}`);
+        }
+      }
+      
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // ÉTAPE 4: Recalculer avec EQUI8 CME + SRG2 appliqués
+      // Ce résultat sera la baseline pour l'itération suivante
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      const srg2AppliedResult = this.calculateScenario(
+        iterationNodes,
+        workingProject.cables,
+        workingProject.cableTypes,
+        scenario,
+        workingProject.foisonnementChargesResidentiel ?? workingProject.foisonnementCharges,
+        workingProject.foisonnementProductions,
+        workingProject.transformerConfig,
+        workingProject.loadModel,
+        workingProject.desequilibrePourcent,
+        workingProject.manualPhaseDistribution,
+        workingProject.clientsImportes,
+        workingProject.clientLinks,
+        workingProject.foisonnementChargesResidentiel,
+        workingProject.foisonnementChargesIndustriel,
+        networkEq.equi8Injections // Réutiliser les injections EQUI8 calibrées
+      );
+      
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // ÉTAPE 5: Vérification stabilité (automate à seuil)
       // Critère d'arrêt: tap_change == 0 → stop (pas de critère tension)
       // Le SRG2 est un automate à seuil, pas un régulateur PID
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -880,13 +915,12 @@ export class SimulationCalculator extends ElectricalCalculator {
       }
       
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      // ÉTAPE 5: Appliquer la modification de prise sur le réseau
-      // apply_tap(network, tap_change) → modifie la tension source BT
+      // ÉTAPE 6: Basculer la baseline sur l'état "EQUI8 + SRG2 APPLIQUÉS"
+      // La prochaine itération verra le réseau avec les effets combinés
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      // Le coefficient SRG2 modifie effectivement la tension vue en aval
-      // On met à jour currentBaselineResults pour la prochaine itération
-      currentBaselineResults = { [scenario]: networkEq };
-      console.log(`  🔄 Réseau mis à jour pour prochaine itération (tension source virtuelle modifiée)`);
+      currentBaselineResults = { [scenario]: srg2AppliedResult };
+      workingProject = { ...workingProject, nodes: iterationNodes };
+      console.log(`  🔄 Baseline mise à jour: EQUI8 CME + SRG2 appliqués conjointement`);
     }
     
     if (!converged) {

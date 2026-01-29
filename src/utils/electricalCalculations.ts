@@ -549,7 +549,10 @@ export class ElectricalCalculator {
       I_phaseB: { re: number; im: number };    // -I_EQUI8/3 sur phase B
       I_phaseC: { re: number; im: number };    // -I_EQUI8/3 sur phase C
       magnitude: number;                        // Magnitude de I_EQUI8
-    }>
+    }>,
+    // ✅ SRG2: Coefficients appliqués à Vslack (% par phase)
+    // Le SRG2 agit sur la tension source, PAS sur les nœuds du réseau
+    srg2VslackCoefficients?: { A: number; B: number; C: number }
   ): CalculationResult {
     // Validation robuste des entrées
     this.validateInputs(nodes, cables, cableTypes, foisonnementCharges, foisonnementProductions, desequilibrePourcent);
@@ -1160,7 +1163,19 @@ export class ElectricalCalculator {
         const I_branch_phase = new Map<string, Complex>();
         const I_inj_node_phase = new Map<string, Complex>();
 
-        const Vslack_phase_ph = fromPolar(Vslack_phase, this.deg2rad(angleDeg));
+        // ✅ SRG2: Appliquer le coefficient de régulation à Vslack (tension source)
+        // C'est le SEUL endroit où le SRG2 peut modifier les tensions
+        // Le coefficient est en %, ex: +7% pour BO2, -7% pour LO2
+        let Vslack_phase_adjusted = Vslack_phase;
+        if (srg2VslackCoefficients) {
+          const coeffPercent = srg2VslackCoefficients[phaseLabel];
+          Vslack_phase_adjusted = Vslack_phase * (1 + coeffPercent / 100);
+          if (Math.abs(coeffPercent) > 0.01) {
+            console.log(`🎯 SRG2 appliqué à Vslack phase ${phaseLabel}: ${Vslack_phase.toFixed(1)}V × (1 + ${coeffPercent.toFixed(1)}%) = ${Vslack_phase_adjusted.toFixed(1)}V`);
+          }
+        }
+        
+        const Vslack_phase_ph = fromPolar(Vslack_phase_adjusted, this.deg2rad(angleDeg));
         for (const n of nodes) V_node_phase.set(n.id, Vslack_phase_ph);
 
         let iter2 = 0;
@@ -1236,55 +1251,28 @@ export class ElectricalCalculator {
               const Iuv = I_branch_phase.get(cab.id) || C(0, 0);
               const Vu = V_node_phase.get(u) || Vslack_phase_ph;
               // Calculer tension selon Kirchhoff : V_v = V_u - Z * I_uv
-              let Vv = sub(Vu, mul(Z, Iuv));
+              // ⚠️ RÈGLE PHYSIQUE: Aucune tension n'est imposée sur les nœuds.
+              // Les tensions résultent UNIQUEMENT de la propagation BFS.
+              const Vv = sub(Vu, mul(Z, Iuv));
               
-              // ✅ EQUI8 NOUVEAU MODÈLE: 
-              // L'EQUI8 modifie les charges, JAMAIS les tensions.
-              // Les tensions résultent du recalcul du réseau avec charges redistribuées.
-              // Plus d'imposition de tension artificielle.
-              const vNode = nodeById.get(v);
-              
+              // ✅ PHYSIQUE CORRECTE: 
+              // - Tensions = résultat naturel du BFS (Kirchhoff)
+              // - EQUI8 agit par injection de courant (déjà intégré dans I_inj_node_phase)
+              // - SRG2 agit sur Vslack (tension source), pas sur les nœuds
+              // - Aucune imposition locale de tension autorisée
               V_node_phase.set(v, Vv);
               
-              if (vNode?.hasSRG2Device && vNode.srg2RegulationCoefficients && vNode.srg2TensionSortie) {
-                // CORRECTION: Utiliser directement la tension de sortie pré-calculée
-                // au lieu d'appliquer le coefficient à Vv (qui peut différer de tensionEntree)
-                let tensionSortiePhase = 0;
-                let regulationCoeff = 0;
-                if (angleDeg === 0) {
-                  // Phase A
-                  tensionSortiePhase = vNode.srg2TensionSortie.A;
-                  regulationCoeff = vNode.srg2RegulationCoefficients.A;
-                } else if (angleDeg === -120) {
-                  // Phase B
-                  tensionSortiePhase = vNode.srg2TensionSortie.B;
-                  regulationCoeff = vNode.srg2RegulationCoefficients.B;
-                } else if (angleDeg === 120) {
-                  // Phase C
-                  tensionSortiePhase = vNode.srg2TensionSortie.C;
-                  regulationCoeff = vNode.srg2RegulationCoefficients.C;
-                } else {
-                  // Fallback: utiliser la moyenne
-                  tensionSortiePhase = (vNode.srg2TensionSortie.A + vNode.srg2TensionSortie.B + vNode.srg2TensionSortie.C) / 3;
-                  regulationCoeff = (vNode.srg2RegulationCoefficients.A + vNode.srg2RegulationCoefficients.B + vNode.srg2RegulationCoefficients.C) / 3;
-                }
-                
-                // Remplacer Vv par la tension de sortie calculée (conserve l'angle de Vv)
-                const angleRad = arg(Vv);
-                const Vv_regulated = C(tensionSortiePhase * Math.cos(angleRad), tensionSortiePhase * Math.sin(angleRad));
-                V_node_phase.set(v, Vv_regulated);
-                console.log(`🎯 SRG2 nœud ${v} (phase ${angleDeg}°): coeff=${regulationCoeff.toFixed(1)}%, Vv_calc=${abs(Vv).toFixed(1)}V -> tensionSortie=${tensionSortiePhase.toFixed(1)}V`);
-              }
               // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-              // [M2] BRANCHE LEGACY "tensionCiblePhaseA/B/C" — NEUTRALISÉE (NO-OP)
-              // En mode EQUI8 CME, aucune imposition directe des tensions par phase.
-              // Les seules tensions "imposées" proviennent du SRG2 (via hasSRG2Device).
-              // EQUI8 modifie les courants (injection shunt), les tensions résultent du BFS.
-              // @deprecated Cette branche était utilisée par l'ancien mode load-shift.
+              // [SUPPRIMÉ] Ancienne logique d'imposition de tension SRG2 locale
+              // 
+              // ⚠️ CETTE LOGIQUE ÉTAIT INCORRECTE PHYSIQUEMENT:
+              // Le SRG2 ne peut pas imposer une tension sur un nœud du réseau.
+              // Il peut seulement modifier la tension source (Vslack) en amont.
+              // 
+              // La nouvelle architecture applique le coefficient SRG2 sur Vslack_phase
+              // dans la boucle de simulation couplée (simulationCalculator.ts)
               // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-              // else if (loadModel === "monophase_reparti" && vNode?.tensionCiblePhaseA ...) {
-              //   [DÉSACTIVÉ] En mode CME, ne pas imposer de tensions par phase
-              // }
+              
               stack2.push(v);
             }
           }

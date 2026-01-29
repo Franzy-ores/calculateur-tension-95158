@@ -869,25 +869,24 @@ export class SimulationCalculator extends ElectricalCalculator {
       }
       
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      // [M1] ÉTAPE 3b: APPLIQUER LES COEFFICIENTS SRG2 IMMÉDIATEMENT
-      // Les marqueurs SRG2 sont posés sur les nœuds AVANT le BFS de la prochaine itération
-      // Ceci garantit que la baseline intègre l'effet SRG2 + EQUI8 conjointement
+      // [M1] ÉTAPE 3b: APPLIQUER LES TENSIONS SÉRIE SRG2 AUX CÂBLES
+      // Le SRG2 injecte une tension série dans la branche (V_v = V_u - Z*I + V_série)
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      const iterationNodes = JSON.parse(JSON.stringify(workingProject.nodes)) as Node[];
+      const iterationCables = JSON.parse(JSON.stringify(workingProject.cables)) as Cable[];
       for (const srg2 of srg2Devices) {
-        if (srg2.coefficientsAppliques && srg2.tensionSortie) {
-          this.applySRG2Coefficients(iterationNodes, srg2, srg2.coefficientsAppliques, srg2.tensionSortie);
-          console.log(`  📌 SRG2 ${srg2.nodeId} appliqué: coeffs=${JSON.stringify(srg2.coefficientsAppliques)}`);
+        if (srg2.coefficientsAppliques && srg2.tensionEntree) {
+          this.applySRG2SerieVoltage(iterationCables, srg2, srg2.tensionEntree, srg2.coefficientsAppliques);
+          console.log(`  📌 SRG2 ${srg2.nodeId} V_série: coeffs=${JSON.stringify(srg2.coefficientsAppliques)}`);
         }
       }
       
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      // ÉTAPE 4: Recalculer avec EQUI8 CME + SRG2 appliqués
+      // ÉTAPE 4: Recalculer avec EQUI8 CME + SRG2 (tension série) appliqués
       // Ce résultat sera la baseline pour l'itération suivante
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
       const srg2AppliedResult = this.calculateScenario(
-        iterationNodes,
-        workingProject.cables,
+        workingProject.nodes,
+        iterationCables,
         workingProject.cableTypes,
         scenario,
         workingProject.foisonnementChargesResidentiel ?? workingProject.foisonnementCharges,
@@ -919,8 +918,8 @@ export class SimulationCalculator extends ElectricalCalculator {
       // La prochaine itération verra le réseau avec les effets combinés
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
       currentBaselineResults = { [scenario]: srg2AppliedResult };
-      workingProject = { ...workingProject, nodes: iterationNodes };
-      console.log(`  🔄 Baseline mise à jour: EQUI8 CME + SRG2 appliqués conjointement`);
+      workingProject = { ...workingProject, cables: iterationCables };
+      console.log(`  🔄 Baseline mise à jour: EQUI8 CME + SRG2 (tension série) conjointement`);
     }
     
     if (!converged) {
@@ -952,20 +951,20 @@ export class SimulationCalculator extends ElectricalCalculator {
       }
     }
     
-    // 3. Préparer les nœuds avec les marqueurs SRG2 (coefficients + tensions sortie)
-    const workingNodes = JSON.parse(JSON.stringify(workingProject.nodes)) as Node[];
+    // 3. Préparer les câbles avec les tensions série SRG2
+    const finalCables = JSON.parse(JSON.stringify(workingProject.cables)) as Cable[];
     
     for (const srg2 of srg2Devices) {
-      if (srg2.coefficientsAppliques && srg2.tensionSortie) {
-        this.applySRG2Coefficients(workingNodes, srg2, srg2.coefficientsAppliques, srg2.tensionSortie);
+      if (srg2.coefficientsAppliques && srg2.tensionEntree) {
+        this.applySRG2SerieVoltage(finalCables, srg2, srg2.tensionEntree, srg2.coefficientsAppliques);
       }
     }
     
-    // 4. Calcul final avec EQUI8 + SRG2 actifs simultanément
-    // ✅ Les injections EQUI8 sont passées au BFS pour calcul cohérent
+    // 4. Calcul final avec EQUI8 (courant shunt) + SRG2 (tension série) actifs simultanément
+    // ✅ Les injections EQUI8 et tensions série SRG2 sont passées au BFS pour calcul cohérent
     const finalResult = this.calculateScenario(
-      workingNodes,
-      workingProject.cables,
+      workingProject.nodes,
+      finalCables,
       workingProject.cableTypes,
       scenario,
       workingProject.foisonnementChargesResidentiel ?? workingProject.foisonnementCharges,
@@ -982,6 +981,7 @@ export class SimulationCalculator extends ElectricalCalculator {
     );
     
     console.log(`\n✅ SIMULATION COUPLÉE TERMINÉE:`);
+    console.log(`   - Modèle: EQUI8 (courant shunt) + SRG2 (tension série)`);
     console.log(`   - Itérations: ${iteration}`);
     console.log(`   - Convergence: ${converged ? 'OUI' : 'NON'}`);
     console.log(`   - Position prise finale: ${Array.from(lastTapPosition.entries()).map(
@@ -2394,18 +2394,28 @@ export class SimulationCalculator extends ElectricalCalculator {
     
     console.log('[DEBUG SRG2] Tensions naturelles stockées pour', originalVoltages.size, 'nœuds SRG2');
     
+    // Copie des câbles pour modification itérative (injection tension série)
+    let workingCables = JSON.parse(JSON.stringify(project.cables)) as Cable[];
+    
+    // Mémoire des états de commutateurs pour détection de stabilisation
+    let previousSwitchStates = new Map<string, { A: SRG2SwitchState; B: SRG2SwitchState; C: SRG2SwitchState }>();
+    
     while (!converged && iteration < SimulationCalculator.SIM_MAX_ITERATIONS) {
       iteration++;
       
-      // Nettoyer les modifications SRG2 précédentes pour obtenir les tensions naturelles du réseau
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // ÉTAPE 1: Nettoyer les tensions série des câbles (itération > 1)
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
       if (iteration > 1) {
-        this.cleanupSRG2Markers(workingNodes);
+        this.cleanupSRG2SerieVoltage(workingCables);
       }
       
-      // Calculer le scénario avec l'état actuel des nœuds
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // ÉTAPE 2: Calculer le scénario BFS (avec tensions série des itérations précédentes)
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
       const result = this.calculateScenario(
         workingNodes,
-        project.cables,
+        workingCables,
         project.cableTypes,
         scenario,
         project.foisonnementCharges,
@@ -2420,28 +2430,36 @@ export class SimulationCalculator extends ElectricalCalculator {
         project.foisonnementChargesIndustriel
       );
 
-      // Appliquer la régulation SRG2 sur chaque dispositif
-      const voltageChanges = new Map<string, {A: number, B: number, C: number}>();
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // ÉTAPE 3: Appliquer la régulation SRG2 - Calculer tensions série
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      let tapChange = false;
+      const currentSwitchStates = new Map<string, { A: SRG2SwitchState; B: SRG2SwitchState; C: SRG2SwitchState }>();
       
       for (const srg2 of srg2Devices) {
-        const nodeIndex = workingNodes.findIndex(n => n.id === srg2.nodeId);
-        if (nodeIndex === -1) continue;
-        
-        // Trouver le nœud SRG2 et récupérer ses tensions actuelles
-        const srg2Node = workingNodes.find(n => n.id === srg2.nodeId);
-        if (!srg2Node) continue;
-
-        // Utiliser les tensions originales stockées pour éviter que le SRG2 lise ses propres tensions modifiées
+        // Utiliser les tensions originales stockées pour la décision de régulation
         let nodeVoltages = originalVoltages.get(srg2.nodeId) || { A: 230, B: 230, C: 230 };
         
-        console.log(`🔍 SRG2 ${srg2.nodeId}: utilisation des tensions originales stockées - A=${nodeVoltages.A.toFixed(1)}V, B=${nodeVoltages.B.toFixed(1)}V, C=${nodeVoltages.C.toFixed(1)}V`);
+        console.log(`🔍 SRG2 ${srg2.nodeId}: tensions originales - A=${nodeVoltages.A.toFixed(1)}V, B=${nodeVoltages.B.toFixed(1)}V, C=${nodeVoltages.C.toFixed(1)}V`);
 
         // Appliquer la régulation SRG2 sur les tensions lues
         const regulationResult = this.applySRG2Regulation(srg2, nodeVoltages, project.voltageSystem);
         
-        // Stocker les coefficients de régulation pour ce nœud
-        if (regulationResult.coefficientsAppliques) {
-          voltageChanges.set(srg2.nodeId, regulationResult.coefficientsAppliques);
+        // Stocker l'état du commutateur
+        if (regulationResult.etatCommutateur) {
+          currentSwitchStates.set(srg2.nodeId, { ...regulationResult.etatCommutateur });
+          
+          // Détecter si le commutateur a changé
+          const prevState = previousSwitchStates.get(srg2.nodeId);
+          if (!prevState || 
+              prevState.A !== regulationResult.etatCommutateur.A ||
+              prevState.B !== regulationResult.etatCommutateur.B ||
+              prevState.C !== regulationResult.etatCommutateur.C) {
+            tapChange = true;
+            console.log(`🔧 SRG2 ${srg2.nodeId} changement de prise: ` +
+              `${prevState ? `${prevState.A}/${prevState.B}/${prevState.C}` : 'INIT'} → ` +
+              `${regulationResult.etatCommutateur.A}/${regulationResult.etatCommutateur.B}/${regulationResult.etatCommutateur.C}`);
+          }
           
           // Mettre à jour les informations du SRG2 pour l'affichage
           srg2.tensionEntree = regulationResult.tensionEntree;
@@ -2449,27 +2467,38 @@ export class SimulationCalculator extends ElectricalCalculator {
           srg2.coefficientsAppliques = regulationResult.coefficientsAppliques;
           srg2.tensionSortie = regulationResult.tensionSortie;
         }
-      }
-      
-      // Appliquer les coefficients et tensions de sortie SRG2 aux nœuds correspondants
-      for (const srg2 of srg2Devices) {
-        const coefficients = voltageChanges.get(srg2.nodeId);
-        if (coefficients && srg2.tensionSortie) {
-          this.applySRG2Coefficients(workingNodes, srg2, coefficients, srg2.tensionSortie);
+        
+        // ✅ NOUVEAU: Appliquer la tension série au câble (au lieu de marquer le nœud)
+        if (regulationResult.coefficientsAppliques && regulationResult.tensionEntree) {
+          this.applySRG2SerieVoltage(
+            workingCables,
+            srg2,
+            regulationResult.tensionEntree,
+            regulationResult.coefficientsAppliques
+          );
         }
       }
       
-      // Vérifier la convergence
-      converged = this.checkSRG2Convergence(voltageChanges, previousVoltages);
-      previousVoltages = new Map(voltageChanges);
+      // Mettre à jour les états précédents
+      previousSwitchStates = new Map(currentSwitchStates);
       
-      console.log(`🔄 SRG2 Iteration ${iteration}: ${converged ? 'Convergé' : 'En cours...'}`);
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // ÉTAPE 4: Vérifier la convergence (automate à seuil: tap_change == 0)
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      if (!tapChange && iteration > 1) {
+        console.log(`✅ SRG2 CONVERGENCE: Pas de changement de prise (iteration ${iteration})`);
+        converged = true;
+      } else {
+        console.log(`🔄 SRG2 Iteration ${iteration}: tap_change=${tapChange}`);
+      }
     }
     
-    // Recalculer une dernière fois avec les tensions finales
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // CALCUL FINAL: BFS avec tensions série stabilisées
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     const finalResult = this.calculateScenario(
       workingNodes,
-      project.cables,
+      workingCables,
       project.cableTypes,
       scenario,
       project.foisonnementCharges,
@@ -2484,11 +2513,8 @@ export class SimulationCalculator extends ElectricalCalculator {
       project.foisonnementChargesIndustriel
     );
 
-    console.log('🎯 SRG2 calcul final terminé - marqueurs SRG2 conservés pour nodeMetricsPerPhase');
-    
-    // IMPORTANT: Ne pas nettoyer les marqueurs SRG2 ici !
-    // Le nettoyage se fait dans calculateWithSimulation() après avoir utilisé les résultats
-    // this.cleanupSRG2Markers(workingNodes); ← Déplacé
+    console.log(`🎯 SRG2 calcul final terminé (${iteration} itérations, convergé: ${converged})`);
+    console.log(`   Modèle: injection tension série (V_v = V_u - Z*I + V_série)`);
 
     return {
       ...finalResult,
@@ -2665,8 +2691,83 @@ export class SimulationCalculator extends ElectricalCalculator {
   }
 
   /**
-   * Applique les coefficients de régulation SRG2 aux nœuds correspondants
-   * Nouvelle approche transformer: les coefficients modifient les tensions calculées
+   * ============================================================================
+   * NOUVEAU MODÈLE SRG2: INJECTION DE TENSION SÉRIE
+   * ============================================================================
+   * Le SRG2 n'impose plus les tensions aux nœuds. Au lieu de cela, il injecte une
+   * tension SÉRIE dans le câble qui mène au nœud d'installation.
+   * 
+   * Formule BFS: V_v = V_u - Z * I_uv + V_série
+   * 
+   * Cette approche respecte la physique du réseau:
+   * - L'amont peut peu bouger
+   * - L'aval peut monter ou descendre selon l'impédance des lignes
+   * - EQUI8 (injection courant shunt) et SRG2 (injection tension série) cohabitent naturellement
+   * ============================================================================
+   */
+  private applySRG2SerieVoltage(
+    cables: Cable[],
+    srg2Device: SRG2Config,
+    tensionEntree: { A: number; B: number; C: number },
+    coefficients: { A: number; B: number; C: number }
+  ): void {
+    console.log(`🔧 SRG2 ${srg2Device.id}: Calcul tension série pour nœud ${srg2Device.nodeId}`);
+    
+    // Trouver le câble qui ARRIVE au nœud SRG2 (câble dont nodeBId === srg2.nodeId)
+    const targetCable = cables.find(c => 
+      c.nodeBId === srg2Device.nodeId || c.nodeAId === srg2Device.nodeId
+    );
+    
+    if (!targetCable) {
+      console.error(`❌ SRG2 ${srg2Device.id}: Aucun câble trouvé pour le nœud ${srg2Device.nodeId}`);
+      return;
+    }
+    
+    // Calculer les tensions série à injecter pour chaque phase
+    // V_série = coefficient × V_entrée
+    // Exemple: coefficient = +7% → V_série = 0.07 × 230 = +16.1V (boost)
+    // Exemple: coefficient = -7% → V_série = -0.07 × 230 = -16.1V (buck)
+    
+    const Vnom = 230; // Tension nominale phase-neutre
+    
+    const serieVoltages = {
+      A: C(coefficients.A / 100 * Vnom, 0),  // Phase A: 0°
+      B: C(
+        coefficients.B / 100 * Vnom * Math.cos(-2 * Math.PI / 3),
+        coefficients.B / 100 * Vnom * Math.sin(-2 * Math.PI / 3)
+      ),  // Phase B: -120°
+      C: C(
+        coefficients.C / 100 * Vnom * Math.cos(2 * Math.PI / 3),
+        coefficients.C / 100 * Vnom * Math.sin(2 * Math.PI / 3)
+      )   // Phase C: +120°
+    };
+    
+    // Affecter les tensions série au câble
+    targetCable.serieVoltagePerPhase = serieVoltages;
+    targetCable.srg2Id = srg2Device.id;
+    
+    console.log(`✅ SRG2 câble ${targetCable.id}: V_série = ` +
+      `A=${abs(serieVoltages.A).toFixed(1)}V, ` +
+      `B=${abs(serieVoltages.B).toFixed(1)}V, ` +
+      `C=${abs(serieVoltages.C).toFixed(1)}V`);
+    console.log(`   Coefficients: A=${coefficients.A.toFixed(1)}%, B=${coefficients.B.toFixed(1)}%, C=${coefficients.C.toFixed(1)}%`);
+  }
+
+  /**
+   * Nettoie les tensions série SRG2 des câbles après calcul
+   */
+  private cleanupSRG2SerieVoltage(cables: Cable[]): void {
+    for (const cable of cables) {
+      if (cable.serieVoltagePerPhase) {
+        cable.serieVoltagePerPhase = undefined;
+        cable.srg2Id = undefined;
+      }
+    }
+  }
+
+  /**
+   * @deprecated - Remplacé par applySRG2SerieVoltage
+   * Ancienne méthode qui marquait les nœuds avec hasSRG2Device
    */
   private applySRG2Coefficients(
     nodes: Node[],
@@ -2674,23 +2775,26 @@ export class SimulationCalculator extends ElectricalCalculator {
     coefficients: { A: number; B: number; C: number },
     tensionSortie: { A: number; B: number; C: number }
   ): void {
-    console.log(`🎯 Application coefficients SRG2 ${srg2Device.id} sur nœud ${srg2Device.nodeId}`);
+    // ============================================================================
+    // @deprecated - Cette méthode est conservée pour compatibilité mais n'est plus
+    // utilisée par le nouveau modèle d'injection série.
+    // Le SRG2 agit maintenant via serieVoltagePerPhase sur les câbles.
+    // ============================================================================
+    console.log(`⚠️ [DEPRECATED] applySRG2Coefficients appelé - utiliser applySRG2SerieVoltage`);
+    console.log(`   SRG2 ${srg2Device.id} sur nœud ${srg2Device.nodeId}`);
     console.log(`   Coefficients: A=${coefficients.A.toFixed(1)}%, B=${coefficients.B.toFixed(1)}%, C=${coefficients.C.toFixed(1)}%`);
-    console.log(`   Tensions sortie: A=${tensionSortie.A.toFixed(1)}V, B=${tensionSortie.B.toFixed(1)}V, C=${tensionSortie.C.toFixed(1)}V`);
 
-    // Trouver le nœud correspondant
+    // Trouver le nœud correspondant (conservé pour compatibilité)
     const nodeIndex = nodes.findIndex(n => String(n.id) === String(srg2Device.nodeId));
     if (nodeIndex === -1) {
       console.error(`❌ Nœud SRG2 non trouvé: ${srg2Device.nodeId}`);
       return;
     }
 
-    // Marquer le nœud comme ayant un dispositif SRG2 avec ses coefficients ET tensions de sortie
+    // Marquer le nœud (ancien modèle - désactivé dans le BFS)
     nodes[nodeIndex].hasSRG2Device = true;
     nodes[nodeIndex].srg2RegulationCoefficients = { ...coefficients };
     nodes[nodeIndex].srg2TensionSortie = { ...tensionSortie };
-
-    console.log(`✅ Nœud ${nodes[nodeIndex].id} marqué avec coefficients et tensions SRG2`);
   }
 
   /**

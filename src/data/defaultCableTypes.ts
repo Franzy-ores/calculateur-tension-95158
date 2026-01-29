@@ -5,7 +5,7 @@ export const defaultCableTypes: CableType[] = [
   // CÂBLES NUS CUIVRE AÉRIENS (NU)
   // ============================================
   {
-    id: 'nu-7cu',
+    id: 'cu-7',
     label: 'NU 7 Cu',
     R12_ohm_per_km: 2.550,
     X12_ohm_per_km: 0.300,
@@ -16,7 +16,7 @@ export const defaultCableTypes: CableType[] = [
     maxCurrent_A: 64,
   },
   {
-    id: 'nu-10cu',
+    id: 'cu-10',
     label: 'NU 10 Cu',
     R12_ohm_per_km: 1.790,
     X12_ohm_per_km: 0.300,
@@ -27,7 +27,7 @@ export const defaultCableTypes: CableType[] = [
     maxCurrent_A: 88,
   },
   {
-    id: 'nu-12.5cu',
+    id: 'cu-12.5',
     label: 'NU 12.5 Cu',
     R12_ohm_per_km: 1.490,
     X12_ohm_per_km: 0.300,
@@ -38,7 +38,7 @@ export const defaultCableTypes: CableType[] = [
     maxCurrent_A: 98,
   },
   {
-    id: 'nu-16cu',
+    id: 'cu-16',
     label: 'NU 16 Cu',
     R12_ohm_per_km: 1.120,
     X12_ohm_per_km: 0.300,
@@ -49,7 +49,7 @@ export const defaultCableTypes: CableType[] = [
     maxCurrent_A: 119,
   },
   {
-    id: 'nu-20cu',
+    id: 'cu-20',
     label: 'NU 20 Cu',
     R12_ohm_per_km: 0.900,
     X12_ohm_per_km: 0.300,
@@ -60,7 +60,7 @@ export const defaultCableTypes: CableType[] = [
     maxCurrent_A: 137,
   },
   {
-    id: 'nu-25cu',
+    id: 'cu-25',
     label: 'NU 25 Cu',
     R12_ohm_per_km: 0.720,
     X12_ohm_per_km: 0.300,
@@ -71,7 +71,7 @@ export const defaultCableTypes: CableType[] = [
     maxCurrent_A: 157,
   },
   {
-    id: 'nu-28cu',
+    id: 'cu-28',
     label: 'NU 28 Cu',
     R12_ohm_per_km: 0.640,
     X12_ohm_per_km: 0.300,
@@ -82,7 +82,7 @@ export const defaultCableTypes: CableType[] = [
     maxCurrent_A: 169,
   },
   {
-    id: 'nu-35cu',
+    id: 'cu-35',
     label: 'NU 35 Cu',
     R12_ohm_per_km: 0.510,
     X12_ohm_per_km: 0.300,
@@ -93,7 +93,7 @@ export const defaultCableTypes: CableType[] = [
     maxCurrent_A: 194,
   },
   {
-    id: 'nu-50cu',
+    id: 'cu-50',
     label: 'NU 50 Cu',
     R12_ohm_per_km: 0.360,
     X12_ohm_per_km: 0.300,
@@ -104,7 +104,7 @@ export const defaultCableTypes: CableType[] = [
     maxCurrent_A: 235,
   },
   {
-    id: 'nu-70cu',
+    id: 'cu-70',
     label: 'NU 70 Cu',
     R12_ohm_per_km: 0.260,
     X12_ohm_per_km: 0.300,
@@ -119,7 +119,7 @@ export const defaultCableTypes: CableType[] = [
   // CÂBLES TORSADÉS ALUMINIUM AÉRIENS (TR)
   // ============================================
   {
-    id: 'tr-16al',
+    id: 'baxb-16',
     label: 'TR 16 Alu',
     R12_ohm_per_km: 1.900,
     X12_ohm_per_km: 0.100,
@@ -130,7 +130,7 @@ export const defaultCableTypes: CableType[] = [
     maxCurrent_A: 71,
   },
   {
-    id: 'tr-25al',
+    id: 'baxb-25',
     label: 'TR 25 Alu',
     R12_ohm_per_km: 1.240,
     X12_ohm_per_km: 0.100,
@@ -141,7 +141,7 @@ export const defaultCableTypes: CableType[] = [
     maxCurrent_A: 93,
   },
   {
-    id: 'tr-35al',
+    id: 'baxb-35',
     label: 'TR 35 Alu',
     R12_ohm_per_km: 0.870,
     X12_ohm_per_km: 0.100,
@@ -152,7 +152,7 @@ export const defaultCableTypes: CableType[] = [
     maxCurrent_A: 116,
   },
   {
-    id: 'tr-70al',
+    id: 'baxb-70',
     label: 'TR 70 Alu',
     R12_ohm_per_km: 0.450,
     X12_ohm_per_km: 0.100,
@@ -163,7 +163,7 @@ export const defaultCableTypes: CableType[] = [
     maxCurrent_A: 177,
   },
   {
-    id: 'tr-95al',
+    id: 'baxb-95',
     label: 'TR 95 Alu',
     R12_ohm_per_km: 0.330,
     X12_ohm_per_km: 0.100,
@@ -172,6 +172,17 @@ export const defaultCableTypes: CableType[] = [
     matiere: 'ALUMINIUM',
     posesPermises: ['AÉRIEN'],
     maxCurrent_A: 230,
+  },
+  {
+    id: 'baxb-150',
+    label: 'Tr 150 Alu',
+    R12_ohm_per_km: 0.244,
+    X12_ohm_per_km: 0.098,
+    R0_ohm_per_km: 1.805,
+    X0_ohm_per_km: 0.258,
+    matiere: 'ALUMINIUM',
+    posesPermises: ['AÉRIEN'],
+    maxCurrent_A: 300,
   },
 
   // ============================================
@@ -291,20 +302,10 @@ export const defaultCableTypes: CableType[] = [
   // ============================================
   // CÂBLES SOUTERRAINS ALUMINIUM (CA Alu)
   // ============================================
+  
   {
-    id: 'ca-50al',
-    label: 'CA 50 Alu',
-    R12_ohm_per_km: 0.688,
-    X12_ohm_per_km: 0.120,
-    R0_ohm_per_km: 2.064,
-    X0_ohm_per_km: 0.360,
-    matiere: 'ALUMINIUM',
-    posesPermises: ['SOUTERRAIN'],
-    maxCurrent_A: 145,
-  },
-  {
-    id: 'ca-95al',
-    label: 'CA 95 Alu',
+    id: 'eaxecwb-95al',
+    label: '4G 95 Alu',
     R12_ohm_per_km: 0.363,
     X12_ohm_per_km: 0.107,
     R0_ohm_per_km: 1.089,
@@ -314,8 +315,8 @@ export const defaultCableTypes: CableType[] = [
     maxCurrent_A: 210,
   },
   {
-    id: 'ca-150al',
-    label: 'CA 150 Alu',
+    id: 'eaxecwb-4x150',
+    label: '4G 150 Alu',
     R12_ohm_per_km: 0.229,
     X12_ohm_per_km: 0.100,
     R0_ohm_per_km: 0.687,
@@ -323,79 +324,5 @@ export const defaultCableTypes: CableType[] = [
     matiere: 'ALUMINIUM',
     posesPermises: ['SOUTERRAIN'],
     maxCurrent_A: 270,
-  },
-  {
-    id: 'ca-185al',
-    label: 'CA 185 Alu',
-    R12_ohm_per_km: 0.186,
-    X12_ohm_per_km: 0.098,
-    R0_ohm_per_km: 0.558,
-    X0_ohm_per_km: 0.294,
-    matiere: 'ALUMINIUM',
-    posesPermises: ['SOUTERRAIN'],
-    maxCurrent_A: 310,
-  },
-  {
-    id: 'ca-240al',
-    label: 'CA 240 Alu',
-    R12_ohm_per_km: 0.143,
-    X12_ohm_per_km: 0.096,
-    R0_ohm_per_km: 0.429,
-    X0_ohm_per_km: 0.288,
-    matiere: 'ALUMINIUM',
-    posesPermises: ['SOUTERRAIN'],
-    maxCurrent_A: 355,
-  },
-
-  // ============================================
-  // CÂBLES BAXB (Torsadé Aluminium - conservés)
-  // ============================================
-  {
-    id: 'baxb-70',
-    label: 'BAXB 70',
-    R12_ohm_per_km: 0.519,
-    X12_ohm_per_km: 0.110,
-    R0_ohm_per_km: 2.515,
-    X0_ohm_per_km: 0.257,
-    matiere: 'ALUMINIUM',
-    posesPermises: ['AÉRIEN'],
-    maxCurrent_A: 190,
-  },
-  {
-    id: 'baxb-95',
-    label: 'BAXB 95',
-    R12_ohm_per_km: 0.383,
-    X12_ohm_per_km: 0.104,
-    R0_ohm_per_km: 2.379,
-    X0_ohm_per_km: 0.263,
-    matiere: 'ALUMINIUM',
-    posesPermises: ['AÉRIEN'],
-    maxCurrent_A: 230,
-  },
-  {
-    id: 'baxb-150',
-    label: 'BAXB 150',
-    R12_ohm_per_km: 0.244,
-    X12_ohm_per_km: 0.098,
-    R0_ohm_per_km: 1.805,
-    X0_ohm_per_km: 0.258,
-    matiere: 'ALUMINIUM',
-    posesPermises: ['AÉRIEN'],
-    maxCurrent_A: 300,
-  },
-
-  // ============================================
-  // CÂBLE EAXeCWB (Souterrain Aluminium - conservé)
-  // ============================================
-  {
-    id: 'eaxecwb-4x150',
-    label: 'EAXeCWB 4x150',
-    R12_ohm_per_km: 0.242,
-    X12_ohm_per_km: 0.069,
-    R0_ohm_per_km: 0.972,
-    X0_ohm_per_km: 0.273,
-    matiere: 'ALUMINIUM',
-    posesPermises: ['SOUTERRAIN'],
-    maxCurrent_A: 310,
   },
 ];

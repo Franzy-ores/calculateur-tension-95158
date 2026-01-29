@@ -464,6 +464,43 @@ export const TensionClientTab = () => {
                         <span className="ml-1 font-medium">{selectedClient.puissancePV_kVA} kVA</span>
                       </div>
                     </div>
+                    
+                    {/* Tensions mesurées (si disponibles) */}
+                    {(selectedClient.tensionMin_V || selectedClient.tensionMax_V || 
+                      selectedClient.tensionMinHiver_V || selectedClient.tensionMaxEte_V) && (
+                      <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded">
+                        <div className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1 flex items-center gap-1">
+                          <Zap className="h-3 w-3" />
+                          Tensions mesurées
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                          {selectedClient.tensionMin_V != null && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Min Tension :</span>
+                              <span className="font-medium">{selectedClient.tensionMin_V.toFixed(1)} V</span>
+                            </div>
+                          )}
+                          {selectedClient.tensionMax_V != null && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Max Tension :</span>
+                              <span className="font-medium">{selectedClient.tensionMax_V.toFixed(1)} V</span>
+                            </div>
+                          )}
+                          {selectedClient.tensionMinHiver_V != null && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Min Tension hiver :</span>
+                              <span className="font-medium">{selectedClient.tensionMinHiver_V.toFixed(1)} V</span>
+                            </div>
+                          )}
+                          {selectedClient.tensionMaxEte_V != null && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Max Tension été :</span>
+                              <span className="font-medium">{selectedClient.tensionMaxEte_V.toFixed(1)} V</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </>

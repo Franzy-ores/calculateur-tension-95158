@@ -1235,56 +1235,63 @@ export class ElectricalCalculator {
               const Z = cableZ_phase.get(cab.id) || C(0, 0);
               const Iuv = I_branch_phase.get(cab.id) || C(0, 0);
               const Vu = V_node_phase.get(u) || Vslack_phase_ph;
-              // Calculer tension selon Kirchhoff : V_v = V_u - Z * I_uv
+              
+              // ============================================================================
+              // Modélisation physique des régulateurs :
+              // EQUI8 = injection de courant shunt au nœud (modifie I via I_inj_node_phase)
+              // SRG2 = injection de tension série dans la branche (via serieVoltagePerPhase)
+              // Aucun nœud n'a de tension imposée artificiellement
+              // ============================================================================
+              
+              // Calculer tension selon Kirchhoff : V_v = V_u - Z * I_uv + V_série
+              // La tension série V_série est injectée par le SRG2 (si présent sur cette branche)
               let Vv = sub(Vu, mul(Z, Iuv));
               
+              // ✅ SRG2 INJECTION SÉRIE: Ajouter la tension série si présente
+              if (cab.serieVoltagePerPhase) {
+                let Vserie: Complex;
+                if (phaseLabel === 'A') {
+                  Vserie = cab.serieVoltagePerPhase.A;
+                } else if (phaseLabel === 'B') {
+                  Vserie = cab.serieVoltagePerPhase.B;
+                } else {
+                  Vserie = cab.serieVoltagePerPhase.C;
+                }
+                
+                // Ajouter la tension série (positive = boost, négative = buck)
+                if (abs(Vserie) > 0.01) {
+                  const Vv_before = abs(Vv);
+                  Vv = add(Vv, Vserie);
+                  console.log(`🔧 SRG2 câble ${cab.id} phase ${phaseLabel}: ` +
+                    `V_série=${abs(Vserie).toFixed(1)}V, ` +
+                    `V=${Vv_before.toFixed(1)}V → ${abs(Vv).toFixed(1)}V`);
+                }
+              }
+              
               // ✅ EQUI8 NOUVEAU MODÈLE: 
-              // L'EQUI8 modifie les charges, JAMAIS les tensions.
-              // Les tensions résultent du recalcul du réseau avec charges redistribuées.
-              // Plus d'imposition de tension artificielle.
+              // L'EQUI8 modifie les courants (via I_inj_node_phase), JAMAIS les tensions directement.
+              // Les tensions résultent naturellement du BFS avec les courants modifiés.
               const vNode = nodeById.get(v);
               
               V_node_phase.set(v, Vv);
               
-              if (vNode?.hasSRG2Device && vNode.srg2RegulationCoefficients && vNode.srg2TensionSortie) {
-                // CORRECTION: Utiliser directement la tension de sortie pré-calculée
-                // au lieu d'appliquer le coefficient à Vv (qui peut différer de tensionEntree)
-                let tensionSortiePhase = 0;
-                let regulationCoeff = 0;
-                if (angleDeg === 0) {
-                  // Phase A
-                  tensionSortiePhase = vNode.srg2TensionSortie.A;
-                  regulationCoeff = vNode.srg2RegulationCoefficients.A;
-                } else if (angleDeg === -120) {
-                  // Phase B
-                  tensionSortiePhase = vNode.srg2TensionSortie.B;
-                  regulationCoeff = vNode.srg2RegulationCoefficients.B;
-                } else if (angleDeg === 120) {
-                  // Phase C
-                  tensionSortiePhase = vNode.srg2TensionSortie.C;
-                  regulationCoeff = vNode.srg2RegulationCoefficients.C;
-                } else {
-                  // Fallback: utiliser la moyenne
-                  tensionSortiePhase = (vNode.srg2TensionSortie.A + vNode.srg2TensionSortie.B + vNode.srg2TensionSortie.C) / 3;
-                  regulationCoeff = (vNode.srg2RegulationCoefficients.A + vNode.srg2RegulationCoefficients.B + vNode.srg2RegulationCoefficients.C) / 3;
-                }
-                
-                // Remplacer Vv par la tension de sortie calculée (conserve l'angle de Vv)
-                const angleRad = arg(Vv);
-                const Vv_regulated = C(tensionSortiePhase * Math.cos(angleRad), tensionSortiePhase * Math.sin(angleRad));
-                V_node_phase.set(v, Vv_regulated);
-                console.log(`🎯 SRG2 nœud ${v} (phase ${angleDeg}°): coeff=${regulationCoeff.toFixed(1)}%, Vv_calc=${abs(Vv).toFixed(1)}V -> tensionSortie=${tensionSortiePhase.toFixed(1)}V`);
-              }
               // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-              // [M2] BRANCHE LEGACY "tensionCiblePhaseA/B/C" — NEUTRALISÉE (NO-OP)
-              // En mode EQUI8 CME, aucune imposition directe des tensions par phase.
-              // Les seules tensions "imposées" proviennent du SRG2 (via hasSRG2Device).
-              // EQUI8 modifie les courants (injection shunt), les tensions résultent du BFS.
-              // @deprecated Cette branche était utilisée par l'ancien mode load-shift.
-              // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-              // else if (loadModel === "monophase_reparti" && vNode?.tensionCiblePhaseA ...) {
-              //   [DÉSACTIVÉ] En mode CME, ne pas imposer de tensions par phase
+              // [DEPRECATED] Ancienne logique SRG2 par imposition de tension
+              // ============================================================================
+              // L'ancien modèle SRG2 imposait directement les tensions aux nœuds via:
+              //   vNode.hasSRG2Device && vNode.srg2RegulationCoefficients && vNode.srg2TensionSortie
+              // 
+              // NOUVEAU MODÈLE (injection série):
+              // Le SRG2 agit maintenant via cab.serieVoltagePerPhase (traité ci-dessus).
+              // La tension résulte naturellement de: V_v = V_u - Z*I + V_série
+              // Aucune imposition directe de tension. L'amont peut peu bouger, l'aval peut
+              // monter ou descendre selon l'impédance des lignes.
+              // ============================================================================
+              // if (vNode?.hasSRG2Device && vNode.srg2RegulationCoefficients && vNode.srg2TensionSortie) {
+              //   [DÉSACTIVÉ] Remplacé par injection série via serieVoltagePerPhase
               // }
+              // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+              
               stack2.push(v);
             }
           }

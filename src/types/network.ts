@@ -243,6 +243,23 @@ export interface Cable {
   voltageDropPerPhase_V?: { A: number; B: number; C: number };
   // NOUVEAU : Courant de neutre pour réseaux 400V (mode mixte)
   currentNeutral_A?: number;
+  
+  // ============================================================================
+  // SRG2 : INJECTION DE TENSION SÉRIE
+  // ============================================================================
+  // Modélisation physique : Le SRG2 est un autotransformateur série qui injecte
+  // une tension additionnelle dans la branche. Cette tension est ajoutée à la
+  // tension calculée par la loi d'Ohm (Vv = Vu - Z*I + Vserie).
+  // Par défaut : undefined (pas de SRG2 sur cette branche)
+  // ============================================================================
+  serieVoltagePerPhase?: {
+    A: Complex;  // Tension série injectée sur phase A (V, phasor)
+    B: Complex;  // Tension série injectée sur phase B (V, phasor)
+    C: Complex;  // Tension série injectée sur phase C (V, phasor)
+  };
+  
+  // ID du SRG2 installé sur cette branche (si applicable)
+  srg2Id?: string;
 }
 
 export interface Project {

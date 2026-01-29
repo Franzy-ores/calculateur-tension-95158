@@ -622,6 +622,41 @@ export class ElectricalCalculator {
         // Productions manuelles du nœud
         const manualProductions = (n.productions || []).reduce((s, p) => s + (p.S_kVA || 0), 0);
         S_pv += manualProductions * (foisonnementProductions / 100);
+        
+        // 🔍 DIAGNOSTIC : Tracer les sources de puissance au nœud
+        if (linkedClients.length > 0 || manualCharges > 0) {
+          console.log(`🔍 [DEBUG] Nœud "${n.name || n.id}" - Calcul S_prel_map:`);
+          console.log(`   📋 Clients liés: ${linkedClients.length}`);
+          for (const client of linkedClients) {
+            const foisonnement = client.clientType === 'industriel' 
+              ? foisonnementIndustriel 
+              : foisonnementResidentiel;
+            console.log(`      - "${client.nomCircuit}": ${client.puissanceContractuelle_kVA} kVA × ${foisonnement}% = ${(client.puissanceContractuelle_kVA * foisonnement / 100).toFixed(2)} kVA (${client.clientType || 'résidentiel'}, ${client.connectionType || client.couplage})`);
+          }
+          console.log(`   🔧 Charges manuelles: ${manualCharges} kVA × ${foisonnementResidentiel}% = ${(manualCharges * foisonnementResidentiel / 100).toFixed(2)} kVA`);
+          console.log(`   ➡️ S_prel TOTAL: ${S_prel.toFixed(2)} kVA`);
+          
+          // Comparer avec autoPhaseDistribution.foisonneAvecCurseurs
+          if (n.autoPhaseDistribution?.charges.foisonneAvecCurseurs) {
+            const fac = n.autoPhaseDistribution.charges.foisonneAvecCurseurs;
+            const totalFoisonneAvecCurseurs = fac.A + fac.B + fac.C;
+            console.log(`   📊 foisonneAvecCurseurs: A=${fac.A.toFixed(2)} + B=${fac.B.toFixed(2)} + C=${fac.C.toFixed(2)} = ${totalFoisonneAvecCurseurs.toFixed(2)} kVA`);
+            
+            // Vérification de cohérence
+            if (Math.abs(S_prel - totalFoisonneAvecCurseurs) > 0.1) {
+              console.warn(`   ⚠️ INCOHÉRENCE: S_prel (${S_prel.toFixed(2)}) ≠ foisonneAvecCurseurs total (${totalFoisonneAvecCurseurs.toFixed(2)})`);
+              console.warn(`      Différence: ${(S_prel - totalFoisonneAvecCurseurs).toFixed(2)} kVA`);
+            } else {
+              console.log(`   ✅ COHÉRENT: S_prel ≈ foisonneAvecCurseurs total`);
+            }
+          } else {
+            console.log(`   ⚠️ foisonneAvecCurseurs: NON DISPONIBLE (fallback sur charges.total)`);
+            if (n.autoPhaseDistribution?.charges.total) {
+              const total = n.autoPhaseDistribution.charges.total;
+              console.log(`      charges.total: A=${total.A.toFixed(2)} + B=${total.B.toFixed(2)} + C=${total.C.toFixed(2)} = ${(total.A + total.B + total.C).toFixed(2)} kVA (BRUT, SANS foisonnement)`);
+            }
+          }
+        }
       } else {
         // Fallback : charges/productions manuelles uniquement (foisonnement global)
         S_prel = (n.clients || []).reduce((s, c) => s + (c.S_kVA || 0), 0) * (foisonnementCharges / 100);

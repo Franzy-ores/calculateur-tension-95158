@@ -302,7 +302,6 @@ export const defaultCableTypes: CableType[] = [
   // ============================================
   // CÂBLES SOUTERRAINS ALUMINIUM (CA Alu)
   // ============================================
-  
   {
     id: 'eaxecwb-95al',
     label: '4G 95 Alu',

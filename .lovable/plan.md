@@ -1,225 +1,276 @@
 
-# Plan : Sélection du nœud SRG2 optimal basée sur l'impact réseau aval
+# Audit : Différence entre Client TRI 100 kVA lié vs Charge Manuelle 100 kVA
 
-## Objectif
+## Problème signalé
 
-Modifier la logique de `findOptimalSRG2Node` pour qu'elle évalue l'**impact réel** de chaque position SRG2 candidate sur le réseau aval, avec pour objectif de **maximiser le nombre de nœuds hors norme EN50160 qui rentrent dans la norme** après l'ajout du SRG2.
+Sur un nœud à 207V attendu :
+- **Charge manuelle TRI 100 kVA** → Tension cohérente (207V)
+- **Client TRI résidentiel 100 kVA créé manuellement et lié** → Tension incorrecte (219V)
 
-## Principe physique
+---
 
-Le SRG2 est un régulateur de tension qui ajuste la tension en sortie via des prises (typiquement ±7%, ±3.5%). Son efficacité dépend de :
-- Sa position sur le réseau (nœuds en aval bénéficiant de la régulation)
-- L'état initial du réseau (nœuds hors norme à corriger)
-- Sa capacité à ramener les nœuds hors norme dans les limites EN50160 (207V-253V)
+## Cause identifiée : Double comptage
 
-## Nouvelle logique de sélection
+Le client lié est compté **DEUX FOIS** dans le calcul :
+
+1. **Première fois** : Dans `S_prel_map` (lignes 607-611) via `getLinkedClientsForNode()`
+2. **Deuxième fois** : Dans `autoPhaseDistribution.foisonneAvecCurseurs` via `calculateNodeAutoPhaseDistribution()`
+
+Le calcul BFS utilise ces **deux sources de données** qui se chevauchent :
+
+```
+S_prel_map × distribution_ratio → S_phase_kVA
+```
+
+Or `S_prel_map` contient **déjà** la puissance foisonnée des clients liés.
+Et `distribution_ratio` est calculé à partir de `foisonneAvecCurseurs` qui **refait** le calcul de foisonnement.
+
+---
+
+## Analyse technique détaillée
+
+### Flux de calcul actuel (lignes 595-640 et 881-970)
 
 ```text
-Pour chaque nœud candidat (distance ≤ 250m de la source) :
-  1. Identifier tous les nœuds en aval du candidat
-  2. Compter les nœuds hors norme EN50160 AVANT simulation
-  3. Simuler l'effet du SRG2 à cette position
-  4. Compter les nœuds hors norme APRÈS simulation
-  5. Calculer le score = (noeuds_corrigés / noeuds_hors_norme_aval)
-
-Le nœud optimal est celui qui MAXIMISE ce score d'amélioration
+┌──────────────────────────────────────────────────────────────────────┐
+│ ÉTAPE 1 : Calcul de S_prel_map (ligne 607-620)                       │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  Pour chaque nœud :                                                  │
+│    - linkedClients = getLinkedClientsForNode(...)                    │
+│    - S_prel += client.puissanceContractuelle × (foisonnement/100)   │
+│    - S_prel += manualCharges × (foisonnementResidentiel/100)        │
+│                                                                      │
+│  → S_prel = 100 × 0.15 = 15 kVA (client TRI résidentiel)            │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+                                    ↓
+┌──────────────────────────────────────────────────────────────────────┐
+│ ÉTAPE 2 : Distribution par phase (lignes 900-904)                    │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  pA_charges = foisonneAvecCurseurs.A / total                        │
+│  pB_charges = foisonneAvecCurseurs.B / total                        │
+│  pC_charges = foisonneAvecCurseurs.C / total                        │
+│                                                                      │
+│  → pA = pB = pC = 33.33%                                            │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+                                    ↓
+┌──────────────────────────────────────────────────────────────────────┐
+│ ÉTAPE 3 : Calcul puissance par phase (lignes 966-968)                │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  S_A_charges_kVA = S_prel_map × pA_charges                          │
+│                  = 15 × 0.333 = 5 kVA  ✅ Correct                    │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
-## Structure des données retournées
+### Vérification de cohérence avec charge manuelle
 
-```typescript
-interface OptimalSRG2Result {
-  nodeId: string;
-  nodeName: string;
-  distanceFromSource_m: number;
-  
-  // Nouveau : métriques d'impact
-  downstreamNodesCount: number;           // Nombre de nœuds en aval
-  nodesOutOfNormBefore: number;           // Nœuds hors norme avant SRG2
-  nodesOutOfNormAfter: number;            // Nœuds hors norme après SRG2
-  nodesCorrected: number;                 // Nœuds ramenés dans la norme
-  correctionRate: number;                 // Taux de correction (0-100%)
-  
-  // Score = taux de correction (plus élevé = meilleur)
-  score: number;
-  
-  // Tensions estimées après SRG2
-  estimatedVoltagesAfter: { min: number; max: number; mean: number };
-  
-  justification: string;
-}
+```text
+┌──────────────────────────────────────────────────────────────────────┐
+│ CAS : Charge manuelle 100 kVA TRI                                    │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  S_prel = manualCharges × (foisonnementResidentiel/100)             │
+│         = 100 × 0.15 = 15 kVA                                       │
+│                                                                      │
+│  Distribution 33.33% par phase → 5 kVA par phase                    │
+│  → Résultat identique au client importé                             │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
-## Algorithme détaillé
+### Où est le problème ?
 
-### Étape 1 : Identifier les candidats (distance ≤ 250m)
+Le flux semble cohérent. Vérifions si le problème vient de :
+
+1. **L'absence de lien** : Le client créé manuellement n'est peut-être pas **lié** au nœud
+2. **L'absence de `autoPhaseDistribution`** : Le nœud n'a peut-être pas été recalculé après liaison
+3. **Fallback incorrect** : Si `autoPhaseDistribution` est absent, le code utilise un autre chemin
+
+### Vérification du fallback (lignes 915-935)
 
 ```typescript
-const MAX_DISTANCE_M = 250;
-
-for (const node of nodes) {
-  if (node.isSource) continue;
+} else {
+  // Fallback : utiliser les valeurs physiques totales
+  const totalCharges = n.autoPhaseDistribution.charges.total.A + ...
   
-  const { pathLength_m } = computeUpstreamImpedance(node.id, ...);
-  
-  if (pathLength_m > MAX_DISTANCE_M) {
-    // Trop loin de la source
-    continue;
+  if (totalCharges > 0.001) {
+    pA_charges = n.autoPhaseDistribution.charges.total.A / totalCharges;
+    ...
   }
-  
-  candidates.push(node);
 }
 ```
 
-### Étape 2 : Pour chaque candidat, trouver les nœuds aval
+Si `foisonneAvecCurseurs` n'existe pas (nœud non recalculé), le code utilise `charges.total` qui contient les valeurs **brutes non foisonnées** !
 
-Réutiliser la logique BFS existante dans `SRG2Panel.tsx` (`findDownstreamNodes`).
+---
 
-### Étape 3 : Compter les nœuds hors norme AVANT simulation
+## Diagnostic probable
 
+Le client TRI créé manuellement est :
+
+1. **Ajouté à `clientsImportes`** via `addClientManual` (ligne 1127-1151)
+2. **Lié au nœud** via `linkClientToNode` (ligne 1203+)
+3. **Mais `autoPhaseDistribution` n'est pas recalculé** car la condition `loadModel === 'mixte_mono_poly'` peut ne pas être vérifiée, ou le calcul de distribution ne met pas à jour `foisonneAvecCurseurs`
+
+### Si `foisonneAvecCurseurs` est manquant :
+
+```text
+S_prel_map = 15 kVA (correct, avec foisonnement)
+
+MAIS le code utilise alors charges.total :
+  - charges.total.A = 100/3 = 33.33 kVA (brut, SANS foisonnement)
+  
+Ratio pA = 33.33 / 100 = 0.333 → OK les ratios sont corrects
+
+S_A_charges = S_prel × pA = 15 × 0.333 = 5 kVA → OK
+```
+
+### Si `autoPhaseDistribution` est complètement absent :
+
+Le code passe au fallback `manualPhaseDistribution` (ligne 939-946) qui utilise les curseurs globaux.
+
+---
+
+## Hypothèse principale
+
+Le problème vient probablement du fait que :
+
+1. `addClientManual` **ne déclenche pas** `updateNodePhaseDistribution` car le client n'est pas encore lié
+2. Mais `linkClientToNode` **ne met pas à jour `foisonneAvecCurseurs`** correctement pour les clients TRI
+
+Vérifions `calculateNodeAutoPhaseDistribution` pour les clients TRI résidentiels :
+
+Dans `phaseDistributionCalculator.ts` (lignes 570-622), le foisonnement différencié est appliqué aux `linkedClients`. Si le client vient d'être créé et lié, son `clientType` peut être `undefined` au lieu de `'résidentiel'`.
+
+### Ligne 572 :
 ```typescript
-const VOLTAGE_MIN_EN50160 = 207; // -10% de 230V
-const VOLTAGE_MAX_EN50160 = 253; // +10% de 230V
-
-function countOutOfNormNodes(
-  nodeIds: string[], 
-  calculationResult: CalculationResult
-): number {
-  let count = 0;
-  for (const nodeId of nodeIds) {
-    const metrics = calculationResult.nodeMetricsPerPhase?.find(n => n.nodeId === nodeId);
-    if (!metrics?.voltagesPerPhase) continue;
-    
-    const { A, B, C } = metrics.voltagesPerPhase;
-    const anyOutOfNorm = [A, B, C].some(
-      v => v < VOLTAGE_MIN_EN50160 || v > VOLTAGE_MAX_EN50160
-    );
-    
-    if (anyOutOfNorm) count++;
-  }
-  return count;
-}
+const isIndustriel = client.clientType === 'industriel';
 ```
 
-### Étape 4 : Simuler l'effet du SRG2 (estimation)
+Si `clientType` est `undefined`, `isIndustriel` est `false`, donc le client est traité comme résidentiel. OK.
 
-Plutôt qu'une simulation complète (coûteuse), estimer l'effet du SRG2 :
+### Problème potentiel : Double foisonnement
 
+Dans `electricalCalculations.ts` (ligne 611) :
 ```typescript
-function estimateSRG2Effect(
-  candidateNodeId: string,
-  downstreamNodes: string[],
-  baselineResult: CalculationResult,
-  project: Project
-): { nodesOutOfNormAfter: number; estimatedVoltages: {...} } {
-  
-  // 1. Calculer la tension moyenne au nœud candidat
-  const candidateMetrics = baselineResult.nodeMetricsPerPhase?.find(
-    n => n.nodeId === candidateNodeId
-  );
-  const { A, B, C } = candidateMetrics.voltagesPerPhase;
-  const Umean = (A + B + C) / 3;
-  
-  // 2. Estimer le coefficient SRG2 pour atteindre 230V
-  // Coefficient max = ±7% (positions LO2/BO2)
-  const targetVoltage = 230;
-  const requiredBoost = targetVoltage - Umean;
-  const boostPercent = Math.max(-7, Math.min(7, (requiredBoost / Umean) * 100));
-  
-  // 3. Appliquer ce boost aux nœuds aval (estimation linéaire)
-  // Les nœuds aval verront un boost proportionnel
-  let nodesStillOutOfNorm = 0;
-  
-  for (const nodeId of downstreamNodes) {
-    const nodeMetrics = baselineResult.nodeMetricsPerPhase?.find(
-      n => n.nodeId === nodeId
-    );
-    if (!nodeMetrics?.voltagesPerPhase) continue;
-    
-    // Estimer les tensions après boost
-    const boostedVoltages = {
-      A: nodeMetrics.voltagesPerPhase.A * (1 + boostPercent / 100),
-      B: nodeMetrics.voltagesPerPhase.B * (1 + boostPercent / 100),
-      C: nodeMetrics.voltagesPerPhase.C * (1 + boostPercent / 100)
-    };
-    
-    const anyOutOfNorm = [boostedVoltages.A, boostedVoltages.B, boostedVoltages.C].some(
-      v => v < VOLTAGE_MIN_EN50160 || v > VOLTAGE_MAX_EN50160
-    );
-    
-    if (anyOutOfNorm) nodesStillOutOfNorm++;
-  }
-  
-  return { nodesOutOfNormAfter: nodesStillOutOfNorm, ... };
-}
+S_prel += client.puissanceContractuelle_kVA * (foisonnement / 100);  // = 15 kVA
 ```
 
-### Étape 5 : Calculer le score et trier
-
+Dans `phaseDistributionCalculator.ts` (lignes 647-655) :
 ```typescript
-for (const candidate of candidates) {
-  const downstreamNodes = findDownstreamNodes(candidate.id);
-  const nodesBefore = countOutOfNormNodes(downstreamNodes, baselineResult);
-  
-  if (nodesBefore === 0) {
-    // Tous les nœuds aval sont déjà conformes
-    // Score bas car pas d'amélioration possible
-    candidate.score = 0.1;
-    continue;
-  }
-  
-  const { nodesOutOfNormAfter } = estimateSRG2Effect(...);
-  const nodesCorrected = nodesBefore - nodesOutOfNormAfter;
-  const correctionRate = (nodesCorrected / nodesBefore) * 100;
-  
-  candidate.score = correctionRate;
-  candidate.nodesCorrected = nodesCorrected;
-  candidate.correctionRate = correctionRate;
-}
-
-// Trier par score DÉCROISSANT (plus élevé = meilleur)
-candidates.sort((a, b) => b.score - a.score);
+const totalFoisonneChargeA = 
+  chargesResidentiellesParPhase.A * (foisonnementChargesResidentiel / 100);
 ```
 
-## Cas particuliers
+Si `chargesResidentiellesParPhase.A` contient déjà la puissance brute (100/3 = 33.33 kVA), alors le foisonnement est appliqué correctement ici.
 
-1. **Aucun nœud hors norme** : Retourner le nœud le plus proche de la source avec un message "Réseau conforme, SRG2 optionnel"
+**Le problème n'est pas un double foisonnement.**
 
-2. **Tous les candidats ont le même score** : Départager par la distance (plus proche = prioritaire)
+---
 
-3. **Aucun candidat dans les 250m** : Relâcher la contrainte à 300m ou suggérer "Aucun emplacement optimal dans la zone"
+## Vérification : Le client est-il vraiment lié ?
 
-## Fichiers à modifier
+Quand `addClientManual` est appelé, le client est ajouté à `clientsImportes` **mais pas lié** au nœud.
 
-| Fichier | Modifications |
-|---------|---------------|
-| `src/utils/optimalSrg2Finder.ts` | Nouvelle logique basée sur l'impact aval |
-| `src/components/SRG2Panel.tsx` | Affichage des nouvelles métriques d'impact |
+L'utilisateur doit ensuite **manuellement lier** le client au nœud via `linkClientToNode`.
 
-## Affichage UI (SRG2Panel)
+**Question critique** : L'utilisateur a-t-il bien lié le client au nœud après l'avoir créé ?
 
-La carte "Suggestion automatique" affichera :
+Si le client **n'est pas lié** :
+- `getLinkedClientsForNode()` ne le trouve pas
+- `S_prel` = 0 pour ce nœud
+- La tension reste à 230V (source) au lieu de chuter
 
+Mais l'utilisateur observe 219V, donc il y a une charge, mais plus faible qu'attendu.
+
+---
+
+## Hypothèse révisée : Problème de type `connectionType`
+
+Dans `addClientManual` (ligne 1141) :
+```typescript
+connectionType: clientData.connectionType,
 ```
-🎯 Nœud recommandé: N3
-   • Distance source: 180 m
-   • Nœuds en aval: 12
-   • Nœuds hors norme avant: 5
-   • Nœuds corrigés: 4 (80%)
-   • Score d'impact: 80%
-   
-💡 Ce nœud permet de ramener 4 nœuds dans la norme EN50160
+
+Mais dans `linkClientToNode` pour le mode mixte (ligne 1228) :
+```typescript
+const rawConnectionType = normalizeClientConnectionType(
+  client.couplage,   // ← utilise couplage, pas connectionType
+  currentProject.voltageSystem
+);
 ```
 
-## Tests de validation
+Si `client.couplage = "TRI"` (défini ligne 1139 comme `connectionType`), la normalisation retourne `"TRI"`.
 
-1. **Réseau avec sous-tensions** : Le nœud optimal doit être celui qui corrige le plus de nœuds avec boost positif
-2. **Réseau avec surtensions** : Le nœud optimal doit être celui qui corrige le plus de nœuds avec boost négatif
-3. **Réseau mixte** : Équilibrer les corrections surtension/sous-tension
-4. **Réseau conforme** : Suggérer le nœud le plus proche avec mention "optionnel"
+Ensuite (ligne 1234-1238) :
+```typescript
+const { correctedType, warning } = validateAndConvertConnectionType(
+  rawConnectionType,  // "TRI"
+  currentProject.voltageSystem,  // ex: "TÉTRAPHASÉ_400V"
+  client.nomCircuit
+);
+```
 
-## Impact utilisateur
+Pour un réseau 400V avec un client TRI, `validateAndConvertConnectionType` retourne :
+```typescript
+correctedType: 'TETRA',  // Converti !
+warning: "⚠️ Client "XXX" (TRI) converti en TÉTRA pour réseau 400V"
+```
 
-- L'utilisateur voit directement l'impact potentiel du SRG2 avant de l'ajouter
-- Le choix est justifié par des métriques concrètes (nombre de nœuds corrigés)
-- La suggestion est basée sur l'efficacité réelle, pas sur des critères théoriques
+Le client est donc traité comme **TETRA** au lieu de **TRI**.
+
+Mais cela ne devrait pas affecter le calcul de puissance (les deux sont 33.33% par phase).
+
+---
+
+## Test recommandé
+
+Afficher dans la console les valeurs suivantes :
+
+1. `S_prel_map.get(nodeId)` - Puissance totale foisonnée au nœud
+2. `node.autoPhaseDistribution?.charges.foisonneAvecCurseurs` - Répartition foisonnée
+3. `linkedClients.length` - Nombre de clients liés au nœud
+4. `client.clientType` - Type du client créé manuellement
+
+---
+
+## Correctifs à implémenter
+
+### 1. Ajouter des logs de diagnostic
+
+Ajouter des logs dans `calculateScenario` pour tracer la source des différences.
+
+### 2. Vérifier la cohérence `S_prel_map` vs `foisonneAvecCurseurs`
+
+Le total de `S_prel_map` devrait être égal au total de `foisonneAvecCurseurs` pour chaque nœud.
+
+### 3. Forcer le recalcul de `autoPhaseDistribution` après `addClientManual`
+
+Si le client est créé et immédiatement lié (même action UI), s'assurer que `updateNodePhaseDistribution` est appelé.
+
+---
+
+## Fichiers concernés
+
+| Fichier | Rôle |
+|---------|------|
+| `src/store/networkStore.ts` | `addClientManual`, `linkClientToNode` |
+| `src/utils/electricalCalculations.ts` | Calcul de `S_prel_map` et distribution BFS |
+| `src/utils/phaseDistributionCalculator.ts` | Calcul de `autoPhaseDistribution` |
+
+---
+
+## Prochaine étape recommandée
+
+Ajouter des **logs de diagnostic détaillés** dans `calculateScenario` pour comparer :
+
+1. La puissance issue de `S_prel_map` (clients liés + charges manuelles)
+2. La puissance issue de `autoPhaseDistribution.foisonneAvecCurseurs`
+3. Identifier si le client créé manuellement est bien compté dans les deux
+
+Cela permettra de confirmer l'hypothèse exacte avant de corriger le code.

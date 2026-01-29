@@ -1,71 +1,60 @@
 /**
  * ============================================================================
- * OPTIMAL SRG2 NODE FINDER - DOWNSTREAM IMPACT BASED
+ * OPTIMAL SRG2 NODE FINDER
  * ============================================================================
  * 
  * Analyse automatique du réseau pour trouver le nœud optimal de mesure
- * pour un régulateur de tension SRG2, basée sur l'impact réseau aval.
+ * pour un régulateur de tension SRG2.
  * 
  * 🧠 PRINCIPE PHYSIQUE:
- * Le SRG2 doit être placé sur un nœud qui maximise le nombre de nœuds
- * hors norme EN50160 qui rentrent dans la norme après régulation.
+ * Le nœud optimal de mesure SRG2 est celui où la tension triphasée est la plus
+ * homogène tout en étant représentatif électriquement du départ.
  * 
- * CRITÈRES DE SÉLECTION:
- * 1. Distance ≤ 250m de la source (placement proche du poste)
- * 2. Maximiser le taux de correction des nœuds hors norme EN50160
+ * Le SRG2 doit mesurer la tension à un nœud :
+ * - Peu déséquilibré (delta U faible entre phases)
+ * - Représentatif du départ (ni trop près du poste, ni en extrémité)
+ * - Position intermédiaire pour "voir" l'ensemble du départ
  * 
- * SCORE = (noeuds_corrigés / noeuds_hors_norme_aval) * 100
- * Le nœud optimal est celui qui MAXIMISE ce score.
+ * 📊 SCORE CALCULÉ (à minimiser):
+ * score(node) = deltaU * Z_upstream
+ * 
+ * deltaU faible → tension propre (homogène entre phases)
+ * Zup intermédiaire → le nœud "voit" le départ sans être dominé par les chutes
+ * 
+ * Le nœud optimal minimise ce score dans les bornes [Zmin, Zmax].
  * 
  * ============================================================================
  */
 
 import { Project, Node, Cable, CableType, CalculationResult } from '@/types/network';
 
-// Distance maximale depuis la source (m)
-const MAX_DISTANCE_FROM_SOURCE_M = 250;
+// Configuration des bornes d'impédance pour SRG2
+const Z_MIN_RATIO_SRG2 = 0.15; // 15% de l'impédance totale du départ
+const Z_MAX_RATIO_SRG2 = 0.60; // 60% de l'impédance totale du départ
 
-// Limites EN50160 pour un réseau 230V
-const VOLTAGE_MIN_EN50160 = 207; // -10% de 230V
-const VOLTAGE_MAX_EN50160 = 253; // +10% de 230V
+// Seuil maximal de déséquilibre acceptable (V)
+const MAX_DELTA_U_V = 8.0;
 
-// Tension cible pour la régulation SRG2
-const TARGET_VOLTAGE_V = 230;
-
-// Coefficients max du SRG2 (±7% pour les positions LO2/BO2)
-const MAX_SRG2_BOOST_PERCENT = 7;
+// Seuil minimal d'impédance pour éviter division par zéro (Ω)
+const MIN_IMPEDANCE_OHM = 0.001;
 
 export interface OptimalSRG2Result {
   /** ID du nœud optimal */
   nodeId: string;
   /** Nom du nœud */
   nodeName: string;
-  /** Distance depuis la source (m) */
-  distanceFromSource_m: number;
-  
-  /** Nombre de nœuds en aval */
-  downstreamNodesCount: number;
-  /** Nœuds hors norme avant SRG2 */
-  nodesOutOfNormBefore: number;
-  /** Nœuds hors norme après SRG2 (estimé) */
-  nodesOutOfNormAfter: number;
-  /** Nœuds corrigés par le SRG2 */
-  nodesCorrected: number;
-  /** Taux de correction (0-100%) */
-  correctionRate: number;
-  
-  /** Score = taux de correction (plus élevé = meilleur) */
+  /** Score calculé (deltaU * Z_up) - plus petit = meilleur */
   score: number;
-  
-  /** Tensions estimées après SRG2 */
-  estimatedVoltagesAfter: { min: number; max: number; mean: number };
-  
-  /** Boost estimé appliqué par le SRG2 (%) */
-  estimatedBoostPercent: number;
-  
-  /** Tension moyenne au nœud candidat (V) */
+  /** Écart de tension entre phases au nœud (V) */
+  deltaU_V: number;
+  /** Tensions par phase au nœud */
+  voltages: { A: number; B: number; C: number };
+  /** Tension moyenne au nœud (V) */
   Umean_V: number;
-  
+  /** Impédance amont phase (Ω) */
+  upstreamImpedance_Zph_Ohm: number;
+  /** Position relative sur le départ (0 = source, 1 = extrémité) */
+  positionRatio: number;
   /** Justification technique */
   justification: string;
 }
@@ -73,32 +62,33 @@ export interface OptimalSRG2Result {
 export interface OptimalSRG2Analysis {
   /** Nœud optimal trouvé */
   optimalNode: OptimalSRG2Result | null;
-  /** Liste des candidats analysés triés par score décroissant (meilleur en premier) */
+  /** Liste des candidats analysés triés par score croissant (meilleur en premier) */
   candidates: OptimalSRG2Result[];
-  /** Nombre total de nœuds hors norme dans le réseau */
-  totalNodesOutOfNorm: number;
-  /** Tous les nœuds sont déjà conformes */
-  networkIsCompliant: boolean;
+  /** Impédance totale maximale du départ (Ω) */
+  totalImpedance_Zph_Ohm: number;
+  /** Bornes d'impédance appliquées */
+  impedanceBounds: { Zmin: number; Zmax: number };
   /** Raison si aucun candidat trouvé */
   noResultReason?: string;
 }
 
 /**
- * Calcule la distance et l'impédance amont entre la source et un nœud donné
+ * Calcule l'impédance amont (Zph) entre la source et un nœud donné
+ * (Réutilisation du code de optimalEqui8Finder)
  */
-function computeUpstreamMetrics(
+function computeUpstreamImpedance(
   nodeId: string,
   nodes: Node[],
   cables: Cable[],
   cableTypes: CableType[]
-): { pathLength_m: number; Zph_Ohm: number } {
+): { Zph_Ohm: number; pathLength_m: number } {
   const source = nodes.find(n => n.isSource);
   if (!source) {
-    return { pathLength_m: 0, Zph_Ohm: 0 };
+    return { Zph_Ohm: 0, pathLength_m: 0 };
   }
   
   if (nodeId === source.id) {
-    return { pathLength_m: 0, Zph_Ohm: 0 };
+    return { Zph_Ohm: 0, pathLength_m: 0 };
   }
   
   // BFS pour trouver le chemin de la source au nœud
@@ -130,10 +120,10 @@ function computeUpstreamMetrics(
   
   // Si le nœud n'est pas atteignable
   if (!parent.has(nodeId)) {
-    return { pathLength_m: 0, Zph_Ohm: 0 };
+    return { Zph_Ohm: 0, pathLength_m: 0 };
   }
   
-  // Remonter le chemin et sommer les distances et impédances
+  // Remonter le chemin et sommer les impédances
   let Zph_total = 0;
   let pathLength_m = 0;
   let currentNodeId = nodeId;
@@ -143,6 +133,10 @@ function computeUpstreamMetrics(
     if (!cable) break;
     
     const cableType = cableTypes.find(ct => ct.id === cable.typeId);
+    if (!cableType) {
+      currentNodeId = parent.get(currentNodeId)!;
+      continue;
+    }
     
     // Calculer la longueur du câble
     let length_m = cable.length_m || 0;
@@ -161,51 +155,16 @@ function computeUpstreamMetrics(
       }
     }
     
+    const length_km = length_m / 1000;
     pathLength_m += length_m;
     
-    if (cableType) {
-      const length_km = length_m / 1000;
-      Zph_total += cableType.R12_ohm_per_km * length_km;
-    }
+    // Sommer les résistances (R12 pour phases)
+    Zph_total += cableType.R12_ohm_per_km * length_km;
     
     currentNodeId = parent.get(currentNodeId)!;
   }
   
-  return { pathLength_m, Zph_Ohm: Zph_total };
-}
-
-/**
- * Trouve tous les nœuds en aval d'un nœud donné (incluant le nœud lui-même)
- */
-function findDownstreamNodes(
-  startNodeId: string,
-  nodes: Node[],
-  cables: Cable[],
-  sourceId: string
-): string[] {
-  const downstream: string[] = [startNodeId];
-  const visited = new Set<string>([startNodeId, sourceId]); // Exclure la source
-  const queue: string[] = [startNodeId];
-  
-  while (queue.length > 0) {
-    const currentId = queue.shift()!;
-    
-    const connectedCables = cables.filter(
-      c => c.nodeAId === currentId || c.nodeBId === currentId
-    );
-    
-    for (const cable of connectedCables) {
-      const nextNodeId = cable.nodeAId === currentId ? cable.nodeBId : cable.nodeAId;
-      
-      if (!visited.has(nextNodeId)) {
-        visited.add(nextNodeId);
-        downstream.push(nextNodeId);
-        queue.push(nextNodeId);
-      }
-    }
-  }
-  
-  return downstream;
+  return { Zph_Ohm: Zph_total, pathLength_m };
 }
 
 /**
@@ -224,6 +183,7 @@ function extractNodeVoltages(
   // Fallback: utiliser nodeMetrics standard
   const simpleMetrics = calculationResult.nodeMetrics?.find(n => n.nodeId === nodeId);
   if (simpleMetrics?.V_phase_V) {
+    // Mode monophasé équivalent: supposer tension équilibrée
     return {
       A: simpleMetrics.V_phase_V,
       B: simpleMetrics.V_phase_V,
@@ -245,109 +205,28 @@ function extractNodeVoltages(
 }
 
 /**
- * Vérifie si un nœud est hors norme EN50160
+ * Calcule l'impédance maximale du réseau (distance au nœud le plus éloigné)
  */
-function isNodeOutOfNorm(voltages: { A: number; B: number; C: number }): boolean {
-  const { A, B, C } = voltages;
-  return [A, B, C].some(v => v < VOLTAGE_MIN_EN50160 || v > VOLTAGE_MAX_EN50160);
-}
-
-/**
- * Compte les nœuds hors norme parmi une liste de nœuds
- */
-function countOutOfNormNodes(
-  nodeIds: string[],
-  calculationResult: CalculationResult
-): { count: number; outOfNormNodeIds: string[] } {
-  let count = 0;
-  const outOfNormNodeIds: string[] = [];
+function computeMaxNetworkImpedance(
+  nodes: Node[],
+  cables: Cable[],
+  cableTypes: CableType[]
+): number {
+  let maxZph = 0;
   
-  for (const nodeId of nodeIds) {
-    const voltages = extractNodeVoltages(nodeId, calculationResult);
-    if (!voltages) continue;
-    
-    if (isNodeOutOfNorm(voltages)) {
-      count++;
-      outOfNormNodeIds.push(nodeId);
+  for (const node of nodes) {
+    if (node.isSource) continue;
+    const { Zph_Ohm } = computeUpstreamImpedance(node.id, nodes, cables, cableTypes);
+    if (Zph_Ohm > maxZph) {
+      maxZph = Zph_Ohm;
     }
   }
   
-  return { count, outOfNormNodeIds };
+  return maxZph;
 }
 
 /**
- * Estime l'effet du SRG2 sur les nœuds aval
- */
-function estimateSRG2Effect(
-  candidateNodeId: string,
-  downstreamNodes: string[],
-  calculationResult: CalculationResult
-): { 
-  nodesOutOfNormAfter: number; 
-  estimatedBoostPercent: number;
-  voltagesAfter: { min: number; max: number; mean: number };
-} {
-  // 1. Calculer la tension moyenne au nœud candidat
-  const candidateVoltages = extractNodeVoltages(candidateNodeId, calculationResult);
-  if (!candidateVoltages) {
-    return { nodesOutOfNormAfter: 0, estimatedBoostPercent: 0, voltagesAfter: { min: 0, max: 0, mean: 0 } };
-  }
-  
-  const { A, B, C } = candidateVoltages;
-  const Umean = (A + B + C) / 3;
-  
-  // 2. Estimer le coefficient SRG2 pour atteindre la tension cible (230V)
-  const requiredBoost = TARGET_VOLTAGE_V - Umean;
-  const boostPercent = Math.max(-MAX_SRG2_BOOST_PERCENT, Math.min(MAX_SRG2_BOOST_PERCENT, (requiredBoost / Umean) * 100));
-  
-  // 3. Appliquer ce boost aux nœuds aval (estimation linéaire)
-  let nodesStillOutOfNorm = 0;
-  let minV = Infinity;
-  let maxV = -Infinity;
-  let sumV = 0;
-  let countV = 0;
-  
-  for (const nodeId of downstreamNodes) {
-    const voltages = extractNodeVoltages(nodeId, calculationResult);
-    if (!voltages) continue;
-    
-    // Estimer les tensions après boost
-    const boostedVoltages = {
-      A: voltages.A * (1 + boostPercent / 100),
-      B: voltages.B * (1 + boostPercent / 100),
-      C: voltages.C * (1 + boostPercent / 100)
-    };
-    
-    // Tracker min/max/mean
-    const valsAfter = [boostedVoltages.A, boostedVoltages.B, boostedVoltages.C];
-    for (const v of valsAfter) {
-      minV = Math.min(minV, v);
-      maxV = Math.max(maxV, v);
-      sumV += v;
-      countV++;
-    }
-    
-    // Vérifier si toujours hors norme
-    if (isNodeOutOfNorm(boostedVoltages)) {
-      nodesStillOutOfNorm++;
-    }
-  }
-  
-  const meanV = countV > 0 ? sumV / countV : TARGET_VOLTAGE_V;
-  
-  return { 
-    nodesOutOfNormAfter: nodesStillOutOfNorm, 
-    estimatedBoostPercent: boostPercent,
-    voltagesAfter: { 
-      min: minV === Infinity ? 0 : minV, 
-      max: maxV === -Infinity ? 0 : maxV, 
-      mean: meanV 
-    }
-  };
-}
-
-/**
- * Trouve le nœud optimal pour la mesure SRG2 basé sur l'impact réseau aval
+ * Trouve le nœud optimal pour la mesure SRG2
  * 
  * @param project Configuration du projet réseau
  * @param calculationResult Résultats de calcul sans EQUI8 ni SRG2
@@ -358,163 +237,108 @@ export function findOptimalSRG2Node(
   calculationResult: CalculationResult
 ): OptimalSRG2Analysis {
   const { nodes, cables, cableTypes } = project;
-  const source = nodes.find(n => n.isSource);
   
-  if (!source) {
+  // Calculer l'impédance totale maximale du départ
+  const totalZph = computeMaxNetworkImpedance(nodes, cables, cableTypes);
+  
+  if (totalZph < MIN_IMPEDANCE_OHM) {
     return {
       optimalNode: null,
       candidates: [],
-      totalNodesOutOfNorm: 0,
-      networkIsCompliant: true,
-      noResultReason: 'Aucune source trouvée dans le réseau'
+      totalImpedance_Zph_Ohm: 0,
+      impedanceBounds: { Zmin: 0, Zmax: 0 },
+      noResultReason: 'Impédance réseau trop faible pour analyse'
     };
   }
   
-  // Compter les nœuds hors norme dans tout le réseau
-  const allNodeIds = nodes.filter(n => !n.isSource).map(n => n.id);
-  const { count: totalOutOfNorm } = countOutOfNormNodes(allNodeIds, calculationResult);
+  // Calculer les bornes d'impédance
+  const Zmin = totalZph * Z_MIN_RATIO_SRG2;
+  const Zmax = totalZph * Z_MAX_RATIO_SRG2;
   
-  console.log(`📊 Analyse optimisation SRG2 (impact aval):`);
-  console.log(`   Nœuds hors norme EN50160: ${totalOutOfNorm} / ${allNodeIds.length}`);
-  
-  // Si le réseau est déjà conforme
-  if (totalOutOfNorm === 0) {
-    // Retourner le nœud le plus proche de la source comme suggestion optionnelle
-    let closestNode: OptimalSRG2Result | null = null;
-    let minDistance = Infinity;
-    
-    for (const node of nodes) {
-      if (node.isSource) continue;
-      
-      const { pathLength_m } = computeUpstreamMetrics(node.id, nodes, cables, cableTypes);
-      if (pathLength_m <= MAX_DISTANCE_FROM_SOURCE_M && pathLength_m < minDistance) {
-        minDistance = pathLength_m;
-        const voltages = extractNodeVoltages(node.id, calculationResult);
-        const downstreamNodes = findDownstreamNodes(node.id, nodes, cables, source.id);
-        
-        closestNode = {
-          nodeId: node.id,
-          nodeName: node.name || node.id,
-          distanceFromSource_m: pathLength_m,
-          downstreamNodesCount: downstreamNodes.length,
-          nodesOutOfNormBefore: 0,
-          nodesOutOfNormAfter: 0,
-          nodesCorrected: 0,
-          correctionRate: 100,
-          score: 100,
-          estimatedVoltagesAfter: voltages ? {
-            min: Math.min(voltages.A, voltages.B, voltages.C),
-            max: Math.max(voltages.A, voltages.B, voltages.C),
-            mean: (voltages.A + voltages.B + voltages.C) / 3
-          } : { min: 230, max: 230, mean: 230 },
-          estimatedBoostPercent: 0,
-          Umean_V: voltages ? (voltages.A + voltages.B + voltages.C) / 3 : 230,
-          justification: 'Réseau conforme EN50160 - SRG2 optionnel pour stabilisation'
-        };
-      }
-    }
-    
-    return {
-      optimalNode: closestNode,
-      candidates: closestNode ? [closestNode] : [],
-      totalNodesOutOfNorm: 0,
-      networkIsCompliant: true,
-      noResultReason: closestNode ? undefined : 'Aucun nœud dans la zone 250m'
-    };
-  }
+  console.log(`📊 Analyse optimisation SRG2:`);
+  console.log(`   Z_total: ${totalZph.toFixed(4)}Ω`);
+  console.log(`   Bornes: Zmin=${Zmin.toFixed(4)}Ω (${(Z_MIN_RATIO_SRG2*100).toFixed(0)}%), Zmax=${Zmax.toFixed(4)}Ω (${(Z_MAX_RATIO_SRG2*100).toFixed(0)}%)`);
   
   const candidates: OptimalSRG2Result[] = [];
   
-  // Analyser chaque nœud (sauf la source) dans la zone 250m
+  // Analyser chaque nœud (sauf la source)
   for (const node of nodes) {
     if (node.isSource) continue;
     
-    // Calculer la distance depuis la source
-    const { pathLength_m } = computeUpstreamMetrics(node.id, nodes, cables, cableTypes);
+    // Calculer l'impédance amont
+    const { Zph_Ohm } = computeUpstreamImpedance(node.id, nodes, cables, cableTypes);
     
-    // Filtrer par distance max
-    if (pathLength_m > MAX_DISTANCE_FROM_SOURCE_M) {
-      console.log(`   ⏭️ ${node.name || node.id}: distance=${pathLength_m.toFixed(0)}m > ${MAX_DISTANCE_FROM_SOURCE_M}m`);
+    // Vérifier les bornes d'impédance
+    if (Zph_Ohm < Zmin) {
+      console.log(`   ⏭️ ${node.name || node.id}: Z=${Zph_Ohm.toFixed(4)}Ω < Zmin (trop proche source)`);
+      continue;
+    }
+    if (Zph_Ohm > Zmax) {
+      console.log(`   ⏭️ ${node.name || node.id}: Z=${Zph_Ohm.toFixed(4)}Ω > Zmax (trop éloigné)`);
       continue;
     }
     
-    // Trouver les nœuds en aval
-    const downstreamNodes = findDownstreamNodes(node.id, nodes, cables, source.id);
-    
-    // Compter les nœuds hors norme AVANT
-    const { count: nodesOutOfNormBefore } = countOutOfNormNodes(downstreamNodes, calculationResult);
-    
-    // Estimer l'effet du SRG2
-    const { nodesOutOfNormAfter, estimatedBoostPercent, voltagesAfter } = estimateSRG2Effect(
-      node.id,
-      downstreamNodes,
-      calculationResult
-    );
-    
-    // Calculer le score (taux de correction)
-    const nodesCorrected = nodesOutOfNormBefore - nodesOutOfNormAfter;
-    let correctionRate = 0;
-    let score = 0;
-    
-    if (nodesOutOfNormBefore > 0) {
-      correctionRate = (nodesCorrected / nodesOutOfNormBefore) * 100;
-      score = correctionRate;
-    } else {
-      // Tous les nœuds aval sont conformes - score bonus basé sur la couverture
-      correctionRate = 100;
-      score = 50 + (downstreamNodes.length / allNodeIds.length) * 50; // 50-100 basé sur couverture
+    // Extraire les tensions par phase
+    const voltages = extractNodeVoltages(node.id, calculationResult);
+    if (!voltages) {
+      console.log(`   ⏭️ ${node.name || node.id}: Pas de données de tension`);
+      continue;
     }
     
-    // Si score égal, départager par distance (plus proche = meilleur)
-    // On ajoute un petit bonus inversement proportionnel à la distance
-    score += (MAX_DISTANCE_FROM_SOURCE_M - pathLength_m) / MAX_DISTANCE_FROM_SOURCE_M * 0.1;
+    // Calculer deltaU = max(U1,U2,U3) - min(U1,U2,U3)
+    const { A, B, C } = voltages;
+    const deltaU = Math.max(A, B, C) - Math.min(A, B, C);
+    const Umean = (A + B + C) / 3;
     
-    const voltages = extractNodeVoltages(node.id, calculationResult);
-    const Umean = voltages ? (voltages.A + voltages.B + voltages.C) / 3 : 230;
+    // Filtrer les nœuds trop déséquilibrés
+    if (deltaU > MAX_DELTA_U_V) {
+      console.log(`   ⏭️ ${node.name || node.id}: ΔU=${deltaU.toFixed(1)}V > seuil max (trop déséquilibré)`);
+      continue;
+    }
+    
+    // Calculer le score (à minimiser)
+    const score = deltaU * Zph_Ohm;
+    const positionRatio = Zph_Ohm / totalZph;
     
     candidates.push({
       nodeId: node.id,
       nodeName: node.name || node.id,
-      distanceFromSource_m: pathLength_m,
-      downstreamNodesCount: downstreamNodes.length,
-      nodesOutOfNormBefore,
-      nodesOutOfNormAfter,
-      nodesCorrected,
-      correctionRate,
       score,
-      estimatedVoltagesAfter: voltagesAfter,
-      estimatedBoostPercent,
+      deltaU_V: deltaU,
+      voltages,
       Umean_V: Umean,
-      justification: `Corrige ${nodesCorrected}/${nodesOutOfNormBefore} nœuds (${correctionRate.toFixed(0)}%), boost ${estimatedBoostPercent > 0 ? '+' : ''}${estimatedBoostPercent.toFixed(1)}%`
+      upstreamImpedance_Zph_Ohm: Zph_Ohm,
+      positionRatio,
+      justification: `ΔU=${deltaU.toFixed(1)}V, Z_up=${Zph_Ohm.toFixed(3)}Ω, position=${(positionRatio*100).toFixed(0)}% du départ`
     });
     
-    console.log(`   ✅ ${node.name || node.id}: score=${score.toFixed(1)}, corrigés=${nodesCorrected}/${nodesOutOfNormBefore}, dist=${pathLength_m.toFixed(0)}m`);
+    console.log(`   ✅ ${node.name || node.id}: score=${score.toFixed(3)}, ΔU=${deltaU.toFixed(1)}V, Z=${Zph_Ohm.toFixed(3)}Ω`);
   }
   
-  // Trier par score DÉCROISSANT (plus élevé = meilleur)
-  candidates.sort((a, b) => b.score - a.score);
+  // Trier par score CROISSANT (plus petit = meilleur pour SRG2)
+  candidates.sort((a, b) => a.score - b.score);
   
   if (candidates.length === 0) {
     return {
       optimalNode: null,
       candidates: [],
-      totalNodesOutOfNorm: totalOutOfNorm,
-      networkIsCompliant: false,
-      noResultReason: `Aucun nœud candidat dans la zone de ${MAX_DISTANCE_FROM_SOURCE_M}m depuis la source`
+      totalImpedance_Zph_Ohm: totalZph,
+      impedanceBounds: { Zmin, Zmax },
+      noResultReason: 'Aucun nœud ne satisfait les critères (ΔU < 8V et impédance dans les bornes 15%-60%)'
     };
   }
   
   const optimalNode = candidates[0];
   
   console.log(`🎯 Nœud optimal SRG2: ${optimalNode.nodeName}`);
-  console.log(`   Score: ${optimalNode.score.toFixed(1)}% (taux de correction)`);
+  console.log(`   Score: ${optimalNode.score.toFixed(3)} (le plus bas)`);
   console.log(`   ${optimalNode.justification}`);
   
   return {
     optimalNode,
     candidates,
-    totalNodesOutOfNorm: totalOutOfNorm,
-    networkIsCompliant: false
+    totalImpedance_Zph_Ohm: totalZph,
+    impedanceBounds: { Zmin, Zmax }
   };
 }
 
@@ -526,18 +350,21 @@ export function formatOptimalSRG2Result(analysis: OptimalSRG2Analysis): string {
     return analysis.noResultReason || 'Aucun nœud optimal trouvé';
   }
   
-  const { optimalNode, networkIsCompliant } = analysis;
+  const { optimalNode, candidates } = analysis;
   
   let text = `🎯 Nœud recommandé: ${optimalNode.nodeName}\n`;
-  text += `   • Distance source: ${optimalNode.distanceFromSource_m.toFixed(0)} m\n`;
-  text += `   • Nœuds en aval: ${optimalNode.downstreamNodesCount}\n`;
+  text += `   • Écart tension (ΔU): ${optimalNode.deltaU_V.toFixed(1)} V\n`;
+  text += `   • Tension moyenne: ${optimalNode.Umean_V.toFixed(1)} V\n`;
+  text += `   • Impédance amont: ${optimalNode.upstreamImpedance_Zph_Ohm.toFixed(3)} Ω\n`;
+  text += `   • Position: ${(optimalNode.positionRatio * 100).toFixed(0)}% du départ\n`;
+  text += `   • Score: ${optimalNode.score.toFixed(3)}\n`;
   
-  if (networkIsCompliant) {
-    text += `   • Réseau conforme EN50160 - SRG2 optionnel\n`;
-  } else {
-    text += `   • Nœuds hors norme: ${optimalNode.nodesOutOfNormBefore}\n`;
-    text += `   • Nœuds corrigés: ${optimalNode.nodesCorrected} (${optimalNode.correctionRate.toFixed(0)}%)\n`;
-    text += `   • Boost estimé: ${optimalNode.estimatedBoostPercent > 0 ? '+' : ''}${optimalNode.estimatedBoostPercent.toFixed(1)}%\n`;
+  if (candidates.length > 1) {
+    text += `\nAutres candidats (${candidates.length - 1}):\n`;
+    for (let i = 1; i < Math.min(candidates.length, 4); i++) {
+      const c = candidates[i];
+      text += `   ${i}. ${c.nodeName} (score: ${c.score.toFixed(3)})\n`;
+    }
   }
   
   return text;

@@ -506,84 +506,34 @@ export const SRG2Panel = () => {
             <CardContent className="pt-0 pb-3 px-4">
               {optimalSRG2Analysis.optimalNode ? (
                 <div className="space-y-3">
-                  {/* Message si réseau conforme */}
-                  {optimalSRG2Analysis.networkIsCompliant && (
-                    <div className="flex items-center gap-2 text-xs text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 p-2 rounded">
-                      <CheckCircle className="h-3 w-3" />
-                      Réseau conforme EN50160 - SRG2 optionnel
-                    </div>
-                  )}
-                  
                   <div className="flex items-center gap-2">
                     <Target className="h-4 w-4 text-blue-600" />
                     <span className="font-medium text-sm">
                       {optimalSRG2Analysis.optimalNode.nodeName}
                     </span>
-                    {!optimalSRG2Analysis.networkIsCompliant && optimalSRG2Analysis.optimalNode.correctionRate > 0 && (
-                      <Badge 
-                        variant="outline" 
-                        className={cn(
-                          "text-xs",
-                          optimalSRG2Analysis.optimalNode.correctionRate >= 80 
-                            ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300"
-                            : optimalSRG2Analysis.optimalNode.correctionRate >= 50
-                            ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300"
-                            : "bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300"
-                        )}
-                      >
-                        {optimalSRG2Analysis.optimalNode.correctionRate.toFixed(0)}% corrigés
-                      </Badge>
-                    )}
+                    <Badge variant="outline" className="text-xs bg-blue-100 dark:bg-blue-900/50">
+                      Score: {optimalSRG2Analysis.optimalNode.score.toFixed(3)}
+                    </Badge>
                   </div>
                   
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="bg-background/50 p-2 rounded">
-                      <div className="text-muted-foreground">Distance source</div>
-                      <div className="font-medium">{optimalSRG2Analysis.optimalNode.distanceFromSource_m.toFixed(0)} m</div>
+                      <div className="text-muted-foreground">Écart ΔU</div>
+                      <div className="font-medium">{optimalSRG2Analysis.optimalNode.deltaU_V.toFixed(1)} V</div>
                     </div>
                     <div className="bg-background/50 p-2 rounded">
-                      <div className="text-muted-foreground">Nœuds aval</div>
-                      <div className="font-medium">{optimalSRG2Analysis.optimalNode.downstreamNodesCount}</div>
+                      <div className="text-muted-foreground">Z amont</div>
+                      <div className="font-medium">{optimalSRG2Analysis.optimalNode.upstreamImpedance_Zph_Ohm.toFixed(3)} Ω</div>
                     </div>
-                    {!optimalSRG2Analysis.networkIsCompliant && (
-                      <>
-                        <div className="bg-background/50 p-2 rounded">
-                          <div className="text-muted-foreground">Hors norme avant</div>
-                          <div className="font-medium text-destructive">{optimalSRG2Analysis.optimalNode.nodesOutOfNormBefore}</div>
-                        </div>
-                        <div className="bg-background/50 p-2 rounded">
-                          <div className="text-muted-foreground">Corrigés</div>
-                          <div className="font-medium text-green-600 dark:text-green-400">
-                            {optimalSRG2Analysis.optimalNode.nodesCorrected}
-                            <span className="text-muted-foreground ml-1">
-                              ({optimalSRG2Analysis.optimalNode.correctionRate.toFixed(0)}%)
-                            </span>
-                          </div>
-                        </div>
-                      </>
-                    )}
                     <div className="bg-background/50 p-2 rounded">
-                      <div className="text-muted-foreground">Boost estimé</div>
-                      <div className="font-medium">
-                        {optimalSRG2Analysis.optimalNode.estimatedBoostPercent > 0 ? '+' : ''}
-                        {optimalSRG2Analysis.optimalNode.estimatedBoostPercent.toFixed(1)}%
-                      </div>
+                      <div className="text-muted-foreground">Position</div>
+                      <div className="font-medium">{(optimalSRG2Analysis.optimalNode.positionRatio * 100).toFixed(0)}% du départ</div>
                     </div>
                     <div className="bg-background/50 p-2 rounded">
                       <div className="text-muted-foreground">U moyen</div>
                       <div className="font-medium">{optimalSRG2Analysis.optimalNode.Umean_V.toFixed(1)} V</div>
                     </div>
                   </div>
-                  
-                  {/* Message d'impact */}
-                  {!optimalSRG2Analysis.networkIsCompliant && optimalSRG2Analysis.optimalNode.nodesCorrected > 0 && (
-                    <div className="text-xs text-blue-700 dark:text-blue-300 bg-blue-100/50 dark:bg-blue-900/20 p-2 rounded flex items-start gap-2">
-                      <Sparkles className="h-3 w-3 mt-0.5 shrink-0" />
-                      <span>
-                        Ce nœud permet de ramener {optimalSRG2Analysis.optimalNode.nodesCorrected} nœud{optimalSRG2Analysis.optimalNode.nodesCorrected > 1 ? 's' : ''} dans la norme EN50160
-                      </span>
-                    </div>
-                  )}
                   
                   <Button
                     size="sm"
@@ -604,9 +554,7 @@ export const SRG2Panel = () => {
                         {optimalSRG2Analysis.candidates.slice(1, 4).map((c, i) => (
                           <div key={c.nodeId} className="text-xs flex items-center justify-between bg-background/30 p-1.5 rounded">
                             <span>{i + 1}. {c.nodeName}</span>
-                            <span className="text-muted-foreground">
-                              {c.nodesCorrected}/{c.nodesOutOfNormBefore} corrigés
-                            </span>
+                            <span className="text-muted-foreground">score: {c.score.toFixed(3)}</span>
                           </div>
                         ))}
                       </div>

@@ -1,3 +1,16 @@
+// ⚠️ ════════════════════════════════════════════════════════════════════════
+// ⚠️ RÈGLE PHYSIQUE ABSOLUE DU SIMULATEUR
+// ⚠️ ════════════════════════════════════════════════════════════════════════
+// ⚠️ 
+// ⚠️ - Seule la tension source (Vslack) peut être modifiée (par SRG2 via coeff %)
+// ⚠️ - L'EQUI8 agit UNIQUEMENT par injection de courant shunt
+// ⚠️ - Aucune tension ne peut être imposée sur un nœud du réseau
+// ⚠️ - Le neutre résulte EXCLUSIVEMENT du BFS triphasé
+// ⚠️ 
+// ⚠️ Ces règles garantissent la conformité aux lois physiques d'un réseau BT.
+// ⚠️ Toute violation de ces principes produira des résultats incorrects.
+// ⚠️ ════════════════════════════════════════════════════════════════════════
+
 import {
   CalculationResult,
   Project,
@@ -773,78 +786,96 @@ export class SimulationCalculator extends ElectricalCalculator {
   ): CalculationResult {
     
     console.log(`🔧 SIMULATION COUPLÉE SRG2+EQUI8 (${srg2Devices.length} SRG2, ${compensators.length} EQUI8)`);
-    console.log(`   ⚡ Principe: Réseau → EQUI8 équilibre → SRG2 décide sur réseau équilibré → itération`);
+    console.log(`   ⚡ Principe: EQUI8 (injection courant) → SRG2 (modifie Vslack) → BFS naturel`);
     
     const MAX_COUPLED_ITERATIONS = 10;
     let iteration = 0;
-    let tapChange = true; // Force première itération
+    let tapChange = true;
     let converged = false;
     
-    // Copie de travail du projet pour les modifications de tension source
-    let workingProject = JSON.parse(JSON.stringify(project)) as Project;
-    let currentBaselineResults = calculationResults;
+    // ✅ SRG2 agit sur Vslack via coefficients (pas d'imposition locale)
+    let currentVslackCoefficients: { A: number; B: number; C: number } = { A: 0, B: 0, C: 0 };
+    let lastTapPosition: Map<string, { A: SRG2SwitchState; B: SRG2SwitchState; C: SRG2SwitchState }> = new Map();
     
     // Résultats intermédiaires
     let networkEq: CalculationResult | null = null;
-    let lastTapPosition: Map<string, { A: SRG2SwitchState; B: SRG2SwitchState; C: SRG2SwitchState }> = new Map();
+    let equi8Injections: Map<string, any> | undefined = undefined;
     
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // BOUCLE PRINCIPALE : simulateCoupledSRG2Equi8
-    // Principe: Le SRG2 corrige la tension d'un réseau DÉJÀ équilibré par l'EQUI8.
-    // L'EQUI8 est recalculé FRAIS à chaque itération (pas de mémoire/ratios).
-    // Critère d'arrêt: tap_change == 0 → stop (pas de critère tension)
+    // BOUCLE PRINCIPALE PHYSIQUEMENT CORRECTE:
+    // 1. BFS avec Vslack (+ coeff SRG2) et injections EQUI8
+    // 2. EQUI8 calibre ses injections
+    // 3. SRG2 lit les tensions au nœud et décide de la prise
+    // 4. SRG2 modifie Vslack (pas les nœuds)
+    // 5. Répéter jusqu'à stabilisation
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    while (iteration < MAX_COUPLED_ITERATIONS) {
+    while (iteration < MAX_COUPLED_ITERATIONS && tapChange) {
       iteration++;
       console.log(`\n🔄 === ITÉRATION COUPLÉE ${iteration}/${MAX_COUPLED_ITERATIONS} ===`);
       
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      // ÉTAPE 1: L'EQUI8 agit en MODE CME (injection de courant shunt)
-      // simulate_equi8_cme(network) → network_eq
-      // L'EQUI8 équilibre les phases AVANT que le SRG2 ne prenne sa décision.
+      // ÉTAPE 1: BFS avec Vslack courant (coefficients SRG2 appliqués à la source)
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      console.log(`  📊 Étape 1: EQUI8 CME - Injection courant shunt`);
-      networkEq = this.calculateWithEQUI8_CME(
-        workingProject,
+      console.log(`  📊 Étape 1: BFS réseau avec Vslack modifié (coeff=${JSON.stringify(currentVslackCoefficients)})`);
+      
+      const baseResult = this.calculateScenario(
+        project.nodes,
+        project.cables,
+        project.cableTypes,
         scenario,
-        compensators,
-        currentBaselineResults
+        project.foisonnementChargesResidentiel ?? project.foisonnementCharges,
+        project.foisonnementProductions,
+        project.transformerConfig,
+        project.loadModel,
+        project.desequilibrePourcent,
+        project.manualPhaseDistribution,
+        project.clientsImportes,
+        project.clientLinks,
+        project.foisonnementChargesResidentiel,
+        project.foisonnementChargesIndustriel,
+        equi8Injections, // Injections EQUI8 de l'itération précédente
+        currentVslackCoefficients // ✅ SRG2 agit sur Vslack
       );
       
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      // ÉTAPE 2: Calculer la tension moyenne vue par le SRG2 sur réseau équilibré
+      // ÉTAPE 2: EQUI8 calibre ses injections sur ce réseau
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      let Umean = 0;
-      const srg2VoltagesAfterEQUI8 = new Map<string, { A: number; B: number; C: number }>();
+      console.log(`  📊 Étape 2: EQUI8 CME - Calibration injections courant`);
+      
+      networkEq = this.calculateWithEQUI8_CME(
+        project,
+        scenario,
+        compensators,
+        { [scenario]: baseResult }
+      );
+      
+      equi8Injections = networkEq.equi8Injections;
+      
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // ÉTAPE 3: SRG2 lit les tensions et décide de la prise
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      console.log(`  📊 Étape 3: SRG2 - Décision de régulation`);
+      tapChange = false;
       
       for (const srg2 of srg2Devices) {
         const nodeMetrics = networkEq.nodeMetricsPerPhase?.find(nm =>
           String(nm.nodeId) === String(srg2.nodeId)
         );
         
-        if (nodeMetrics?.voltagesPerPhase) {
-          const { A, B, C } = nodeMetrics.voltagesPerPhase;
-          srg2VoltagesAfterEQUI8.set(srg2.nodeId, { A, B, C });
-          Umean = (A + B + C) / 3;
-          console.log(`  📈 SRG2 ${srg2.nodeId} voit réseau ÉQUILIBRÉ: ` +
-            `A=${A.toFixed(1)}V, B=${B.toFixed(1)}V, C=${C.toFixed(1)}V → Umean=${Umean.toFixed(1)}V`);
-        }
-      }
-      
-      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      // ÉTAPE 3: Le SRG2 DÉCIDE sur ce réseau équilibré
-      // simulate_srg2(network_eq, srg2_settings) → tap_change
-      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      console.log(`  📊 Étape 2: SRG2 - Décision de régulation sur réseau équilibré`);
-      tapChange = false;
-      
-      for (const srg2 of srg2Devices) {
-        const nodeVoltages = srg2VoltagesAfterEQUI8.get(srg2.nodeId) || { A: 230, B: 230, C: 230 };
+        if (!nodeMetrics?.voltagesPerPhase) continue;
         
-        // Appliquer la régulation SRG2 (décision basée sur réseau équilibré)
-        const regulationResult = this.applySRG2Regulation(srg2, nodeVoltages, workingProject.voltageSystem);
+        const nodeVoltages = {
+          A: nodeMetrics.voltagesPerPhase.A,
+          B: nodeMetrics.voltagesPerPhase.B,
+          C: nodeMetrics.voltagesPerPhase.C
+        };
         
-        // Détecter si le SRG2 demande un changement de prise
+        console.log(`  📈 SRG2 ${srg2.nodeId} voit: A=${nodeVoltages.A.toFixed(1)}V, B=${nodeVoltages.B.toFixed(1)}V, C=${nodeVoltages.C.toFixed(1)}V`);
+        
+        // Appliquer la régulation SRG2
+        const regulationResult = this.applySRG2Regulation(srg2, nodeVoltages, project.voltageSystem);
+        
+        // Détecter changement de prise
         const previousTap = lastTapPosition.get(srg2.nodeId);
         const currentTap = regulationResult.etatCommutateur;
         
@@ -866,61 +897,20 @@ export class SimulationCalculator extends ElectricalCalculator {
         srg2.etatCommutateur = regulationResult.etatCommutateur;
         srg2.coefficientsAppliques = regulationResult.coefficientsAppliques;
         srg2.tensionSortie = regulationResult.tensionSortie;
-      }
-      
-      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      // [M1] ÉTAPE 3b: APPLIQUER LES COEFFICIENTS SRG2 IMMÉDIATEMENT
-      // Les marqueurs SRG2 sont posés sur les nœuds AVANT le BFS de la prochaine itération
-      // Ceci garantit que la baseline intègre l'effet SRG2 + EQUI8 conjointement
-      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      const iterationNodes = JSON.parse(JSON.stringify(workingProject.nodes)) as Node[];
-      for (const srg2 of srg2Devices) {
-        if (srg2.coefficientsAppliques && srg2.tensionSortie) {
-          this.applySRG2Coefficients(iterationNodes, srg2, srg2.coefficientsAppliques, srg2.tensionSortie);
-          console.log(`  📌 SRG2 ${srg2.nodeId} appliqué: coeffs=${JSON.stringify(srg2.coefficientsAppliques)}`);
+        
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // ÉTAPE 4: SRG2 modifie Vslack (pas les nœuds!)
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        if (regulationResult.coefficientsAppliques) {
+          currentVslackCoefficients = { ...regulationResult.coefficientsAppliques };
+          console.log(`  🎯 SRG2 → Vslack coefficients: A=${currentVslackCoefficients.A.toFixed(1)}%, B=${currentVslackCoefficients.B.toFixed(1)}%, C=${currentVslackCoefficients.C.toFixed(1)}%`);
         }
       }
       
-      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      // ÉTAPE 4: Recalculer avec EQUI8 CME + SRG2 appliqués
-      // Ce résultat sera la baseline pour l'itération suivante
-      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      const srg2AppliedResult = this.calculateScenario(
-        iterationNodes,
-        workingProject.cables,
-        workingProject.cableTypes,
-        scenario,
-        workingProject.foisonnementChargesResidentiel ?? workingProject.foisonnementCharges,
-        workingProject.foisonnementProductions,
-        workingProject.transformerConfig,
-        workingProject.loadModel,
-        workingProject.desequilibrePourcent,
-        workingProject.manualPhaseDistribution,
-        workingProject.clientsImportes,
-        workingProject.clientLinks,
-        workingProject.foisonnementChargesResidentiel,
-        workingProject.foisonnementChargesIndustriel,
-        networkEq.equi8Injections // Réutiliser les injections EQUI8 calibrées
-      );
-      
-      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      // ÉTAPE 5: Vérification stabilité (automate à seuil)
-      // Critère d'arrêt: tap_change == 0 → stop (pas de critère tension)
-      // Le SRG2 est un automate à seuil, pas un régulateur PID
-      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
       if (!tapChange) {
-        console.log(`  ✅ CONVERGENCE ATTEINTE: tap_change == 0 (automate stabilisé)`);
+        console.log(`  ✅ CONVERGENCE ATTEINTE: tap_change == 0`);
         converged = true;
-        break;
       }
-      
-      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      // ÉTAPE 6: Basculer la baseline sur l'état "EQUI8 + SRG2 APPLIQUÉS"
-      // La prochaine itération verra le réseau avec les effets combinés
-      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      currentBaselineResults = { [scenario]: srg2AppliedResult };
-      workingProject = { ...workingProject, nodes: iterationNodes };
-      console.log(`  🔄 Baseline mise à jour: EQUI8 CME + SRG2 appliqués conjointement`);
     }
     
     if (!converged) {
@@ -928,70 +918,36 @@ export class SimulationCalculator extends ElectricalCalculator {
     }
     
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // ÉTAPE FINALE: Calcul BFS avec EQUI8 CME + coefficients SRG2
-    // Les deux effets sont appliqués SIMULTANÉMENT pour cohérence des tensions
-    // ✅ CORRECTION: Injections EQUI8 passées au calculateScenario final
+    // CALCUL FINAL: BFS avec Vslack (SRG2) + Injections (EQUI8)
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    console.log(`\n  📊 Étape finale: Équilibrage EQUI8 final + application coefficients SRG2`);
+    console.log(`\n📊 Calcul final: Vslack=${JSON.stringify(currentVslackCoefficients)}, EQUI8 injections=${equi8Injections?.size || 0}`);
     
-    // 1. Recalculer avec EQUI8 CME pour obtenir les injections calibrées
-    const equi8FinalResult = networkEq || this.calculateWithEQUI8_CME(
-      workingProject,
-      scenario,
-      compensators,
-      currentBaselineResults
-    );
-    
-    // 2. Récupérer les injections EQUI8 calibrées du résultat CME
-    const equi8FinalInjections = equi8FinalResult.equi8Injections || new Map();
-    
-    console.log(`   📤 Injections EQUI8 calibrées récupérées: ${equi8FinalInjections.size} compensateur(s)`);
-    if (equi8FinalInjections.size > 0) {
-      for (const [nodeId, injection] of equi8FinalInjections.entries()) {
-        console.log(`      - Nœud ${nodeId}: I_inj=${injection.magnitude.toFixed(2)}A`);
-      }
-    }
-    
-    // 3. Préparer les nœuds avec les marqueurs SRG2 (coefficients + tensions sortie)
-    const workingNodes = JSON.parse(JSON.stringify(workingProject.nodes)) as Node[];
-    
-    for (const srg2 of srg2Devices) {
-      if (srg2.coefficientsAppliques && srg2.tensionSortie) {
-        this.applySRG2Coefficients(workingNodes, srg2, srg2.coefficientsAppliques, srg2.tensionSortie);
-      }
-    }
-    
-    // 4. Calcul final avec EQUI8 + SRG2 actifs simultanément
-    // ✅ Les injections EQUI8 sont passées au BFS pour calcul cohérent
     const finalResult = this.calculateScenario(
-      workingNodes,
-      workingProject.cables,
-      workingProject.cableTypes,
+      project.nodes,
+      project.cables,
+      project.cableTypes,
       scenario,
-      workingProject.foisonnementChargesResidentiel ?? workingProject.foisonnementCharges,
-      workingProject.foisonnementProductions,
-      workingProject.transformerConfig,
-      workingProject.loadModel,
-      workingProject.desequilibrePourcent,
-      workingProject.manualPhaseDistribution,
-      workingProject.clientsImportes,
-      workingProject.clientLinks,
-      workingProject.foisonnementChargesResidentiel,
-      workingProject.foisonnementChargesIndustriel,
-      equi8FinalInjections // ✅ Injections EQUI8 CME incluses dans le calcul final
+      project.foisonnementChargesResidentiel ?? project.foisonnementCharges,
+      project.foisonnementProductions,
+      project.transformerConfig,
+      project.loadModel,
+      project.desequilibrePourcent,
+      project.manualPhaseDistribution,
+      project.clientsImportes,
+      project.clientLinks,
+      project.foisonnementChargesResidentiel,
+      project.foisonnementChargesIndustriel,
+      equi8Injections,
+      currentVslackCoefficients
     );
     
     console.log(`\n✅ SIMULATION COUPLÉE TERMINÉE:`);
     console.log(`   - Itérations: ${iteration}`);
     console.log(`   - Convergence: ${converged ? 'OUI' : 'NON'}`);
-    console.log(`   - Position prise finale: ${Array.from(lastTapPosition.entries()).map(
-      ([id, tap]) => `${id}: ${tap.A}/${tap.B}/${tap.C}`
-    ).join(', ')}`);
+    console.log(`   - Vslack final: A=${currentVslackCoefficients.A.toFixed(1)}%, B=${currentVslackCoefficients.B.toFixed(1)}%, C=${currentVslackCoefficients.C.toFixed(1)}%`);
     
-    // Construire le résultat final avec les métadonnées SRG2
     return {
       ...finalResult,
-      // Ajouter les résultats SRG2
       srg2Results: srg2Devices.map(srg2 => ({
         srg2Id: srg2.id,
         nodeId: srg2.nodeId,
@@ -1007,7 +963,8 @@ export class SimulationCalculator extends ElectricalCalculator {
         convergence: converged
       })),
       convergenceStatus: converged ? 'converged' : 'not_converged',
-      iterations: iteration
+      iterations: iteration,
+      equi8Injections
     } as CalculationResult & {
       srg2Results: SRG2SimulationResult[];
       convergenceStatus: 'converged' | 'not_converged';
@@ -2285,190 +2242,22 @@ export class SimulationCalculator extends ElectricalCalculator {
     srg2Devices: SRG2Config[],
     calculationResults?: { [key: string]: CalculationResult }
   ): CalculationResult {
-    console.log(`🔍 DIAGNOSTIC ID - Début calculateWithSRG2Regulation`);
+    console.log(`🔍 DIAGNOSTIC SRG2 - Régulation via Vslack (pas d'imposition locale)`);
     console.log(`📋 IDs des SRG2:`, srg2Devices.map(srg2 => `${srg2.id} -> nœud ${srg2.nodeId}`));
-    console.log(`📋 IDs des nœuds du projet:`, project.nodes.map(n => `${n.id} (${n.name})`));
-    
-    // Vérifier que tous les SRG2 ont des nœuds correspondants
-    for (const srg2 of srg2Devices) {
-      const nodeExists = project.nodes.find(n => n.id === srg2.nodeId);
-      if (!nodeExists) {
-        console.error(`❌ SRG2 ${srg2.id} référence un nœud inexistant: ${srg2.nodeId}`);
-      } else {
-        console.log(`✅ SRG2 ${srg2.id} -> nœud trouvé: ${nodeExists.id} (${nodeExists.name})`);
-      }
-    }
     
     let iteration = 0;
     let converged = false;
-    let previousVoltages: Map<string, {A: number, B: number, C: number}> = new Map();
+    let previousTaps: Map<string, {A: number, B: number, C: number}> = new Map();
     
-    // Copie des nœuds pour modification itérative
-    const workingNodes = JSON.parse(JSON.stringify(project.nodes)) as Node[];
+    // ✅ SRG2 agit sur Vslack via coefficients, pas sur les nœuds
+    let currentVslackCoefficients: { A: number; B: number; C: number } = { A: 0, B: 0, C: 0 };
     
-    // Stocker les tensions originales avant toute modification SRG2
-    const originalVoltages = new Map<string, {A: number, B: number, C: number}>();
+    // Stocker les tensions naturelles au nœud SRG2 pour la décision
+    const naturalVoltages = new Map<string, {A: number, B: number, C: number}>();
     
-    // === LECTURE TENSIONS NATURELLES depuis calculationResults (cohérence avec affichage) ===
-    const existingResult = calculationResults?.[scenario];
-    
-    if (existingResult?.nodeMetricsPerPhase) {
-      console.log('[DEBUG SRG2] === Lecture tensions depuis calculationResults (COHÉRENCE AFFICHAGE) ===');
-      
-      for (const srg2 of srg2Devices) {
-        const nodeMetrics = existingResult.nodeMetricsPerPhase.find(nm => 
-          String(nm.nodeId) === String(srg2.nodeId)
-        );
-        
-        if (nodeMetrics?.voltagesPerPhase) {
-          originalVoltages.set(srg2.nodeId, {
-            A: nodeMetrics.voltagesPerPhase.A,
-            B: nodeMetrics.voltagesPerPhase.B,
-            C: nodeMetrics.voltagesPerPhase.C
-          });
-          console.log(`[DEBUG SRG2] ✅ Tensions lues depuis calculationResults pour ${srg2.nodeId}: A=${nodeMetrics.voltagesPerPhase.A.toFixed(1)}V, B=${nodeMetrics.voltagesPerPhase.B.toFixed(1)}V, C=${nodeMetrics.voltagesPerPhase.C.toFixed(1)}V`);
-        } else {
-          // Fallback sur les tensions moyennes triphasées si per-phase non disponible
-          const nodeResult = existingResult.nodeMetrics?.find(nm => 
-            String(nm.nodeId) === String(srg2.nodeId)
-          );
-          const fallbackVoltage = nodeResult?.V_phase_V ?? 230;
-          originalVoltages.set(srg2.nodeId, {
-            A: fallbackVoltage,
-            B: fallbackVoltage,
-            C: fallbackVoltage
-          });
-          console.log(`[DEBUG SRG2] ⚠️ Fallback tensions depuis calculationResults pour ${srg2.nodeId}: ${fallbackVoltage.toFixed(1)}V`);
-        }
-      }
-    } else {
-      // Fallback : calculer si calculationResults non disponible
-      console.warn('[DEBUG SRG2] ⚠️ calculationResults non disponible, calcul naturel de secours');
-      
-      const nodesWithoutSRG2Flag = project.nodes.map(n => ({
-        ...n,
-        hasSRG2Device: false
-      }));
-      
-      const naturalResult = this.calculateScenario(
-        nodesWithoutSRG2Flag,
-        project.cables,
-        project.cableTypes,
-        scenario,
-        project.foisonnementCharges,
-        project.foisonnementProductions,
-        project.transformerConfig,
-        project.loadModel,
-        project.desequilibrePourcent,
-        project.manualPhaseDistribution,
-        project.clientsImportes,
-        project.clientLinks,
-        project.foisonnementChargesResidentiel,
-        project.foisonnementChargesIndustriel
-      );
-      
-      for (const srg2 of srg2Devices) {
-        const nodeMetrics = naturalResult.nodeMetricsPerPhase?.find(nm => 
-          String(nm.nodeId) === String(srg2.nodeId)
-        );
-        
-        if (nodeMetrics?.voltagesPerPhase) {
-          originalVoltages.set(srg2.nodeId, {
-            A: nodeMetrics.voltagesPerPhase.A,
-            B: nodeMetrics.voltagesPerPhase.B,
-            C: nodeMetrics.voltagesPerPhase.C
-          });
-        } else {
-          const nodeResult = naturalResult.nodeMetrics?.find(nm => 
-            String(nm.nodeId) === String(srg2.nodeId)
-          );
-          const fallbackVoltage = nodeResult?.V_phase_V ?? 230;
-          originalVoltages.set(srg2.nodeId, {
-            A: fallbackVoltage,
-            B: fallbackVoltage,
-            C: fallbackVoltage
-          });
-        }
-      }
-    }
-    
-    console.log('[DEBUG SRG2] Tensions naturelles stockées pour', originalVoltages.size, 'nœuds SRG2');
-    
-    while (!converged && iteration < SimulationCalculator.SIM_MAX_ITERATIONS) {
-      iteration++;
-      
-      // Nettoyer les modifications SRG2 précédentes pour obtenir les tensions naturelles du réseau
-      if (iteration > 1) {
-        this.cleanupSRG2Markers(workingNodes);
-      }
-      
-      // Calculer le scénario avec l'état actuel des nœuds
-      const result = this.calculateScenario(
-        workingNodes,
-        project.cables,
-        project.cableTypes,
-        scenario,
-        project.foisonnementCharges,
-        project.foisonnementProductions,
-        project.transformerConfig,
-        project.loadModel,
-        project.desequilibrePourcent,
-        project.manualPhaseDistribution,
-        project.clientsImportes,
-        project.clientLinks,
-        project.foisonnementChargesResidentiel,
-        project.foisonnementChargesIndustriel
-      );
-
-      // Appliquer la régulation SRG2 sur chaque dispositif
-      const voltageChanges = new Map<string, {A: number, B: number, C: number}>();
-      
-      for (const srg2 of srg2Devices) {
-        const nodeIndex = workingNodes.findIndex(n => n.id === srg2.nodeId);
-        if (nodeIndex === -1) continue;
-        
-        // Trouver le nœud SRG2 et récupérer ses tensions actuelles
-        const srg2Node = workingNodes.find(n => n.id === srg2.nodeId);
-        if (!srg2Node) continue;
-
-        // Utiliser les tensions originales stockées pour éviter que le SRG2 lise ses propres tensions modifiées
-        let nodeVoltages = originalVoltages.get(srg2.nodeId) || { A: 230, B: 230, C: 230 };
-        
-        console.log(`🔍 SRG2 ${srg2.nodeId}: utilisation des tensions originales stockées - A=${nodeVoltages.A.toFixed(1)}V, B=${nodeVoltages.B.toFixed(1)}V, C=${nodeVoltages.C.toFixed(1)}V`);
-
-        // Appliquer la régulation SRG2 sur les tensions lues
-        const regulationResult = this.applySRG2Regulation(srg2, nodeVoltages, project.voltageSystem);
-        
-        // Stocker les coefficients de régulation pour ce nœud
-        if (regulationResult.coefficientsAppliques) {
-          voltageChanges.set(srg2.nodeId, regulationResult.coefficientsAppliques);
-          
-          // Mettre à jour les informations du SRG2 pour l'affichage
-          srg2.tensionEntree = regulationResult.tensionEntree;
-          srg2.etatCommutateur = regulationResult.etatCommutateur;
-          srg2.coefficientsAppliques = regulationResult.coefficientsAppliques;
-          srg2.tensionSortie = regulationResult.tensionSortie;
-        }
-      }
-      
-      // Appliquer les coefficients et tensions de sortie SRG2 aux nœuds correspondants
-      for (const srg2 of srg2Devices) {
-        const coefficients = voltageChanges.get(srg2.nodeId);
-        if (coefficients && srg2.tensionSortie) {
-          this.applySRG2Coefficients(workingNodes, srg2, coefficients, srg2.tensionSortie);
-        }
-      }
-      
-      // Vérifier la convergence
-      converged = this.checkSRG2Convergence(voltageChanges, previousVoltages);
-      previousVoltages = new Map(voltageChanges);
-      
-      console.log(`🔄 SRG2 Iteration ${iteration}: ${converged ? 'Convergé' : 'En cours...'}`);
-    }
-    
-    // Recalculer une dernière fois avec les tensions finales
-    const finalResult = this.calculateScenario(
-      workingNodes,
+    // === Calcul baseline pour récupérer les tensions naturelles ===
+    const baselineResult = this.calculateScenario(
+      project.nodes,
       project.cables,
       project.cableTypes,
       scenario,
@@ -2483,12 +2272,85 @@ export class SimulationCalculator extends ElectricalCalculator {
       project.foisonnementChargesResidentiel,
       project.foisonnementChargesIndustriel
     );
-
-    console.log('🎯 SRG2 calcul final terminé - marqueurs SRG2 conservés pour nodeMetricsPerPhase');
     
-    // IMPORTANT: Ne pas nettoyer les marqueurs SRG2 ici !
-    // Le nettoyage se fait dans calculateWithSimulation() après avoir utilisé les résultats
-    // this.cleanupSRG2Markers(workingNodes); ← Déplacé
+    // Récupérer les tensions naturelles pour chaque SRG2
+    for (const srg2 of srg2Devices) {
+      const nodeMetrics = baselineResult.nodeMetricsPerPhase?.find(nm => 
+        String(nm.nodeId) === String(srg2.nodeId)
+      );
+      
+      if (nodeMetrics?.voltagesPerPhase) {
+        naturalVoltages.set(srg2.nodeId, {
+          A: nodeMetrics.voltagesPerPhase.A,
+          B: nodeMetrics.voltagesPerPhase.B,
+          C: nodeMetrics.voltagesPerPhase.C
+        });
+        console.log(`📊 SRG2 ${srg2.nodeId} tensions naturelles: A=${nodeMetrics.voltagesPerPhase.A.toFixed(1)}V, B=${nodeMetrics.voltagesPerPhase.B.toFixed(1)}V, C=${nodeMetrics.voltagesPerPhase.C.toFixed(1)}V`);
+      }
+    }
+    
+    // === Boucle de convergence SRG2 ===
+    while (!converged && iteration < SimulationCalculator.SIM_MAX_ITERATIONS) {
+      iteration++;
+      
+      // Calculer les coefficients de régulation pour chaque SRG2
+      const currentTaps = new Map<string, {A: number, B: number, C: number}>();
+      
+      for (const srg2 of srg2Devices) {
+        // Utiliser les tensions naturelles stockées pour la décision
+        const nodeVoltages = naturalVoltages.get(srg2.nodeId) || { A: 230, B: 230, C: 230 };
+        
+        // Appliquer la régulation SRG2 pour obtenir les coefficients
+        const regulationResult = this.applySRG2Regulation(srg2, nodeVoltages, project.voltageSystem);
+        
+        // Stocker les coefficients
+        if (regulationResult.coefficientsAppliques) {
+          currentTaps.set(srg2.nodeId, regulationResult.coefficientsAppliques);
+          
+          // Mettre à jour les informations du SRG2 pour l'affichage
+          srg2.tensionEntree = regulationResult.tensionEntree;
+          srg2.etatCommutateur = regulationResult.etatCommutateur;
+          srg2.coefficientsAppliques = regulationResult.coefficientsAppliques;
+          srg2.tensionSortie = regulationResult.tensionSortie;
+          
+          // ✅ Agréger les coefficients sur Vslack (on prend le premier SRG2 pour simplifier)
+          // En pratique, un seul SRG2 est généralement actif
+          currentVslackCoefficients = { ...regulationResult.coefficientsAppliques };
+          
+          console.log(`🔧 SRG2 ${srg2.nodeId}: coefficients=${JSON.stringify(regulationResult.coefficientsAppliques)}`);
+        }
+      }
+      
+      // Vérifier la convergence (positions de prise identiques)
+      converged = this.checkSRG2Convergence(currentTaps, previousTaps);
+      previousTaps = new Map(currentTaps);
+      
+      console.log(`🔄 SRG2 Iteration ${iteration}: ${converged ? 'Convergé' : 'En cours...'}`);
+    }
+    
+    // === Calcul final avec les coefficients SRG2 appliqués à Vslack ===
+    console.log(`📊 Calcul final avec Vslack modifié: A=${currentVslackCoefficients.A.toFixed(1)}%, B=${currentVslackCoefficients.B.toFixed(1)}%, C=${currentVslackCoefficients.C.toFixed(1)}%`);
+    
+    const finalResult = this.calculateScenario(
+      project.nodes,
+      project.cables,
+      project.cableTypes,
+      scenario,
+      project.foisonnementCharges,
+      project.foisonnementProductions,
+      project.transformerConfig,
+      project.loadModel,
+      project.desequilibrePourcent,
+      project.manualPhaseDistribution,
+      project.clientsImportes,
+      project.clientLinks,
+      project.foisonnementChargesResidentiel,
+      project.foisonnementChargesIndustriel,
+      undefined, // pas d'injection EQUI8
+      currentVslackCoefficients // ✅ SRG2 agit sur Vslack
+    );
+
+    console.log('🎯 SRG2 calcul terminé - Vslack modifié, aucune imposition locale');
 
     return {
       ...finalResult,

@@ -28,9 +28,9 @@ export const ExcelImporter = ({ onClose }: ExcelImporterProps) => {
 
   const { importClientsFromExcel, currentProject } = useNetworkStore();
   
-  // Vérifier le nombre d'imports déjà effectués (max 2)
+  // Vérifier le nombre d'imports déjà effectués (max 3)
   const importCount = currentProject?.importCount ?? 0;
-  const hasReachedImportLimit = importCount >= 2;
+  const hasReachedImportLimit = importCount >= 3;
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -148,7 +148,7 @@ export const ExcelImporter = ({ onClose }: ExcelImporterProps) => {
             <p className="font-semibold">Limite d'importation atteinte</p>
             <p>
               Vous avez déjà effectué <strong>{importCount} import(s)</strong> sur ce projet.
-              Le nombre maximum d'imports autorisés est de <strong>2</strong>.
+              Le nombre maximum d'imports autorisés est de <strong>3</strong>.
             </p>
             <p className="text-sm">
               <strong>Solution :</strong>

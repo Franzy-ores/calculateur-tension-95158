@@ -9,6 +9,7 @@ import { ClientEditPanel } from "@/components/ClientEditPanel";
 import { GlobalAlertPopup } from "@/components/GlobalAlertPopup";
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { RecoveryDialog } from "@/components/RecoveryDialog";
+import { SaveProjectDialog } from "@/components/SaveProjectDialog";
 import DebugConsole from "@/components/DebugConsole";
 import { useNetworkStore } from "@/store/networkStore";
 import { useProjectPersistence } from "@/hooks/useProjectPersistence";
@@ -35,6 +36,7 @@ const Index = () => {
     isSimulationActive,
     isDirty,
     markAsSaved,
+    updateProjectConfig,
   } = useNetworkStore();
 
   // Hooks de persistance
@@ -44,6 +46,7 @@ const Index = () => {
   // États pour les dialogues
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [showRecoveryDialog, setShowRecoveryDialog] = useState(false);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [pendingAction, setPendingAction] = useState<'new' | 'load' | null>(null);
   const [pendingLoadFile, setPendingLoadFile] = useState<File | null>(null);
 
@@ -86,8 +89,8 @@ const Index = () => {
     };
   }, [currentProject]);
 
-  // Fonction de sauvegarde
-  const performSave = useCallback(() => {
+  // Fonction de sauvegarde avec nom optionnel
+  const performSaveWithName = useCallback((projectName: string) => {
     if (currentProject) {
       // Récupérer les équipements de simulation depuis le store
       const { simulationEquipment } = useNetworkStore.getState();
@@ -95,6 +98,7 @@ const Index = () => {
       // Calculer et inclure les bounds géographiques avant la sauvegarde
       const projectToSave = { 
         ...currentProject,
+        name: projectName, // Utiliser le nom fourni
         simulationEquipment // Inclure les équipements de simulation
       };
       if (projectToSave.nodes.length > 0) {
@@ -139,15 +143,27 @@ const Index = () => {
       const url = URL.createObjectURL(dataBlob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${currentProject.name}.json`;
+      link.download = `${projectName}.json`;
       link.click();
       URL.revokeObjectURL(url);
+      
+      // Mettre à jour le nom du projet si différent
+      if (projectName !== currentProject.name) {
+        updateProjectConfig({ name: projectName });
+      }
       
       // Marquer comme sauvé et supprimer le brouillon
       markAsSaved();
       clearDraft();
     }
-  }, [currentProject, markAsSaved, clearDraft]);
+  }, [currentProject, markAsSaved, clearDraft, updateProjectConfig]);
+
+  // Fonction de sauvegarde simple (même nom)
+  const performSave = useCallback(() => {
+    if (currentProject) {
+      performSaveWithName(currentProject.name);
+    }
+  }, [currentProject, performSaveWithName]);
 
   // Fonction pour charger un fichier
   const performLoad = useCallback((file: File) => {
@@ -180,10 +196,21 @@ const Index = () => {
     }
   }, [isDirty, createNewProject, openEditPanel, clearDraft]);
 
-  // Gestionnaire sauvegarde
+  // Gestionnaire sauvegarde - ouvre le dialogue si projet existant
   const handleSave = useCallback(() => {
+    if (currentProject) {
+      setShowSaveDialog(true);
+    }
+  }, [currentProject]);
+
+  // Gestionnaires pour le dialogue de sauvegarde
+  const handleSaveWithSameName = useCallback(() => {
     performSave();
   }, [performSave]);
+
+  const handleSaveWithNewName = useCallback((newName: string) => {
+    performSaveWithName(newName);
+  }, [performSaveWithName]);
 
   // Gestionnaire chargement
   const handleLoad = useCallback(() => {
@@ -346,6 +373,15 @@ const Index = () => {
         savedAt={draftInfo?.savedAt || new Date().toISOString()}
         onRecover={handleRecover}
         onDiscard={handleDiscardDraft}
+      />
+
+      {/* Dialogue de sauvegarde avec choix du nom */}
+      <SaveProjectDialog
+        open={showSaveDialog}
+        onOpenChange={setShowSaveDialog}
+        currentName={currentProject?.name || 'Nouveau Projet'}
+        onSaveWithSameName={handleSaveWithSameName}
+        onSaveWithNewName={handleSaveWithNewName}
       />
 
       {/* Console de debug visuelle (pour iOS/mobile) */}

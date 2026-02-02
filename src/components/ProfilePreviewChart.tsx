@@ -17,8 +17,8 @@ export const ProfilePreviewChart = ({ values, color = '#3b82f6', label }: Profil
       {label && (
         <p className="text-xs text-muted-foreground mb-1 text-center">{label}</p>
       )}
-      <ResponsiveContainer width="100%" height={120}>
-        <AreaChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+      <ResponsiveContainer width="100%" height={180}>
+        <AreaChart data={data} margin={{ top: 10, right: 10, left: -15, bottom: 5 }}>
           <defs>
             <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor={color} stopOpacity={0.3} />

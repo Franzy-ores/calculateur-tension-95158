@@ -1,153 +1,69 @@
 
-# Plan : Rationalisation de l'éditeur de profils horaires
 
-## Problèmes identifiés
+# Plan : Simplification des boutons d'ajustement
 
-| Problème | Impact |
-|----------|--------|
-| **24 sliders verticaux** | Sur petit écran, impossible de voir toute la journée sans scroller |
-| **Zone défilante cachée** | Partie inférieure des heures (12h-23h) invisible sans action utilisateur |
-| **Sélecteur de profil noyé** | Les contrôles Saison + Type + Modèle sont sur une même ligne, peu lisible |
-| **Graphique trop petit** | Hauteur fixe de 120px, difficile à analyser |
-| **Ajustement global encombrant** | Occupe beaucoup de place avec peu d'usage |
+## Problème actuel
 
-## Solution proposée : Interface compacte et responsive
+Les boutons multiplicateurs (×0.5, ×0.8, ×1.0, ×1.2, ×1.5) proposent actuellement un menu déroulant "Cible" pour choisir quel profil ajuster. C'est redondant et confus car l'utilisateur a déjà sélectionné un profil en haut de la fenêtre.
 
-### 1. Nouvelle disposition des heures : grille 6x4
+## Solution
 
-Au lieu de 2 colonnes de 12 sliders, utiliser une grille compacte avec sliders horizontaux miniatures :
+**L'ajustement doit impacter uniquement le profil actuellement affiché** (saison + type de profil sélectionnés).
 
-```text
-┌──────────────────────────────────────────────────────────────┐
-│  00h [▓▓░░░░░] 15%   01h [▓░░░░░░] 10%   02h [▓░░░░░░] 8%   │
-│  03h [▓░░░░░░] 8%    04h [▓░░░░░░] 10%   05h [▓▓░░░░░] 18%  │
-│  06h [▓▓▓░░░░] 30%   07h [▓▓▓▓░░░] 45%   08h [▓▓▓▓▓░░] 55%  │
-│  09h [▓▓▓▓░░░] 50%   10h [▓▓▓░░░░] 35%   11h [▓▓▓░░░░] 30%  │
-│  12h [▓▓▓░░░░] 28%   13h [▓▓▓░░░░] 28%   14h [▓▓▓░░░░] 30%  │
-│  15h [▓▓▓░░░░] 32%   16h [▓▓▓▓░░░] 45%   17h [▓▓▓▓▓░░] 60%  │
-│  18h [▓▓▓▓▓▓░] 75%   19h [▓▓▓▓▓▓▓] 85%   20h [▓▓▓▓▓▓░] 72%  │
-│  21h [▓▓▓▓▓░░] 58%   22h [▓▓▓▓░░░] 42%   23h [▓▓▓░░░░] 28%  │
-└──────────────────────────────────────────────────────────────┘
-```
+### Modifications
 
-- **Desktop** : 6 colonnes × 4 lignes (toutes les heures visibles)
-- **Tablette** : 4 colonnes × 6 lignes
-- **Mobile** : 3 colonnes × 8 lignes
+| Élément | Avant | Après |
+|---------|-------|-------|
+| **Cible de l'ajustement** | Choix via dropdown (Tous / Résidentiel / etc.) | Profil affiché uniquement (season + profileType) |
+| **Dropdown "Cible"** | Présent en bas à droite | Supprimé |
+| **Variable `targetProfile`** | Utilisée | Supprimée |
+| **Fonction `applyMultiplier`** | Parcourt plusieurs profils/saisons | Modifie uniquement `editedProfiles.profiles[season][profileType]` |
 
-### 2. Composant HourlySlider compact
-
-Remplacer le slider actuel par un composant condensé :
-
-```text
-┌────────────────────────┐
-│ 18h [▓▓▓▓▓▓▓░░░] 75%  │
-└────────────────────────┘
-```
-
-- Label d'heure intégré (2 caractères)
-- Slider horizontal miniature
-- Valeur en % sur 3 caractères
-- Click pour édition directe
-- Pas de champ input séparé
-
-### 3. Graphique plus grand et interactif
-
-- Augmenter la hauteur de 120px à 180px
-- Permettre le clic sur le graphique pour modifier une valeur
-- Afficher les 24 heures avec labels plus clairs
-
-### 4. Interface réorganisée
-
-```text
-┌────────────────────────────────────────────────────────────────────┐
-│  🌡️ Éditeur de profils horaires                                   │
-├────────────────────────────────────────────────────────────────────┤
-│                                                                    │
-│  [❄️ Hiver] [☀️ Été]     [Résidentiel ▼]     [Modèle... ▼]        │
-│                                                                    │
-│  ┌──────────────────────────────────────────────────────────────┐  │
-│  │               📊 GRAPHIQUE PRÉVISUALISATION                  │  │
-│  │                    (hauteur 180px)                           │  │
-│  └──────────────────────────────────────────────────────────────┘  │
-│                                                                    │
-│  ┌──────────────────────────────────────────────────────────────┐  │
-│  │  00h ▓░░ 15   01h ▓░░ 10   02h ▓░░ 8    03h ▓░░ 8           │  │
-│  │  04h ▓░░ 10   05h ▓▓░ 18   06h ▓▓▓ 30   07h ▓▓▓ 45          │  │
-│  │  08h ▓▓▓ 55   09h ▓▓▓ 50   10h ▓▓▓ 35   11h ▓▓░ 30          │  │
-│  │  12h ▓▓░ 28   13h ▓▓░ 28   14h ▓▓░ 30   15h ▓▓░ 32          │  │
-│  │  16h ▓▓▓ 45   17h ▓▓▓ 60   18h ▓▓▓ 75   19h ▓▓▓ 85          │  │
-│  │  20h ▓▓▓ 72   21h ▓▓▓ 58   22h ▓▓▓ 42   23h ▓▓░ 28          │  │
-│  └──────────────────────────────────────────────────────────────┘  │
-│                                                                    │
-│  ┌─ Ajustement rapide ──────────────────────────────────────────┐  │
-│  │  [×0.5] [×0.8] [×1.0] [×1.2] [×1.5]   Cible: [Tous ▼]       │  │
-│  └──────────────────────────────────────────────────────────────┘  │
-│                                                                    │
-├────────────────────────────────────────────────────────────────────┤
-│  [📥 Importer] [📤 Exporter]    [↩️ Reset] [Annuler] [✓ Sauver]   │
-└────────────────────────────────────────────────────────────────────┘
-```
-
-### 5. Ajustement automatique simplifié
-
-Remplacer le slider 10%-200% par des boutons préréglés :
-
-| Bouton | Action |
-|--------|--------|
-| **×0.5** | Réduire de 50% |
-| **×0.8** | Réduire de 20% |
-| **×1.0** | Réinitialiser |
-| **×1.2** | Augmenter de 20% |
-| **×1.5** | Augmenter de 50% |
-
-Plus un menu déroulant pour cibler un profil spécifique ou tous.
-
-## Fichiers à modifier
-
-| Fichier | Modification |
-|---------|--------------|
-| `src/components/ProfileVisualEditor.tsx` | Refonte complète de la disposition |
-| `src/components/HourlySlider.tsx` | Version compacte pour grille |
-| `src/components/ProfilePreviewChart.tsx` | Augmenter hauteur + interactivité optionnelle |
-
-## Nouveau composant : CompactHourlySlider
+### Code simplifié
 
 ```typescript
-interface CompactHourlySliderProps {
-  hour: number;
-  value: number;
-  onChange: (value: number) => void;
-}
+const applyMultiplier = (multiplierValue: number) => {
+  const currentProfile = editedProfiles.profiles[season][profileType];
+  if (!currentProfile) return;
 
-// Affichage : "18h ▓▓▓▓▓░░ 75"
-// Interaction : drag sur la barre ou clic pour popup d'édition
+  const newProfile: { [key: string]: number } = {};
+  Object.entries(currentProfile).forEach(([hour, value]) => {
+    newProfile[hour] = Math.max(0, Math.min(100, Math.round(value * multiplierValue)));
+  });
+
+  setEditedProfiles(prev => ({
+    ...prev,
+    profiles: {
+      ...prev.profiles,
+      [season]: {
+        ...prev.profiles[season],
+        [profileType]: newProfile,
+      },
+    },
+  }));
+
+  toast.success(`×${multiplierValue.toFixed(1)} appliqué à ${PROFILE_LABELS[profileType].label} (${season === 'winter' ? 'Hiver' : 'Été'})`);
+};
 ```
 
-## Bénéfices attendus
+### Interface simplifiée
 
-| Avant | Après |
-|-------|-------|
-| Scroll obligatoire pour voir 24h | Vision complète en un coup d'œil |
-| Interface encombrée | Interface épurée et lisible |
-| Ajustement global complexe | Boutons rapides préréglés |
-| Graphique petit | Graphique agrandi 50% |
-| Non responsive | Adapté mobile/tablette/desktop |
+```text
+┌─ Ajustement rapide ─────────────────────────────────┐
+│  Ajuster : [×0.5] [×0.8] [×1.0] [×1.2] [×1.5]      │
+└─────────────────────────────────────────────────────┘
+```
 
-## Implémentation
+## Fichier à modifier
 
-### Phase 1 : Composant CompactHourlySlider
-- Nouveau composant compact avec barre de progression visuelle
-- Interaction drag ou clic pour modifier
+- `src/components/ProfileVisualEditor.tsx`
+  - Supprimer l'état `targetProfile`
+  - Simplifier `applyMultiplier` pour cibler uniquement le profil affiché
+  - Supprimer le `<Select>` de choix de cible dans la zone d'ajustement
 
-### Phase 2 : Grille responsive
-- CSS Grid avec breakpoints : 6/4/3 colonnes
-- Suppression du ScrollArea pour les heures
+## Bénéfice
 
-### Phase 3 : Boutons multiplicateurs
-- Remplacement du slider par boutons préréglés
-- Simplification du flux utilisateur
-
-### Phase 4 : Graphique agrandi
-- Hauteur 180px au lieu de 120px
-- Labels d'heures plus visibles
+- Interface plus intuitive : ce qu'on voit = ce qu'on modifie
+- Moins d'éléments visuels, moins de confusion
+- Comportement cohérent avec le reste de l'éditeur (modèles, sliders)
 

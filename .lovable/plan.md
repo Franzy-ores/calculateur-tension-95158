@@ -1,61 +1,59 @@
-# Plan : Implémentation de la formule GRD belge pour les impédances
 
-## ✅ IMPLÉMENTÉ (2026-02-02)
+# Plan : Couleur jaune clair pour les nœuds Production en situation normale
 
-La formule GRD belge (ORES/RESA/Sibelga) a été appliquée à tous les calculs d'impédance de phase :
+## Contexte
 
-```text
-R = (R₀ + 2×R₁₂) / 3
-X = (X₀ + 2×X₁₂) / 3
-```
+Actuellement, les nœuds avec **production seule** utilisent la couleur verte (`bg-voltage-normal`) en situation normale (≤8% de déviation de tension). Cette couleur est la même que celle des nœuds sans anomalie, ce qui ne distingue pas visuellement les nœuds producteurs.
 
-### Fichiers modifiés
+Vous souhaitez que les nœuds avec production soient affichés en **jaune clair** en situation normale, comme les nœuds mixtes.
 
-| Fichier | Modification |
-|---------|--------------|
-| `src/utils/electricalCalculations.ts` | Ajout de `calculateGRDImpedance()` et modification de `selectRX()` |
-| `src/utils/equi8CME.ts` | Application de la formule pour le calcul d'impédance équivalente |
-| `src/utils/optimalEqui8Finder.ts` | Application de la formule pour la recherche de nœud optimal |
-| `src/utils/optimalSrg2Finder.ts` | Application de la formule pour la recherche de nœud SRG2 |
-| `src/utils/__tests__/mono230VCurrentCalculation.test.ts` | Tests mis à jour pour valider la formule GRD |
+## Modifications prévues
 
-### Impact sur les calculs
+### Fichier : `src/components/MapView.tsx`
 
-Exemple pour câble TR 70 Alu :
-- R₁₂ = 0.450 Ω/km, R₀ = 1.350 Ω/km
-- R_GRD = (1.350 + 2×0.450) / 3 = 0.750 Ω/km
-- Impact : +67% sur la résistance effective
+La logique de couleur des nœuds sera modifiée dans la section qui détermine `iconClass` pour les nœuds avec production seule :
 
-La chute de tension sera augmentée de 33-67% selon le câble, ce qui correspond aux observations terrain des GRD belges.
+| Type de nœud | Situation | Avant | Après |
+|--------------|-----------|-------|-------|
+| Production seule (P) | ≤8% (normale) | Vert (`bg-voltage-normal`) | Jaune clair (`bg-yellow-300`) |
+| Production seule (P) | 8-10% (warning) | Orange (inchangé) | Orange (inchangé) |
+| Production seule (P) | >10% (critique) | Rouge (inchangé) | Rouge (inchangé) |
 
-### Notes techniques
+### Détail technique
 
-- Le conducteur **neutre** continue d'utiliser R₀/X₀ directement (inchangé)
-- Les conducteurs de **phase** utilisent maintenant la formule combinée
-- Cette correction s'applique aux réseaux 230V triangle ET 400V étoile
-
----
-
-## Contexte technique (archive)
-
-Dans les réseaux de distribution BT des GRD belges (ORES, RESA, Sibelga), la chute de tension ne se calcule jamais avec R₁₂ seul. La résistance et réactance effectives vues par une phase sont toujours :
+Modifier les lignes 853-861 :
 
 ```text
-R = (R₀ + 2×R₁₂) / 3
-X = (X₀ + 2×X₁₂) / 3
+AVANT:
+  } else if (hasProduction) {
+    iconContent = 'P';
+    if (Math.abs(nominalDropPercent) <= 8) {
+      iconClass = 'bg-voltage-normal border-green-600 text-white';
+    } ...
+
+APRÈS:
+  } else if (hasProduction) {
+    iconContent = 'P';
+    if (Math.abs(nominalDropPercent) <= 8) {
+      iconClass = 'bg-yellow-300 border-yellow-500 text-gray-800';
+    } ...
 ```
 
-Cette formule combine les impédances de séquence directe (Z₁) et homopolaire (Z₀) car le réseau GRD est structurellement déséquilibré. Référence : modèles CYME, NEPLAN, PowerFactory.
+### Cohérence visuelle
 
-### Formules de chute de tension
+| Type nœud | Couleur normale | Code couleur |
+|-----------|-----------------|--------------|
+| Source (400V) | Fuchsia | `bg-fuchsia-500` |
+| Source (230V) | Cyan | `bg-cyan-500` |
+| Charge seule (C) | Bleu | `bg-blue-500` |
+| Production seule (P) | **Jaune clair** | `bg-yellow-300` |
+| Mixte (M) | Jaune | `bg-yellow-500` |
+| Non alimenté | Gris | `bg-gray-400` |
 
-Ces formules restent inchangées, mais utilisent les nouvelles valeurs R et X :
+Le jaune clair (`yellow-300`) est plus pâle que le jaune (`yellow-500`) des nœuds mixtes, créant une distinction visuelle claire entre production seule et mixte.
 
-```text
-Monophasé : ΔV = 2 × L × I × (R×cosφ + X×sinφ)
-Triphasé  : ΔV = √3 × L × I × (R×cosφ + X×sinφ)
-```
+## Impact
 
-### Impact sur les fichiers de câbles de branchement
-
-Le fichier `src/data/branchementCableTypes.ts` utilise une structure simplifiée avec `R_ohm_per_km` et `X_ohm_per_km` (sans distinction R₁₂/R₀). Ces câbles de branchement sont utilisés uniquement dans l'onglet "Tension Client" et ne sont pas affectés par cette modification.
+- Changement visuel uniquement sur la carte
+- Aucun impact sur les calculs
+- Améliore la lisibilité : les nœuds producteurs sont immédiatement identifiables

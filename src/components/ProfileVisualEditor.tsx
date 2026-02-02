@@ -60,7 +60,6 @@ export const ProfileVisualEditor = ({
   const [editedProfiles, setEditedProfiles] = useState<DailyProfileConfig>(profiles);
   const [season, setSeason] = useState<Season>('winter');
   const [profileType, setProfileType] = useState<ProfileType>('residential');
-  const [targetProfile, setTargetProfile] = useState<string>('all');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -178,33 +177,27 @@ export const ProfileVisualEditor = ({
   };
 
   const applyMultiplier = (multiplierValue: number) => {
-    const seasons: Season[] = ['winter', 'summer'];
-    const profileKeys: ProfileType[] = targetProfile === 'all' 
-      ? ['residential', 'client', 'pv', 'ev', 'industrial_pme']
-      : [targetProfile as ProfileType];
+    const seasonProfiles = editedProfiles.profiles[season] as unknown as Record<string, { [key: string]: number } | undefined>;
+    const currentProfile = seasonProfiles[profileType];
+    if (!currentProfile) return;
 
-    setEditedProfiles(prev => {
-      const updated = { ...prev, profiles: { ...prev.profiles } };
-      
-      seasons.forEach(s => {
-        updated.profiles[s] = { ...prev.profiles[s] };
-        profileKeys.forEach(pk => {
-          const seasonProfiles = prev.profiles[s] as unknown as Record<string, { [key: string]: number } | undefined>;
-          const profile = seasonProfiles[pk];
-          if (profile) {
-            const newProfile: { [key: string]: number } = {};
-            Object.entries(profile).forEach(([hour, value]) => {
-              newProfile[hour] = Math.max(0, Math.min(100, Math.round(value * multiplierValue)));
-            });
-            (updated.profiles[s] as unknown as Record<string, { [key: string]: number }>)[pk] = newProfile;
-          }
-        });
-      });
-      
-      return updated;
+    const newProfile: { [key: string]: number } = {};
+    Object.entries(currentProfile).forEach(([hour, value]) => {
+      newProfile[hour] = Math.max(0, Math.min(100, Math.round(value * multiplierValue)));
     });
-    
-    toast.success(`Multiplicateur ×${multiplierValue.toFixed(1)} appliqué`);
+
+    setEditedProfiles(prev => ({
+      ...prev,
+      profiles: {
+        ...prev.profiles,
+        [season]: {
+          ...prev.profiles[season],
+          [profileType]: newProfile,
+        },
+      },
+    }));
+
+    toast.success(`×${multiplierValue.toFixed(1)} appliqué à ${PROFILE_LABELS[profileType].label} (${season === 'winter' ? 'Hiver' : 'Été'})`);
   };
 
   const currentValues = getCurrentValues();
@@ -301,20 +294,6 @@ export const ProfileVisualEditor = ({
                   </Button>
                 ))}
               </div>
-
-              <Select value={targetProfile} onValueChange={setTargetProfile}>
-                <SelectTrigger className="w-36 h-7 text-xs ml-auto">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="text-xs">Tous les profils</SelectItem>
-                  <SelectItem value="residential" className="text-xs">Résidentiel</SelectItem>
-                  <SelectItem value="client" className="text-xs">Raccordement client</SelectItem>
-                  <SelectItem value="pv" className="text-xs">Production PV</SelectItem>
-                  <SelectItem value="ev" className="text-xs">Véhicules élec.</SelectItem>
-                  <SelectItem value="industrial_pme" className="text-xs">Industriel / PME</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </Card>
         </div>

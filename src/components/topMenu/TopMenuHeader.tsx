@@ -1,8 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Zap, FileText, Save, FolderOpen, Settings, ChevronDown, ChevronUp } from "lucide-react";
+import { Zap, FileText, Save, FolderOpen, Settings, ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
 import { useNetworkStore } from "@/store/networkStore";
+
 interface TopMenuHeaderProps {
   onNewNetwork: () => void;
   onSave: () => void;
@@ -11,6 +12,7 @@ interface TopMenuHeaderProps {
   isExpanded: boolean;
   onToggleExpand: () => void;
 }
+
 export const TopMenuHeader = ({
   onNewNetwork,
   onSave,
@@ -23,11 +25,12 @@ export const TopMenuHeader = ({
     currentProject,
     editTarget,
     isSimulationActive,
-    simulationEquipment
+    simulationEquipment,
+    isDirty
   } = useNetworkStore();
   const hasSimulationEquipment = (simulationEquipment.srg2Devices?.length || 0) > 0 || simulationEquipment.neutralCompensators.length > 0 || simulationEquipment.cableReplacement?.enabled;
   return <div className="flex items-center justify-between px-4 py-2 border-b border-primary/20">
-      {/* Left: Logo + Title + Simulation Badge */}
+      {/* Left: Logo + Title + Simulation Badge + Unsaved indicator */}
       <div className="flex items-center gap-3">
         <div className="p-1.5 bg-primary/10 rounded-lg">
           <Zap className="h-5 w-5 text-primary" />
@@ -38,6 +41,19 @@ export const TopMenuHeader = ({
         {editTarget === 'simulation' && <Badge variant="default" className="animate-pulse bg-accent text-accent-foreground text-xs px-2 py-0.5">
             🔬 Mode Simulation
           </Badge>}
+        {isDirty && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="outline" className="border-warning bg-warning/10 text-warning flex items-center gap-1 text-xs px-2 py-0.5 cursor-help">
+                <AlertCircle className="h-3 w-3" />
+                Non sauvé
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Modifications non sauvées. Cliquez sur Sauvegarder pour les conserver.</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
 
       {/* Center: Key Status Badges */}

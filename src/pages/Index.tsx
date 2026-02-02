@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { TopMenu } from "@/components/TopMenu";
 import { MapView } from "@/components/MapView";
 import { Toolbar } from "@/components/Toolbar";
@@ -7,8 +7,12 @@ import { EditPanel } from "@/components/EditPanel";
 import { SimulationPanel } from "@/components/SimulationPanel";
 import { ClientEditPanel } from "@/components/ClientEditPanel";
 import { GlobalAlertPopup } from "@/components/GlobalAlertPopup";
+import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
+import { RecoveryDialog } from "@/components/RecoveryDialog";
 import DebugConsole from "@/components/DebugConsole";
 import { useNetworkStore } from "@/store/networkStore";
+import { useProjectPersistence } from "@/hooks/useProjectPersistence";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
 
@@ -29,7 +33,26 @@ const Index = () => {
     resultsPanelFullscreen,
     focusMode,
     isSimulationActive,
+    isDirty,
+    markAsSaved,
   } = useNetworkStore();
+
+  // Hooks de persistance
+  const { saveDraft, recoverDraft, clearDraft, hasDraft, draftInfo } = useProjectPersistence();
+  useUnsavedChangesGuard();
+
+  // États pour les dialogues
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+  const [showRecoveryDialog, setShowRecoveryDialog] = useState(false);
+  const [pendingAction, setPendingAction] = useState<'new' | 'load' | null>(null);
+  const [pendingLoadFile, setPendingLoadFile] = useState<File | null>(null);
+
+  // Afficher le dialogue de récupération au démarrage si brouillon détecté
+  useEffect(() => {
+    if (hasDraft && draftInfo) {
+      setShowRecoveryDialog(true);
+    }
+  }, [hasDraft, draftInfo]);
 
   // Déterminer quels résultats utiliser - simulation si équipements actifs ET isSimulationActive, sinon calculs normaux
   const activeEquipmentCount = (simulationEquipment.srg2Devices?.filter(s => s.enabled).length || 0) + 
@@ -63,12 +86,8 @@ const Index = () => {
     };
   }, [currentProject]);
 
-  const handleNewNetwork = () => {
-    createNewProject("Nouveau Réseau", "TÉTRAPHASÉ_400V");
-    handleSettings(); // Ouvrir automatiquement les paramètres après création
-  };
-
-  const handleSave = () => {
+  // Fonction de sauvegarde
+  const performSave = useCallback(() => {
     if (currentProject) {
       // Récupérer les équipements de simulation depuis le store
       const { simulationEquipment } = useNetworkStore.getState();
@@ -123,34 +142,68 @@ const Index = () => {
       link.download = `${currentProject.name}.json`;
       link.click();
       URL.revokeObjectURL(url);
+      
+      // Marquer comme sauvé et supprimer le brouillon
+      markAsSaved();
+      clearDraft();
     }
-  };
+  }, [currentProject, markAsSaved, clearDraft]);
 
-  const handleLoad = () => {
+  // Fonction pour charger un fichier
+  const performLoad = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        console.log('🔄 Début du chargement JSON...');
+        const project = JSON.parse(e.target?.result as string);
+        console.log('✅ JSON parsé:', project.name, 'nodes:', project.nodes?.length, 'cables:', project.cables?.length);
+        loadProject(project);
+        clearDraft(); // Supprimer le brouillon après chargement
+        console.log('✅ Project loaded successfully:', project.name);
+      } catch (error) {
+        console.error('Error loading project:', error);
+        alert('Erreur lors du chargement du projet. Vérifiez le format du fichier JSON.');
+      }
+    };
+    reader.readAsText(file);
+  }, [loadProject, clearDraft]);
+
+  // Gestionnaire nouveau réseau
+  const handleNewNetwork = useCallback(() => {
+    if (isDirty) {
+      setPendingAction('new');
+      setShowUnsavedDialog(true);
+    } else {
+      createNewProject("Nouveau Réseau", "TÉTRAPHASÉ_400V");
+      openEditPanel('project');
+      clearDraft();
+    }
+  }, [isDirty, createNewProject, openEditPanel, clearDraft]);
+
+  // Gestionnaire sauvegarde
+  const handleSave = useCallback(() => {
+    performSave();
+  }, [performSave]);
+
+  // Gestionnaire chargement
+  const handleLoad = useCallback(() => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          try {
-            console.log('🔄 Début du chargement JSON...');
-            const project = JSON.parse(e.target?.result as string);
-            console.log('✅ JSON parsé:', project.name, 'nodes:', project.nodes?.length, 'cables:', project.cables?.length);
-            loadProject(project);
-            console.log('✅ Project loaded successfully:', project.name);
-          } catch (error) {
-            console.error('Error loading project:', error);
-            alert('Erreur lors du chargement du projet. Vérifiez le format du fichier JSON.');
-          }
-        };
-        reader.readAsText(file);
+        if (isDirty) {
+          setPendingLoadFile(file);
+          setPendingAction('load');
+          setShowUnsavedDialog(true);
+        } else {
+          performLoad(file);
+        }
       }
     };
     input.click();
-  };
+  }, [isDirty, performLoad]);
 
   const handleSettings = () => {
     openEditPanel('project');
@@ -160,6 +213,58 @@ const Index = () => {
     console.log('🐛 handleSimulation called');
     openEditPanel('simulation');
   };
+
+  // Gestionnaires pour le dialogue de modifications non sauvées
+  const handleUnsavedSave = useCallback(() => {
+    performSave();
+    // Exécuter l'action en attente après sauvegarde
+    if (pendingAction === 'new') {
+      createNewProject("Nouveau Réseau", "TÉTRAPHASÉ_400V");
+      openEditPanel('project');
+    } else if (pendingAction === 'load' && pendingLoadFile) {
+      performLoad(pendingLoadFile);
+    }
+    setPendingAction(null);
+    setPendingLoadFile(null);
+  }, [performSave, pendingAction, pendingLoadFile, createNewProject, openEditPanel, performLoad]);
+
+  const handleUnsavedDiscard = useCallback(() => {
+    // Exécuter l'action sans sauvegarder
+    if (pendingAction === 'new') {
+      createNewProject("Nouveau Réseau", "TÉTRAPHASÉ_400V");
+      openEditPanel('project');
+      clearDraft();
+    } else if (pendingAction === 'load' && pendingLoadFile) {
+      performLoad(pendingLoadFile);
+    }
+    setPendingAction(null);
+    setPendingLoadFile(null);
+  }, [pendingAction, pendingLoadFile, createNewProject, openEditPanel, performLoad, clearDraft]);
+
+  const handleUnsavedCancel = useCallback(() => {
+    setPendingAction(null);
+    setPendingLoadFile(null);
+  }, []);
+
+  // Gestionnaires pour le dialogue de récupération
+  const handleRecover = useCallback(() => {
+    const draft = recoverDraft();
+    if (draft) {
+      loadProject(draft.project);
+      if (draft.simulationEquipment) {
+        // Restaurer les équipements de simulation si présents
+        const store = useNetworkStore.getState();
+        store.simulationEquipment.srg2Devices = draft.simulationEquipment.srg2Devices || [];
+        store.simulationEquipment.neutralCompensators = draft.simulationEquipment.neutralCompensators || [];
+        store.simulationEquipment.cableUpgrades = draft.simulationEquipment.cableUpgrades || [];
+      }
+      clearDraft();
+    }
+  }, [recoverDraft, loadProject, clearDraft]);
+
+  const handleDiscardDraft = useCallback(() => {
+    clearDraft();
+  }, [clearDraft]);
 
   // Déterminer si on doit afficher le ResultsPanel
   const shouldShowResults = resultsPanelOpen && editTarget !== 'simulation' && !focusMode;
@@ -222,6 +327,26 @@ const Index = () => {
         console.log('🐛 Should render SimulationPanel:', editTarget === 'simulation');
         return editTarget === 'simulation' ? <SimulationPanel /> : null;
       })()}
+
+      {/* Dialogue de modifications non sauvées */}
+      <UnsavedChangesDialog
+        open={showUnsavedDialog}
+        onOpenChange={setShowUnsavedDialog}
+        onSave={handleUnsavedSave}
+        onDiscard={handleUnsavedDiscard}
+        onCancel={handleUnsavedCancel}
+        actionDescription={pendingAction === 'new' ? 'créer un nouveau projet' : 'charger un projet'}
+      />
+
+      {/* Dialogue de récupération au démarrage */}
+      <RecoveryDialog
+        open={showRecoveryDialog}
+        onOpenChange={setShowRecoveryDialog}
+        projectName={draftInfo?.name || 'Projet inconnu'}
+        savedAt={draftInfo?.savedAt || new Date().toISOString()}
+        onRecover={handleRecover}
+        onDiscard={handleDiscardDraft}
+      />
 
       {/* Console de debug visuelle (pour iOS/mobile) */}
       <DebugConsole />

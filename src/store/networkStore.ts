@@ -112,6 +112,10 @@ interface NetworkStoreState extends NetworkState {
   measuredProfileMetadata: MeasuredProfileMetadata | null;
   // Mode de sélection de nœud sur la carte (centralisé)
   nodeSelectionMode: 'profil24h' | 'srg2' | 'equi8' | null;
+  // Gestion de la sauvegarde
+  isDirty: boolean;
+  lastSavedAt: Date | null;
+  lastAutoSaveAt: Date | null;
 }
 
 interface NetworkActions {
@@ -220,6 +224,11 @@ interface NetworkActions {
   handleNodeSelectionClick: (nodeId: string) => void;
   // Action câble de branchement
   setSelectedBranchementCableId: (cableId: string | null) => void;
+  // Actions de gestion de sauvegarde
+  markAsDirty: () => void;
+  markAsSaved: () => void;
+  setLastSavedAt: (date: Date) => void;
+  setLastAutoSaveAt: (date: Date) => void;
 }
 
 // Fonction utilitaire pour créer la configuration par défaut du transformateur
@@ -410,6 +419,10 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   measuredProfileMetadata: null,
   // Mode de sélection de nœud sur la carte
   nodeSelectionMode: null,
+  // Gestion de la sauvegarde
+  isDirty: false,
+  lastSavedAt: null,
+  lastAutoSaveAt: null,
 
   // Actions
   createNewProject: (name, voltageSystem) => {
@@ -424,6 +437,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       showVoltages: true,
       simulationMode: false,
       isSimulationActive: false,
+      isDirty: false, // Nouveau projet = pas de modifications
+      lastSavedAt: null,
       calculationResults: {
         PRÉLÈVEMENT: null,
         MIXTE: null,
@@ -670,6 +685,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       showVoltages: true,
       simulationMode: false,
       isSimulationActive: false,
+      isDirty: false, // Projet chargé = pas de modifications
+      lastSavedAt: new Date(), // Considérer le projet chargé comme "sauvé"
       calculationResults: {
         PRÉLÈVEMENT: null,
         MIXTE: null,
@@ -785,7 +802,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     }
     
     // Mettre à jour le state AVANT les recalculs
-    set({ currentProject: updatedProject });
+    set({ currentProject: updatedProject, isDirty: true });
 
     // Si manualPhaseDistribution ou phaseDistributionMode change en mode mixte, recalculer toutes les distributions
     if ((updates.manualPhaseDistribution || updates.phaseDistributionModeCharges || updates.phaseDistributionModeProductions) && updatedProject.loadModel === 'mixte_mono_poly') {
@@ -835,7 +852,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     };
 
     set({
-      currentProject: updatedProject
+      currentProject: updatedProject,
+      isDirty: true
     });
   },
 
@@ -860,6 +878,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       
       return {
         ...state,
+        isDirty: true,
         currentProject: {
           ...state.currentProject,
           ...projectUpdates,
@@ -883,7 +902,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         ),
         clientLinks: (currentProject.clientLinks || []).filter(link => link.nodeId !== nodeId)
       },
-      selectedNodeId: null
+      selectedNodeId: null,
+      isDirty: true
     });
 
     // Recalculer les résultats après suppression du nœud et de ses liens clients
@@ -931,7 +951,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     };
 
     set({
-      currentProject: updatedProject
+      currentProject: updatedProject,
+      isDirty: true
     });
   },
 
@@ -954,7 +975,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       currentProject: {
         ...currentProject,
         cables: [...currentProject.cables, newCable]
-      }
+      },
+      isDirty: true
     });
   },
 
@@ -976,7 +998,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
           }
           return cable;
         })
-      }
+      },
+      isDirty: true
     });
   },
 
@@ -989,7 +1012,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         ...currentProject,
         cables: currentProject.cables.filter(cable => cable.id !== cableId)
       },
-      selectedCableId: null
+      selectedCableId: null,
+      isDirty: true
     });
   },
 
@@ -1065,7 +1089,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       importCount: (currentProject.importCount ?? 0) + 1 // Incrémenter le compteur d'imports
     };
     
-    set({ currentProject: updatedProject });
+    set({ currentProject: updatedProject, isDirty: true });
     toast.success(`${clients.length} raccordements importés avec succès`);
     
     // Initialiser manualPhaseDistribution avec répartition réelle en mode mixte
@@ -1146,7 +1170,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       clientsImportes: [...(currentProject.clientsImportes || []), newClient],
     };
     
-    set({ currentProject: updatedProject });
+    set({ currentProject: updatedProject, isDirty: true });
     toast.success(`Client "${clientData.nomCircuit}" créé avec succès`);
   },
 
@@ -1164,7 +1188,7 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     };
     
     // ✅ 1. Mettre à jour le state AVANT les recalculs
-    set({ currentProject: updatedProject });
+    set({ currentProject: updatedProject, isDirty: true });
     
     // ✅ 2. Recalculer distribution du nœud si client lié en mode mixte
     const clientLink = currentProject.clientLinks?.find(l => l.clientId === clientId);
@@ -1189,7 +1213,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         ...currentProject,
         clientsImportes: (currentProject.clientsImportes || []).filter(c => c.id !== clientId),
         clientLinks: (currentProject.clientLinks || []).filter(l => l.clientId !== clientId)
-      }
+      },
+      isDirty: true
     });
     
     toast.success('Client supprimé');
@@ -1319,7 +1344,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         },
         selectedClientForLinking: null,
         linkingMode: false,
-        selectedTool: 'select'
+        selectedTool: 'select',
+        isDirty: true
       });
       
       // Recalculer autoPhaseDistribution pour le nœud concerné
@@ -1358,7 +1384,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         },
         selectedClientForLinking: null,
         linkingMode: false,
-        selectedTool: 'select'
+        selectedTool: 'select',
+        isDirty: true
       });
       
       updateAllCalculations();
@@ -1377,7 +1404,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       currentProject: {
         ...currentProject,
         clientLinks: (currentProject.clientLinks || []).filter(l => l.clientId !== clientId)
-      }
+      },
+      isDirty: true
     });
     
     // Recalculer distribution du nœud si mode mixte
@@ -2742,4 +2770,10 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   },
   
   setSelectedBranchementCableId: (cableId) => set({ selectedBranchementCableId: cableId }),
+  
+  // Actions de gestion de sauvegarde
+  markAsDirty: () => set({ isDirty: true }),
+  markAsSaved: () => set({ isDirty: false, lastSavedAt: new Date() }),
+  setLastSavedAt: (date) => set({ lastSavedAt: date }),
+  setLastAutoSaveAt: (date) => set({ lastAutoSaveAt: date }),
 }));

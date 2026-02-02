@@ -853,7 +853,7 @@ export const MapView = () => {
         } else if (hasProduction) {
           iconContent = 'P'; // Production seule
           if (Math.abs(nominalDropPercent) <= 8) {
-            iconClass = 'bg-voltage-normal border-green-600 text-white';
+            iconClass = 'bg-yellow-300 border-yellow-500 text-gray-800';
           } else if (Math.abs(nominalDropPercent) <= 10) {
             iconClass = 'bg-voltage-warning border-orange-600 text-white';
           } else {

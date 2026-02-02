@@ -1,102 +1,113 @@
 
-# Plan : Mise à jour de la base de données des câbles
+# Plan : Implémentation de la formule GRD belge pour les impédances
 
-## Résumé
+## Contexte technique
 
-Je vais créer une copie de sauvegarde du fichier actuel puis mettre à jour la base de données avec les 30 câbles de votre fichier Excel.
+Dans les réseaux de distribution BT des GRD belges (ORES, RESA, Sibelga), la chute de tension ne se calcule jamais avec R₁₂ seul. La résistance et réactance effectives vues par une phase sont toujours :
 
-## Étapes d'implémentation
+```text
+R = (R₀ + 2×R₁₂) / 3
+X = (X₀ + 2×X₁₂) / 3
+```
 
-### Étape 1 : Créer une copie de sauvegarde
+Cette formule combine les impédances de séquence directe (Z₁) et homopolaire (Z₀) car le réseau GRD est structurellement déséquilibré.
 
-Créer le fichier `src/data/defaultCableTypes.backup.ts` contenant une copie exacte du fichier actuel pour référence future.
+## Analyse du code actuel
 
-### Étape 2 : Mettre à jour le fichier principal
+La méthode `selectRX` dans `src/utils/electricalCalculations.ts` retourne actuellement :
 
-Remplacer le contenu de `src/data/defaultCableTypes.ts` avec :
+```text
+┌─────────────────────────────────────────────────────────┐
+│ Réseau 230V triangle : R = R₁₂, X = X₁₂                │
+│ Réseau 400V étoile   : R = R₁₂, X = X₁₂ (phases)       │
+│                        R = R₀,  X = X₀  (neutre seul)  │
+└─────────────────────────────────────────────────────────┘
+```
 
-**Câbles NU (Cuivre Nu Aérien) - 10 types**
+Cette logique sous-estime la chute de tension jusqu'à **40%** sur certains câbles torsadés.
 
-| ID | Label | R (Ohm/km) | X (Ohm/km) | I max (A) |
-|----|-------|------------|------------|-----------|
-| nu-7cu | NU 7 Cu | 2.550 | 0.300 | 64 |
-| nu-10cu | NU 10 Cu | 1.790 | 0.300 | 88 |
-| nu-12.5cu | NU 12.5 Cu | 1.490 | 0.300 | 98 |
-| nu-16cu | NU 16 Cu | 1.120 | 0.300 | 119 |
-| nu-20cu | NU 20 Cu | 0.900 | 0.300 | 137 |
-| nu-25cu | NU 25 Cu | 0.720 | 0.300 | 157 |
-| nu-28cu | NU 28 Cu | 0.640 | 0.300 | 169 |
-| nu-35cu | NU 35 Cu | 0.510 | 0.300 | 194 |
-| nu-50cu | NU 50 Cu | 0.360 | 0.300 | 235 |
-| nu-70cu | NU 70 Cu | 0.260 | 0.300 | 299 |
+## Fichiers à modifier
 
-**Câbles TR (Torsadé Aluminium Aérien) - 5 types**
+| Fichier | Modification |
+|---------|--------------|
+| `src/utils/electricalCalculations.ts` | Modifier `selectRX` pour appliquer la formule GRD |
+| `src/utils/equi8CME.ts` | Appliquer la formule pour le calcul d'impédance équivalente |
+| `src/utils/optimalEqui8Finder.ts` | Appliquer la formule pour la recherche de nœud optimal |
+| `src/utils/optimalSrg2Finder.ts` | Appliquer la formule pour la recherche de nœud SRG2 |
+| `src/utils/__tests__/mono230VCurrentCalculation.test.ts` | Mettre à jour les tests unitaires |
 
-| ID | Label | R (Ohm/km) | X (Ohm/km) | I max (A) |
-|----|-------|------------|------------|-----------|
-| tr-16al | TR 16 Alu | 1.900 | 0.100 | 71 |
-| tr-25al | TR 25 Alu | 1.240 | 0.100 | 93 |
-| tr-35al | TR 35 Alu | 0.870 | 0.100 | 116 |
-| tr-70al | TR 70 Alu | 0.450 | 0.100 | 177 |
-| tr-95al | TR 95 Alu | 0.330 | 0.100 | 230 |
+## Détails techniques
 
-**Câbles CA Cuivre (Souterrain) - 10 types**
+### Étape 1 : Créer une fonction utilitaire de calcul d'impédance GRD
 
-| ID | Label | R (Ohm/km) | X (Ohm/km) | I max (A) |
-|----|-------|------------|------------|-----------|
-| ca-10cu | CA 10 Cu | 2.020 | 0.160 | 73 |
-| ca-16cu | CA 16 Cu | 1.260 | 0.144 | 95 |
-| ca-25cu | CA 25 Cu | 0.810 | 0.134 | 130 |
-| ca-35cu | CA 35 Cu | 0.580 | 0.127 | 160 |
-| ca-50cu | CA 50 Cu | 0.405 | 0.120 | 190 |
-| ca-70cu | CA 70 Cu | 0.290 | 0.110 | 235 |
-| ca-95cu | CA 95 Cu | 0.210 | 0.110 | 280 |
-| ca-120cu | CA 120 Cu | 0.169 | 0.104 | 320 |
-| ca-150cu | CA 150 Cu | 0.135 | 0.100 | 355 |
-| ca-240cu | CA 240 Cu | 0.084 | 0.096 | 420 |
+Ajouter dans `electricalCalculations.ts` :
 
-**Câbles CA Aluminium (Souterrain) - 5 types**
+```typescript
+/**
+ * Calcule l'impédance effective selon la formule GRD belge
+ * R = (R0 + 2*R12) / 3
+ * X = (X0 + 2*X12) / 3
+ * 
+ * Cette formule combine les composantes directe et homopolaire
+ * car le réseau de distribution est structurellement déséquilibré.
+ */
+private calculateGRDImpedance(cableType: CableType): { R: number, X: number } {
+  const R = (cableType.R0_ohm_per_km + 2 * cableType.R12_ohm_per_km) / 3;
+  const X = (cableType.X0_ohm_per_km + 2 * cableType.X12_ohm_per_km) / 3;
+  return { R, X };
+}
+```
 
-| ID | Label | R (Ohm/km) | X (Ohm/km) | I max (A) |
-|----|-------|------------|------------|-----------|
-| ca-50al | CA 50 Alu | 0.688 | 0.120 | 145 |
-| ca-95al | CA 95 Alu | 0.363 | 0.107 | 210 |
-| ca-150al | CA 150 Alu | 0.229 | 0.100 | 270 |
-| ca-185al | CA 185 Alu | 0.186 | 0.098 | 310 |
-| ca-240al | CA 240 Alu | 0.143 | 0.096 | 355 |
+### Étape 2 : Modifier la méthode `selectRX`
 
-**Câbles conservés (existants)**
+Remplacer la logique actuelle :
 
-- BAXB 70, 95, 150 (torsadé aluminium spécifique)
-- EAXeCWB 4x150 (souterrain aluminium)
+```text
+AVANT:
+  230V → R₁₂, X₁₂
+  400V → R₁₂, X₁₂ (phases) / R₀, X₀ (neutre)
 
-### Détails techniques
+APRÈS:
+  Phases → (R₀ + 2×R₁₂)/3, (X₀ + 2×X₁₂)/3
+  Neutre → R₀, X₀ (inchangé)
+```
 
-**Calcul des impédances homopolaires (R0, X0)**
+### Étape 3 : Propagation aux modules connexes
 
-Pour tous les câbles, j'appliquerai la règle standard :
-- R0 = 3 x R12
-- X0 = 3 x X12
+Appliquer la même formule dans :
+- `equi8CME.ts` ligne 207 : calcul de `Zph_total`
+- `optimalEqui8Finder.ts` ligne 161 : calcul de `Zph_total`
+- `optimalSrg2Finder.ts` ligne 162 : calcul de `Zph_total`
 
-**Organisation du fichier**
+### Étape 4 : Validation numérique
 
-Le fichier sera structuré en sections commentées :
-1. Câbles nus cuivre aériens (NU)
-2. Câbles torsadés aluminium aériens (TR)
-3. Câbles souterrains cuivre (CA Cu)
-4. Câbles souterrains aluminium (CA Alu)
-5. Câbles BAXB (conservés)
-6. Câble EAXeCWB (conservé)
+Exemple de calcul pour un câble TR 70 Alu :
 
-## Fichiers modifiés
+```text
+R₁₂ = 0.450 Ω/km, R₀ = 1.350 Ω/km
+X₁₂ = 0.100 Ω/km, X₀ = 0.300 Ω/km
 
-| Fichier | Action |
-|---------|--------|
-| `src/data/defaultCableTypes.backup.ts` | Nouveau - copie de sauvegarde |
-| `src/data/defaultCableTypes.ts` | Modifié - 30 nouveaux câbles + 4 conservés |
+R_GRD = (1.350 + 2×0.450) / 3 = 0.750 Ω/km
+X_GRD = (0.300 + 2×0.100) / 3 = 0.167 Ω/km
 
-## Résultat attendu
+Impact : R_GRD / R₁₂ = 0.750 / 0.450 = 1.67 (+67%)
+```
 
-- Les calculs de tension utiliseront les mêmes valeurs R et X que votre fichier Excel
-- La différence de 3V sera corrigée grâce aux valeurs X réalistes (0.300 au lieu de 0.08)
-- 34 types de câbles disponibles au total
+La chute de tension sera augmentée d'environ 40-67% selon le câble, ce qui correspond aux observations terrain.
+
+## Formules de chute de tension
+
+Ces formules restent inchangées, mais utilisent les nouvelles valeurs R et X :
+
+```text
+Monophasé : ΔV = 2 × L × I × (R×cosφ + X×sinφ)
+Triphasé  : ΔV = √3 × L × I × (R×cosφ + X×sinφ)
+```
+
+## Impact sur les fichiers de câbles de branchement
+
+Le fichier `src/data/branchementCableTypes.ts` utilise une structure simplifiée avec `R_ohm_per_km` et `X_ohm_per_km` (sans distinction R₁₂/R₀). Ces câbles de branchement sont utilisés uniquement dans l'onglet "Tension Client" et ne sont pas affectés par cette modification.
+
+## Tests de non-régression
+
+Les tests existants devront être mis à jour pour refléter les nouvelles valeurs attendues. Les résultats de chute de tension seront plus élevés, ce qui correspond à la réalité physique des réseaux GRD belges.

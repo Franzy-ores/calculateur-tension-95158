@@ -158,8 +158,10 @@ function computeUpstreamImpedance(
     const length_km = length_m / 1000;
     pathLength_m += length_m;
     
-    // Sommer les résistances (R12 pour phases)
-    Zph_total += cableType.R12_ohm_per_km * length_km;
+    // Sommer les résistances selon formule GRD belge
+    // Phases: R = (R0 + 2*R12) / 3 (formule ORES/RESA/Sibelga)
+    const R_grd = (cableType.R0_ohm_per_km + 2 * cableType.R12_ohm_per_km) / 3;
+    Zph_total += R_grd * length_km;
     
     currentNodeId = parent.get(currentNodeId)!;
   }

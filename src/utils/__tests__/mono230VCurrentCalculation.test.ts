@@ -207,29 +207,61 @@ describe('Calcul de courant MONO en 230V triangle', () => {
     });
   });
 
-  describe('Utilisation de R12/X12 en 230V triangle', () => {
-    it('Le calcul 230V triangle doit toujours utiliser R12/X12 (pas R0)', () => {
+  describe('Utilisation de la formule GRD belge (R0+2*R12)/3', () => {
+    it('Le calcul doit utiliser R_GRD = (R0 + 2*R12) / 3 pour les phases', () => {
       // ARRANGE
       const cableType = mkCableType(0.32, 0.08, 0.64, 0.16);
       
-      // En 230V triangle, on doit utiliser R12 = 0.32, pas R0 = 0.64
-      // Le facteur de chute de tension doit être basé sur R12
+      // Formule GRD belge : R = (R0 + 2*R12) / 3
+      const R_GRD = (cableType.R0_ohm_per_km + 2 * cableType.R12_ohm_per_km) / 3;
+      const X_GRD = (cableType.X0_ohm_per_km + 2 * cableType.X12_ohm_per_km) / 3;
+      
+      // Vérification des valeurs calculées
+      // R_GRD = (0.64 + 2*0.32) / 3 = 1.28 / 3 = 0.4267 Ω/km
+      // X_GRD = (0.16 + 2*0.08) / 3 = 0.32 / 3 = 0.1067 Ω/km
+      expect(R_GRD).toBeCloseTo(0.4267, 3);
+      expect(X_GRD).toBeCloseTo(0.1067, 3);
+      
+      // L'impédance GRD est supérieure à R12 seul (correction +33% dans ce cas)
+      expect(R_GRD).toBeGreaterThan(cableType.R12_ohm_per_km);
+    });
+
+    it('Câble TR 70 Alu doit avoir une correction de +67%', () => {
+      // Câble TR 70 Alu typique
+      const R12 = 0.450;  // Ω/km
+      const R0 = 1.350;   // Ω/km (3x R12)
+      
+      const R_GRD = (R0 + 2 * R12) / 3;
+      
+      // R_GRD = (1.350 + 2*0.450) / 3 = 2.25 / 3 = 0.75 Ω/km
+      expect(R_GRD).toBeCloseTo(0.75, 3);
+      
+      // Impact : R_GRD / R12 = 0.75 / 0.45 = 1.67 (+67%)
+      const impact = R_GRD / R12;
+      expect(impact).toBeCloseTo(1.67, 2);
+    });
+
+    it('Chute de tension triphasée avec formule GRD', () => {
+      const cableType = mkCableType(0.32, 0.08, 0.64, 0.16);
+      const R_GRD = (cableType.R0_ohm_per_km + 2 * cableType.R12_ohm_per_km) / 3;
+      const X_GRD = (cableType.X0_ohm_per_km + 2 * cableType.X12_ohm_per_km) / 3;
       
       const L_km = 0.1;
       const I = 43.5;
       const cosPhi = 0.95;
       const sinPhi = Math.sqrt(1 - cosPhi * cosPhi);
       
-      // Calcul avec R12 (correct)
+      // ΔU triphasé = √3 × I × (R×cosφ + X×sinφ) × L
+      const deltaU_GRD = Math.sqrt(3) * I * (R_GRD * cosPhi + X_GRD * sinPhi) * L_km;
+      
+      // Calcul avec R12 seul (ancienne méthode - incorrecte)
       const deltaU_R12 = Math.sqrt(3) * I * (cableType.R12_ohm_per_km * cosPhi + cableType.X12_ohm_per_km * sinPhi) * L_km;
       
-      // Calcul avec R0 (incorrect pour 230V)
-      const deltaU_R0 = Math.sqrt(3) * I * (cableType.R0_ohm_per_km * cosPhi + cableType.X0_ohm_per_km * sinPhi) * L_km;
+      console.log(`ΔU avec formule GRD: ${deltaU_GRD.toFixed(2)}V, avec R12 seul: ${deltaU_R12.toFixed(2)}V`);
       
-      console.log(`ΔU avec R12: ${deltaU_R12.toFixed(2)}V, avec R0: ${deltaU_R0.toFixed(2)}V`);
-      
-      // R0 donnerait une chute de tension 2x plus grande (incorrect en 230V triangle)
-      expect(deltaU_R0).toBeCloseTo(deltaU_R12 * 2, 1);
+      // La chute de tension GRD doit être ~33% supérieure à R12 seul
+      expect(deltaU_GRD).toBeGreaterThan(deltaU_R12);
+      expect(deltaU_GRD / deltaU_R12).toBeCloseTo(1.33, 1);
     });
   });
 });

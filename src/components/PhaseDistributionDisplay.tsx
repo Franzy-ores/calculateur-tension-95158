@@ -33,15 +33,20 @@ function calculatePhaseData(
   is230V: boolean,
   manualPhaseDistribution?: { charges: { A: number; B: number; C: number }; productions: { A: number; B: number; C: number } }
 ) {
+  // Variables MONO (toujours résidentiel)
   let nbMono = 0;
   let chargeMono = 0;
-  let chargeMonoResidentiel = 0;
-  let chargeMonoIndustriel = 0;
   let productionMono = 0;
-  let chargePoly = 0;
-  let chargePolyResidentiel = 0;
-  let chargePolyIndustriel = 0;
-  let productionPoly = 0;
+  
+  // Variables Poly Résidentiel
+  let nbPolyRes = 0;
+  let chargePolyRes = 0;
+  let productionPolyRes = 0;
+  
+  // Variables Poly Industriel
+  let nbPolyInd = 0;
+  let chargePolyInd = 0;
+  let productionPolyInd = 0;
   
   const linkedClientIds = new Set(clientLinks?.map(link => link.clientId) || []);
   
@@ -61,70 +66,73 @@ function calculatePhaseData(
       
       if (matchesPhase) {
         nbMono++;
-        const isResidentiel = client.clientType !== 'industriel';
-        if (isResidentiel) {
-          chargeMonoResidentiel += client.puissanceContractuelle_kVA;
-        } else {
-          chargeMonoIndustriel += client.puissanceContractuelle_kVA;
-        }
+        chargeMono += client.puissanceContractuelle_kVA;
+        productionMono += client.puissancePV_kVA || 0;
       }
     }
     
     if (client.connectionType === 'TRI' || client.connectionType === 'TETRA') {
-      const chargeParPhase = client.puissanceContractuelle_kVA / 3;
       const isResidentiel = client.clientType !== 'industriel';
+      const chargeParPhase = client.puissanceContractuelle_kVA / 3;
+      const prodParPhase = (client.puissancePV_kVA || 0) / 3;
       
       if (isResidentiel) {
-        chargePolyResidentiel += chargeParPhase;
+        nbPolyRes += 1/3; // Comptage fractionnel
+        chargePolyRes += chargeParPhase;
+        productionPolyRes += prodParPhase;
       } else {
-        chargePolyIndustriel += chargeParPhase;
+        nbPolyInd += 1/3;
+        chargePolyInd += chargeParPhase;
+        productionPolyInd += prodParPhase;
       }
     }
   });
   
-  nodes.forEach(node => {
-    if (node.autoPhaseDistribution) {
-      chargeMono += node.autoPhaseDistribution.charges.mono[phase];
-      productionMono += node.autoPhaseDistribution.productions.mono[phase];
-      chargePoly += node.autoPhaseDistribution.charges.poly[phase];
-      productionPoly += node.autoPhaseDistribution.productions.poly[phase];
-    }
-  });
+  // Calculs foisonnés par catégorie
+  const chargeMonoFoisonne = chargeMono * (foisonnementChargesResidentiel / 100);
+  const prodMonoFoisonne = productionMono * (foisonnementProductions / 100);
   
-  const totalPhysiqueCharge = chargeMono + chargePoly;
-  const totalPhysiqueProduction = productionMono + productionPoly;
+  const chargePolyResFoisonne = chargePolyRes * (foisonnementChargesResidentiel / 100);
+  const prodPolyResFoisonne = productionPolyRes * (foisonnementProductions / 100);
   
-  const chargeFoisonneResidentiel = chargeMonoResidentiel * (foisonnementChargesResidentiel / 100);
-  const chargeFoisonneIndustriel = chargeMonoIndustriel * (foisonnementChargesIndustriel / 100);
+  const chargePolyIndFoisonne = chargePolyInd * (foisonnementChargesIndustriel / 100);
+  const prodPolyIndFoisonne = productionPolyInd * (foisonnementProductions / 100);
   
-  const chargePolyFoisonne = 
-    chargePolyResidentiel * (foisonnementChargesResidentiel / 100) +
-    chargePolyIndustriel * (foisonnementChargesIndustriel / 100);
+  // Totaux foisonnés pour cette phase
+  const totalChargeFoisonne = chargeMonoFoisonne + chargePolyResFoisonne + chargePolyIndFoisonne;
+  const totalProdFoisonne = prodMonoFoisonne + prodPolyResFoisonne + prodPolyIndFoisonne;
   
-  const totalFoisonneCharge = chargeFoisonneResidentiel + chargeFoisonneIndustriel + chargePolyFoisonne;
-  const totalFoisonneProduction = totalPhysiqueProduction * (foisonnementProductions / 100);
-  
+  // Calcul déséquilibre via curseurs
   const curseurCharge = manualPhaseDistribution?.charges[phase] || 33.33;
-  const curseurProduction = manualPhaseDistribution?.productions[phase] || 33.33;
-  
-  const chargeAvecCurseur = totalFoisonneChargeGlobal * (curseurCharge / 100);
-  const productionAvecCurseur = totalFoisonneProductionGlobal * (curseurProduction / 100);
-  
   const ecartChargePercent = ((curseurCharge - 33.33) / 33.33) * 100;
   
+  // Intensité : (Charges - Productions) foisonnées / 230V
   const voltage = 230;
-  const courantTotal = ((chargeAvecCurseur - productionAvecCurseur) * 1000) / voltage;
+  const courantTotal = ((totalChargeFoisonne - totalProdFoisonne) * 1000) / voltage;
   
   return {
+    // MONO
     nbMono,
     chargeMono,
-    chargePolyResidentiel,
-    chargePolyIndustriel,
-    productionMono,
-    totalPhysiqueCharge,
-    totalFoisonneCharge,
-    totalFoisonneProduction,
-    chargeAvecCurseur,
+    prodMono: productionMono,
+    chargeMonoFoisonne,
+    prodMonoFoisonne,
+    
+    // Poly Résidentiel
+    nbPolyRes,
+    chargePolyRes,
+    prodPolyRes: productionPolyRes,
+    chargePolyResFoisonne,
+    prodPolyResFoisonne,
+    
+    // Poly Industriel
+    nbPolyInd,
+    chargePolyInd,
+    prodPolyInd: productionPolyInd,
+    chargePolyIndFoisonne,
+    prodPolyIndFoisonne,
+    
+    // Totaux
     ecartChargePercent,
     courantTotal
   };
@@ -279,7 +287,7 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
     highPowerClientsPerPhase.B.length > 0 || 
     highPowerClientsPerPhase.C.length > 0;
 
-  // Section: Tableau récapitulatif (7 colonnes essentielles)
+  // Section: Tableau récapitulatif (17 colonnes avec charges et productions)
   const renderTable = () => (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
@@ -305,16 +313,37 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
       </div>
       
       <div className="overflow-x-auto">
-        <table className="w-full text-xs border-collapse">
+        <table className="w-full text-[10px] border-collapse">
           <thead>
+            {/* Ligne de regroupement */}
             <tr className="border-b border-border">
-              <th className="text-left py-1.5 px-2 text-foreground font-semibold">Couplage</th>
-              <th className="text-center py-1.5 px-1 text-foreground font-semibold">MONO</th>
-              <th className="text-right py-1.5 px-1 text-foreground font-semibold">Ch. MONO</th>
-              <th className="text-right py-1.5 px-1 text-green-600 dark:text-green-400 font-semibold">Poly Rés.</th>
-              <th className="text-right py-1.5 px-1 text-orange-600 dark:text-orange-400 font-semibold">Poly Ind.</th>
-              <th className="text-right py-1.5 px-1 text-foreground font-semibold">Déséq.</th>
-              <th className="text-right py-1.5 px-1 text-foreground font-semibold">I (A)</th>
+              <th rowSpan={2} className="text-left py-1.5 px-1 text-foreground font-semibold align-bottom">Coupl.</th>
+              <th colSpan={5} className="text-center py-1 px-0.5 font-semibold bg-primary/10 text-primary border-x border-border">MONO (Rés.)</th>
+              <th colSpan={5} className="text-center py-1 px-0.5 font-semibold bg-green-500/10 text-green-700 dark:text-green-400 border-x border-border">Poly Rés.</th>
+              <th colSpan={5} className="text-center py-1 px-0.5 font-semibold bg-orange-500/10 text-orange-700 dark:text-orange-400 border-x border-border">Poly Ind.</th>
+              <th rowSpan={2} className="text-right py-1.5 px-1 text-foreground font-semibold align-bottom">Déséq.</th>
+              <th rowSpan={2} className="text-right py-1.5 px-1 text-foreground font-semibold align-bottom">I (A)</th>
+            </tr>
+            {/* Ligne des sous-colonnes */}
+            <tr className="border-b border-border text-[9px] text-muted-foreground">
+              {/* MONO */}
+              <th className="py-1 px-0.5 text-center bg-primary/5">Nb</th>
+              <th className="py-1 px-0.5 text-right bg-primary/5">Ch.</th>
+              <th className="py-1 px-0.5 text-right bg-primary/5">Pr.</th>
+              <th className="py-1 px-0.5 text-right bg-primary/5">Ch.F</th>
+              <th className="py-1 px-0.5 text-right bg-primary/5 border-r border-border">Pr.F</th>
+              {/* Poly Rés. */}
+              <th className="py-1 px-0.5 text-center bg-green-500/5">Nb</th>
+              <th className="py-1 px-0.5 text-right bg-green-500/5">Ch.</th>
+              <th className="py-1 px-0.5 text-right bg-green-500/5">Pr.</th>
+              <th className="py-1 px-0.5 text-right bg-green-500/5">Ch.F</th>
+              <th className="py-1 px-0.5 text-right bg-green-500/5 border-r border-border">Pr.F</th>
+              {/* Poly Ind. */}
+              <th className="py-1 px-0.5 text-center bg-orange-500/5">Nb</th>
+              <th className="py-1 px-0.5 text-right bg-orange-500/5">Ch.</th>
+              <th className="py-1 px-0.5 text-right bg-orange-500/5">Pr.</th>
+              <th className="py-1 px-0.5 text-right bg-orange-500/5">Ch.F</th>
+              <th className="py-1 px-0.5 text-right bg-orange-500/5 border-r border-border">Pr.F</th>
             </tr>
           </thead>
           <tbody>
@@ -337,20 +366,35 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
                 currentProject.manualPhaseDistribution
               );
             
-              const bgClass = phase === 'A' ? 'bg-blue-50 dark:bg-blue-500/10' : phase === 'B' ? 'bg-green-50 dark:bg-green-500/10' : 'bg-red-50 dark:bg-red-500/10';
+              const bgClass = phase === 'A' ? 'bg-blue-50/50 dark:bg-blue-500/5' : phase === 'B' ? 'bg-green-50/50 dark:bg-green-500/5' : 'bg-red-50/50 dark:bg-red-500/5';
               const ecartColor = Math.abs(data.ecartChargePercent) < 5 ? 'text-green-600' : Math.abs(data.ecartChargePercent) < 15 ? 'text-yellow-600' : 'text-red-600';
               
               return (
                 <tr key={phase} className={`border-b border-border/50 ${bgClass}`}>
-                  <td className="py-1.5 px-2 text-foreground font-semibold">{phaseLabel}</td>
-                  <td className="text-center py-1.5 px-1 text-foreground">{data.nbMono}</td>
-                  <td className="text-right py-1.5 px-1 text-foreground">{data.chargeMono.toFixed(1)}</td>
-                  <td className="text-right py-1.5 px-1 text-green-700 dark:text-green-300">{data.chargePolyResidentiel.toFixed(1)}</td>
-                  <td className="text-right py-1.5 px-1 text-orange-700 dark:text-orange-300">{data.chargePolyIndustriel.toFixed(1)}</td>
-                  <td className={`text-right py-1.5 px-1 font-bold ${ecartColor}`}>
+                  <td className="py-1 px-1 text-foreground font-semibold">{phaseLabel}</td>
+                  {/* MONO */}
+                  <td className="text-center py-1 px-0.5 text-foreground">{data.nbMono}</td>
+                  <td className="text-right py-1 px-0.5 text-foreground">{data.chargeMono.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-foreground">{data.prodMono.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-primary font-medium">{data.chargeMonoFoisonne.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-primary font-medium border-r border-border/50">{data.prodMonoFoisonne.toFixed(1)}</td>
+                  {/* Poly Rés. */}
+                  <td className="text-center py-1 px-0.5 text-foreground">{Math.round(data.nbPolyRes)}</td>
+                  <td className="text-right py-1 px-0.5 text-foreground">{data.chargePolyRes.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-foreground">{data.prodPolyRes.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-green-700 dark:text-green-400 font-medium">{data.chargePolyResFoisonne.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-green-700 dark:text-green-400 font-medium border-r border-border/50">{data.prodPolyResFoisonne.toFixed(1)}</td>
+                  {/* Poly Ind. */}
+                  <td className="text-center py-1 px-0.5 text-foreground">{Math.round(data.nbPolyInd)}</td>
+                  <td className="text-right py-1 px-0.5 text-foreground">{data.chargePolyInd.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-foreground">{data.prodPolyInd.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-orange-700 dark:text-orange-400 font-medium">{data.chargePolyIndFoisonne.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-orange-700 dark:text-orange-400 font-medium border-r border-border/50">{data.prodPolyIndFoisonne.toFixed(1)}</td>
+                  {/* Totaux */}
+                  <td className={`text-right py-1 px-1 font-bold ${ecartColor}`}>
                     {data.ecartChargePercent > 0 ? '+' : ''}{data.ecartChargePercent.toFixed(0)}%
                   </td>
-                  <td className="text-right py-1.5 px-1 text-foreground font-semibold">{Math.abs(data.courantTotal).toFixed(1)}</td>
+                  <td className="text-right py-1 px-1 text-foreground font-semibold">{Math.abs(data.courantTotal).toFixed(1)}</td>
                 </tr>
               );
             })}

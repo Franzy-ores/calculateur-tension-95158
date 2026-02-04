@@ -1,157 +1,121 @@
 
 
-# Plan : Restructuration compacte de l'onglet Paramètres
+# Plan : Correction du comptage des clients MONO par couplage
 
-## Objectif
-Réduire l'espace vertical occupé tout en conservant toutes les informations existantes.
+## Bug identifié
 
-## Analyse de l'existant
+### Symptôme
+Un client MONO ajouté sur le couplage L1-L2 apparaît sur **deux lignes** du tableau récapitulatif (L1-L2 ET L2-L3) au lieu d'une seule.
 
-| Composant | Hauteur estimée | Contenu |
-|-----------|----------------|---------|
-| Card Foisonnement | ~200px | Scénario + 3 sliders + totaux |
-| Sliders de phase | ~150px | 2 groupes de 3 barres verticales |
-| Alertes fortes puissances | ~200px | Grille 3 colonnes L1/L2/L3 |
-| Résumé foisonnement | ~120px | Détail MONO/POLY par type |
-| Tableau récapitulatif | ~180px | 11 colonnes, 3 lignes de données |
+### Cause racine
+Deux sources de données incohérentes sont utilisées pour le comptage :
 
-**Total déployé : ~850px de hauteur**
+| Source | Fichier | Comportement |
+|--------|---------|--------------|
+| `calculatePhaseData()` | `PhaseDistributionDisplay.tsx:53-57` | Mappage correct : couplage → ligne unique |
+| `monoClientsCount` | `phaseDistributionCalculator.ts:357-365` | Mappage incorrect : compte 0.5 sur 2 phases |
 
----
+### Logique incorrecte dans `phaseDistributionCalculator.ts`
 
-## Solution proposée : Layout en 2 rangées compactes
-
-### Rangée 1 : Contrôles (toujours visible)
-
-```text
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│ [Scénario ▼]  │  🏠 Rés. ═══●═══ 15%  │  🏭 Ind. ═══●═══ 70%  │  ☀️ Prod ═══●═══ 100%  │
-│               │  180→27 kVA          │  150→105 kVA         │  36→36 kVA            │
-├───────────────┼──────────────────────────────────────────────────────────────────────┤
-│ Déséquilibre  │  Charges: [L1] [L2] [L3]   │   Productions: [L1] [L2] [L3]           │
-│ ⟲ Reset       │  +2%   -1%   +5%           │   +0%   +3%   -2%                       │
-└─────────────────────────────────────────────────────────────────────────────────────┘
+```typescript
+// LIGNES 357-365 - BUG : un client A-B est compté 0.5 sur A ET 0.5 sur B
+if (client.phaseCoupling === 'A-B' || client.phaseCoupling === 'A-C') {
+  result.monoClientsCount.A += 0.5;
+}
+if (client.phaseCoupling === 'A-B' || client.phaseCoupling === 'B-C') {
+  result.monoClientsCount.B += 0.5;
+}
+if (client.phaseCoupling === 'B-C' || client.phaseCoupling === 'A-C') {
+  result.monoClientsCount.C += 0.5;
+}
 ```
 
-**Caractéristiques :**
-- Sliders horizontaux au lieu de verticaux pour les phases (gain de ~80px)
-- Scénario + foisonnement sur une seule ligne
-- Affichage compact des écarts de phase (valeurs numériques uniquement)
+**Le problème** : On ne parle pas de phases (L1, L2, L3) mais de **couples de phases** (L1-L2, L2-L3, L3-L1). Chaque client MONO appartient à UN SEUL couplage.
 
-### Rangée 2 : Détails (collapsible avec accordéon)
+---
 
-```text
-┌─ [v] Récapitulatif par couplage ────────────────────────────────────────────────────┐
-│  L1-L2 │ 15 MONO │ 60.0 kVA MONO │ 12.0 Poly Rés │ 35.0 Poly Ind │ 36.2 kVA │ 8.5A │
-│  L2-L3 │ 12 MONO │ 48.0 kVA MONO │ 12.0 Poly Rés │ 35.0 Poly Ind │ 33.8 kVA │ 7.2A │
-│  L3-L1 │ 18 MONO │ 72.0 kVA MONO │ 12.0 Poly Rés │ 35.0 Poly Ind │ 37.5 kVA │ 9.1A │
-└─────────────────────────────────────────────────────────────────────────────────────┘
+## Correction à apporter
 
-┌─ [v] Foisonnement détaillé ─────────────────────────────────────────────────────────┐
-│  🏠 Résidentiel (15%): MONO 45 clients 180→27 kVA │ TRI 3 clients 36→5.4 kVA        │
-│  🏭 Industriel (70%): TRI/TÉTRA 5 clients 150→105 kVA                               │
-│  Total: 137.4 kVA foisonné                                                          │
-└─────────────────────────────────────────────────────────────────────────────────────┘
+### Logique métier 230V Triangle
 
-┌─ [v] Alertes fortes puissances ─────────────────────────────────────────────────────┐
-│  ⚠️ L1: 2 clients (15 kVA)  │  L2: 0  │  L3: 1 client (12 kVA)                      │
-└─────────────────────────────────────────────────────────────────────────────────────┘
+| Couplage physique | Label tableau | Variable interne |
+|------------------|---------------|------------------|
+| L1-L2 | `L1-L2` | `phase === 'A'` |
+| L2-L3 | `L2-L3` | `phase === 'B'` |
+| L3-L1 | `L3-L1` | `phase === 'C'` |
+
+Un client sur le couplage `A-B` appartient à la ligne **L1-L2** uniquement (phase interne = 'A').
+
+### Fichier `src/utils/phaseDistributionCalculator.ts`
+
+#### Modification 1 : Corriger `monoClientsCount` (lignes 356-365)
+
+```typescript
+// AVANT (incorrect) : 0.5 sur 2 phases
+if (client.phaseCoupling === 'A-B' || client.phaseCoupling === 'A-C') {
+  result.monoClientsCount.A += 0.5;
+}
+if (client.phaseCoupling === 'A-B' || client.phaseCoupling === 'B-C') {
+  result.monoClientsCount.B += 0.5;
+}
+
+// APRÈS (correct) : 1 client par couplage
+if (client.phaseCoupling === 'A-B') {
+  result.monoClientsCount.A += 1;  // L1-L2
+} else if (client.phaseCoupling === 'B-C') {
+  result.monoClientsCount.B += 1;  // L2-L3
+} else if (client.phaseCoupling === 'A-C') {
+  result.monoClientsCount.C += 1;  // L3-L1
+}
 ```
 
-**Caractéristiques :**
-- 3 sections en accordéon (une seule ouverte à la fois)
-- Tableau réduit à 7 colonnes essentielles (au lieu de 11)
-- Alertes condensées en une ligne
+### Fichier `src/components/PhaseDistributionDisplay.tsx`
 
----
+#### Vérification : Logique de `calculatePhaseData()` (lignes 53-57)
 
-## Modifications techniques
+Cette partie est **CORRECTE** :
 
-### Fichier : `src/components/topMenu/ParametersTab.tsx`
-
-| Modification | Description |
-|--------------|-------------|
-| Layout horizontal | Remplacer les 2 Cards côte à côte par un layout en rangées empilées |
-| Sliders horizontaux pour phases | Remplacer les barres verticales par des sliders horizontaux compacts |
-| Accordéon pour sections détaillées | Utiliser `Accordion` au lieu de `Collapsible` pour les 3 sections |
-| Supprimer duplication | Le résumé foisonnement intégré dans la rangée 1 rend la Card séparée obsolète |
-
-### Fichier : `src/components/PhaseDistributionSliders.tsx`
-
-| Modification | Description |
-|--------------|-------------|
-| Orientation horizontale | Changer `orientation="vertical"` en layout horizontal |
-| Affichage compact | Retirer les barres de progression visuelles, garder slider + valeur |
-| Hauteur réduite | Passer de 120px à ~50px par groupe |
-
-### Fichier : `src/components/PhaseDistributionDisplay.tsx`
-
-| Modification | Description |
-|--------------|-------------|
-| Tableau 7 colonnes | Supprimer: "Prod. foisonné", "Ch. contrat", "Prod (kVA)" séparée |
-| Colonnes conservées | Couplage, Nb MONO, Ch. MONO, Ch. Poly Rés, Ch. Poly Ind, Ch. déséq, Courant |
-| Alertes condensées | Une seule ligne avec badges colorés au lieu de la grille 3 colonnes |
-| Accordéon | Wrapper les 3 sections dans `AccordionItem` |
-
----
-
-## Gain d'espace estimé
-
-| Section | Avant | Après | Gain |
-|---------|-------|-------|------|
-| Foisonnement + Scénario | 200px | 80px | -120px |
-| Sliders de phase | 150px | 50px | -100px |
-| Tableau récapitulatif | 180px | 120px | -60px |
-| Alertes fortes puissances | 200px | 40px (collapsé) | -160px |
-| Résumé foisonnement | 120px | 40px (collapsé) | -80px |
-| **TOTAL** | **~850px** | **~330px** | **-520px (~60%)** |
-
----
-
-## Wireframe final
-
-```text
-┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│ PARAMÈTRES                                                                              │
-├─────────────────────────────────────────────────────────────────────────────────────────┤
-│ ┌─ Scénario ─┐  ┌─ Foisonnement ─────────────────────────────────────────────────────┐  │
-│ │ ⚡ Mixte ▼ │  │ 🏠 ══●══ 15%  │  🏭 ══●══ 70%  │  ☀️ ══●══ 100%  │ Total: 137 kVA │  │
-│ └────────────┘  │ 180→27        │  150→105       │  36→36          │                │  │
-│                 └────────────────────────────────────────────────────────────────────┘  │
-├─────────────────────────────────────────────────────────────────────────────────────────┤
-│ ┌─ Déséquilibre (%) ─────────────────────────────────────────────────────────────────┐  │
-│ │ Charges:     L1-L2 ══●══ +2%  │  L2-L3 ══●══ -1%  │  L3-L1 ══●══ +5%     [⟲ Reset] │  │
-│ │ Productions: L1-L2 ══●══ +0%  │  L2-L3 ══●══ +3%  │  L3-L1 ══●══ -2%     [⟲ Reset] │  │
-│ └────────────────────────────────────────────────────────────────────────────────────┘  │
-├─────────────────────────────────────────────────────────────────────────────────────────┤
-│ ▶ Récapitulatif par couplage                                                   [Table] │
-│ ▶ Foisonnement détaillé (MONO/POLY)                                            [Stats] │
-│ ▶ Alertes fortes puissances MONO                                           [⚠️ 3 L1]   │
-└─────────────────────────────────────────────────────────────────────────────────────────┘
+```typescript
+if (is230V) {
+  const coupling = client.phaseCoupling;
+  if (phase === 'A' && coupling === 'A-B') matchesPhase = true;  // ✅ L1-L2 → A
+  if (phase === 'B' && coupling === 'B-C') matchesPhase = true;  // ✅ L2-L3 → B
+  if (phase === 'C' && coupling === 'A-C') matchesPhase = true;  // ✅ L3-L1 → C
+}
 ```
+
+Le mappage est correct : un client `A-B` n'apparaît que quand `phase === 'A'`.
+
+---
+
+## Impact de la correction
+
+### Avant correction
+| Ligne | Client sur A-B |
+|-------|----------------|
+| L1-L2 | 0.5 client |
+| L2-L3 | 0.5 client |
+| L3-L1 | 0 client |
+
+### Après correction
+| Ligne | Client sur A-B |
+|-------|----------------|
+| L1-L2 | 1 client ✅ |
+| L2-L3 | 0 client ✅ |
+| L3-L1 | 0 client ✅ |
 
 ---
 
 ## Fichiers à modifier
 
-1. **`src/components/topMenu/ParametersTab.tsx`**
-   - Refactorer le layout en rangées horizontales
-   - Intégrer les sliders de foisonnement inline
-   - Ajouter composant Accordion pour les sections détaillées
+| Fichier | Lignes | Action |
+|---------|--------|--------|
+| `src/utils/phaseDistributionCalculator.ts` | 356-365 | Corriger le comptage `monoClientsCount` pour 230V |
+| `src/components/PhaseDistributionDisplay.tsx` | 53-57 | Aucune modification (déjà correct) |
 
-2. **`src/components/PhaseDistributionSliders.tsx`**
-   - Convertir les sliders verticaux en horizontaux
-   - Réduire la hauteur globale du composant
+---
 
-3. **`src/components/PhaseDistributionDisplay.tsx`**
-   - Réduire le tableau à 7 colonnes essentielles
-   - Condenser les alertes en badges inline
-   - Wrapper les sections dans AccordionItems
+## Récapitulatif
 
-## Bénéfices
-
-- Gain de 60% d'espace vertical
-- Toutes les informations restent accessibles
-- Interface plus scannable (contrôles en haut, détails à la demande)
-- Accordéon permet de voir une section détaillée sans encombrer
+La seule modification nécessaire est dans `phaseDistributionCalculator.ts` pour aligner le comptage des clients MONO avec la logique "1 client = 1 couplage de phases", au lieu de la logique erronée "1 client = 0.5 × 2 phases".
 

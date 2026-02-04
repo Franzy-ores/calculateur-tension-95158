@@ -1,130 +1,157 @@
 
 
-# Plan : Correction du tableau Récapitulatif par Couplage
+# Plan : Restructuration compacte de l'onglet Paramètres
 
-## Clarification métier
+## Objectif
+Réduire l'espace vertical occupé tout en conservant toutes les informations existantes.
 
-| Règle | Description |
-|-------|-------------|
-| **MONO = Résidentiel uniquement** | Les clients monophasés sont toujours résidentiels |
-| **Industriel = TRI/TÉTRA uniquement** | Les clients industriels sont obligatoirement polyphasés |
-| **Tag clientType fait loi** | Le foisonnement dépend du tag résidentiel/industriel, pas du couplage |
+## Analyse de l'existant
 
-## Corrections à apporter
+| Composant | Hauteur estimée | Contenu |
+|-----------|----------------|---------|
+| Card Foisonnement | ~200px | Scénario + 3 sliders + totaux |
+| Sliders de phase | ~150px | 2 groupes de 3 barres verticales |
+| Alertes fortes puissances | ~200px | Grille 3 colonnes L1/L2/L3 |
+| Résumé foisonnement | ~120px | Détail MONO/POLY par type |
+| Tableau récapitulatif | ~180px | 11 colonnes, 3 lignes de données |
 
-### 1. Supprimer les lignes TRI et TÉTRA du tableau
+**Total déployé : ~850px de hauteur**
 
-**Lignes 734-775** : Ces lignes affichent des données redondantes car les charges TRI/TÉTRA sont déjà réparties dans les colonnes "Ch. Poly 33.3%" des lignes L1/L2/L3.
+---
 
-### 2. Corriger le foisonnement POLY (bug ligne 229)
+## Solution proposée : Layout en 2 rangées compactes
 
-```typescript
-// AVANT (ligne 229) - incorrect
-const chargePolyFoisonne = chargePoly * (foisonnementChargesIndustriel / 100); // Poly = industriel
-
-// APRÈS - correct : utiliser le tag clientType des clients TRI/TÉTRA
-const chargePolyFoisonne = 
-  chargePolyResidentiel * (foisonnementChargesResidentiel / 100) +
-  chargePolyIndustriel * (foisonnementChargesIndustriel / 100);
-```
-
-### 3. Simplifier les colonnes MONO industriel
-
-Puisque les clients MONO sont toujours résidentiels :
-- Supprimer la colonne "Nb Ind." pour les lignes MONO (ou laisser à 0)
-- Supprimer la colonne "Ch. Ind. (kVA)" pour les lignes MONO (ou afficher "-")
-- Renommer "Ch. Rés." en "Ch. MONO" (implicitement résidentiel)
-
-### 4. Enrichir le résumé foisonnement avec détail MONO/POLY
-
-Nouveau format proposé :
+### Rangée 1 : Contrôles (toujours visible)
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│ 📊 FOISONNEMENT PAR TYPE ET COUPLAGE                                            │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│  🏠 Résidentiel (15%)                                                           │
-│     MONO: 45 clients, 180 kVA → 27.0 kVA foisonné                              │
-│     TRI/TÉTRA: 3 clients, 36 kVA → 5.4 kVA foisonné                            │
-│     Total: 48 clients, 216 kVA → 32.4 kVA                                      │
-│                                                                                 │
-│  🏭 Industriel (70%)                                                            │
-│     TRI/TÉTRA: 5 clients, 150 kVA → 105.0 kVA foisonné                         │
-│                                                                                 │
-│  Total foisonné: 137.4 kVA                                                      │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ [Scénario ▼]  │  🏠 Rés. ═══●═══ 15%  │  🏭 Ind. ═══●═══ 70%  │  ☀️ Prod ═══●═══ 100%  │
+│               │  180→27 kVA          │  150→105 kVA         │  36→36 kVA            │
+├───────────────┼──────────────────────────────────────────────────────────────────────┤
+│ Déséquilibre  │  Charges: [L1] [L2] [L3]   │   Productions: [L1] [L2] [L3]           │
+│ ⟲ Reset       │  +2%   -1%   +5%           │   +0%   +3%   -2%                       │
+└─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Fichier à modifier
+**Caractéristiques :**
+- Sliders horizontaux au lieu de verticaux pour les phases (gain de ~80px)
+- Scénario + foisonnement sur une seule ligne
+- Affichage compact des écarts de phase (valeurs numériques uniquement)
 
-**`src/components/PhaseDistributionDisplay.tsx`**
+### Rangée 2 : Détails (collapsible avec accordéon)
 
-| Section | Lignes | Modification |
-|---------|--------|--------------|
-| `calculatePhaseData()` | 139-269 | Séparer `chargePolyResidentiel` et `chargePolyIndustriel` pour le foisonnement |
-| `calculateGlobalFoisonne()` | 271-330 | Ajouter compteurs MONO/POLY par type résidentiel |
-| Ligne TRI | 734-753 | Supprimer |
-| Ligne TÉTRA | 756-775 | Supprimer |
-| Résumé foisonnement | 625-651 | Enrichir avec détail MONO vs TRI/TÉTRA par type |
-| Colonnes tableau | 668-682 | Simplifier : retirer colonnes Ind. pour MONO, garder pour POLY |
+```text
+┌─ [v] Récapitulatif par couplage ────────────────────────────────────────────────────┐
+│  L1-L2 │ 15 MONO │ 60.0 kVA MONO │ 12.0 Poly Rés │ 35.0 Poly Ind │ 36.2 kVA │ 8.5A │
+│  L2-L3 │ 12 MONO │ 48.0 kVA MONO │ 12.0 Poly Rés │ 35.0 Poly Ind │ 33.8 kVA │ 7.2A │
+│  L3-L1 │ 18 MONO │ 72.0 kVA MONO │ 12.0 Poly Rés │ 35.0 Poly Ind │ 37.5 kVA │ 9.1A │
+└─────────────────────────────────────────────────────────────────────────────────────┘
 
-## Détail technique
+┌─ [v] Foisonnement détaillé ─────────────────────────────────────────────────────────┐
+│  🏠 Résidentiel (15%): MONO 45 clients 180→27 kVA │ TRI 3 clients 36→5.4 kVA        │
+│  🏭 Industriel (70%): TRI/TÉTRA 5 clients 150→105 kVA                               │
+│  Total: 137.4 kVA foisonné                                                          │
+└─────────────────────────────────────────────────────────────────────────────────────┘
 
-### Modification de `calculatePhaseData()` (lignes 139-269)
-
-Ajouter la distinction résidentiel/industriel pour les clients POLY :
-
-```typescript
-// Variables additionnelles à tracker
-let chargePolyResidentiel = 0;
-let chargePolyIndustriel = 0;
-
-// Dans la boucle clients POLY
-if (client.connectionType === 'TRI' || client.connectionType === 'TETRA') {
-  const chargeParPhase = client.puissanceContractuelle_kVA / 3;
-  if (client.clientType === 'industriel') {
-    chargePolyIndustriel += chargeParPhase;
-  } else {
-    chargePolyResidentiel += chargeParPhase;
-  }
-}
-
-// Foisonnement POLY corrigé
-const chargePolyFoisonne = 
-  chargePolyResidentiel * (foisonnementChargesResidentiel / 100) +
-  chargePolyIndustriel * (foisonnementChargesIndustriel / 100);
+┌─ [v] Alertes fortes puissances ─────────────────────────────────────────────────────┐
+│  ⚠️ L1: 2 clients (15 kVA)  │  L2: 0  │  L3: 1 client (12 kVA)                      │
+└─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Modification de `calculateGlobalFoisonne()` (lignes 271-330)
+**Caractéristiques :**
+- 3 sections en accordéon (une seule ouverte à la fois)
+- Tableau réduit à 7 colonnes essentielles (au lieu de 11)
+- Alertes condensées en une ligne
 
-Ajouter les compteurs pour le résumé enrichi :
+---
 
-```typescript
-interface GlobalFoisonneResult {
-  // Existants
-  totalFoisonneChargeGlobal: number;
-  totalFoisonneProductionGlobal: number;
-  // Nouveaux
-  monoResidentiel: { nbClients: number; charge: number; foisonne: number };
-  polyResidentiel: { nbClients: number; charge: number; foisonne: number };
-  polyIndustriel: { nbClients: number; charge: number; foisonne: number };
-}
+## Modifications techniques
+
+### Fichier : `src/components/topMenu/ParametersTab.tsx`
+
+| Modification | Description |
+|--------------|-------------|
+| Layout horizontal | Remplacer les 2 Cards côte à côte par un layout en rangées empilées |
+| Sliders horizontaux pour phases | Remplacer les barres verticales par des sliders horizontaux compacts |
+| Accordéon pour sections détaillées | Utiliser `Accordion` au lieu de `Collapsible` pour les 3 sections |
+| Supprimer duplication | Le résumé foisonnement intégré dans la rangée 1 rend la Card séparée obsolète |
+
+### Fichier : `src/components/PhaseDistributionSliders.tsx`
+
+| Modification | Description |
+|--------------|-------------|
+| Orientation horizontale | Changer `orientation="vertical"` en layout horizontal |
+| Affichage compact | Retirer les barres de progression visuelles, garder slider + valeur |
+| Hauteur réduite | Passer de 120px à ~50px par groupe |
+
+### Fichier : `src/components/PhaseDistributionDisplay.tsx`
+
+| Modification | Description |
+|--------------|-------------|
+| Tableau 7 colonnes | Supprimer: "Prod. foisonné", "Ch. contrat", "Prod (kVA)" séparée |
+| Colonnes conservées | Couplage, Nb MONO, Ch. MONO, Ch. Poly Rés, Ch. Poly Ind, Ch. déséq, Courant |
+| Alertes condensées | Une seule ligne avec badges colorés au lieu de la grille 3 colonnes |
+| Accordéon | Wrapper les 3 sections dans `AccordionItem` |
+
+---
+
+## Gain d'espace estimé
+
+| Section | Avant | Après | Gain |
+|---------|-------|-------|------|
+| Foisonnement + Scénario | 200px | 80px | -120px |
+| Sliders de phase | 150px | 50px | -100px |
+| Tableau récapitulatif | 180px | 120px | -60px |
+| Alertes fortes puissances | 200px | 40px (collapsé) | -160px |
+| Résumé foisonnement | 120px | 40px (collapsé) | -80px |
+| **TOTAL** | **~850px** | **~330px** | **-520px (~60%)** |
+
+---
+
+## Wireframe final
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│ PARAMÈTRES                                                                              │
+├─────────────────────────────────────────────────────────────────────────────────────────┤
+│ ┌─ Scénario ─┐  ┌─ Foisonnement ─────────────────────────────────────────────────────┐  │
+│ │ ⚡ Mixte ▼ │  │ 🏠 ══●══ 15%  │  🏭 ══●══ 70%  │  ☀️ ══●══ 100%  │ Total: 137 kVA │  │
+│ └────────────┘  │ 180→27        │  150→105       │  36→36          │                │  │
+│                 └────────────────────────────────────────────────────────────────────┘  │
+├─────────────────────────────────────────────────────────────────────────────────────────┤
+│ ┌─ Déséquilibre (%) ─────────────────────────────────────────────────────────────────┐  │
+│ │ Charges:     L1-L2 ══●══ +2%  │  L2-L3 ══●══ -1%  │  L3-L1 ══●══ +5%     [⟲ Reset] │  │
+│ │ Productions: L1-L2 ══●══ +0%  │  L2-L3 ══●══ +3%  │  L3-L1 ══●══ -2%     [⟲ Reset] │  │
+│ └────────────────────────────────────────────────────────────────────────────────────┘  │
+├─────────────────────────────────────────────────────────────────────────────────────────┤
+│ ▶ Récapitulatif par couplage                                                   [Table] │
+│ ▶ Foisonnement détaillé (MONO/POLY)                                            [Stats] │
+│ ▶ Alertes fortes puissances MONO                                           [⚠️ 3 L1]   │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Tableau simplifié
+---
 
-| Couplage | Nb MONO | Ch. MONO | Ch. Poly Rés. | Ch. Poly Ind. | Prod. | Ch. contrat | Ch. foisonné | Ch. déséq. | Courant |
-|----------|---------|----------|---------------|---------------|-------|-------------|--------------|------------|---------|
-| L1-L2    | 15      | 60.0     | 12.0          | 35.0          | 5.0   | 107.0       | 35.5         | 36.2 (+2%) | 8.5     |
-| L2-L3    | 12      | 48.0     | 12.0          | 35.0          | 3.0   | 95.0        | 33.1         | 33.8 (-1%) | 7.2     |
-| L3-L1    | 18      | 72.0     | 12.0          | 35.0          | 8.0   | 119.0       | 38.9         | 37.5 (+5%) | 9.1     |
+## Fichiers à modifier
+
+1. **`src/components/topMenu/ParametersTab.tsx`**
+   - Refactorer le layout en rangées horizontales
+   - Intégrer les sliders de foisonnement inline
+   - Ajouter composant Accordion pour les sections détaillées
+
+2. **`src/components/PhaseDistributionSliders.tsx`**
+   - Convertir les sliders verticaux en horizontaux
+   - Réduire la hauteur globale du composant
+
+3. **`src/components/PhaseDistributionDisplay.tsx`**
+   - Réduire le tableau à 7 colonnes essentielles
+   - Condenser les alertes en badges inline
+   - Wrapper les sections dans AccordionItems
 
 ## Bénéfices
 
-| Avant | Après |
-|-------|-------|
-| Lignes TRI/TÉTRA redondantes | Supprimées (info dans colonnes POLY) |
-| Foisonnement POLY toujours industriel | Foisonnement selon tag clientType |
-| Résumé sans détail MONO/POLY | Détail complet par type et couplage |
-| Colonnes Ind. pour MONO (toujours 0) | Colonnes simplifiées |
+- Gain de 60% d'espace vertical
+- Toutes les informations restent accessibles
+- Interface plus scannable (contrôles en haut, détails à la demande)
+- Accordéon permet de voir une section détaillée sans encombrer
 

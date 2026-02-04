@@ -157,6 +157,8 @@ function calculatePhaseData(
   chargeMonoIndustriel: number;
   productionMono: number;
   chargePoly: number;
+  chargePolyResidentiel: number;
+  chargePolyIndustriel: number;
   productionPoly: number;
   totalPhysiqueCharge: number;
   totalPhysiqueProduction: number;
@@ -176,6 +178,8 @@ function calculatePhaseData(
   let chargeMonoIndustriel = 0;
   let productionMono = 0;
   let chargePoly = 0;
+  let chargePolyResidentiel = 0;
+  let chargePolyIndustriel = 0;
   let productionPoly = 0;
   
   // Compter les clients MONO par phase avec distinction résidentiel/industriel
@@ -183,27 +187,43 @@ function calculatePhaseData(
   
   clientsImportes?.forEach(client => {
     if (!linkedClientIds.has(client.id)) return;
-    if (client.connectionType !== 'MONO') return;
     
-    let matchesPhase = false;
-    if (is230V) {
-      const coupling = client.phaseCoupling;
-      if (phase === 'A' && coupling === 'A-B') matchesPhase = true;
-      if (phase === 'B' && coupling === 'B-C') matchesPhase = true;
-      if (phase === 'C' && coupling === 'A-C') matchesPhase = true;
-    } else {
-      matchesPhase = client.assignedPhase === phase;
+    // Clients MONO : distinction résidentiel/industriel par phase
+    if (client.connectionType === 'MONO') {
+      let matchesPhase = false;
+      if (is230V) {
+        const coupling = client.phaseCoupling;
+        if (phase === 'A' && coupling === 'A-B') matchesPhase = true;
+        if (phase === 'B' && coupling === 'B-C') matchesPhase = true;
+        if (phase === 'C' && coupling === 'A-C') matchesPhase = true;
+      } else {
+        matchesPhase = client.assignedPhase === phase;
+      }
+      
+      if (matchesPhase) {
+        nbMono++;
+        const isResidentiel = client.clientType !== 'industriel';
+        // Note: MONO = toujours résidentiel selon règle métier
+        // On garde la logique au cas où, mais nbIndustriel sera toujours 0 pour MONO
+        if (isResidentiel) {
+          nbResidentiel++;
+          chargeMonoResidentiel += client.puissanceContractuelle_kVA;
+        } else {
+          nbIndustriel++;
+          chargeMonoIndustriel += client.puissanceContractuelle_kVA;
+        }
+      }
     }
     
-    if (matchesPhase) {
-      nbMono++;
+    // Clients POLY (TRI/TÉTRA) : répartir 33.33% sur chaque phase avec distinction résidentiel/industriel
+    if (client.connectionType === 'TRI' || client.connectionType === 'TETRA') {
+      const chargeParPhase = client.puissanceContractuelle_kVA / 3;
       const isResidentiel = client.clientType !== 'industriel';
+      
       if (isResidentiel) {
-        nbResidentiel++;
-        chargeMonoResidentiel += client.puissanceContractuelle_kVA;
+        chargePolyResidentiel += chargeParPhase;
       } else {
-        nbIndustriel++;
-        chargeMonoIndustriel += client.puissanceContractuelle_kVA;
+        chargePolyIndustriel += chargeParPhase;
       }
     }
   });
@@ -222,11 +242,15 @@ function calculatePhaseData(
   const totalPhysiqueProduction = productionMono + productionPoly;
   
   // Total foisonné de CETTE phase avec foisonnement différencié par type de client
-  // Pour MONO: appliquer foisonnement selon type client
-  // Pour POLY: utiliser foisonnement industriel (généralement les clients poly sont industriels)
+  // Pour MONO: appliquer foisonnement selon type client (MONO = toujours résidentiel)
+  // Pour POLY: utiliser le clientType (résidentiel OU industriel selon le tag)
   const chargeFoisonneResidentiel = chargeMonoResidentiel * (foisonnementChargesResidentiel / 100);
   const chargeFoisonneIndustriel = chargeMonoIndustriel * (foisonnementChargesIndustriel / 100);
-  const chargePolyFoisonne = chargePoly * (foisonnementChargesIndustriel / 100); // Poly = industriel
+  
+  // CORRECTION: foisonnement POLY séparé résidentiel/industriel selon clientType
+  const chargePolyFoisonne = 
+    chargePolyResidentiel * (foisonnementChargesResidentiel / 100) +
+    chargePolyIndustriel * (foisonnementChargesIndustriel / 100);
   
   const totalFoisonneCharge = chargeFoisonneResidentiel + chargeFoisonneIndustriel + chargePolyFoisonne;
   const totalFoisonneProduction = totalPhysiqueProduction * (foisonnementProductions / 100);
@@ -255,6 +279,8 @@ function calculatePhaseData(
     chargeMonoIndustriel,
     productionMono,
     chargePoly,
+    chargePolyResidentiel,
+    chargePolyIndustriel,
     productionPoly,
     totalPhysiqueCharge,
     totalPhysiqueProduction,
@@ -268,7 +294,7 @@ function calculatePhaseData(
   };
 }
 
-// Helper pour calculer les totaux foisonnés globaux avec distinction résidentiel/industriel
+// Helper pour calculer les totaux foisonnés globaux avec distinction résidentiel/industriel et MONO/POLY
 function calculateGlobalFoisonne(
   nodes: Node[],
   foisonnementChargesResidentiel: number,
@@ -285,6 +311,10 @@ function calculateGlobalFoisonne(
   totalChargeFoisonneIndustriel: number;
   nbTotalResidentiel: number;
   nbTotalIndustriel: number;
+  // NOUVEAU: Détail MONO/POLY par type
+  monoResidentiel: { nbClients: number; charge: number; foisonne: number };
+  polyResidentiel: { nbClients: number; charge: number; foisonne: number };
+  polyIndustriel: { nbClients: number; charge: number; foisonne: number };
 } {
   let totalChargePhysiqueResidentiel = 0;
   let totalChargePhysiqueIndustriel = 0;
@@ -292,22 +322,43 @@ function calculateGlobalFoisonne(
   let nbTotalResidentiel = 0;
   let nbTotalIndustriel = 0;
   
+  // Compteurs détaillés MONO/POLY par type
+  let monoResidentielClients = 0;
+  let monoResidentielCharge = 0;
+  let polyResidentielClients = 0;
+  let polyResidentielCharge = 0;
+  let polyIndustrielClients = 0;
+  let polyIndustrielCharge = 0;
+  
   const linkedClientIds = new Set(clientLinks?.map(link => link.clientId) || []);
   
-  // Calculer les charges par type de client
+  // Calculer les charges par type de client et couplage
   clientsImportes?.forEach(client => {
     if (!linkedClientIds.has(client.id)) return;
     
     const isResidentiel = client.clientType !== 'industriel';
+    const isMono = client.connectionType === 'MONO';
     const charge = client.puissanceContractuelle_kVA;
     const prod = client.puissancePV_kVA || 0;
     
     if (isResidentiel) {
       totalChargePhysiqueResidentiel += charge;
       nbTotalResidentiel++;
+      
+      if (isMono) {
+        monoResidentielClients++;
+        monoResidentielCharge += charge;
+      } else {
+        polyResidentielClients++;
+        polyResidentielCharge += charge;
+      }
     } else {
       totalChargePhysiqueIndustriel += charge;
       nbTotalIndustriel++;
+      
+      // Industriel = toujours POLY (TRI/TÉTRA)
+      polyIndustrielClients++;
+      polyIndustrielCharge += charge;
     }
     
     totalProductionPhysique += prod;
@@ -325,7 +376,23 @@ function calculateGlobalFoisonne(
     totalChargeFoisonneResidentiel,
     totalChargeFoisonneIndustriel,
     nbTotalResidentiel,
-    nbTotalIndustriel
+    nbTotalIndustriel,
+    // Détails MONO/POLY par type
+    monoResidentiel: {
+      nbClients: monoResidentielClients,
+      charge: monoResidentielCharge,
+      foisonne: monoResidentielCharge * (foisonnementChargesResidentiel / 100)
+    },
+    polyResidentiel: {
+      nbClients: polyResidentielClients,
+      charge: polyResidentielCharge,
+      foisonne: polyResidentielCharge * (foisonnementChargesResidentiel / 100)
+    },
+    polyIndustriel: {
+      nbClients: polyIndustrielClients,
+      charge: polyIndustrielCharge,
+      foisonne: polyIndustrielCharge * (foisonnementChargesIndustriel / 100)
+    }
   };
 }
 
@@ -622,30 +689,53 @@ export const PhaseDistributionDisplay = () => {
         </div>
       )}
 
-      {/* Résumé foisonnement par type de client */}
-      <div className="p-2 bg-slate-100 dark:bg-slate-700/50 border border-slate-300 dark:border-slate-600 rounded">
-        <div className="flex items-center justify-between text-xs">
-          <div className="flex items-center gap-4">
-            <span className="font-semibold text-foreground">📊 Foisonnement par type :</span>
-            <div className="flex items-center gap-1">
-              <span className="text-green-600 dark:text-green-400">Résidentiel ({foisonnementResidentiel}%):</span>
-              <span className="font-bold text-green-700 dark:text-green-300">
-                {globalFoisonne.nbTotalResidentiel} clients, 
-                {globalFoisonne.totalChargeResidentiel.toFixed(1)} kVA → 
-                {globalFoisonne.totalChargeFoisonneResidentiel.toFixed(1)} kVA
-              </span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="text-orange-600 dark:text-orange-400">Industriel ({foisonnementIndustriel}%):</span>
-              <span className="font-bold text-orange-700 dark:text-orange-300">
-                {globalFoisonne.nbTotalIndustriel} clients, 
-                {globalFoisonne.totalChargeIndustriel.toFixed(1)} kVA → 
-                {globalFoisonne.totalChargeFoisonneIndustriel.toFixed(1)} kVA
-              </span>
+      {/* Résumé foisonnement par type de client avec détail MONO/POLY */}
+      <div className="p-3 bg-slate-100 dark:bg-slate-700/50 border border-slate-300 dark:border-slate-600 rounded">
+        <div className="text-xs space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-foreground">📊 FOISONNEMENT PAR TYPE ET COUPLAGE</span>
+            <div className="text-foreground font-bold">
+              Total foisonné: {globalFoisonne.totalFoisonneChargeGlobal.toFixed(1)} kVA
             </div>
           </div>
-          <div className="text-foreground font-semibold">
-            Total foisonné: {globalFoisonne.totalFoisonneChargeGlobal.toFixed(1)} kVA
+          
+          {/* Résidentiel avec détail MONO/POLY */}
+          <div className="pl-2 border-l-2 border-green-500">
+            <div className="font-semibold text-green-600 dark:text-green-400 mb-1">
+              🏠 Résidentiel ({foisonnementResidentiel}%)
+            </div>
+            <div className="grid grid-cols-2 gap-x-4 text-muted-foreground">
+              <div className="flex justify-between">
+                <span>MONO:</span>
+                <span className="text-foreground">
+                  {globalFoisonne.monoResidentiel.nbClients} clients, {globalFoisonne.monoResidentiel.charge.toFixed(1)} kVA → <span className="font-bold text-green-700 dark:text-green-300">{globalFoisonne.monoResidentiel.foisonne.toFixed(1)} kVA</span>
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>TRI/TÉTRA:</span>
+                <span className="text-foreground">
+                  {globalFoisonne.polyResidentiel.nbClients} clients, {globalFoisonne.polyResidentiel.charge.toFixed(1)} kVA → <span className="font-bold text-green-700 dark:text-green-300">{globalFoisonne.polyResidentiel.foisonne.toFixed(1)} kVA</span>
+                </span>
+              </div>
+            </div>
+            <div className="mt-1 text-green-700 dark:text-green-300">
+              Total: {globalFoisonne.nbTotalResidentiel} clients, {globalFoisonne.totalChargeResidentiel.toFixed(1)} kVA → {globalFoisonne.totalChargeFoisonneResidentiel.toFixed(1)} kVA
+            </div>
+          </div>
+          
+          {/* Industriel (TRI/TÉTRA uniquement) */}
+          <div className="pl-2 border-l-2 border-orange-500">
+            <div className="font-semibold text-orange-600 dark:text-orange-400 mb-1">
+              🏭 Industriel ({foisonnementIndustriel}%)
+            </div>
+            <div className="text-muted-foreground">
+              <div className="flex justify-between">
+                <span>TRI/TÉTRA:</span>
+                <span className="text-foreground">
+                  {globalFoisonne.polyIndustriel.nbClients} clients, {globalFoisonne.polyIndustriel.charge.toFixed(1)} kVA → <span className="font-bold text-orange-700 dark:text-orange-300">{globalFoisonne.polyIndustriel.foisonne.toFixed(1)} kVA</span>
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -667,12 +757,10 @@ export const PhaseDistributionDisplay = () => {
             <thead>
               <tr className="border-b border-slate-300 dark:border-slate-500">
                 <th className="text-left py-2 px-2 text-foreground font-semibold">Couplage</th>
-                <th className="text-center py-2 px-1 text-foreground font-semibold">Nb<br/>Total</th>
-                <th className="text-center py-2 px-1 text-green-600 dark:text-green-400 font-semibold">Nb<br/>Rés.</th>
-                <th className="text-center py-2 px-1 text-orange-600 dark:text-orange-400 font-semibold">Nb<br/>Ind.</th>
-                <th className="text-right py-2 px-1 text-green-600 dark:text-green-400 font-semibold">Ch. Rés.<br/>(kVA)</th>
-                <th className="text-right py-2 px-1 text-orange-600 dark:text-orange-400 font-semibold">Ch. Ind.<br/>(kVA)</th>
-                <th className="text-right py-2 px-1 text-foreground font-semibold">Ch. Poly<br/>33.3%</th>
+                <th className="text-center py-2 px-1 text-foreground font-semibold">Nb<br/>MONO</th>
+                <th className="text-right py-2 px-1 text-foreground font-semibold">Ch. MONO<br/>(kVA)</th>
+                <th className="text-right py-2 px-1 text-green-600 dark:text-green-400 font-semibold">Ch. Poly<br/>Rés. 33.3%</th>
+                <th className="text-right py-2 px-1 text-orange-600 dark:text-orange-400 font-semibold">Ch. Poly<br/>Ind. 33.3%</th>
                 <th className="text-right py-2 px-1 text-foreground font-semibold">Prod.<br/>(kVA)</th>
                 <th className="text-right py-2 px-1 text-purple-600 dark:text-purple-400 font-semibold">Prod.<br/>foisonné</th>
                 <th className="text-right py-2 px-1 text-foreground font-semibold">Ch.<br/>contrat</th>
@@ -709,11 +797,9 @@ export const PhaseDistributionDisplay = () => {
                     <tr key={phase} className={`border-b border-slate-300 dark:border-slate-600/50 ${bgClass}`}>
                       <td className="py-2 px-2 text-foreground font-semibold">{phaseLabel}</td>
                       <td className="text-center py-2 px-1 text-foreground">{data.nbMono}</td>
-                      <td className="text-center py-2 px-1 text-green-700 dark:text-green-300">{data.nbResidentiel}</td>
-                      <td className="text-center py-2 px-1 text-orange-700 dark:text-orange-300">{data.nbIndustriel}</td>
-                      <td className="text-right py-2 px-1 text-green-700 dark:text-green-300">{data.chargeMonoResidentiel.toFixed(1)}</td>
-                      <td className="text-right py-2 px-1 text-orange-700 dark:text-orange-300">{data.chargeMonoIndustriel.toFixed(1)}</td>
-                      <td className="text-right py-2 px-1 text-foreground">{data.chargePoly.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-foreground">{data.chargeMono.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-green-700 dark:text-green-300">{data.chargePolyResidentiel.toFixed(1)}</td>
+                      <td className="text-right py-2 px-1 text-orange-700 dark:text-orange-300">{data.chargePolyIndustriel.toFixed(1)}</td>
                       <td className="text-right py-2 px-1 text-foreground">{data.productionMono.toFixed(1)}</td>
                       <td className="text-right py-2 px-1 text-purple-700 dark:text-purple-300 font-semibold">{data.totalFoisonneProduction.toFixed(1)}</td>
                       <td className="text-right py-2 px-1 text-foreground font-semibold">{data.totalPhysiqueCharge.toFixed(1)}</td>
@@ -731,49 +817,7 @@ export const PhaseDistributionDisplay = () => {
                 });
               })()}
               
-              {/* Ligne TRI si présent */}
-              {clientsByCoupling['TRI'] && (
-                <tr className="border-b border-slate-300 dark:border-slate-600/50 bg-purple-100 dark:bg-purple-500/20">
-                  <td className="py-2 px-2 text-foreground font-semibold">TRI</td>
-                  <td className="text-center py-2 px-1 text-foreground">{clientsByCoupling['TRI'].clients.length}</td>
-                  <td className="text-center py-2 px-1 text-green-700 dark:text-green-300">{clientsByCoupling['TRI'].nbResidentiel}</td>
-                  <td className="text-center py-2 px-1 text-orange-700 dark:text-orange-300">{clientsByCoupling['TRI'].nbIndustriel}</td>
-                  <td className="text-right py-2 px-1 text-green-700 dark:text-green-300">{clientsByCoupling['TRI'].chargeResidentiel.toFixed(1)}</td>
-                  <td className="text-right py-2 px-1 text-orange-700 dark:text-orange-300">{clientsByCoupling['TRI'].chargeIndustriel.toFixed(1)}</td>
-                  <td className="text-right py-2 px-1 text-foreground">-</td>
-                  <td className="text-right py-2 px-1 text-foreground">{clientsByCoupling['TRI'].totalProdKVA.toFixed(1)}</td>
-                  <td className="text-right py-2 px-1 text-purple-700 dark:text-purple-300 font-semibold">{(clientsByCoupling['TRI'].totalProdKVA * foisonnementProductions / 100).toFixed(1)}</td>
-                  <td className="text-right py-2 px-1 text-foreground font-semibold">{clientsByCoupling['TRI'].totalKVA.toFixed(1)}</td>
-                  <td className="text-right py-2 px-1 text-foreground font-semibold">
-                    {((clientsByCoupling['TRI'].chargeResidentiel * foisonnementResidentiel / 100) + 
-                      (clientsByCoupling['TRI'].chargeIndustriel * foisonnementIndustriel / 100)).toFixed(1)}
-                  </td>
-                  <td className="text-right py-2 px-1 text-foreground">-</td>
-                  <td className="text-right py-2 px-1 text-foreground font-semibold">{clientsByCoupling['TRI'].totalCurrent.toFixed(1)}</td>
-                </tr>
-              )}
-              
-              {/* Ligne TÉTRA si présent */}
-              {clientsByCoupling['TÉTRA'] && (
-                <tr className="border-b border-slate-300 dark:border-slate-600/50 bg-cyan-100 dark:bg-cyan-500/20">
-                  <td className="py-2 px-2 text-foreground font-semibold">TÉTRA</td>
-                  <td className="text-center py-2 px-1 text-foreground">{clientsByCoupling['TÉTRA'].clients.length}</td>
-                  <td className="text-center py-2 px-1 text-green-700 dark:text-green-300">{clientsByCoupling['TÉTRA'].nbResidentiel}</td>
-                  <td className="text-center py-2 px-1 text-orange-700 dark:text-orange-300">{clientsByCoupling['TÉTRA'].nbIndustriel}</td>
-                  <td className="text-right py-2 px-1 text-green-700 dark:text-green-300">{clientsByCoupling['TÉTRA'].chargeResidentiel.toFixed(1)}</td>
-                  <td className="text-right py-2 px-1 text-orange-700 dark:text-orange-300">{clientsByCoupling['TÉTRA'].chargeIndustriel.toFixed(1)}</td>
-                  <td className="text-right py-2 px-1 text-foreground">-</td>
-                  <td className="text-right py-2 px-1 text-foreground">{clientsByCoupling['TÉTRA'].totalProdKVA.toFixed(1)}</td>
-                  <td className="text-right py-2 px-1 text-purple-700 dark:text-purple-300 font-semibold">{(clientsByCoupling['TÉTRA'].totalProdKVA * foisonnementProductions / 100).toFixed(1)}</td>
-                  <td className="text-right py-2 px-1 text-foreground font-semibold">{clientsByCoupling['TÉTRA'].totalKVA.toFixed(1)}</td>
-                  <td className="text-right py-2 px-1 text-foreground font-semibold">
-                    {((clientsByCoupling['TÉTRA'].chargeResidentiel * foisonnementResidentiel / 100) + 
-                      (clientsByCoupling['TÉTRA'].chargeIndustriel * foisonnementIndustriel / 100)).toFixed(1)}
-                  </td>
-                  <td className="text-right py-2 px-1 text-foreground">-</td>
-                  <td className="text-right py-2 px-1 text-foreground font-semibold">{clientsByCoupling['TÉTRA'].totalCurrent.toFixed(1)}</td>
-                </tr>
-              )}
+              {/* Lignes TRI et TÉTRA supprimées car redondantes - les données POLY sont déjà réparties dans les colonnes Ch. Poly Rés./Ind. des phases */}
             </tbody>
           </table>
         </div>

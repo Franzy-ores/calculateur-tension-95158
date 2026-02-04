@@ -1,121 +1,241 @@
 
+# Plan : Restructuration complète du tableau Récapitulatif par couplage
 
-# Plan : Correction du comptage des clients MONO par couplage
+## Objectif
+Afficher un tableau avec colonnes distinctes pour charges ET productions, par catégorie (MONO, Poly Résidentiel, Poly Industriel), avec valeurs brutes et foisonnées, plus l'intensité par phase.
 
-## Bug identifié
+## Structure du tableau proposée
 
-### Symptôme
-Un client MONO ajouté sur le couplage L1-L2 apparaît sur **deux lignes** du tableau récapitulatif (L1-L2 ET L2-L3) au lieu d'une seule.
+| Couplage | Nb | Ch. | Pr. | Ch.F | Pr.F | Nb | Ch. | Pr. | Ch.F | Pr.F | Nb | Ch. | Pr. | Ch.F | Pr.F | Déséq. | I (A) |
+|----------|----|----|-----|------|------|----|-----|-----|------|------|----|-----|-----|------|------|--------|-------|
+|          | **MONO (Résidentiel)** |||||| **Poly Résidentiel** |||||| **Poly Industriel** |||||| | |
 
-### Cause racine
-Deux sources de données incohérentes sont utilisées pour le comptage :
+### Colonnes par catégorie (3 × 5 colonnes)
+- **Nb** : Nombre de clients
+- **Ch.** : Charge contractuelle (kVA)
+- **Pr.** : Production PV (kVA)
+- **Ch.F** : Charge foisonnée (kVA)
+- **Pr.F** : Production foisonnée (kVA)
 
-| Source | Fichier | Comportement |
-|--------|---------|--------------|
-| `calculatePhaseData()` | `PhaseDistributionDisplay.tsx:53-57` | Mappage correct : couplage → ligne unique |
-| `monoClientsCount` | `phaseDistributionCalculator.ts:357-365` | Mappage incorrect : compte 0.5 sur 2 phases |
-
-### Logique incorrecte dans `phaseDistributionCalculator.ts`
-
-```typescript
-// LIGNES 357-365 - BUG : un client A-B est compté 0.5 sur A ET 0.5 sur B
-if (client.phaseCoupling === 'A-B' || client.phaseCoupling === 'A-C') {
-  result.monoClientsCount.A += 0.5;
-}
-if (client.phaseCoupling === 'A-B' || client.phaseCoupling === 'B-C') {
-  result.monoClientsCount.B += 0.5;
-}
-if (client.phaseCoupling === 'B-C' || client.phaseCoupling === 'A-C') {
-  result.monoClientsCount.C += 0.5;
-}
-```
-
-**Le problème** : On ne parle pas de phases (L1, L2, L3) mais de **couples de phases** (L1-L2, L2-L3, L3-L1). Chaque client MONO appartient à UN SEUL couplage.
+### Colonnes finales
+- **Déséq.** : Écart par rapport à 33.33% (%)
+- **I (A)** : Intensité calculée sur la phase
 
 ---
 
-## Correction à apporter
+## Modifications techniques
 
-### Logique métier 230V Triangle
+### 1. Modifier `calculatePhaseData()` (lignes 23-131)
 
-| Couplage physique | Label tableau | Variable interne |
-|------------------|---------------|------------------|
-| L1-L2 | `L1-L2` | `phase === 'A'` |
-| L2-L3 | `L2-L3` | `phase === 'B'` |
-| L3-L1 | `L3-L1` | `phase === 'C'` |
-
-Un client sur le couplage `A-B` appartient à la ligne **L1-L2** uniquement (phase interne = 'A').
-
-### Fichier `src/utils/phaseDistributionCalculator.ts`
-
-#### Modification 1 : Corriger `monoClientsCount` (lignes 356-365)
+Ajouter le tracking des productions par catégorie :
 
 ```typescript
-// AVANT (incorrect) : 0.5 sur 2 phases
-if (client.phaseCoupling === 'A-B' || client.phaseCoupling === 'A-C') {
-  result.monoClientsCount.A += 0.5;
-}
-if (client.phaseCoupling === 'A-B' || client.phaseCoupling === 'B-C') {
-  result.monoClientsCount.B += 0.5;
-}
-
-// APRÈS (correct) : 1 client par couplage
-if (client.phaseCoupling === 'A-B') {
-  result.monoClientsCount.A += 1;  // L1-L2
-} else if (client.phaseCoupling === 'B-C') {
-  result.monoClientsCount.B += 1;  // L2-L3
-} else if (client.phaseCoupling === 'A-C') {
-  result.monoClientsCount.C += 1;  // L3-L1
+function calculatePhaseData(...) {
+  // Variables MONO
+  let nbMono = 0;
+  let chargeMonoResidentiel = 0;
+  let productionMonoResidentiel = 0;  // NOUVEAU
+  
+  // Variables POLY Résidentiel
+  let nbPolyResidentiel = 0;  // NOUVEAU
+  let chargePolyResidentiel = 0;
+  let productionPolyResidentiel = 0;  // NOUVEAU
+  
+  // Variables POLY Industriel
+  let nbPolyIndustriel = 0;  // NOUVEAU
+  let chargePolyIndustriel = 0;
+  let productionPolyIndustriel = 0;  // NOUVEAU
+  
+  clientsImportes?.forEach(client => {
+    if (!linkedClientIds.has(client.id)) return;
+    
+    if (client.connectionType === 'MONO') {
+      // Filtrage par phase/couplage (existant)
+      if (matchesPhase) {
+        nbMono++;
+        chargeMonoResidentiel += client.puissanceContractuelle_kVA;
+        productionMonoResidentiel += client.puissancePV_kVA || 0;  // NOUVEAU
+      }
+    }
+    
+    if (client.connectionType === 'TRI' || client.connectionType === 'TETRA') {
+      const isResidentiel = client.clientType !== 'industriel';
+      const chargeParPhase = client.puissanceContractuelle_kVA / 3;
+      const prodParPhase = (client.puissancePV_kVA || 0) / 3;  // NOUVEAU
+      
+      if (isResidentiel) {
+        nbPolyResidentiel += 1/3;  // Comptage fractionnel
+        chargePolyResidentiel += chargeParPhase;
+        productionPolyResidentiel += prodParPhase;  // NOUVEAU
+      } else {
+        nbPolyIndustriel += 1/3;
+        chargePolyIndustriel += chargeParPhase;
+        productionPolyIndustriel += prodParPhase;  // NOUVEAU
+      }
+    }
+  });
+  
+  // Calculs foisonnés par catégorie
+  const chargeMonoFoisonne = chargeMonoResidentiel * (foisonnementChargesResidentiel / 100);
+  const prodMonoFoisonne = productionMonoResidentiel * (foisonnementProductions / 100);
+  
+  const chargePolyResFoisonne = chargePolyResidentiel * (foisonnementChargesResidentiel / 100);
+  const prodPolyResFoisonne = productionPolyResidentiel * (foisonnementProductions / 100);
+  
+  const chargePolyIndFoisonne = chargePolyIndustriel * (foisonnementChargesIndustriel / 100);
+  const prodPolyIndFoisonne = productionPolyIndustriel * (foisonnementProductions / 100);
+  
+  // Intensité totale : (Charges - Productions) foisonnées / Voltage
+  const totalChargeFoisonne = chargeMonoFoisonne + chargePolyResFoisonne + chargePolyIndFoisonne;
+  const totalProdFoisonne = prodMonoFoisonne + prodPolyResFoisonne + prodPolyIndFoisonne;
+  const courant = ((totalChargeFoisonne - totalProdFoisonne) * 1000) / 230;
+  
+  return {
+    // MONO
+    nbMono,
+    chargeMono: chargeMonoResidentiel,
+    prodMono: productionMonoResidentiel,
+    chargeMonoFoisonne,
+    prodMonoFoisonne,
+    
+    // Poly Résidentiel
+    nbPolyRes: nbPolyResidentiel,
+    chargePolyRes: chargePolyResidentiel,
+    prodPolyRes: productionPolyResidentiel,
+    chargePolyResFoisonne,
+    prodPolyResFoisonne,
+    
+    // Poly Industriel
+    nbPolyInd: nbPolyIndustriel,
+    chargePolyInd: chargePolyIndustriel,
+    prodPolyInd: productionPolyIndustriel,
+    chargePolyIndFoisonne,
+    prodPolyIndFoisonne,
+    
+    // Totaux
+    ecartChargePercent,
+    courantTotal: courant
+  };
 }
 ```
 
-### Fichier `src/components/PhaseDistributionDisplay.tsx`
+### 2. Modifier `renderTable()` (lignes 283-361)
 
-#### Vérification : Logique de `calculatePhaseData()` (lignes 53-57)
+Nouvelle structure du tableau avec regroupement par catégorie :
 
-Cette partie est **CORRECTE** :
-
-```typescript
-if (is230V) {
-  const coupling = client.phaseCoupling;
-  if (phase === 'A' && coupling === 'A-B') matchesPhase = true;  // ✅ L1-L2 → A
-  if (phase === 'B' && coupling === 'B-C') matchesPhase = true;  // ✅ L2-L3 → B
-  if (phase === 'C' && coupling === 'A-C') matchesPhase = true;  // ✅ L3-L1 → C
-}
+```tsx
+<table className="w-full text-[10px] border-collapse">
+  <thead>
+    {/* Ligne de regroupement */}
+    <tr className="border-b border-border">
+      <th rowSpan={2}>Couplage</th>
+      <th colSpan={5} className="text-center bg-blue-100">MONO (Rés.)</th>
+      <th colSpan={5} className="text-center bg-green-100">Poly Rés.</th>
+      <th colSpan={5} className="text-center bg-orange-100">Poly Ind.</th>
+      <th rowSpan={2}>Déséq.</th>
+      <th rowSpan={2}>I (A)</th>
+    </tr>
+    {/* Ligne des sous-colonnes */}
+    <tr className="border-b border-border text-[9px]">
+      {/* MONO */}
+      <th>Nb</th><th>Ch.</th><th>Pr.</th><th>Ch.F</th><th>Pr.F</th>
+      {/* Poly Rés. */}
+      <th>Nb</th><th>Ch.</th><th>Pr.</th><th>Ch.F</th><th>Pr.F</th>
+      {/* Poly Ind. */}
+      <th>Nb</th><th>Ch.</th><th>Pr.</th><th>Ch.F</th><th>Pr.F</th>
+    </tr>
+  </thead>
+  <tbody>
+    {(['A', 'B', 'C'] as const).map((phase) => {
+      const data = calculatePhaseData(...);
+      return (
+        <tr key={phase}>
+          <td>{phaseLabel}</td>
+          {/* MONO */}
+          <td>{data.nbMono}</td>
+          <td>{data.chargeMono.toFixed(1)}</td>
+          <td>{data.prodMono.toFixed(1)}</td>
+          <td>{data.chargeMonoFoisonne.toFixed(1)}</td>
+          <td>{data.prodMonoFoisonne.toFixed(1)}</td>
+          {/* Poly Résidentiel */}
+          <td>{data.nbPolyRes.toFixed(0)}</td>
+          <td>{data.chargePolyRes.toFixed(1)}</td>
+          <td>{data.prodPolyRes.toFixed(1)}</td>
+          <td>{data.chargePolyResFoisonne.toFixed(1)}</td>
+          <td>{data.prodPolyResFoisonne.toFixed(1)}</td>
+          {/* Poly Industriel */}
+          <td>{data.nbPolyInd.toFixed(0)}</td>
+          <td>{data.chargePolyInd.toFixed(1)}</td>
+          <td>{data.prodPolyInd.toFixed(1)}</td>
+          <td>{data.chargePolyIndFoisonne.toFixed(1)}</td>
+          <td>{data.prodPolyIndFoisonne.toFixed(1)}</td>
+          {/* Totaux */}
+          <td>{data.ecartChargePercent.toFixed(0)}%</td>
+          <td>{Math.abs(data.courantTotal).toFixed(1)}</td>
+        </tr>
+      );
+    })}
+  </tbody>
+</table>
 ```
-
-Le mappage est correct : un client `A-B` n'apparaît que quand `phase === 'A'`.
 
 ---
 
-## Impact de la correction
+## Formule de calcul de l'intensité
 
-### Avant correction
-| Ligne | Client sur A-B |
-|-------|----------------|
-| L1-L2 | 0.5 client |
-| L2-L3 | 0.5 client |
-| L3-L1 | 0 client |
+Le courant par phase est calculé selon :
 
-### Après correction
-| Ligne | Client sur A-B |
-|-------|----------------|
-| L1-L2 | 1 client ✅ |
-| L2-L3 | 0 client ✅ |
-| L3-L1 | 0 client ✅ |
+```text
+I_phase = (Σ Charges_foisonnées - Σ Productions_foisonnées) × 1000 / U
+```
+
+Où :
+- **Charges_foisonnées** = Ch.MONO×15% + Ch.PolyRés×15% + Ch.PolyInd×70%
+- **Productions_foisonnées** = (Pr.MONO + Pr.PolyRés + Pr.PolyInd) × foisonnementProductions%
+- **U** = 230V
 
 ---
 
 ## Fichiers à modifier
 
-| Fichier | Lignes | Action |
-|---------|--------|--------|
-| `src/utils/phaseDistributionCalculator.ts` | 356-365 | Corriger le comptage `monoClientsCount` pour 230V |
-| `src/components/PhaseDistributionDisplay.tsx` | 53-57 | Aucune modification (déjà correct) |
+| Fichier | Section | Modification |
+|---------|---------|--------------|
+| `src/components/PhaseDistributionDisplay.tsx` | `calculatePhaseData()` L23-131 | Ajouter tracking production par catégorie |
+| `src/components/PhaseDistributionDisplay.tsx` | `renderTable()` L283-361 | Nouveau layout avec 17 colonnes |
 
 ---
 
-## Récapitulatif
+## Aperçu visuel final
 
-La seule modification nécessaire est dans `phaseDistributionCalculator.ts` pour aligner le comptage des clients MONO avec la logique "1 client = 1 couplage de phases", au lieu de la logique erronée "1 client = 0.5 × 2 phases".
+```text
+┌──────────┬─────────────────────────────┬─────────────────────────────┬─────────────────────────────┬───────┬───────┐
+│ Couplage │      MONO (Résidentiel)     │       Poly Résidentiel      │       Poly Industriel       │ Déséq │ I (A) │
+│          ├────┬──────┬──────┬─────┬─────┼────┬──────┬──────┬─────┬─────┼────┬──────┬──────┬─────┬─────┤       │       │
+│          │ Nb │ Ch.  │ Pr.  │ Ch.F│ Pr.F│ Nb │ Ch.  │ Pr.  │ Ch.F│ Pr.F│ Nb │ Ch.  │ Pr.  │ Ch.F│ Pr.F│       │       │
+├──────────┼────┼──────┼──────┼─────┼─────┼────┼──────┼──────┼─────┼─────┼────┼──────┼──────┼─────┼─────┼───────┼───────┤
+│ L1-L2    │ 15 │ 60.0 │  5.0 │ 9.0 │ 5.0 │  1 │ 12.0 │  3.0 │ 1.8 │ 3.0 │  2 │ 35.0 │ 10.0 │24.5 │10.0 │  +2%  │  8.5  │
+│ L2-L3    │ 12 │ 48.0 │  3.0 │ 7.2 │ 3.0 │  1 │ 12.0 │  3.0 │ 1.8 │ 3.0 │  2 │ 35.0 │ 10.0 │24.5 │10.0 │  -1%  │  7.2  │
+│ L3-L1    │ 18 │ 72.0 │  8.0 │10.8 │ 8.0 │  1 │ 12.0 │  3.0 │ 1.8 │ 3.0 │  1 │ 35.0 │ 10.0 │24.5 │10.0 │  +5%  │  9.1  │
+└──────────┴────┴──────┴──────┴─────┴─────┴────┴──────┴──────┴─────┴─────┴────┴──────┴──────┴─────┴─────┴───────┴───────┘
+```
+
+---
+
+## Légende des colonnes
+
+| Abréviation | Signification |
+|-------------|---------------|
+| Nb | Nombre de clients |
+| Ch. | Charge contractuelle (kVA) |
+| Pr. | Production PV (kVA) |
+| Ch.F | Charge foisonnée (kVA) |
+| Pr.F | Production foisonnée (kVA) |
+| Déséq. | Écart de répartition vs 33.33% |
+| I (A) | Intensité résultante (A) |
+
+---
+
+## Note sur le comptage Poly
+
+Pour les clients polyphasés (TRI/TÉTRA), le comptage par phase est fractionnel (1/3 par phase) car un client est réparti sur les 3 phases. Le "Nb" affiché représente donc la contribution équivalente par phase, non le nombre absolu de clients.
 

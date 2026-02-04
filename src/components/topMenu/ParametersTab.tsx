@@ -1,20 +1,15 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Percent, BarChart3, ChevronDown, ChevronUp, Home, Factory, Sun, Activity } from "lucide-react";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Home, Factory, Sun, Activity, Table, BarChart3, AlertTriangle } from "lucide-react";
 import { useNetworkStore } from "@/store/networkStore";
 import { PhaseDistributionSliders } from "@/components/PhaseDistributionSliders";
 import { PhaseDistributionDisplay } from "@/components/PhaseDistributionDisplay";
 import { calculatePowersByClientType } from '@/utils/clientsUtils';
 import { getConnectedNodes } from '@/utils/networkConnectivity';
-import { useState } from 'react';
 
 export const ParametersTab = () => {
-  const [phaseOpen, setPhaseOpen] = useState(true);
-  
   const {
     currentProject,
     selectedScenario,
@@ -62,182 +57,177 @@ export const ParametersTab = () => {
   const showPhaseDistribution = currentProject.loadModel === 'monophase_reparti' || currentProject.loadModel === 'mixte_mono_poly';
 
   return (
-    <div className="flex flex-wrap gap-3 p-3">
-      {/* Card 1: Foisonnement différencié */}
-      <Card className="bg-card/80 backdrop-blur border-border/50 flex-1 min-w-[300px] max-w-[450px]">
-        <CardHeader className="pb-1 pt-2 px-3">
-          <CardTitle className="text-xs font-medium flex items-center gap-1.5">
-            <Percent className="h-3 w-3 text-primary" />
-            Coefficients de foisonnement
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-3 pb-2 space-y-3">
-          {/* Sélecteur de scénario */}
-          <div className="space-y-1 pb-2 border-b border-border/50">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs flex items-center gap-1">
-                <Activity className="h-3 w-3 text-destructive" />
-                Scénario
-              </Label>
-            </div>
-            <Select 
-              value={selectedScenario || 'PRÉLÈVEMENT'} 
-              onValueChange={setSelectedScenario}
-              disabled={simulationPreview.isActive}
-            >
-              <SelectTrigger className="w-full bg-background border text-xs h-8">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-popover border z-[10000]">
-                <SelectItem value="PRÉLÈVEMENT">🔌 Prélèvement</SelectItem>
-                <SelectItem value="MIXTE">⚡ Mixte</SelectItem>
-                <SelectItem value="PRODUCTION">☀️ Production</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-[10px] text-muted-foreground">
-              {selectedScenario === 'PRÉLÈVEMENT' && "Consommation uniquement"}
-              {selectedScenario === 'MIXTE' && "Consommation + production"}
-              {selectedScenario === 'PRODUCTION' && "Injection maximale"}
-            </p>
-          </div>
+    <div className="flex flex-col gap-2 p-2">
+      {/* Rangée 1: Scénario + Foisonnement (toujours visible) */}
+      <div className="flex flex-wrap items-stretch gap-3 p-3 bg-card/80 backdrop-blur border border-border/50 rounded-lg">
+        {/* Scénario */}
+        <div className="flex flex-col gap-1 min-w-[120px]">
+          <Label className="text-[10px] flex items-center gap-1 text-muted-foreground">
+            <Activity className="h-3 w-3" />
+            Scénario
+          </Label>
+          <Select 
+            value={selectedScenario || 'PRÉLÈVEMENT'} 
+            onValueChange={setSelectedScenario}
+            disabled={simulationPreview.isActive}
+          >
+            <SelectTrigger className="w-full bg-background border text-xs h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-popover border z-[10000]">
+              <SelectItem value="PRÉLÈVEMENT">🔌 Prélèvement</SelectItem>
+              <SelectItem value="MIXTE">⚡ Mixte</SelectItem>
+              <SelectItem value="PRODUCTION">☀️ Production</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-          {/* Charges Résidentielles */}
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs flex items-center gap-1">
-                <Home className="h-3 w-3 text-blue-500" />
-                Résidentiel
-              </Label>
-              <span className="text-xs font-mono font-medium text-blue-500">
-                {foisonnementResidentiel}%
+        {/* Séparateur */}
+        <div className="w-px bg-border/50 self-stretch" />
+
+        {/* Sliders Foisonnement inline */}
+        <div className="flex flex-wrap items-center gap-4 flex-1">
+          {/* Résidentiel */}
+          <div className="flex items-center gap-2 min-w-[180px] flex-1 max-w-[220px]">
+            <Home className="h-4 w-4 text-blue-500 flex-shrink-0" />
+            <div className="flex-1 flex flex-col gap-0.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-muted-foreground">Rés.</span>
+                <span className="text-xs font-mono font-medium text-blue-500">{foisonnementResidentiel}%</span>
+              </div>
+              <Slider
+                value={[foisonnementResidentiel]}
+                onValueChange={(value) => setFoisonnementChargesResidentiel(value[0])}
+                max={100}
+                min={0}
+                step={1}
+                disabled={simulationPreview.isActive}
+                className="h-3"
+              />
+              <span className="text-[10px] text-muted-foreground">
+                {chargesResidentielles.toFixed(0)}→<span className="text-blue-500 font-medium">{chargesResidentiellesFoisonnees.toFixed(1)}</span>
               </span>
             </div>
-            <Slider
-              value={[foisonnementResidentiel]}
-              onValueChange={(value) => setFoisonnementChargesResidentiel(value[0])}
-              max={100}
-              min={0}
-              step={1}
-              disabled={simulationPreview.isActive}
-              className="h-4"
-            />
-            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-              <span>{chargesResidentielles.toFixed(1)} kVA contractuel</span>
-              <span className="font-medium text-blue-500">{chargesResidentiellesFoisonnees.toFixed(1)} kVA</span>
-            </div>
           </div>
 
-          {/* Charges Industrielles */}
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs flex items-center gap-1">
-                <Factory className="h-3 w-3 text-orange-500" />
-                Industriel
-              </Label>
-              <span className="text-xs font-mono font-medium text-orange-500">
-                {foisonnementIndustriel}%
+          {/* Industriel */}
+          <div className="flex items-center gap-2 min-w-[180px] flex-1 max-w-[220px]">
+            <Factory className="h-4 w-4 text-orange-500 flex-shrink-0" />
+            <div className="flex-1 flex flex-col gap-0.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-muted-foreground">Ind.</span>
+                <span className="text-xs font-mono font-medium text-orange-500">{foisonnementIndustriel}%</span>
+              </div>
+              <Slider
+                value={[foisonnementIndustriel]}
+                onValueChange={(value) => setFoisonnementChargesIndustriel(value[0])}
+                max={100}
+                min={0}
+                step={1}
+                disabled={simulationPreview.isActive}
+                className="h-3"
+              />
+              <span className="text-[10px] text-muted-foreground">
+                {chargesIndustrielles.toFixed(0)}→<span className="text-orange-500 font-medium">{chargesIndustriellesFoisonnees.toFixed(1)}</span>
               </span>
-            </div>
-            <Slider
-              value={[foisonnementIndustriel]}
-              onValueChange={(value) => setFoisonnementChargesIndustriel(value[0])}
-              max={100}
-              min={0}
-              step={1}
-              disabled={simulationPreview.isActive}
-              className="h-4"
-            />
-            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-              <span>{chargesIndustrielles.toFixed(1)} kVA contractuel</span>
-              <span className="font-medium text-orange-500">{chargesIndustriellesFoisonnees.toFixed(1)} kVA</span>
-            </div>
-          </div>
-
-          {/* Séparateur et Total */}
-          <div className="border-t border-border/50 pt-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Total charges foisonnées</span>
-              <span className="font-medium text-primary">{totalChargesFoisonnees.toFixed(1)} kVA</span>
-            </div>
-            <div className="text-[10px] text-muted-foreground text-right">
-              sur {(chargesResidentielles + chargesIndustrielles).toFixed(1)} kVA contractuel
             </div>
           </div>
 
           {/* Productions */}
-          <div className="space-y-1 border-t border-border/50 pt-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs flex items-center gap-1">
-                <Sun className="h-3 w-3 text-yellow-500" />
-                Productions
-              </Label>
-              <span className="text-xs font-mono font-medium text-yellow-500">
-                {foisonnementProductions}%
+          <div className="flex items-center gap-2 min-w-[180px] flex-1 max-w-[220px]">
+            <Sun className="h-4 w-4 text-yellow-500 flex-shrink-0" />
+            <div className="flex-1 flex flex-col gap-0.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-muted-foreground">Prod.</span>
+                <span className="text-xs font-mono font-medium text-yellow-500">{foisonnementProductions}%</span>
+              </div>
+              <Slider
+                value={[foisonnementProductions]}
+                onValueChange={(value) => setFoisonnementProductions(value[0])}
+                max={100}
+                min={0}
+                step={1}
+                disabled={simulationPreview.isActive}
+                className="h-3"
+              />
+              <span className="text-[10px] text-muted-foreground">
+                {totalProductionsContractuelles.toFixed(0)}→<span className="text-yellow-500 font-medium">{productionsFoisonnees.toFixed(1)}</span>
               </span>
             </div>
-            <Slider
-              value={[foisonnementProductions]}
-              onValueChange={(value) => setFoisonnementProductions(value[0])}
-              max={100}
-              min={0}
-              step={1}
-              disabled={simulationPreview.isActive}
-              className="h-4"
-            />
-            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-              <span>{totalProductionsContractuelles.toFixed(1)} kVA</span>
-              <span className="font-medium text-yellow-500">{productionsFoisonnees.toFixed(1)} kVA</span>
-            </div>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Card 2: Distribution de phase - collapsible compact */}
+          {/* Total */}
+          <div className="flex flex-col items-end justify-center px-2 border-l border-border/50">
+            <span className="text-[10px] text-muted-foreground">Total foisonné</span>
+            <span className="text-sm font-bold text-primary">{totalChargesFoisonnees.toFixed(1)} kVA</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Rangée 2: Déséquilibre de phase (si mode MONO/Mixte) */}
       {showPhaseDistribution && (
-        <Card className="bg-card/80 backdrop-blur border-border/50 flex-1 min-w-[350px]">
-          <Collapsible open={phaseOpen} onOpenChange={setPhaseOpen}>
-            <CardHeader className="pb-1 pt-2 px-3">
-              <CollapsibleTrigger asChild>
-                <div className="flex items-center justify-between cursor-pointer hover:bg-muted/50 -mx-1 px-1 py-0.5 rounded transition-colors">
-                  <CardTitle className="text-xs font-medium flex items-center gap-1.5">
-                    <BarChart3 className="h-3 w-3 text-secondary" />
-                    Distribution de phase
-                  </CardTitle>
-                  <Button variant="ghost" size="sm" className="h-5 w-5 p-0">
-                    {phaseOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                  </Button>
-                </div>
-              </CollapsibleTrigger>
-            </CardHeader>
-            <CollapsibleContent>
-              <CardContent className="px-3 pb-2 space-y-2">
-                <div className="flex gap-3 flex-wrap">
-                  <div className="flex-1 min-w-[140px]">
-                    <PhaseDistributionSliders type="charges" title="Charges" />
-                  </div>
-                  <div className="flex-1 min-w-[140px]">
-                    <PhaseDistributionSliders type="productions" title="Productions" />
-                  </div>
-                </div>
-                <div className="border-t border-border/50 pt-2">
-                  <PhaseDistributionDisplay />
-                </div>
-              </CardContent>
-            </CollapsibleContent>
-          </Collapsible>
-        </Card>
+        <div className="flex flex-wrap items-center gap-4 p-3 bg-card/80 backdrop-blur border border-border/50 rounded-lg">
+          <Label className="text-xs font-medium flex items-center gap-1.5 text-muted-foreground">
+            <BarChart3 className="h-3.5 w-3.5" />
+            Déséquilibre
+          </Label>
+          <PhaseDistributionSliders type="charges" title="Charges" />
+          <div className="w-px h-8 bg-border/50" />
+          <PhaseDistributionSliders type="productions" title="Productions" />
+        </div>
+      )}
+
+      {/* Rangée 3: Sections détaillées en accordéon */}
+      {showPhaseDistribution && (
+        <Accordion type="single" collapsible className="w-full">
+          <AccordionItem value="table" className="border border-border/50 rounded-lg bg-card/80 backdrop-blur">
+            <AccordionTrigger className="px-3 py-2 hover:no-underline">
+              <div className="flex items-center gap-2 text-xs font-medium">
+                <Table className="h-3.5 w-3.5 text-muted-foreground" />
+                Récapitulatif par couplage
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="px-3 pb-3">
+              <PhaseDistributionDisplay section="table" />
+            </AccordionContent>
+          </AccordionItem>
+          
+          <AccordionItem value="stats" className="border border-border/50 rounded-lg bg-card/80 backdrop-blur mt-1">
+            <AccordionTrigger className="px-3 py-2 hover:no-underline">
+              <div className="flex items-center gap-2 text-xs font-medium">
+                <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
+                Foisonnement détaillé (MONO/POLY)
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="px-3 pb-3">
+              <PhaseDistributionDisplay section="stats" />
+            </AccordionContent>
+          </AccordionItem>
+          
+          <AccordionItem value="alerts" className="border border-border/50 rounded-lg bg-card/80 backdrop-blur mt-1">
+            <AccordionTrigger className="px-3 py-2 hover:no-underline">
+              <div className="flex items-center gap-2 text-xs font-medium">
+                <AlertTriangle className="h-3.5 w-3.5 text-orange-500" />
+                Alertes fortes puissances MONO
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="px-3 pb-3">
+              <PhaseDistributionDisplay section="alerts" />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       )}
 
       {/* Placeholder if no phase distribution */}
       {!showPhaseDistribution && (
-        <Card className="bg-card/80 backdrop-blur border-border/50 flex items-center justify-center min-w-[200px]">
-          <CardContent className="text-center py-4">
-            <BarChart3 className="h-5 w-5 text-muted-foreground/30 mx-auto mb-1" />
+        <div className="flex items-center justify-center p-4 text-center bg-card/80 backdrop-blur border border-border/50 rounded-lg">
+          <div className="flex flex-col items-center gap-1">
+            <BarChart3 className="h-5 w-5 text-muted-foreground/30" />
             <p className="text-xs text-muted-foreground">
-              Mode Monophasé ou Mixte requis
+              Mode Monophasé ou Mixte requis pour la distribution de phase
             </p>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
     </div>
   );

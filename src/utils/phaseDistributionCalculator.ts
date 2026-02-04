@@ -353,15 +353,14 @@ export function calculateNodeAutoPhaseDistribution(
         result.productions.mono.B += baseProdB;
         result.productions.mono.C += baseProdC;
         
-        // Comptage pour affichage selon le couplage
-        if (client.phaseCoupling === 'A-B' || client.phaseCoupling === 'A-C') {
-          result.monoClientsCount.A += 0.5;
-        }
-        if (client.phaseCoupling === 'A-B' || client.phaseCoupling === 'B-C') {
-          result.monoClientsCount.B += 0.5;
-        }
-        if (client.phaseCoupling === 'B-C' || client.phaseCoupling === 'A-C') {
-          result.monoClientsCount.C += 0.5;
+        // Comptage pour affichage : 1 client = 1 couplage unique
+        // A-B → L1-L2 (compteur A), B-C → L2-L3 (compteur B), A-C → L3-L1 (compteur C)
+        if (client.phaseCoupling === 'A-B') {
+          result.monoClientsCount.A += 1;
+        } else if (client.phaseCoupling === 'B-C') {
+          result.monoClientsCount.B += 1;
+        } else if (client.phaseCoupling === 'A-C') {
+          result.monoClientsCount.C += 1;
         }
       } else {
         // ✅ Réseau 400V : distribution physique sur la phase assignée SANS curseurs de déséquilibre

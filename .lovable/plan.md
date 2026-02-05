@@ -1,241 +1,222 @@
 
-# Plan : Restructuration complète du tableau Récapitulatif par couplage
+# Plan : Synchronisation automatique des curseurs de déséquilibre avec le tableau
 
 ## Objectif
-Afficher un tableau avec colonnes distinctes pour charges ET productions, par catégorie (MONO, Poly Résidentiel, Poly Industriel), avec valeurs brutes et foisonnées, plus l'intensité par phase.
+1. Les curseurs de déséquilibre s'adaptent **automatiquement** aux valeurs calculées dans le tableau récapitulatif par couplage
+2. Si l'utilisateur **force manuellement** un curseur, l'arrière-plan passe en **jaune** pour indiquer le mode forcé
+3. Le bouton Reset remet les curseurs en mode automatique (synchronisé avec le tableau)
 
-## Structure du tableau proposée
+---
 
-| Couplage | Nb | Ch. | Pr. | Ch.F | Pr.F | Nb | Ch. | Pr. | Ch.F | Pr.F | Nb | Ch. | Pr. | Ch.F | Pr.F | Déséq. | I (A) |
-|----------|----|----|-----|------|------|----|-----|-----|------|------|----|-----|-----|------|------|--------|-------|
-|          | **MONO (Résidentiel)** |||||| **Poly Résidentiel** |||||| **Poly Industriel** |||||| | |
+## Architecture proposée
 
-### Colonnes par catégorie (3 × 5 colonnes)
-- **Nb** : Nombre de clients
-- **Ch.** : Charge contractuelle (kVA)
-- **Pr.** : Production PV (kVA)
-- **Ch.F** : Charge foisonnée (kVA)
-- **Pr.F** : Production foisonnée (kVA)
+### Nouveau flag dans `manualPhaseDistribution`
 
-### Colonnes finales
-- **Déséq.** : Écart par rapport à 33.33% (%)
-- **I (A)** : Intensité calculée sur la phase
+```typescript
+manualPhaseDistribution?: {
+  charges: { A: number; B: number; C: number };
+  productions: { A: number; B: number; C: number };
+  constraints: { min: number; max: number; total: number };
+  // NOUVEAU : Flags de forçage manuel
+  chargesForced?: boolean;      // true = curseurs charges forcés manuellement
+  productionsForced?: boolean;  // true = curseurs productions forcés manuellement
+};
+```
+
+### Comportement
+
+| État | Comportement curseurs | Couleur fond |
+|------|----------------------|--------------|
+| `forced = false` | Valeurs = calcul tableau | Standard (gris/transparent) |
+| `forced = true` | Valeurs = dernières valeurs manuelles | **Jaune** |
+| Reset cliqué | `forced = false`, valeurs recalculées | Standard |
 
 ---
 
 ## Modifications techniques
 
-### 1. Modifier `calculatePhaseData()` (lignes 23-131)
+### 1. `src/types/network.ts` (lignes 310-314)
 
-Ajouter le tracking des productions par catégorie :
+Ajouter les flags de forçage :
 
 ```typescript
-function calculatePhaseData(...) {
-  // Variables MONO
-  let nbMono = 0;
-  let chargeMonoResidentiel = 0;
-  let productionMonoResidentiel = 0;  // NOUVEAU
+manualPhaseDistribution?: {
+  charges: { A: number; B: number; C: number };
+  productions: { A: number; B: number; C: number };
+  constraints: { min: number; max: number; total: number };
+  chargesForced?: boolean;      // NOUVEAU
+  productionsForced?: boolean;  // NOUVEAU
+};
+```
+
+### 2. `src/components/PhaseDistributionSliders.tsx`
+
+#### a) Calculer les valeurs automatiques depuis le tableau
+
+Réutiliser la logique de `calculatePhaseData()` de `PhaseDistributionDisplay.tsx` pour calculer les pourcentages réels par couplage :
+
+```typescript
+const calculateAutoDistribution = (): { A: number; B: number; C: number } => {
+  // Calculer total foisonné par phase depuis les clients
+  // Retourner pourcentages A, B, C
+};
+```
+
+#### b) Synchroniser automatiquement si pas forcé
+
+```typescript
+useEffect(() => {
+  const isForced = type === 'charges' 
+    ? currentProject.manualPhaseDistribution?.chargesForced 
+    : currentProject.manualPhaseDistribution?.productionsForced;
   
-  // Variables POLY Résidentiel
-  let nbPolyResidentiel = 0;  // NOUVEAU
-  let chargePolyResidentiel = 0;
-  let productionPolyResidentiel = 0;  // NOUVEAU
-  
-  // Variables POLY Industriel
-  let nbPolyIndustriel = 0;  // NOUVEAU
-  let chargePolyIndustriel = 0;
-  let productionPolyIndustriel = 0;  // NOUVEAU
-  
-  clientsImportes?.forEach(client => {
-    if (!linkedClientIds.has(client.id)) return;
-    
-    if (client.connectionType === 'MONO') {
-      // Filtrage par phase/couplage (existant)
-      if (matchesPhase) {
-        nbMono++;
-        chargeMonoResidentiel += client.puissanceContractuelle_kVA;
-        productionMonoResidentiel += client.puissancePV_kVA || 0;  // NOUVEAU
-      }
+  if (!isForced) {
+    const autoValues = calculateAutoDistribution();
+    // Mettre à jour silencieusement si différent
+    if (Math.abs(autoValues.A - distribution.A) > 0.1 ||
+        Math.abs(autoValues.B - distribution.B) > 0.1 ||
+        Math.abs(autoValues.C - distribution.C) > 0.1) {
+      updateProjectConfig({
+        manualPhaseDistribution: {
+          ...currentProject.manualPhaseDistribution,
+          [type]: autoValues
+        }
+      });
     }
-    
-    if (client.connectionType === 'TRI' || client.connectionType === 'TETRA') {
-      const isResidentiel = client.clientType !== 'industriel';
-      const chargeParPhase = client.puissanceContractuelle_kVA / 3;
-      const prodParPhase = (client.puissancePV_kVA || 0) / 3;  // NOUVEAU
-      
-      if (isResidentiel) {
-        nbPolyResidentiel += 1/3;  // Comptage fractionnel
-        chargePolyResidentiel += chargeParPhase;
-        productionPolyResidentiel += prodParPhase;  // NOUVEAU
-      } else {
-        nbPolyIndustriel += 1/3;
-        chargePolyIndustriel += chargeParPhase;
-        productionPolyIndustriel += prodParPhase;  // NOUVEAU
-      }
+  }
+}, [currentProject.clientsImportes, currentProject.clientLinks, /* autres dépendances */]);
+```
+
+#### c) Marquer comme forcé lors d'une modification manuelle
+
+```typescript
+const handlePhaseChange = (phase: 'A' | 'B' | 'C', newValue: number) => {
+  // ... logique existante ...
+  
+  updateProjectConfig({
+    manualPhaseDistribution: {
+      ...currentProject.manualPhaseDistribution,
+      [type]: newDistribution,
+      [`${type}Forced`]: true  // MARQUER COMME FORCÉ
+    }
+  });
+};
+```
+
+#### d) Reset = retour en mode automatique
+
+```typescript
+const initializeToRealDistribution = () => {
+  const realDistribution = calculateAutoDistribution();
+  
+  updateProjectConfig({
+    manualPhaseDistribution: {
+      ...currentProject.manualPhaseDistribution,
+      [type]: realDistribution,
+      [`${type}Forced`]: false  // RETOUR EN MODE AUTO
     }
   });
   
-  // Calculs foisonnés par catégorie
-  const chargeMonoFoisonne = chargeMonoResidentiel * (foisonnementChargesResidentiel / 100);
-  const prodMonoFoisonne = productionMonoResidentiel * (foisonnementProductions / 100);
-  
-  const chargePolyResFoisonne = chargePolyResidentiel * (foisonnementChargesResidentiel / 100);
-  const prodPolyResFoisonne = productionPolyResidentiel * (foisonnementProductions / 100);
-  
-  const chargePolyIndFoisonne = chargePolyIndustriel * (foisonnementChargesIndustriel / 100);
-  const prodPolyIndFoisonne = productionPolyIndustriel * (foisonnementProductions / 100);
-  
-  // Intensité totale : (Charges - Productions) foisonnées / Voltage
-  const totalChargeFoisonne = chargeMonoFoisonne + chargePolyResFoisonne + chargePolyIndFoisonne;
-  const totalProdFoisonne = prodMonoFoisonne + prodPolyResFoisonne + prodPolyIndFoisonne;
-  const courant = ((totalChargeFoisonne - totalProdFoisonne) * 1000) / 230;
-  
-  return {
-    // MONO
-    nbMono,
-    chargeMono: chargeMonoResidentiel,
-    prodMono: productionMonoResidentiel,
-    chargeMonoFoisonne,
-    prodMonoFoisonne,
-    
-    // Poly Résidentiel
-    nbPolyRes: nbPolyResidentiel,
-    chargePolyRes: chargePolyResidentiel,
-    prodPolyRes: productionPolyResidentiel,
-    chargePolyResFoisonne,
-    prodPolyResFoisonne,
-    
-    // Poly Industriel
-    nbPolyInd: nbPolyIndustriel,
-    chargePolyInd: chargePolyIndustriel,
-    prodPolyInd: productionPolyIndustriel,
-    chargePolyIndFoisonne,
-    prodPolyIndFoisonne,
-    
-    // Totaux
-    ecartChargePercent,
-    courantTotal: courant
-  };
+  toast.success(`${type === 'charges' ? 'Charges' : 'Productions'} synchronisées avec le tableau`);
+};
+```
+
+#### e) Affichage fond jaune si forcé
+
+```typescript
+const isForced = type === 'charges' 
+  ? currentProject.manualPhaseDistribution?.chargesForced 
+  : currentProject.manualPhaseDistribution?.productionsForced;
+
+return (
+  <div className={cn(
+    "flex items-center gap-3 p-2 rounded-md",
+    isForced && "bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700"
+  )}>
+    {/* ... contenu existant ... */}
+  </div>
+);
+```
+
+### 3. `src/store/networkStore.ts`
+
+#### Migration automatique
+
+Lors du chargement d'un projet, initialiser les flags si absents :
+
+```typescript
+// Dans loadProject()
+if (project.manualPhaseDistribution) {
+  project.manualPhaseDistribution.chargesForced = project.manualPhaseDistribution.chargesForced ?? false;
+  project.manualPhaseDistribution.productionsForced = project.manualPhaseDistribution.productionsForced ?? false;
 }
 ```
 
-### 2. Modifier `renderTable()` (lignes 283-361)
+#### Auto-sync lors de changements
 
-Nouvelle structure du tableau avec regroupement par catégorie :
+Quand les clients changent (import, lien, suppression), si pas forcé, recalculer :
 
-```tsx
-<table className="w-full text-[10px] border-collapse">
-  <thead>
-    {/* Ligne de regroupement */}
-    <tr className="border-b border-border">
-      <th rowSpan={2}>Couplage</th>
-      <th colSpan={5} className="text-center bg-blue-100">MONO (Rés.)</th>
-      <th colSpan={5} className="text-center bg-green-100">Poly Rés.</th>
-      <th colSpan={5} className="text-center bg-orange-100">Poly Ind.</th>
-      <th rowSpan={2}>Déséq.</th>
-      <th rowSpan={2}>I (A)</th>
-    </tr>
-    {/* Ligne des sous-colonnes */}
-    <tr className="border-b border-border text-[9px]">
-      {/* MONO */}
-      <th>Nb</th><th>Ch.</th><th>Pr.</th><th>Ch.F</th><th>Pr.F</th>
-      {/* Poly Rés. */}
-      <th>Nb</th><th>Ch.</th><th>Pr.</th><th>Ch.F</th><th>Pr.F</th>
-      {/* Poly Ind. */}
-      <th>Nb</th><th>Ch.</th><th>Pr.</th><th>Ch.F</th><th>Pr.F</th>
-    </tr>
-  </thead>
-  <tbody>
-    {(['A', 'B', 'C'] as const).map((phase) => {
-      const data = calculatePhaseData(...);
-      return (
-        <tr key={phase}>
-          <td>{phaseLabel}</td>
-          {/* MONO */}
-          <td>{data.nbMono}</td>
-          <td>{data.chargeMono.toFixed(1)}</td>
-          <td>{data.prodMono.toFixed(1)}</td>
-          <td>{data.chargeMonoFoisonne.toFixed(1)}</td>
-          <td>{data.prodMonoFoisonne.toFixed(1)}</td>
-          {/* Poly Résidentiel */}
-          <td>{data.nbPolyRes.toFixed(0)}</td>
-          <td>{data.chargePolyRes.toFixed(1)}</td>
-          <td>{data.prodPolyRes.toFixed(1)}</td>
-          <td>{data.chargePolyResFoisonne.toFixed(1)}</td>
-          <td>{data.prodPolyResFoisonne.toFixed(1)}</td>
-          {/* Poly Industriel */}
-          <td>{data.nbPolyInd.toFixed(0)}</td>
-          <td>{data.chargePolyInd.toFixed(1)}</td>
-          <td>{data.prodPolyInd.toFixed(1)}</td>
-          <td>{data.chargePolyIndFoisonne.toFixed(1)}</td>
-          <td>{data.prodPolyIndFoisonne.toFixed(1)}</td>
-          {/* Totaux */}
-          <td>{data.ecartChargePercent.toFixed(0)}%</td>
-          <td>{Math.abs(data.courantTotal).toFixed(1)}</td>
-        </tr>
-      );
-    })}
-  </tbody>
-</table>
+```typescript
+// Dans importClientsFromExcel(), linkClientToNode(), unlinkClient(), etc.
+// Après modification des clients :
+if (!updatedProject.manualPhaseDistribution?.chargesForced) {
+  const autoCharges = calculateRealMonoDistributionPercents(updatedProject.nodes, ...);
+  updatedProject.manualPhaseDistribution.charges = autoCharges;
+}
+if (!updatedProject.manualPhaseDistribution?.productionsForced) {
+  const autoProductions = calculateRealMonoProductionDistributionPercents(updatedProject.nodes, ...);
+  updatedProject.manualPhaseDistribution.productions = autoProductions;
+}
 ```
 
 ---
 
-## Formule de calcul de l'intensité
-
-Le courant par phase est calculé selon :
+## Flux utilisateur
 
 ```text
-I_phase = (Σ Charges_foisonnées - Σ Productions_foisonnées) × 1000 / U
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ÉTAT INITIAL : Mode automatique                                             │
+│ ┌─────────────────────────────────────────────────────────────────────────┐ │
+│ │ Charges:  L1-L2 ══●══ +2%  │  L2-L3 ══●══ -1%  │  L3-L1 ══●══ +5%  [⟲] │ │
+│ └─────────────────────────────────────────────────────────────────────────┘ │
+│                        (fond transparent, valeurs = tableau)                │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼ Utilisateur déplace un curseur
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ÉTAT FORCÉ : Mode manuel                                                    │
+│ ┌─────────────────────────────────────────────────────────────────────────┐ │
+│ │ ██████████████████████████████ FOND JAUNE ██████████████████████████████ │ │
+│ │ Charges:  L1-L2 ══●══ +10% │  L2-L3 ══●══ -5%  │  L3-L1 ══●══ +8%  [⟲] │ │
+│ └─────────────────────────────────────────────────────────────────────────┘ │
+│                        (fond jaune, valeurs = manuelles)                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼ Utilisateur clique Reset [⟲]
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ÉTAT INITIAL : Mode automatique restauré                                    │
+│ ┌─────────────────────────────────────────────────────────────────────────┐ │
+│ │ Charges:  L1-L2 ══●══ +2%  │  L2-L3 ══●══ -1%  │  L3-L1 ══●══ +5%  [⟲] │ │
+│ └─────────────────────────────────────────────────────────────────────────┘ │
+│                        (fond transparent, valeurs = tableau)                │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
-
-Où :
-- **Charges_foisonnées** = Ch.MONO×15% + Ch.PolyRés×15% + Ch.PolyInd×70%
-- **Productions_foisonnées** = (Pr.MONO + Pr.PolyRés + Pr.PolyInd) × foisonnementProductions%
-- **U** = 230V
 
 ---
 
 ## Fichiers à modifier
 
-| Fichier | Section | Modification |
-|---------|---------|--------------|
-| `src/components/PhaseDistributionDisplay.tsx` | `calculatePhaseData()` L23-131 | Ajouter tracking production par catégorie |
-| `src/components/PhaseDistributionDisplay.tsx` | `renderTable()` L283-361 | Nouveau layout avec 17 colonnes |
+| Fichier | Modification |
+|---------|--------------|
+| `src/types/network.ts` | Ajouter `chargesForced` et `productionsForced` au type |
+| `src/components/PhaseDistributionSliders.tsx` | Auto-sync, détection forçage, fond jaune, Reset |
+| `src/store/networkStore.ts` | Migration, auto-sync sur changement clients |
 
 ---
 
-## Aperçu visuel final
+## Avantages
 
-```text
-┌──────────┬─────────────────────────────┬─────────────────────────────┬─────────────────────────────┬───────┬───────┐
-│ Couplage │      MONO (Résidentiel)     │       Poly Résidentiel      │       Poly Industriel       │ Déséq │ I (A) │
-│          ├────┬──────┬──────┬─────┬─────┼────┬──────┬──────┬─────┬─────┼────┬──────┬──────┬─────┬─────┤       │       │
-│          │ Nb │ Ch.  │ Pr.  │ Ch.F│ Pr.F│ Nb │ Ch.  │ Pr.  │ Ch.F│ Pr.F│ Nb │ Ch.  │ Pr.  │ Ch.F│ Pr.F│       │       │
-├──────────┼────┼──────┼──────┼─────┼─────┼────┼──────┼──────┼─────┼─────┼────┼──────┼──────┼─────┼─────┼───────┼───────┤
-│ L1-L2    │ 15 │ 60.0 │  5.0 │ 9.0 │ 5.0 │  1 │ 12.0 │  3.0 │ 1.8 │ 3.0 │  2 │ 35.0 │ 10.0 │24.5 │10.0 │  +2%  │  8.5  │
-│ L2-L3    │ 12 │ 48.0 │  3.0 │ 7.2 │ 3.0 │  1 │ 12.0 │  3.0 │ 1.8 │ 3.0 │  2 │ 35.0 │ 10.0 │24.5 │10.0 │  -1%  │  7.2  │
-│ L3-L1    │ 18 │ 72.0 │  8.0 │10.8 │ 8.0 │  1 │ 12.0 │  3.0 │ 1.8 │ 3.0 │  1 │ 35.0 │ 10.0 │24.5 │10.0 │  +5%  │  9.1  │
-└──────────┴────┴──────┴──────┴─────┴─────┴────┴──────┴──────┴─────┴─────┴────┴──────┴──────┴─────┴─────┴───────┴───────┘
-```
-
----
-
-## Légende des colonnes
-
-| Abréviation | Signification |
-|-------------|---------------|
-| Nb | Nombre de clients |
-| Ch. | Charge contractuelle (kVA) |
-| Pr. | Production PV (kVA) |
-| Ch.F | Charge foisonnée (kVA) |
-| Pr.F | Production foisonnée (kVA) |
-| Déséq. | Écart de répartition vs 33.33% |
-| I (A) | Intensité résultante (A) |
-
----
-
-## Note sur le comptage Poly
-
-Pour les clients polyphasés (TRI/TÉTRA), le comptage par phase est fractionnel (1/3 par phase) car un client est réparti sur les 3 phases. Le "Nb" affiché représente donc la contribution équivalente par phase, non le nombre absolu de clients.
-
+- Les curseurs reflètent toujours les données réelles du tableau (cohérence)
+- L'utilisateur peut forcer des valeurs différentes (flexibilité)
+- Le fond jaune indique clairement le mode manuel (transparence)
+- Le Reset permet de revenir au mode automatique (réversibilité)

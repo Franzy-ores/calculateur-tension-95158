@@ -311,6 +311,8 @@ export interface Project {
     charges: { A: number; B: number; C: number };
     productions: { A: number; B: number; C: number };
     constraints: { min: number; max: number; total: number };
+    chargesForced?: boolean;      // true = curseurs charges forcés manuellement
+    productionsForced?: boolean;  // true = curseurs productions forcés manuellement
   };
   // Mode d'application de la répartition manuelle pour les charges
   /** @deprecated Option B : curseurs toujours appliqués à tous les clients */

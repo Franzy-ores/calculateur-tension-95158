@@ -500,8 +500,20 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       project.manualPhaseDistribution = {
         charges: { A: 33.33, B: 33.33, C: 33.34 },
         productions: { A: 33.33, B: 33.33, C: 33.34 },
-        constraints: { min: -20, max: 20, total: 100 }
+        constraints: { min: -20, max: 20, total: 100 },
+        chargesForced: false,
+        productionsForced: false
       };
+    }
+    
+    // Migration automatique: chargesForced et productionsForced si absents
+    if (project.manualPhaseDistribution.chargesForced === undefined) {
+      project.manualPhaseDistribution.chargesForced = false;
+      console.log('📦 Projet migré: chargesForced = false (mode automatique)');
+    }
+    if (project.manualPhaseDistribution.productionsForced === undefined) {
+      project.manualPhaseDistribution.productionsForced = false;
+      console.log('📦 Projet migré: productionsForced = false (mode automatique)');
     }
     
     // Valider que manualPhaseDistribution existe pour mode mixte
@@ -509,7 +521,9 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       project.manualPhaseDistribution = {
         charges: { A: 33.33, B: 33.33, C: 33.34 },
         productions: { A: 33.33, B: 33.33, C: 33.34 },
-        constraints: { min: -20, max: 20, total: 100 }
+        constraints: { min: -20, max: 20, total: 100 },
+        chargesForced: false,
+        productionsForced: false
       };
       console.log('📦 Configuration manualPhaseDistribution initialisée pour mode mixte');
     }

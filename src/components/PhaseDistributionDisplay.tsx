@@ -98,13 +98,19 @@ function calculatePhaseData(
   const chargePolyIndFoisonne = chargePolyInd * (foisonnementChargesIndustriel / 100);
   const prodPolyIndFoisonne = productionPolyInd * (foisonnementProductions / 100);
   
+  // Totaux bruts (physiques) pour cette phase
+  const totalChargePhysique = chargeMono + chargePolyRes + chargePolyInd;
+  const totalProdPhysique = productionMono + productionPolyRes + productionPolyInd;
+  
   // Totaux foisonnés pour cette phase
   const totalChargeFoisonne = chargeMonoFoisonne + chargePolyResFoisonne + chargePolyIndFoisonne;
   const totalProdFoisonne = prodMonoFoisonne + prodPolyResFoisonne + prodPolyIndFoisonne;
   
-  // Calcul déséquilibre via curseurs
+  // Calcul déséquilibre via curseurs (charge et production séparément)
   const curseurCharge = manualPhaseDistribution?.charges[phase] || 33.33;
+  const curseurProduction = manualPhaseDistribution?.productions[phase] || 33.33;
   const ecartChargePercent = ((curseurCharge - 33.33) / 33.33) * 100;
+  const ecartProductionPercent = ((curseurProduction - 33.33) / 33.33) * 100;
   
   // Intensité : (Charges - Productions) foisonnées / 230V
   const voltage = 230;
@@ -132,8 +138,15 @@ function calculatePhaseData(
     chargePolyIndFoisonne,
     prodPolyIndFoisonne,
     
-    // Totaux
+    // Totaux globaux par phase
+    totalChargePhysique,
+    totalProdPhysique,
+    totalChargeFoisonne,
+    totalProdFoisonne,
+    
+    // Déséquilibres séparés
     ecartChargePercent,
+    ecartProductionPercent,
     courantTotal
   };
 }
@@ -321,7 +334,8 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
               <th colSpan={5} className="text-center py-1 px-0.5 font-semibold bg-primary/10 text-primary border-x border-border">MONO (Rés.)</th>
               <th colSpan={5} className="text-center py-1 px-0.5 font-semibold bg-green-500/10 text-green-700 dark:text-green-400 border-x border-border">Poly Rés.</th>
               <th colSpan={5} className="text-center py-1 px-0.5 font-semibold bg-orange-500/10 text-orange-700 dark:text-orange-400 border-x border-border">Poly Ind.</th>
-              <th rowSpan={2} className="text-right py-1.5 px-1 text-foreground font-semibold align-bottom">Déséq.</th>
+              <th colSpan={4} className="text-center py-1 px-0.5 font-semibold bg-muted text-foreground border-x border-border">TOTAUX</th>
+              <th colSpan={2} className="text-center py-1 px-0.5 font-semibold bg-purple-500/10 text-purple-700 dark:text-purple-400 border-x border-border">Déséq. %</th>
               <th rowSpan={2} className="text-right py-1.5 px-1 text-foreground font-semibold align-bottom">I (A)</th>
             </tr>
             {/* Ligne des sous-colonnes */}
@@ -344,6 +358,14 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
               <th className="py-1 px-0.5 text-right bg-orange-500/5">Pr.</th>
               <th className="py-1 px-0.5 text-right bg-orange-500/5">Ch.F</th>
               <th className="py-1 px-0.5 text-right bg-orange-500/5 border-r border-border">Pr.F</th>
+              {/* TOTAUX */}
+              <th className="py-1 px-0.5 text-right bg-muted/50">Ch.</th>
+              <th className="py-1 px-0.5 text-right bg-muted/50">Ch.F</th>
+              <th className="py-1 px-0.5 text-right bg-muted/50">Pr.</th>
+              <th className="py-1 px-0.5 text-right bg-muted/50 border-r border-border">Pr.F</th>
+              {/* Déséquilibre */}
+              <th className="py-1 px-0.5 text-right bg-purple-500/5">Ch.</th>
+              <th className="py-1 px-0.5 text-right bg-purple-500/5 border-r border-border">Pr.</th>
             </tr>
           </thead>
           <tbody>
@@ -369,6 +391,8 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
               const bgClass = phase === 'A' ? 'bg-blue-50/50 dark:bg-blue-500/5' : phase === 'B' ? 'bg-green-50/50 dark:bg-green-500/5' : 'bg-red-50/50 dark:bg-red-500/5';
               const ecartColor = Math.abs(data.ecartChargePercent) < 5 ? 'text-green-600' : Math.abs(data.ecartChargePercent) < 15 ? 'text-yellow-600' : 'text-red-600';
               
+              const ecartProdColor = Math.abs(data.ecartProductionPercent) < 5 ? 'text-green-600' : Math.abs(data.ecartProductionPercent) < 15 ? 'text-yellow-600' : 'text-red-600';
+              
               return (
                 <tr key={phase} className={`border-b border-border/50 ${bgClass}`}>
                   <td className="py-1 px-1 text-foreground font-semibold">{phaseLabel}</td>
@@ -390,10 +414,19 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
                   <td className="text-right py-1 px-0.5 text-foreground">{data.prodPolyInd.toFixed(1)}</td>
                   <td className="text-right py-1 px-0.5 text-orange-700 dark:text-orange-400 font-medium">{data.chargePolyIndFoisonne.toFixed(1)}</td>
                   <td className="text-right py-1 px-0.5 text-orange-700 dark:text-orange-400 font-medium border-r border-border/50">{data.prodPolyIndFoisonne.toFixed(1)}</td>
-                  {/* Totaux */}
-                  <td className={`text-right py-1 px-1 font-bold ${ecartColor}`}>
+                  {/* TOTAUX */}
+                  <td className="text-right py-1 px-0.5 text-foreground font-medium">{data.totalChargePhysique.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-foreground font-bold">{data.totalChargeFoisonne.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-foreground font-medium">{data.totalProdPhysique.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-foreground font-bold border-r border-border/50">{data.totalProdFoisonne.toFixed(1)}</td>
+                  {/* Déséquilibre */}
+                  <td className={`text-right py-1 px-0.5 font-bold ${ecartColor}`}>
                     {data.ecartChargePercent > 0 ? '+' : ''}{data.ecartChargePercent.toFixed(0)}%
                   </td>
+                  <td className={`text-right py-1 px-0.5 font-bold border-r border-border/50 ${ecartProdColor}`}>
+                    {data.ecartProductionPercent > 0 ? '+' : ''}{data.ecartProductionPercent.toFixed(0)}%
+                  </td>
+                  {/* Intensité */}
                   <td className="text-right py-1 px-1 text-foreground font-semibold">{Math.abs(data.courantTotal).toFixed(1)}</td>
                 </tr>
               );
@@ -405,6 +438,7 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
                 nbMono: 0, chargeMono: 0, prodMono: 0, chargeMonoFoisonne: 0, prodMonoFoisonne: 0,
                 nbPolyRes: 0, chargePolyRes: 0, prodPolyRes: 0, chargePolyResFoisonne: 0, prodPolyResFoisonne: 0,
                 nbPolyInd: 0, chargePolyInd: 0, prodPolyInd: 0, chargePolyIndFoisonne: 0, prodPolyIndFoisonne: 0,
+                totalChargePhysique: 0, totalProdPhysique: 0, totalChargeFoisonne: 0, totalProdFoisonne: 0,
                 courantTotal: 0
               };
               
@@ -430,6 +464,10 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
                 totals.prodPolyInd += data.prodPolyInd;
                 totals.chargePolyIndFoisonne += data.chargePolyIndFoisonne;
                 totals.prodPolyIndFoisonne += data.prodPolyIndFoisonne;
+                totals.totalChargePhysique += data.totalChargePhysique;
+                totals.totalProdPhysique += data.totalProdPhysique;
+                totals.totalChargeFoisonne += data.totalChargeFoisonne;
+                totals.totalProdFoisonne += data.totalProdFoisonne;
                 totals.courantTotal += Math.abs(data.courantTotal);
               });
 
@@ -454,8 +492,15 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
                   <td className="text-right py-1 px-0.5 text-foreground">{totals.prodPolyInd.toFixed(1)}</td>
                   <td className="text-right py-1 px-0.5 text-orange-700 dark:text-orange-400 font-bold">{totals.chargePolyIndFoisonne.toFixed(1)}</td>
                   <td className="text-right py-1 px-0.5 text-orange-700 dark:text-orange-400 font-bold border-r border-border/50">{totals.prodPolyIndFoisonne.toFixed(1)}</td>
+                  {/* TOTAUX */}
+                  <td className="text-right py-1 px-0.5 text-foreground font-medium">{totals.totalChargePhysique.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-foreground font-bold">{totals.totalChargeFoisonne.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-foreground font-medium">{totals.totalProdPhysique.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-foreground font-bold border-r border-border/50">{totals.totalProdFoisonne.toFixed(1)}</td>
                   {/* Pas de déséquilibre pour la ligne totale */}
-                  <td className="text-right py-1 px-1 text-muted-foreground">—</td>
+                  <td className="text-right py-1 px-0.5 text-muted-foreground">—</td>
+                  <td className="text-right py-1 px-0.5 text-muted-foreground border-r border-border/50">—</td>
+                  {/* Intensité */}
                   <td className="text-right py-1 px-1 text-foreground font-bold">{totals.courantTotal.toFixed(1)}</td>
                 </tr>
               );

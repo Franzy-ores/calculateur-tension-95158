@@ -55,17 +55,19 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
         }
       });
     }
-  }, [
-    currentProject?.clientsImportes, 
-    currentProject?.clientLinks,
-    currentProject?.foisonnementChargesResidentiel,
-    currentProject?.foisonnementChargesIndustriel,
-    currentProject?.foisonnementProductions,
-    currentProject?.manualPhaseDistribution,
-    currentProject?.loadModel,
-    type,
-    updateProjectConfig
-  ]);
+}, [
+  // Trigger on source data changes - NOT on manualPhaseDistribution to avoid circular updates
+  currentProject?.clientsImportes, 
+  currentProject?.clientLinks,
+  currentProject?.foisonnementChargesResidentiel,
+  currentProject?.foisonnementChargesIndustriel,
+  currentProject?.foisonnementProductions,
+  currentProject?.loadModel,
+  currentProject?.voltageSystem,
+  type,
+  updateProjectConfig,
+  currentProject // Global dependency to catch any changes
+]);
   
   if (!currentProject || !currentProject.manualPhaseDistribution) return null;
   

@@ -398,6 +398,68 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
                 </tr>
               );
             })}
+            {/* LIGNE TOTAL */}
+            {(() => {
+              // Calculer les totaux globaux pour toutes les phases
+              const totals = { 
+                nbMono: 0, chargeMono: 0, prodMono: 0, chargeMonoFoisonne: 0, prodMonoFoisonne: 0,
+                nbPolyRes: 0, chargePolyRes: 0, prodPolyRes: 0, chargePolyResFoisonne: 0, prodPolyResFoisonne: 0,
+                nbPolyInd: 0, chargePolyInd: 0, prodPolyInd: 0, chargePolyIndFoisonne: 0, prodPolyIndFoisonne: 0,
+                courantTotal: 0
+              };
+              
+              (['A', 'B', 'C'] as const).forEach(phase => {
+                const data = calculatePhaseData(
+                  currentProject.nodes, phase, foisonnementResidentiel, foisonnementIndustriel,
+                  foisonnementProductions, globalFoisonne.totalFoisonneChargeGlobal,
+                  globalFoisonne.totalFoisonneProductionGlobal, currentProject.clientsImportes,
+                  currentProject.clientLinks, is230V, currentProject.manualPhaseDistribution
+                );
+                totals.nbMono += data.nbMono;
+                totals.chargeMono += data.chargeMono;
+                totals.prodMono += data.prodMono;
+                totals.chargeMonoFoisonne += data.chargeMonoFoisonne;
+                totals.prodMonoFoisonne += data.prodMonoFoisonne;
+                totals.nbPolyRes += data.nbPolyRes;
+                totals.chargePolyRes += data.chargePolyRes;
+                totals.prodPolyRes += data.prodPolyRes;
+                totals.chargePolyResFoisonne += data.chargePolyResFoisonne;
+                totals.prodPolyResFoisonne += data.prodPolyResFoisonne;
+                totals.nbPolyInd += data.nbPolyInd;
+                totals.chargePolyInd += data.chargePolyInd;
+                totals.prodPolyInd += data.prodPolyInd;
+                totals.chargePolyIndFoisonne += data.chargePolyIndFoisonne;
+                totals.prodPolyIndFoisonne += data.prodPolyIndFoisonne;
+                totals.courantTotal += Math.abs(data.courantTotal);
+              });
+
+              return (
+                <tr className="border-t-2 border-border bg-muted/50 font-semibold">
+                  <td className="py-1.5 px-1 text-foreground">TOTAL</td>
+                  {/* MONO */}
+                  <td className="text-center py-1 px-0.5 text-foreground">{totals.nbMono}</td>
+                  <td className="text-right py-1 px-0.5 text-foreground">{totals.chargeMono.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-foreground">{totals.prodMono.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-primary font-bold">{totals.chargeMonoFoisonne.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-primary font-bold border-r border-border/50">{totals.prodMonoFoisonne.toFixed(1)}</td>
+                  {/* Poly Rés. */}
+                  <td className="text-center py-1 px-0.5 text-foreground">{Math.round(totals.nbPolyRes)}</td>
+                  <td className="text-right py-1 px-0.5 text-foreground">{totals.chargePolyRes.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-foreground">{totals.prodPolyRes.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-green-700 dark:text-green-400 font-bold">{totals.chargePolyResFoisonne.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-green-700 dark:text-green-400 font-bold border-r border-border/50">{totals.prodPolyResFoisonne.toFixed(1)}</td>
+                  {/* Poly Ind. */}
+                  <td className="text-center py-1 px-0.5 text-foreground">{Math.round(totals.nbPolyInd)}</td>
+                  <td className="text-right py-1 px-0.5 text-foreground">{totals.chargePolyInd.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-foreground">{totals.prodPolyInd.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-orange-700 dark:text-orange-400 font-bold">{totals.chargePolyIndFoisonne.toFixed(1)}</td>
+                  <td className="text-right py-1 px-0.5 text-orange-700 dark:text-orange-400 font-bold border-r border-border/50">{totals.prodPolyIndFoisonne.toFixed(1)}</td>
+                  {/* Pas de déséquilibre pour la ligne totale */}
+                  <td className="text-right py-1 px-1 text-muted-foreground">—</td>
+                  <td className="text-right py-1 px-1 text-foreground font-bold">{totals.courantTotal.toFixed(1)}</td>
+                </tr>
+              );
+            })()}
           </tbody>
         </table>
       </div>

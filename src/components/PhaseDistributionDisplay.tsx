@@ -112,9 +112,12 @@ function calculatePhaseData(
   const ecartChargePercent = ((curseurCharge - 33.33) / 33.33) * 100;
   const ecartProductionPercent = ((curseurProduction - 33.33) / 33.33) * 100;
   
-  // Intensité : (Charges - Productions) foisonnées / 230V
+  // Intensité : Appliquer les curseurs de déséquilibre aux totaux globaux
+  // I(A) = ((Total global charge foisonné * % curseur charge) - (Total global prod foisonné * % curseur prod)) * 1000 / 230V
   const voltage = 230;
-  const courantTotal = ((totalChargeFoisonne - totalProdFoisonne) * 1000) / voltage;
+  const chargeAvecCurseur = totalFoisonneChargeGlobal * (curseurCharge / 100);
+  const prodAvecCurseur = totalFoisonneProductionGlobal * (curseurProduction / 100);
+  const courantTotal = ((chargeAvecCurseur - prodAvecCurseur) * 1000) / voltage;
   
   return {
     // MONO

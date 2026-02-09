@@ -12,7 +12,8 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Cable, ArrowRightLeft, CheckCircle, X, TrendingDown } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Cable, ArrowRightLeft, CheckCircle, Trash2, TrendingDown } from 'lucide-react';
 import { CableReplacementConfig } from '@/types/network';
 
 interface SimulationComparisonResult {
@@ -305,7 +306,7 @@ export const CableReplacementSimulator: React.FC = () => {
         )}
 
         {/* Action buttons */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
           {!isReplacementActive ? (
             <Button 
               onClick={handleSimulate}
@@ -316,14 +317,29 @@ export const CableReplacementSimulator: React.FC = () => {
               Simuler
             </Button>
           ) : (
-            <Button 
-              variant="destructive"
-              onClick={handleCancelSimulation}
-              className="flex-1"
-            >
-              <X className="h-4 w-4 mr-2" />
-              Annuler la simulation
-            </Button>
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={cableReplacementConfig?.enabled ?? false}
+                  onCheckedChange={(enabled) => {
+                    if (cableReplacementConfig) {
+                      setCableReplacementConfig({ ...cableReplacementConfig, enabled });
+                      runSimulation();
+                    }
+                  }}
+                />
+                <span className="text-sm text-muted-foreground">
+                  {cableReplacementConfig?.enabled ? 'Actif' : 'Inactif'}
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCancelSimulation}
+              >
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            </div>
           )}
         </div>
       </CardContent>

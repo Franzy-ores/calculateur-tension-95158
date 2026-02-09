@@ -219,8 +219,39 @@ export const SRG2Panel = () => {
               </Button>
             </div>
           </div>
-          <CardDescription>
-            Nœud: {node?.name || srg2.nodeId} • Mode: {srg2.mode} • Type: {srg2.type || 'Auto'}
+          <div className="flex items-center gap-2 mt-1">
+            <Label className="text-xs text-muted-foreground">Nœud:</Label>
+            <Select 
+              value={srg2.nodeId} 
+              onValueChange={(newNodeId) => {
+                if (newNodeId !== srg2.nodeId) {
+                  const usedNodeIds = simulationEquipment.srg2Devices?.filter(d => d.id !== srg2.id).map(d => d.nodeId) || [];
+                  if (usedNodeIds.includes(newNodeId)) {
+                    toast.error('Un SRG2 existe déjà sur ce nœud');
+                    return;
+                  }
+                  updateSRG2Device(srg2.id, { nodeId: newNodeId });
+                  toast.success(`SRG2 déplacé vers ${nodes.find(n => n.id === newNodeId)?.name || newNodeId}`);
+                }
+              }}
+            >
+              <SelectTrigger className="h-7 text-xs flex-1">
+                <SelectValue>{node?.name || srg2.nodeId}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {nodes.map(n => (
+                  <SelectItem key={n.id} value={n.id}>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-3 w-3" />
+                      <span>{n.name || n.id}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <CardDescription className="text-xs mt-1">
+            Mode: {srg2.mode} • Type: {srg2.type || 'Auto'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">

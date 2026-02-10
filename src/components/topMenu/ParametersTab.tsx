@@ -22,20 +22,18 @@ export const ParametersTab = () => {
 
   if (!currentProject) return null;
 
-  // Calcul des puissances totales
+  // Calcul des puissances totales (circuit = noeuds connectés)
   const connectedNodes = currentProject?.cables && currentProject?.nodes 
     ? getConnectedNodes(currentProject.nodes, currentProject.cables)
     : new Set<string>();
   const connectedNodesData = currentProject?.nodes.filter(node => connectedNodes.has(node.id)) || [];
 
-  // Calcul des puissances par type de client
   const { chargesResidentielles, chargesIndustrielles } = calculatePowersByClientType(
     connectedNodesData,
     currentProject.clientsImportes || [],
     currentProject.clientLinks || []
   );
 
-  // Calcul des productions totales
   let totalProductionsContractuelles = 0;
   connectedNodesData.forEach(node => {
     totalProductionsContractuelles += node.productions.reduce((sum, p) => sum + p.S_kVA, 0);
@@ -53,6 +51,28 @@ export const ParametersTab = () => {
   const chargesIndustriellesFoisonnees = chargesIndustrielles * (foisonnementIndustriel / 100);
   const totalChargesFoisonnees = chargesResidentiellesFoisonnees + chargesIndustriellesFoisonnees;
   const productionsFoisonnees = totalProductionsContractuelles * (foisonnementProductions / 100);
+
+  // Calcul des totaux "Clients Cabine" (tous les clients importés, liés et non liés)
+  const clientsImportes = currentProject.clientsImportes || [];
+  let cabineChargesResidentielles = 0;
+  let cabineChargesIndustrielles = 0;
+  let cabineProductionsTotal = 0;
+  clientsImportes.forEach(client => {
+    if (client.clientType === 'industriel') {
+      cabineChargesIndustrielles += client.puissanceContractuelle_kVA;
+    } else {
+      cabineChargesResidentielles += client.puissanceContractuelle_kVA;
+    }
+    cabineProductionsTotal += client.puissancePV_kVA;
+  });
+  const cabineChargesFoisonnees = cabineChargesResidentielles * (foisonnementResidentiel / 100) + cabineChargesIndustrielles * (foisonnementIndustriel / 100);
+  const cabineProductionsFoisonnees = cabineProductionsTotal * (foisonnementProductions / 100);
+
+  // Alerte transfo
+  const transformerPower = currentProject.transformerConfig?.nominalPower_kVA || 0;
+  const cabineNet = cabineChargesFoisonnees - cabineProductionsFoisonnees;
+  const isSurcharge = transformerPower > 0 && cabineChargesFoisonnees > transformerPower + cabineProductionsFoisonnees;
+  const isInjection = transformerPower > 0 && cabineProductionsFoisonnees > transformerPower + cabineChargesFoisonnees;
 
   const showPhaseDistribution = currentProject.loadModel === 'monophase_reparti' || currentProject.loadModel === 'mixte_mono_poly';
 
@@ -156,12 +176,32 @@ export const ParametersTab = () => {
             </div>
           </div>
 
-          {/* Total */}
-        <div className="flex flex-col items-end justify-center px-2 border-l border-border/50">
-            <span className="text-[10px] text-muted-foreground">Charges foisonnées</span>
+          {/* Total Circuit */}
+          <div className="flex flex-col items-end justify-center px-2 border-l border-border/50">
+            <span className="text-[10px] text-muted-foreground">Circuit - Charges F.</span>
             <span className="text-sm font-bold text-primary">{totalChargesFoisonnees.toFixed(1)} kVA</span>
-            <span className="text-[10px] text-muted-foreground mt-0.5">Productions foisonnées</span>
+            <span className="text-[10px] text-muted-foreground mt-0.5">Circuit - Prod. F.</span>
             <span className="text-sm font-bold text-yellow-500">{productionsFoisonnees.toFixed(1)} kVA</span>
+          </div>
+
+          {/* Total Clients Cabine */}
+          <div className="flex flex-col items-end justify-center px-2 border-l border-border/50">
+            <span className="text-[10px] text-muted-foreground">Cabine - Charges F.</span>
+            <span className="text-sm font-bold text-primary">{cabineChargesFoisonnees.toFixed(1)} kVA</span>
+            <span className="text-[10px] text-muted-foreground mt-0.5">Cabine - Prod. F.</span>
+            <span className="text-sm font-bold text-yellow-500">{cabineProductionsFoisonnees.toFixed(1)} kVA</span>
+            {isSurcharge && (
+              <div className="flex items-center gap-1 mt-1 text-destructive">
+                <AlertTriangle className="h-3 w-3" />
+                <span className="text-[10px] font-medium">Surcharge: +{(cabineChargesFoisonnees - transformerPower - cabineProductionsFoisonnees).toFixed(1)} kVA</span>
+              </div>
+            )}
+            {isInjection && (
+              <div className="flex items-center gap-1 mt-1 text-destructive">
+                <AlertTriangle className="h-3 w-3" />
+                <span className="text-[10px] font-medium">Injection: +{(cabineProductionsFoisonnees - transformerPower - cabineChargesFoisonnees).toFixed(1)} kVA</span>
+              </div>
+            )}
           </div>
         </div>
       </div>

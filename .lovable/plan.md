@@ -1,30 +1,62 @@
 
+# Plan : Ajout des totaux "Clients Cabine" et alerte transfo dans l'onglet Parametres
 
-# Plan : Ajout du total foisonne production dans l'onglet Parametres
+## Contexte
+
+Actuellement, l'onglet Parametres affiche uniquement les totaux foisonnes du **circuit** (noeuds connectes). Le besoin est d'afficher egalement les totaux foisonnes de **tous les clients importes** (lies et non lies au reseau), appeles "Clients Cabine", et d'alerter si le net depasse la puissance du transformateur.
 
 ## Modification
 
-Fichier : `src/components/topMenu/ParametersTab.tsx`
+**Fichier unique : `src/components/topMenu/ParametersTab.tsx`**
 
-Dans la section "Total" (lignes 144-148), ajouter une deuxieme ligne affichant le total foisonne des productions a cote du total foisonne des charges.
+### 1. Calcul des totaux "Clients Cabine"
 
-### Code actuel (lignes 144-148)
-```typescript
-<div className="flex flex-col items-end justify-center px-2 border-l border-border/50">
-  <span className="text-[10px] text-muted-foreground">Total foisonné</span>
-  <span className="text-sm font-bold text-primary">{totalChargesFoisonnees.toFixed(1)} kVA</span>
-</div>
+Ajouter le calcul de la somme de tous les `clientsImportes` (lies et non lies), avec application des coefficients de foisonnement differencies (residentiel/industriel) :
+
+```text
+clientsImportes.forEach(client => {
+  if (client.clientType === 'industriel') {
+    cabineChargesIndustrielles += client.puissanceContractuelle_kVA
+  } else {
+    cabineChargesResidentielles += client.puissanceContractuelle_kVA  
+  }
+  cabineProductionsTotal += client.puissancePV_kVA
+})
+
+cabineChargesFoisonnees = cabineResidentielles * (foisResidentiel/100) + cabineIndustrielles * (foisIndustriel/100)
+cabineProductionsFoisonnees = cabineProductionsTotal * (foisProductions/100)
 ```
 
-### Code modifie
-```typescript
-<div className="flex flex-col items-end justify-center px-2 border-l border-border/50">
-  <span className="text-[10px] text-muted-foreground">Charges foisonnees</span>
-  <span className="text-sm font-bold text-primary">{totalChargesFoisonnees.toFixed(1)} kVA</span>
-  <span className="text-[10px] text-muted-foreground mt-0.5">Productions foisonnees</span>
-  <span className="text-sm font-bold text-yellow-500">{productionsFoisonnees.toFixed(1)} kVA</span>
-</div>
+### 2. Affichage dans le panneau Total
+
+A cote du bloc existant "Charges foisonnees / Productions foisonnees" (circuit), ajouter un second bloc separe par un trait vertical :
+
+```text
+| Circuit              | Clients Cabine        |
+| Ch.F: XX.X kVA      | Ch.F: XX.X kVA        |
+| Pr.F: XX.X kVA      | Pr.F: XX.X kVA        |
 ```
 
-La valeur `productionsFoisonnees` est deja calculee a la ligne 53 du fichier, il suffit de l'afficher.
+### 3. Alerte transfo
 
+Sous le bloc "Clients Cabine", si `cabineChargesFoisonnees - cabineProductionsFoisonnees > transformerPower` et `transformerPower > 0`, afficher une ligne d'alerte avec icone AlertTriangle en rouge et le texte du depassement.
+
+La logique d'alerte reprend celle du `GlobalAlertPopup` existant dans `Index.tsx` (surcharge : charges > transfo + productions, injection : productions > transfo + charges).
+
+### Resume visuel du bloc Total modifie
+
+```text
+┌─ Circuit ──────────┬─ Clients Cabine ─────────────┐
+│ Charges foisonnees │ Charges foisonnees            │
+│ 12.5 kVA           │ 45.2 kVA                     │
+│ Productions fois.  │ Productions foisonnees        │
+│ 3.0 kVA            │ 8.5 kVA                      │
+│                    │ [!] Surcharge: +XX kVA/transfo│
+└────────────────────┴──────────────────────────────-┘
+```
+
+## Fichier modifie
+
+| Fichier | Modification |
+|---|---|
+| `src/components/topMenu/ParametersTab.tsx` | Calcul totaux cabine + affichage bloc + alerte transfo |

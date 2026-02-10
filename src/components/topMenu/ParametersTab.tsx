@@ -157,9 +157,11 @@ export const ParametersTab = () => {
           </div>
 
           {/* Total */}
-          <div className="flex flex-col items-end justify-center px-2 border-l border-border/50">
-            <span className="text-[10px] text-muted-foreground">Total foisonné</span>
+        <div className="flex flex-col items-end justify-center px-2 border-l border-border/50">
+            <span className="text-[10px] text-muted-foreground">Charges foisonnées</span>
             <span className="text-sm font-bold text-primary">{totalChargesFoisonnees.toFixed(1)} kVA</span>
+            <span className="text-[10px] text-muted-foreground mt-0.5">Productions foisonnées</span>
+            <span className="text-sm font-bold text-yellow-500">{productionsFoisonnees.toFixed(1)} kVA</span>
           </div>
         </div>
       </div>

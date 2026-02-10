@@ -6,7 +6,7 @@ import { ResultsPanel } from "@/components/ResultsPanel";
 import { EditPanel } from "@/components/EditPanel";
 import { SimulationPanel } from "@/components/SimulationPanel";
 import { ClientEditPanel } from "@/components/ClientEditPanel";
-import { GlobalAlertPopup } from "@/components/GlobalAlertPopup";
+
 import { UnsavedChangesDialog } from "@/components/UnsavedChangesDialog";
 import { RecoveryDialog } from "@/components/RecoveryDialog";
 import { SaveProjectDialog } from "@/components/SaveProjectDialog";
@@ -63,31 +63,6 @@ const Index = () => {
   
   const resultsToUse = (isSimulationActive && activeEquipmentCount > 0) ? simulationResults : calculationResults;
 
-  // Calcul des charges et productions foisonnées pour l'alerte globale
-  const { foisonnedCharge, foisonnedProduction, transformerPower } = useMemo(() => {
-    if (!currentProject) {
-      return { foisonnedCharge: 0, foisonnedProduction: 0, transformerPower: 0 };
-    }
-    
-    // Somme des charges et productions de TOUS les clients importés
-    let totalChargeContractuelle = 0;
-    let totalProductionContractuelle = 0;
-    
-    currentProject.clientsImportes?.forEach(client => {
-      totalChargeContractuelle += client.puissanceContractuelle_kVA || 0;
-      totalProductionContractuelle += client.puissancePV_kVA || 0;
-    });
-    
-    // Application des coefficients de foisonnement (stockés en %, ex: 100 = 100%)
-    const foisonnementCharges = currentProject.foisonnementCharges ?? 100;
-    const foisonnementProductions = currentProject.foisonnementProductions ?? 100;
-    
-    return {
-      foisonnedCharge: totalChargeContractuelle * (foisonnementCharges / 100),
-      foisonnedProduction: totalProductionContractuelle * (foisonnementProductions / 100),
-      transformerPower: currentProject.transformerConfig?.nominalPower_kVA || 0
-    };
-  }, [currentProject]);
 
   // Fonction de sauvegarde avec nom optionnel
   const performSaveWithName = useCallback((projectName: string) => {
@@ -318,14 +293,6 @@ const Index = () => {
         
       </div>
 
-      {/* Alerte globale surcharge/injection */}
-      {currentProject && transformerPower > 0 && (
-        <GlobalAlertPopup
-          transformerPower={transformerPower}
-          foisonnedCharge={foisonnedCharge}
-          foisonnedProduction={foisonnedProduction}
-        />
-      )}
       
       <EditPanel />
 

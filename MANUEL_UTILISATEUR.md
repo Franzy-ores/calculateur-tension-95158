@@ -1,5 +1,9 @@
 # Manuel Utilisateur - Calcul de Chute de Tension BT
 
+**Version : 10 février 2026**
+
+---
+
 ## 📋 Vue d'ensemble
 
 Cette application permet de calculer et d'analyser les chutes de tension dans les réseaux électriques basse tension (BT). Elle offre une interface cartographique intuitive pour concevoir, modéliser et analyser des réseaux électriques avec différents scénarios de charge.
@@ -158,6 +162,18 @@ Cette application permet de calculer et d'analyser les chutes de tension dans le
 ### Calcul avec tension cible
 - Permet de déterminer la section de câble nécessaire
 - Pour atteindre une tension spécifique en bout de ligne
+
+### Totaux Clients Cabine et alerte transfo
+
+L'onglet **Paramètres** affiche côte à côte :
+- **Circuit** : Charges/productions foisonnées des nœuds connectés au réseau
+- **Clients Cabine** : Charges/productions foisonnées de **tous** les clients importés (liés et non liés)
+
+Une **alerte transfo** s'affiche automatiquement si :
+- **Surcharge** : les charges foisonnées dépassent la puissance du transfo + les productions
+- **Injection** : les productions foisonnées dépassent la puissance du transfo + les charges
+
+---
 
 ## 🔬 Module de Simulation
 
@@ -376,6 +392,296 @@ Trois curseurs permettent de définir la distribution manuelle des charges/produ
 
 > 💡 **Astuce - Recentrage automatique** : Lorsque vous quittez le mode plein écran du panneau de résultats (icône œil 👁️), la carte se recentre automatiquement sur votre projet pour vous faciliter la navigation.
 
+---
+
+## 🔌 Calcul de tension — Détails techniques
+
+Ce chapitre décrit en détail le fonctionnement du moteur de calcul électrique utilisé par l'application.
+
+### 10.1 Systèmes de tension supportés
+
+L'application supporte deux systèmes de tension fondamentalement différents :
+
+#### Réseau 230V Triangle (TRIPHASÉ_230V)
+
+```
+       ────A────
+      /         \
+    230V       230V
+    /             \
+   B──── 230V ────C
+```
+
+- **3 conducteurs** : phases A, B, C (pas de neutre)
+- **Tension entre phases** : 230V (tension composée)
+- **Types de raccordement** : MONO_230V_PP (monophasé phase-phase), TRI_230V_3F (triphasé 3 fils)
+- **Impédances utilisées** : toujours R12/X12 (phase-phase)
+- **Tension interne BFS** : la référence de calcul est 230/√3 ≈ 133V par phase, ce qui assure des courants de branche et pertes I²R physiquement corrects tout en présentant les tensions ligne-ligne (230V) dans l'interface
+
+#### Réseau 400V Étoile (TÉTRAPHASÉ_400V)
+
+```
+          N (neutre)
+          │
+    ┌─────┼─────┐
+    │     │     │
+   230V  230V  230V
+    │     │     │
+    A     B     C
+    └──400V──┴──400V──┘
+```
+
+- **4 conducteurs** : phases A, B, C + Neutre (N)
+- **Tension phase-neutre** : 230V ; **Tension entre phases** : 400V (230V × √3)
+- **Types de raccordement** : MONO_230V_PN (phase-neutre), TÉTRA_3P+N_230_400V (tétraphasé)
+- **Impédances** : phases → R12/X12, neutre → R0/X0
+
+### 10.2 Formule d'impédance des conducteurs (GRD belges)
+
+L'impédance effective des conducteurs de phase est calculée selon la formule des GRD belges (ORES/RESA/Sibelga), qui combine les composantes directe et homopolaire pour refléter le déséquilibre structurel du réseau :
+
+```
+R_eff = (R0 + 2 × R12) / 3
+X_eff = (X0 + 2 × X12) / 3
+```
+
+Le conducteur neutre utilise directement R0/X0. Cette formule s'applique à tous les calculs de chute de tension (BFS) et de recherche d'emplacement optimal.
+
+### 10.3 Algorithme Backward-Forward Sweep (BFS)
+
+Le réseau est supposé **radial** (arborescent, une seule source). Les calculs sont réalisés en régime sinusoïdal établi par une méthode Backward-Forward Sweep phasorielle (nombres complexes).
+
+#### Prétraitements
+
+1. **Construction de l'arbre** depuis la source (parcours en largeur) → relations parent/enfant, ordre postfixé
+2. **Puissance équivalente par nœud** : `S_eq(n) = charges_foisonnées − productions_foisonnées`
+3. **Puissance aval** : `S_aval(n) = S_eq(n) + Σ S_aval(descendants)`
+4. **Tension initiale** : `V(n) ← V_slack = U_ref_phase ∠ 0°`
+
+#### Boucle itérative (max 100 itérations, tolérance 1e-4)
+
+**Étape 1 — Courant d'injection nodal (par phase)**
+
+```
+S_total(n) = P + jQ
+  P = S_kVA × cos φ × 1000
+  Q = |S_kVA| × sin φ × 1000 × signe(S_kVA)
+
+I_inj(n) = conj(S_phase(n) / V(n))
+```
+
+Les puissances actives (P) et réactives (Q) sont calculées séparément pour les charges (cos φ charges, par défaut 0.95 inductif) et les productions (cos φ productions, par défaut 1.00), puis combinées par somme vectorielle au nœud.
+
+**Étape 2 — Backward (courants de branches)**
+
+```
+I_branche(u→parent) = I_inj(u) + Σ I_branche(descendants de u)
+```
+
+**Étape 3 — Forward (mise à jour des tensions)**
+
+```
+V_source_bus = V_slack − Z_transfo × I_source_net
+V(enfant) = V(parent) − Z_câble × I_branche
+```
+
+**Étape 4 — Convergence** : vérification de la variation maximale de tension phasorielle.
+
+### 10.4 Impédance du transformateur
+
+Le transformateur HT/BT est modélisé par son impédance série par phase :
+
+```
+Z_pu  = Ucc% / 100
+Z_base = U_ligne² / S_nominal_VA
+|Z|   = Z_pu × Z_base
+
+R = |Z| / √(1 + (X/R)²)
+X = R × (X/R)
+
+Z_transfo = R + jX
+```
+
+### 10.5 Foisonnement différencié
+
+Le foisonnement (taux de simultanéité) est appliqué différemment selon le type de client :
+
+| Type | Foisonnement typique | Usage |
+|------|---------------------|-------|
+| **Résidentiel** | 15-30% | Habitations, petits commerces |
+| **Industriel** | 70-100% | Usines, entrepôts |
+
+Le calcul au nœud :
+```
+Charges_foisonnées = Σ(résidentiels × fois_résidentiel/100) + Σ(industriels × fois_industriel/100)
+Productions_foisonnées = Σ(PV_kVA × fois_productions/100)
+```
+
+### 10.6 Scénarios de calcul
+
+| Scénario | Puissance équivalente au nœud |
+|----------|-------------------------------|
+| **Prélèvement** | S_eq = charges foisonnées |
+| **Production** | S_eq = −productions foisonnées |
+| **Mixte** | S_eq = charges foisonnées − productions foisonnées |
+
+### 10.7 Résultats par tronçon
+
+Pour chaque câble du réseau :
+
+| Grandeur | Formule |
+|----------|---------|
+| Courant RMS | I = \|I_branche\| |
+| Chute par phase | ΔV_ph = Z_câble × I_ph |
+| Chute ligne | ΔU = \|ΔV_ph\| × √3 (si triphasé) |
+| Pourcentage | ΔU% = ΔU / U_ref × 100 |
+| Pertes Joule | P = I² × R × 3 (si triphasé) / 1000 kW |
+
+### 10.8 Conformité EN 50160
+
+Pour chaque nœud, l'écart par rapport à la tension nominale est évalué :
+
+| Écart | Statut | Couleur |
+|-------|--------|---------|
+| ≤ 8% | Normal | 🟢 Vert |
+| ≤ 10% | Attention | 🟡 Orange |
+| > 10% | Critique | 🔴 Rouge |
+
+### 10.9 Raccordements monophasés 230V Triangle (correction vectorielle)
+
+En réseau 230V triangle, un client monophasé branché entre deux phases (ex. L1-L2) est modélisé par une paire de phaseurs opposés :
+- S_A = +S_total à 0°
+- S_B = −S_total à 180°
+
+Cela assure que le courant calculé par le BFS vaut bien I = S_total / 230V, sans double-comptage de puissance.
+
+### 10.10 Tension source configurable
+
+La tension source est réglable via un curseur dans l'onglet **Réseau** :
+- **230V** : plage 225–240V
+- **400V** : plage 390–430V
+
+Elle est automatiquement réinitialisée à la valeur nominale lors d'un changement de système de tension.
+
+---
+
+## 🟢 Calcul EQUI8 — Détails techniques
+
+Ce chapitre décrit en détail le modèle de calcul du compensateur de courant de neutre EQUI8.
+
+### 11.1 Principe physique
+
+L'EQUI8 agit exclusivement comme une **source de courant shunt** :
+- Injection de +I sur le conducteur neutre
+- Injection de −I/3 sur chacune des trois phases
+
+Les tensions résultantes sont calculées naturellement par le solveur BFS — elles ne sont jamais imposées ni forcées.
+
+### 11.2 Conditions d'éligibilité
+
+Un nœud est éligible à l'EQUI8 si :
+1. Réseau **400V tétraphasé** (neutre requis)
+2. Le nœud possède un **déséquilibre réel** entre phases (détecté dynamiquement)
+3. Impédances équivalentes Zph et Zn ≥ **0.15Ω** (contrainte fournisseur)
+
+L'éligibilité est désormais indépendante du mode de charge global et fonctionne aussi bien en mode `monophase_reparti` qu'en mode `mixte_mono_poly`.
+
+### 11.3 Algorithme de calibration CME
+
+L'EQUI8 utilise une boucle de calibration par **méthode de la sécante** avec amortissement :
+
+1. Calcul du courant de neutre initial I_N = I_A + I_B + I_C (somme vectorielle)
+2. Si |I_N| < seuil → EQUI8 reste inactif
+3. Calcul itératif du courant d'injection optimal :
+   - Variation de I limitée à **±20% par itération**
+   - Facteur d'amortissement **0.7** pour éviter les oscillations
+4. Respect des **limites thermiques** :
+   - 80A pendant 15 minutes
+   - 60A pendant 3 heures
+   - 45A en régime permanent
+5. Si une limite est atteinte, la calibration s'arrête au cap et la saturation est signalée
+
+### 11.4 Placement optimal
+
+Le nœud optimal pour l'EQUI8 est déterminé en maximisant le score :
+
+```
+Score = I_neutre / Z_amont
+```
+
+Ce critère privilégie les nœuds avec un fort courant de neutre (déséquilibre marqué) tout en s'assurant que l'impédance amont est assez faible pour ne pas que le compensateur domine la tension locale. La recherche est contrainte aux nœuds situés entre **10% et 70%** de l'impédance totale du réseau.
+
+### 11.5 Interaction avec le SRG2
+
+- L'EQUI8 (shunt courant) et le SRG2 (série tension) sont **physiquement compatibles** et peuvent coexister
+- **Règle de conflit** : si un SRG2 et un EQUI8 sont sur le même nœud ou en relation parent/enfant immédiate, le SRG2 est prioritaire et l'EQUI8 est automatiquement désactivé
+- La boucle de couplage suit la séquence : EQUI8 → Décision SRG2 → Application SRG2 → BFS → Mise à jour
+
+---
+
+## 🔵 Calcul SRG2 — Détails techniques
+
+Ce chapitre décrit en détail le modèle de calcul du régulateur de tension SRG2.
+
+### 12.1 Principe physique
+
+Le SRG2 est modélisé comme une **injection de tension série** dans une branche (câble). Dans le forward sweep du BFS :
+
+```
+V_sortie = (V_amont − Z_câble × I) + V_série
+```
+
+V_série est un phaseur complexe injecté dans la branche. Les tensions nodales sont ainsi un résultat naturel du solveur réseau, pas un forçage arbitraire.
+
+### 12.2 Modèle d'automate à seuils
+
+Le SRG2 fonctionne comme un **automate à seuils** (pas un régulateur PID). La convergence est définie par la stabilité de la décision de prise : si `tap_change == 0` après une itération, l'automate a convergé.
+
+Chaque phase dispose de 5 positions indépendantes :
+
+| Position | SRG2-400 | SRG2-230 |
+|----------|----------|----------|
+| **LO2** | −7% | −6% |
+| **LO1** | −3.5% | −3% |
+| **Bypass** | 0% | 0% |
+| **BO1** | +3.5% | +3% |
+| **BO2** | +7% | +6% |
+
+La décision de changement de prise intègre une **hystérésis de ±2V** et une **temporisation de 7 secondes** pour éviter les oscillations.
+
+### 12.3 Limites de puissance
+
+| Mode | Limite |
+|------|--------|
+| **Injection** (PV > charges) | 85 kVA max |
+| **Prélèvement** (charges > PV) | 110 kVA max |
+
+Si la puissance aval foisonnée dépasse ces limites, le SRG2 ne peut plus réguler correctement.
+
+### 12.4 Placement optimal
+
+La fonction de recherche identifie le nœud optimal pour le SRG2 **dans un rayon de 250m** de la source. Elle :
+1. Privilégie les nœuds conformes à la norme EN 50160 (207V–253V)
+2. Calcule un **score d'impact** : pourcentage de nœuds aval remis en conformité après une régulation théorique ±7%
+
+```
+Score = (nœuds corrigés / nœuds hors norme initiaux) × 100
+```
+
+### 12.5 Boucle de couplage SRG2 + EQUI8
+
+Lorsque les deux équipements sont actifs sur le réseau, la simulation suit une séquence causale :
+
+1. **EQUI8** : calcul du courant d'injection (CME) à partir de l'état réseau courant
+2. **SRG2** : décision de prise basée sur les tensions résultantes
+3. **Application** des coefficients SRG2 aux nœuds concernés
+4. **BFS** : recalcul complet des tensions et courants
+5. **Convergence** : atteinte dès que le SRG2 ne demande plus de changement de prise
+
+L'EQUI8 est recalculé dynamiquement à chaque itération sans utiliser de ratios mémorisés.
+
+---
+
 ## ⚠️ Normes et conformité
 
 ### Limites réglementaires
@@ -463,3 +769,4 @@ Pour toute question ou problème :
 ---
 
 *Application développée pour les professionnels de l'électricité - Conforme aux normes NF C 15-100*
+*Dernière mise à jour : 10 février 2026*

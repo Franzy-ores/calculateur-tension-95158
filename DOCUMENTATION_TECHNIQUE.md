@@ -1,10 +1,14 @@
 # Documentation Technique - Calculateur de Chute de Tension
 
-## Vue d'ensemble
+**Version : 10 février 2026** — Date de référence pour le développement.
 
-Cette application permet de calculer les chutes de tension dans un réseau électrique basse tension (BT) en créant visuellement des nœuds et des câbles sur une carte interactive, puis en générant des rapports PDF détaillés.
+---
 
-## Architecture
+## 1. Vue d'ensemble
+
+Cette application permet de calculer les chutes de tension dans un réseau électrique basse tension (BT) en créant visuellement des nœuds et des câbles sur une carte interactive, puis en générant des rapports PDF détaillés. Elle intègre des modules de simulation (EQUI8, SRG2) pour l'optimisation du réseau.
+
+## 2. Architecture
 
 ### Technologies utilisées
 - **Frontend**: React 18 + TypeScript + Vite
@@ -19,16 +23,27 @@ Cette application permet de calculer les chutes de tension dans un réseau élec
 src/
 ├── components/           # Composants React
 │   ├── ui/              # Composants UI réutilisables (shadcn)
+│   ├── topMenu/         # Onglets du menu supérieur
 │   ├── MapView.tsx      # Carte interactive principale
 │   ├── ResultsPanel.tsx # Panneau des résultats
 │   ├── EditPanel.tsx    # Panneau d'édition nœuds/câbles
+│   ├── SimulationPanel.tsx # Panneau de simulation
 │   └── ...
 ├── store/               # Gestion d'état Zustand
 │   └── networkStore.ts  # Store principal du réseau
 ├── types/               # Définitions TypeScript
-│   └── network.ts       # Types du réseau électrique
-├── utils/               # Utilitaires
-│   ├── electricalCalculations.ts  # Moteur de calcul
+│   ├── network.ts       # Types du réseau électrique
+│   ├── srg2.ts          # Types SRG2
+│   └── dailyProfile.ts  # Types profils journaliers
+├── utils/               # Utilitaires et moteurs de calcul
+│   ├── electricalCalculations.ts  # Moteur BFS principal
+│   ├── simulationCalculator.ts    # Extension simulation
+│   ├── equi8CME.ts                # Modèle CME EQUI8
+│   ├── equi8LoadShiftCalculator.ts # Calibration EQUI8
+│   ├── srg2SerieVoltage.ts        # Modèle série SRG2
+│   ├── optimalEqui8Finder.ts      # Placement optimal EQUI8
+│   ├── optimalSrg2Finder.ts       # Placement optimal SRG2
+│   ├── phaseDistributionCalculator.ts # Répartition phases
 │   ├── pdfGenerator.ts            # Générateur PDF
 │   └── tableGenerator.ts          # Générateur tableaux
 ├── data/                # Données par défaut
@@ -37,7 +52,9 @@ src/
     └── Index.tsx        # Page principale
 ```
 
-## Modèle de données
+---
+
+## 3. Modèle de données
 
 ### Types principaux (`src/types/network.ts`)
 
@@ -45,7 +62,7 @@ src/
 // Système de tension
 type VoltageSystem = 'TRIPHASÉ_230V' | 'TÉTRAPHASÉ_400V';
 
-// Types de raccordement
+// Types de raccordement réseau
 type ConnectionType = 
   // Réseau 230V (triangle) :
   | 'MONO_230V_PP'      // monophasé 230V entre 2 phases
@@ -57,7 +74,7 @@ type ConnectionType =
 // Types de raccordement normalisés
 type ClientConnectionType = 'MONO' | 'TRI' | 'TETRA';
 
-// Types de raccordement (résidentiel ou industriel)
+// Types de client (résidentiel ou industriel)
 type ClientType = 'résidentiel' | 'industriel';
 
 // Scénarios de calcul
@@ -72,8 +89,8 @@ interface Node {
   isSource: boolean;
   connectionType: ConnectionType;
   tensionCible?: number;
-  clients: ClientCharge[];      // Charges connectées (legacy)
-  productions: ProductionPV[];  // Productions PV connectées (legacy)
+  clients: ClientCharge[];
+  productions: ProductionPV[];
 }
 
 // Raccordement importé
@@ -83,13 +100,13 @@ interface ClientImporte {
   nomCircuit: string;
   lat: number;
   lng: number;
-  puissanceContractuelle_kVA: number;  // charge
-  puissancePV_kVA: number;             // production PV
+  puissanceContractuelle_kVA: number;
+  puissancePV_kVA: number;
   couplage: string;                     // "TRI", "MONO", "TETRA"
   clientType?: ClientType;              // 'résidentiel' | 'industriel'
-  connectionType?: ClientConnectionType; // Type de raccordement normalisé
-  assignedPhase?: 'A' | 'B' | 'C';      // Phase assignée (pour MONO)
-  linkedNodeId?: string;                 // ID du nœud lié
+  connectionType?: ClientConnectionType;
+  assignedPhase?: 'A' | 'B' | 'C';
+  linkedNodeId?: string;
 }
 
 // Câble du réseau
@@ -100,7 +117,6 @@ interface Cable {
   nodeBId: string;
   typeId: string;
   coordinates: { lat: number; lng: number }[];
-  // Propriétés calculées
   length_m?: number;
   current_A?: number;
   voltageDrop_V?: number;
@@ -114,10 +130,10 @@ interface CableType {
   label: string;
   R12_ohm_per_km: number;   // Résistance phase-phase
   X12_ohm_per_km: number;   // Réactance phase-phase
-  R0_ohm_per_km: number;    // Résistance phase-neutre
-  X0_ohm_per_km: number;    // Réactance phase-neutre
-  I_max_A: number;          // Courant admissible
-  poses: string[];          // Modes de pose autorisés
+  R0_ohm_per_km: number;    // Résistance phase-neutre / homopolaire
+  X0_ohm_per_km: number;    // Réactance phase-neutre / homopolaire
+  I_max_A: number;
+  poses: string[];
 }
 
 // Projet complet
@@ -126,25 +142,23 @@ interface Project {
   name: string;
   voltageSystem: VoltageSystem;
   cosPhi: number;
-  foisonnementChargesResidentiel: number;   // % foisonnement résidentiel
-  foisonnementChargesIndustriel: number;    // % foisonnement industriel
-  foisonnementProductions: number;           // % foisonnement productions
+  foisonnementChargesResidentiel: number;
+  foisonnementChargesIndustriel: number;
+  foisonnementProductions: number;
   nodes: Node[];
   cables: Cable[];
   cableTypes: CableType[];
   clientsImportes?: ClientImporte[];
   clientLinks?: ClientLink[];
-  geographicBounds?: any;
+  transformerConfig?: TransformerConfig;
 }
 ```
 
 ---
 
-## 3. Principes de calcul électrique
+## 4. Principes de calcul électrique
 
-### 3.1 Systèmes de tension : 230V Triangle vs 400V Étoile
-
-Le calculateur supporte deux systèmes de tension fondamentalement différents :
+### 4.1 Systèmes de tension : 230V Triangle vs 400V Étoile
 
 #### Réseau 230V Triangle (TRIPHASÉ_230V)
 
@@ -156,22 +170,11 @@ Le calculateur supporte deux systèmes de tension fondamentalement différents :
    B──── 230V ────C
 ```
 
-**Caractéristiques :**
 - **3 conducteurs** : phases A, B, C (pas de neutre)
 - **Tension entre phases** : 230V (tension composée)
-- **Pas de neutre physique** → pas de tension phase-neutre
-- **Types de raccordement disponibles** :
-  - `MONO_230V_PP` : monophasé 230V entre deux phases (ex: A-B)
-  - `TRI_230V_3F` : triphasé 230V (3 fils)
-
-**Impédances utilisées** : Toujours R12/X12 (impédances phase-phase)
-
-**Formule du courant triphasé** :
-```
-I = S / (√3 × 230V)
-```
-
----
+- **Types de raccordement** : MONO_230V_PP, TRI_230V_3F
+- **Impédances utilisées** : toujours R12/X12 (phase-phase)
+- **Tension interne BFS** : la référence est **230/√3 ≈ 133V** par phase, ce qui assure des courants de branche et pertes I²R physiquement corrects tout en présentant les tensions ligne-ligne (230V) dans l'interface
 
 #### Réseau 400V Étoile (TÉTRAPHASÉ_400V)
 
@@ -186,88 +189,45 @@ I = S / (√3 × 230V)
     └──400V──┴──400V──┘
 ```
 
-**Caractéristiques :**
 - **4 conducteurs** : phases A, B, C + Neutre (N)
-- **Tension phase-neutre** : 230V (tension simple)
-- **Tension entre phases** : 400V (tension composée = 230V × √3)
-- **Neutre disponible** → permet les charges monophasées phase-neutre
-- **Types de raccordement disponibles** :
-  - `MONO_230V_PN` : monophasé 230V phase-neutre (ex: A-N)
-  - `TÉTRA_3P+N_230_400V` : tétraphasé 3P+N (230/400V)
+- **Tension phase-neutre** : 230V ; **Tension entre phases** : 400V (230V × √3)
+- **Types de raccordement** : MONO_230V_PN, TÉTRA_3P+N_230_400V
+- **Impédances** : phases → formule GRD belges (voir §4.2), neutre → R0/X0
 
-**Impédances utilisées** :
-- Phases : R12/X12 (impédances phase-phase)
-- Neutre : R0/X0 (impédances phase-neutre)
+### 4.2 Formule d'impédance des conducteurs (GRD belges)
 
-**Formule du courant triphasé** :
+L'impédance effective des conducteurs de phase est calculée selon la formule des GRD belges (ORES/RESA/Sibelga), qui combine les composantes directe et homopolaire pour refléter le déséquilibre structurel du réseau :
+
 ```
-I = S / (√3 × 400V)
+R_eff = (R0 + 2 × R12) / 3
+X_eff = (X0 + 2 × X12) / 3
 ```
 
----
+Le conducteur neutre utilise directement R0/X0. Cette formule s'applique à tous les calculs de chute de tension (BFS) et de recherche d'emplacement optimal.
 
-### 3.2 Sélection automatique des impédances
-
-La fonction `selectRX()` choisit automatiquement les bonnes impédances selon le contexte :
-
-```typescript
-private selectRX(cableType, is400V, isUnbalanced, forNeutral): { R, X }
-```
-
-| Réseau | Conducteur | Impédances utilisées |
-|--------|-----------|---------------------|
-| 230V Triangle | Phases | R12/X12 |
-| 400V Étoile | Phases | R12/X12 |
-| 400V Étoile | Neutre | R0/X0 |
-
-> **Important** : En réseau 230V triangle, il n'y a pas de conducteur neutre. Les impédances R0/X0 ne sont jamais utilisées.
-
----
-
-### 3.3 Raccordements : Résidentiel vs Industriel
-
-#### Types de raccordement
-
-Chaque raccordement importé peut être classé selon son type :
+### 4.3 Raccordements : Résidentiel vs Industriel
 
 | Type | Foisonnement typique | Usage |
 |------|---------------------|-------|
 | **Résidentiel** | 15-30% | Habitations, petits commerces |
 | **Industriel** | 70-100% | Usines, entrepôts, gros consommateurs |
 
-#### Foisonnement différencié
+**Règles métier :**
+- Les clients **MONO** sont strictement résidentiels (foisonnement 15%)
+- Les clients **industriels** doivent être polyphasés (TRI/TÉTRA, foisonnement 70%)
+- Les **charges manuelles** sont toujours traitées comme résidentielles (15%)
 
-Le foisonnement représente le taux de simultanéité des charges. Il est appliqué différemment selon le type de raccordement :
+### 4.4 Facteurs de puissance différenciés
 
-```typescript
-// Calcul de la puissance équivalente foisonnée
-for (const raccordement of raccordementsLies) {
-  const foisonnement = raccordement.clientType === 'industriel' 
-    ? foisonnementChargesIndustriel    // Ex: 70%
-    : foisonnementChargesResidentiel;  // Ex: 15%
-  
-  S_foisonne += raccordement.puissanceContractuelle_kVA * (foisonnement / 100);
-}
-```
+Le moteur utilise des cos φ séparés pour les charges et les productions :
+- **Charges** : cos φ = 0.95 (inductif) par défaut
+- **Productions** : cos φ = 1.00 par défaut
 
-**Exemple concret :**
+Les calculs utilisent la somme vectorielle avec P (actif) et Q (réactif) calculés séparément pour chaque type avant combinaison au nœud.
 
-| Raccordement | Type | P contractuelle | Foisonnement | P foisonnée |
-|-------------|------|----------------|--------------|-------------|
-| Maison A | Résidentiel | 12 kVA | 15% | 1.8 kVA |
-| Maison B | Résidentiel | 9 kVA | 15% | 1.35 kVA |
-| Usine X | Industriel | 100 kVA | 70% | 70 kVA |
-| **Total** | | **121 kVA** | | **73.15 kVA** |
-
----
-
-### 3.4 Répartition des phases (Mode mixte)
-
-En mode `mixte_mono_poly`, les raccordements sont automatiquement répartis sur les phases selon leur type de couplage :
+### 4.5 Répartition des phases (Mode mixte)
 
 #### Raccordements MONO (monophasés)
-
-Les raccordements monophasés sont assignés à une phase unique (A, B ou C) :
 
 ```typescript
 // En 400V étoile : phase-neutre
@@ -277,281 +237,286 @@ assignedPhase: 'A'  // Raccordé entre phase A et neutre
 phaseCoupling: 'A-B'  // Raccordé entre phases A et B
 ```
 
-**Répartition des charges par phase :**
-- Charges 100% sur la phase assignée
-- Productions 100% sur la phase assignée (ou réparties si puissance > seuil)
+**Règle de cohérence** : un client MONO ayant charges et productions utilise la même affectation de phase pour les deux.
 
 #### Raccordements TRI/TÉTRA (triphasés/tétraphasés)
 
-Les raccordements triphasés sont répartis équitablement sur les 3 phases :
+Répartition équilibrée sur les 3 phases : `chargesParPhase = puissance / 3` par phase.
 
-```typescript
-// Répartition équilibrée
-chargesParPhase = {
-  A: puissanceContractuelle / 3,
-  B: puissanceContractuelle / 3,
-  C: puissanceContractuelle / 3
-}
+#### Foisonnement par phase
+
 ```
-
-#### Foisonnement différencié par phase
-
-Le foisonnement est appliqué **par type de raccordement et par phase** :
-
-```typescript
-// Pour chaque phase (A, B, C)
 totalFoisonneChargeA = 
-  chargesResidentiellesPhaseA * (foisonnementResidentiel / 100) +
-  chargesIndustriellesPhaseA * (foisonnementIndustriel / 100);
+  chargesResidentiellesPhaseA × (foisResidentiel/100) +
+  chargesIndustriellesPhaseA × (foisIndustriel/100)
 ```
+
+### 4.6 Correction vectorielle MONO 230V Triangle
+
+En réseau 230V triangle, un client monophasé branché entre deux phases (ex. L1-L2) est modélisé par une paire de phaseurs opposés :
+- S_A = +S_total à 0°
+- S_B = −S_total à 180°
+
+Cela assure que le courant calculé par le BFS vaut bien I = S_total / 230V, sans double-comptage de puissance. La propriété `phasePhaseLoads` suit la puissance totale par couplage (A-B, B-C, A-C).
 
 ---
 
-## 4. Moteur de calcul électrique
+## 5. Moteur de calcul électrique (BFS)
 
-### 4.1 Algorithme Backward-Forward Sweep
+### 5.1 Algorithme Backward-Forward Sweep
 
-Le réseau est supposé radial (arborescent) avec une seule source. Les calculs sont réalisés en régime sinusoïdal établi par une méthode Backward-Forward Sweep phasorielle (nombres complexes).
+Le réseau est supposé **radial** (arborescent, une seule source). Les calculs sont réalisés en régime sinusoïdal établi par une méthode Backward-Forward Sweep phasorielle (nombres complexes).
 
 #### Prétraitements
 
-1. **Construction de l'arbre** depuis la source (BFS) → parent/children, ordre postfixé
+1. **Construction de l'arbre** depuis la source (parcours en largeur) → relations parent/enfant, ordre postfixé
 2. **Puissance équivalente par nœud** : `S_eq(n) = charges_foisonnées − productions_foisonnées`
 3. **Puissance aval** : `S_aval(n) = S_eq(n) + Σ S_aval(descendants)`
 4. **Tension initiale** : `V(n) ← V_slack = U_ref_phase ∠ 0°`
 
-#### Boucle itérative
+#### Boucle itérative (max 100 itérations, tolérance 1e-4)
 
-(max 100 itérations, tolérance 1e−4 sur |ΔV|/U_ref_phase)
+**Étape 1 — Courant d'injection nodal (par phase)**
 
-**1. Courant d'injection nodal (par phase)**
 ```
 S_total(n) = P + jQ
   P = S_kVA × cos φ × 1000
-  Q = |S_kVA| × sin φ × 1000 × sign(S_kVA)
+  Q = |S_kVA| × sin φ × 1000 × signe(S_kVA)
 
 S_phase(n) = S_total(n) / (3 si triphasé, sinon 1)
 I_inj(n) = conj(S_phase(n) / V(n))
 ```
 
-**2. Backward (courants de branches)**
+Les P et Q sont calculés séparément pour les charges (cos φ charges = 0.95) et les productions (cos φ productions = 1.00), puis combinés par somme vectorielle.
+
+**Étape 2 — Backward (courants de branches)**
+
 ```
-I_branche(u→p) = I_inj(u) + Σ I_branche(descendants de u)
+I_branche(u→parent) = I_inj(u) + Σ I_branche(descendants de u)
 I_source_net = I_inj(source) + Σ I_branche(départs)
 ```
 
-**3. Forward (mises à jour des tensions)**
+**Étape 3 — Forward (mise à jour des tensions)**
+
 ```
-V_source_bus = V_slack − Z_tr × I_source_net
+V_source_bus = V_slack − Z_transfo × I_source_net
 V(enfant) = V(parent) − Z_câble × I_branche
 ```
 
-**4. Test de convergence** sur la variation maximale de tension phasorielle.
+**Étape 4 — Convergence** : vérification de la variation maximale de tension phasorielle.
 
----
+### 5.2 Tension source configurable
 
-### 4.2 Calcul du courant selon le type de raccordement
+La tension source est réglable via un curseur dans l'onglet **Réseau** :
+- **230V** : plage 225–240V
+- **400V** : plage 390–430V
 
-La conversion puissance → courant dépend du type de raccordement :
+Elle est automatiquement réinitialisée à la valeur nominale lors d'un changement de système de tension. Le moteur de calcul utilise cette valeur en priorité sur la tension nominale.
 
-```typescript
-private calculateCurrentA(S_kVA, connectionType, sourceVoltage?): number {
-  switch (connectionType) {
-    case 'MONO_230V_PN':
-      // Monophasé phase-neutre: I = S / U_phase
-      return (S_kVA * 1000) / 230;
-      
-    case 'MONO_230V_PP':
-      // Monophasé phase-phase: I = S / U_phase-phase
-      return (S_kVA * 1000) / 230;
-      
-    case 'TRI_230V_3F':
-      // Triangle 230V: I = S / (√3 × 230V)
-      return (S_kVA * 1000) / (Math.sqrt(3) * 230);
-      
-    case 'TÉTRA_3P+N_230_400V':
-      // Étoile 400V: I = S / (√3 × 400V)
-      return (S_kVA * 1000) / (Math.sqrt(3) * 400);
-  }
-}
+### 5.3 Impédance du transformateur
+
+```
+Z_pu  = Ucc% / 100
+Z_base = U_ligne² / S_nominal_VA
+|Z|   = Z_pu × Z_base
+
+R = |Z| / √(1 + (X/R)²)
+X = R × (X/R)
+
+Z_transfo = R + jX
 ```
 
----
+### 5.4 Scénarios et foisonnement
 
-### 4.3 Impédance du transformateur
+| Scénario | Puissance équivalente au nœud |
+|----------|-------------------------------|
+| **Prélèvement** | S_eq = charges foisonnées |
+| **Production** | S_eq = −productions foisonnées |
+| **Mixte** | S_eq = charges foisonnées − productions foisonnées |
 
-Le transformateur HT/BT est modélisé par son impédance série par phase :
-
-```typescript
-// Calcul de l'impédance transformateur
-const Zpu = Ucc_percent / 100;           // p.u.
-const Sbase_VA = S_nominal_kVA * 1000;   // VA
-const Zbase = U_line² / Sbase_VA;        // Ω
-const Zmag = Zpu * Zbase;                // |Z| en Ω
-
-// Décomposition R/X via ratio X/R
-if (xOverR > 0) {
-  R = Zmag / sqrt(1 + xOverR²);
-  X = R * xOverR;
-} else {
-  R = 0.05 * Zmag;  // Fallback
-  X = sqrt(Zmag² - R²);
-}
-
-Ztr_phase = R + jX;
+Application du foisonnement différencié :
+```
+Charges_foisonnées = Σ(résidentiels × fois_résidentiel/100) + Σ(industriels × fois_industriel/100)
+Productions_foisonnées = Σ(PV_kVA × fois_productions/100)
 ```
 
----
+> **Note** : Seuls les nœuds connectés à la source sont inclus dans les totaux « Circuit ».
 
-### 4.4 Calculs par tronçon (résultats)
-
-Pour chaque câble du réseau :
+### 5.5 Résultats par tronçon
 
 | Grandeur | Formule |
 |----------|---------|
-| Courant RMS | `I = \|I_branche\|` |
-| Chute par phase | `ΔV_ph = Z_câble × I_ph` |
-| Chute ligne | `ΔU_ligne = \|ΔV_ph\| × (√3 si triphasé)` |
-| Pourcentage chute | `ΔU_% = (ΔU_ligne / U_ref) × 100` |
-| Puissance apparente | `S_kVA = \|V_amont × conj(I_ph)\| × (3 si tri) / 1000` |
-| Pertes Joule | `P_pertes = I² × R_phase × (3 si tri) / 1000` |
+| Courant RMS | I = \|I_branche\| |
+| Chute par phase | ΔV_ph = Z_câble × I_ph |
+| Chute ligne | ΔU = \|ΔV_ph\| × √3 (si triphasé) |
+| Pourcentage | ΔU% = ΔU / U_ref × 100 |
+| Pertes Joule | P = I² × R × 3 (si triphasé) / 1000 kW |
+
+### 5.6 Conformité EN 50160
+
+| Écart | Statut | Couleur |
+|-------|--------|---------|
+| ≤ 8% | Normal | 🟢 Vert |
+| ≤ 10% | Attention | 🟡 Orange |
+| > 10% | Critique | 🔴 Rouge |
 
 ---
 
-### 4.5 Évaluation nodale et conformité EN 50160
+## 6. Module de Simulation
 
-Pour chaque nœud :
-
-```typescript
-// Tension nœud (ligne)
-U_node = |V(n)| × (√3 si triphasé, sinon 1)
-
-// Chute cumulée
-ΔU_cum_V = U_ref - U_node
-ΔU_cum_% = ΔU_cum_V / U_ref × 100
-
-// Conformité EN 50160
-if (|ΔU_%| ≤ 8%)  → 'normal' (vert)
-if (|ΔU_%| ≤ 10%) → 'warning' (orange)
-if (|ΔU_%| > 10%) → 'critical' (rouge)
-```
-
----
-
-### 4.6 Scénarios et foisonnement
-
-| Scénario | Formule S_eq |
-|----------|--------------|
-| PRÉLÈVEMENT | `S_eq = charges_foisonnées` |
-| PRODUCTION | `S_eq = −productions_foisonnées` |
-| MIXTE | `S_eq = charges_foisonnées − productions_foisonnées` |
-
-**Application du foisonnement différencié :**
-
-```typescript
-// Pour chaque raccordement lié au nœud
-const foisonnement = (raccordement.clientType === 'industriel')
-  ? project.foisonnementChargesIndustriel    // Ex: 70%
-  : project.foisonnementChargesResidentiel;  // Ex: 15%
-
-chargesFoisonnees += raccordement.puissanceContractuelle_kVA * (foisonnement / 100);
-```
-
-> **Note** : Seuls les nœuds connectés à la source sont inclus dans les totaux.
-
----
-
-## 5. Module de Simulation
-
-### 5.1 Architecture du module
-
-Le module de simulation étend les capacités de calcul standard en introduisant des équipements de compensation et de régulation.
+### 6.1 Architecture
 
 - **SimulationCalculator** : Extension de `ElectricalCalculator`
 - **SimulationEquipment** : Structure regroupant tous les équipements (EQUI8, SRG2)
 - **simulationResults** : Résultats séparés qui remplacent `calculationResults` quand la simulation est active
 
-### 5.2 EQUI8 - Compensateur de Courant de Neutre
+### 6.2 Contrôle harmonisé des équipements
 
-#### Principe technique
-
-L'EQUI8 réduit le courant dans le conducteur neutre (I_N) en injectant des puissances réactives calculées automatiquement sur les trois phases.
-
-**Conditions d'éligibilité :**
-1. Réseau en 400V tétraphasé (neutre requis)
-2. Type de raccordement du nœud : MONO_230V_PN
-3. Mode de charge : `monophase_reparti` activé
-4. Déséquilibre présent (> 0%)
-5. Impédances minimales : Zph > 0.15Ω, Zn > 0.15Ω
-
-> ⚠️ **Important** : Un EQUI8 ne peut pas fonctionner en réseau 230V triangle car il n'y a pas de conducteur neutre.
-
-#### Algorithme de compensation
-
-```
-1. I_N_initial = I_A + I_B + I_C (somme vectorielle)
-2. Si |I_N_initial| < tolerance_A → EQUI8 reste inactif
-3. Calcul Q_A, Q_B, Q_C pour équilibrer les tensions Ph-N
-4. Limitation par puissance maximale si nécessaire
-5. Application: I_phase_compensé = I_phase + Q_phase / V_phase
-6. I_N_final = I_A_comp + I_B_comp + I_C_comp
-7. reductionPercent = (1 - |I_N_final| / |I_N_initial|) × 100
-```
-
-### 5.3 SRG2 - Régulateur de Tension Triphasé
-
-Le SRG2 est un stabilisateur automatique de tension disponible en deux variantes :
-
-#### SRG2-400 (réseau 400V étoile)
-
-| Position | Seuil (V) | Coefficient |
-|----------|-----------|-------------|
-| LO2 | U > 246V | -7% |
-| LO1 | U > 238V | -3.5% |
-| BYP | 222-238V | 0% |
-| BO1 | U < 222V | +3.5% |
-| BO2 | U < 214V | +7% |
-
-#### SRG2-230 (réseau 230V triangle)
-
-| Position | Seuil (V) | Coefficient |
-|----------|-----------|-------------|
-| LO2 | U > 244V | -6% |
-| LO1 | U > 236V | -3% |
-| BYP | 224-236V | 0% |
-| BO1 | U < 224V | +3% |
-| BO2 | U < 216V | +6% |
-
-**Formule de régulation :**
-```
-U_sortie = U_entrée × (1 + coefficient/100)
-```
-
-**Limites de puissance aval :**
-- Injection (PV > charges) : 85 kVA max
-- Prélèvement (charges > PV) : 110 kVA max
+Tous les modules de simulation (EQUI8, SRG2, remplacement de câbles) suivent un pattern UX harmonisé :
+- **Switch actif/inactif** : active/désactive l'effet sans supprimer la configuration
+- **Icône corbeille** : réinitialise l'équipement
+- **Sélection de nœud** : dropdown dynamique pour le placement
 
 ---
 
-## 6. Mode déséquilibré (Monophasé réparti)
+## 7. EQUI8 — Compensateur de Courant de Neutre
 
-### 6.1 Définition
+### 7.1 Principe physique
 
-Le mode `monophase_reparti` permet de modéliser des réseaux où les charges monophasées ne sont pas réparties uniformément sur les phases.
+L'EQUI8 agit exclusivement comme une **source de courant shunt** :
+- Injection de **+I** sur le conducteur neutre
+- Injection de **−I/3** sur chacune des trois phases
+
+Les tensions résultantes sont calculées naturellement par le solveur BFS — elles ne sont jamais imposées ni forcées.
+
+### 7.2 Conditions d'éligibilité
+
+Un nœud est éligible à l'EQUI8 si :
+1. Réseau **400V tétraphasé** (neutre requis)
+2. Le nœud possède un **déséquilibre réel** entre phases (détecté dynamiquement)
+3. Impédances équivalentes Zph et Zn ≥ **0.15Ω** (contrainte fournisseur)
+
+> ⚠️ L'EQUI8 ne peut pas fonctionner en réseau 230V triangle (pas de conducteur neutre).
+
+L'éligibilité est indépendante du mode de charge global et fonctionne en mode `monophase_reparti` comme en mode `mixte_mono_poly`.
+
+### 7.3 Algorithme de calibration CME
+
+L'EQUI8 utilise une boucle de calibration par **méthode de la sécante** avec amortissement :
+
+1. Calcul du courant de neutre initial : I_N = I_A + I_B + I_C (somme vectorielle)
+2. Si |I_N| < seuil → EQUI8 reste inactif
+3. Calcul itératif du courant d'injection optimal :
+   - Variation de I limitée à **±20% par itération**
+   - Facteur d'amortissement **0.7** pour éviter les oscillations
+4. Respect des **limites thermiques** :
+   - **80A** pendant 15 minutes
+   - **60A** pendant 3 heures
+   - **45A** en régime permanent
+5. Si une limite est atteinte, la calibration s'arrête au cap et la saturation est signalée
+
+### 7.4 Placement optimal
+
+Le nœud optimal est déterminé en maximisant le score :
+
+```
+Score = I_neutre / Z_amont
+```
+
+Ce critère privilégie les nœuds avec un fort courant de neutre (déséquilibre marqué) tout en s'assurant que l'impédance amont est assez faible pour éviter que le compensateur ne domine la tension locale. La recherche est contrainte aux nœuds situés entre **10% et 70%** de l'impédance totale du réseau.
+
+### 7.5 Interaction avec le SRG2
+
+- L'EQUI8 (shunt courant) et le SRG2 (série tension) sont **physiquement compatibles** car ils agissent sur des variables différentes
+- **Règle de conflit** : si un SRG2 et un EQUI8 sont sur le même nœud ou en relation parent/enfant immédiate, le SRG2 est prioritaire et l'EQUI8 est automatiquement désactivé
+- La boucle de couplage suit la séquence : EQUI8 → Décision SRG2 → Application SRG2 → BFS → Mise à jour
+
+---
+
+## 8. SRG2 — Régulateur de Tension Triphasé
+
+### 8.1 Principe physique
+
+Le SRG2 est modélisé comme une **injection de tension série** dans une branche (câble). Dans le forward sweep du BFS :
+
+```
+V_sortie = (V_amont − Z_câble × I) + V_série
+```
+
+V_série est un phaseur complexe injecté dans la branche. Les tensions nodales sont un résultat naturel du solveur réseau, pas un forçage arbitraire.
+
+### 8.2 Modèle d'automate à seuils
+
+Le SRG2 fonctionne comme un **automate à seuils** (pas un régulateur PID). La convergence est définie par la stabilité de la décision de prise : si `tap_change == 0` après une itération, l'automate a convergé.
+
+Chaque phase dispose de 5 positions indépendantes :
+
+| Position | SRG2-400 (±7%/±3.5%) | SRG2-230 (±6%/±3%) |
+|----------|----------------------|---------------------|
+| **LO2** | > 246V → −7% | > 244V → −6% |
+| **LO1** | > 238V → −3.5% | > 237V → −3% |
+| **Bypass** | 222–238V → 0% | 223–237V → 0% |
+| **BO1** | < 222V → +3.5% | < 223V → +3% |
+| **BO2** | < 214V → +7% | < 216V → +6% |
+
+La décision de changement de prise intègre une **hystérésis de ±2V** et une **temporisation de 7 secondes** pour éviter les oscillations.
+
+### 8.3 Mémoire mécanique (profils journaliers)
+
+En analyse de profil journalier (24h), la position de prise du SRG2 est maintenue d'une heure à l'autre (mémoire mécanique). Le système utilise l'état de l'heure précédente et la zone d'hystérésis ±2V pour évaluer les changements de prise, évitant les oscillations irréalistes.
+
+### 8.4 Limites de puissance
+
+| Mode | Limite |
+|------|--------|
+| **Injection** (PV > charges) | 85 kVA max |
+| **Prélèvement** (charges > PV) | 110 kVA max |
+
+Si la puissance aval foisonnée dépasse ces limites, le SRG2 ne peut plus réguler correctement.
+
+### 8.5 Placement optimal
+
+La fonction `findOptimalSRG2Node` identifie le nœud optimal **dans un rayon de 250m** de la source :
+1. Privilégie les nœuds conformes à la norme EN 50160 (207V–253V)
+2. Calcule un **score d'impact** : pourcentage de nœuds aval remis en conformité après une régulation théorique ±7%
+
+```
+Score = (nœuds corrigés / nœuds hors norme initiaux) × 100
+```
+
+### 8.6 Boucle de couplage SRG2 + EQUI8
+
+Lorsque les deux équipements sont actifs, la simulation suit une séquence causale :
+
+1. **EQUI8** : calcul du courant d'injection (CME) à partir de l'état réseau courant
+2. **SRG2** : décision de prise basée sur les tensions résultantes
+3. **Application** des coefficients SRG2 aux nœuds concernés
+4. **BFS** : recalcul complet des tensions et courants
+5. **Convergence** : atteinte dès que le SRG2 ne demande plus de changement de prise
+
+L'EQUI8 est recalculé dynamiquement à chaque itération sans utiliser de ratios mémorisés.
+
+---
+
+## 9. Mode déséquilibré (Monophasé réparti)
+
+### 9.1 Définition
+
+Le mode déséquilibré permet de modéliser des réseaux où les charges monophasées ne sont pas réparties uniformément sur les phases.
 
 **Effets :**
 - Tensions phase-neutre différentes pour chaque phase
 - Courant de neutre non nul (I_N)
 - Conditions nécessaires pour l'utilisation de l'EQUI8
 
-### 6.2 Répartition des phases
+### 9.2 Répartition des phases
 
 Trois paramètres définissent la distribution (total = 100%) :
-- `phaseAPercent` : Pourcentage sur phase A
-- `phaseBPercent` : Pourcentage sur phase B
-- `phaseCPercent` : Pourcentage sur phase C
+- `phaseAPercent`, `phaseBPercent`, `phaseCPercent`
 
-### 6.3 Calcul du courant de neutre
+Les curseurs de déséquilibre affectent **tous** les types de clients (MONO, TRI/TÉTRA) et les charges manuelles (Option B).
+
+### 9.3 Calcul du courant de neutre
 
 ```
 I_N = I_A + I_B + I_C (somme vectorielle complexe)
@@ -562,13 +527,36 @@ Avec déséquilibre    : I_N ≠ 0 → échauffement conducteur neutre
 
 ---
 
-## 7. Jeu de barres virtuel
+## 10. Totaux Clients Cabine et alerte transfo
 
-### 7.1 Principe
+### 10.1 Principe
+
+L'onglet **Paramètres** affiche côte à côte :
+- **Circuit** : charges/productions foisonnées des nœuds connectés au réseau
+- **Clients Cabine** : charges/productions foisonnées de **tous** les clients importés (liés et non liés)
+
+### 10.2 Calcul
+
+```
+cabineChargesFoisonnées = Σ(résidentiels × fois_résidentiel/100) + Σ(industriels × fois_industriel/100)
+cabineProductionsFoisonnées = Σ(PV_kVA × fois_productions/100)
+```
+
+### 10.3 Alerte transfo
+
+Une alerte s'affiche si :
+- **Surcharge** : charges foisonnées > puissance transfo + productions foisonnées
+- **Injection** : productions foisonnées > puissance transfo + charges foisonnées
+
+---
+
+## 11. Jeu de barres virtuel
+
+### 11.1 Principe
 
 Calculé après convergence du power flow, le jeu de barres représente le point de départ du réseau BT après le transformateur.
 
-### 7.2 Grandeurs calculées
+### 11.2 Grandeurs calculées
 
 | Grandeur | Description |
 |----------|-------------|
@@ -579,7 +567,7 @@ Calculé après convergence du power flow, le jeu de barres représente le point
 | `deltaU_V` | Chute de tension dans le transformateur |
 | `losses_kW` | Pertes cuivre du transformateur |
 
-### 7.3 Analyse par circuit
+### 11.3 Analyse par circuit
 
 Chaque départ (enfant direct de la source) dispose de :
 - `subtreeSkVA` : Puissance du sous-arbre
@@ -589,13 +577,12 @@ Chaque départ (enfant direct de la source) dispose de :
 
 ---
 
-## 8. Gestion d'état (Zustand)
+## 12. Gestion d'état (Zustand)
 
 ### Store principal (`src/store/networkStore.ts`)
 
 ```typescript
 interface NetworkState {
-  // Projet actuel
   currentProject: Project | null;
   
   // Raccordements importés
@@ -629,11 +616,9 @@ interface NetworkState {
 
 ---
 
-## 9. Interface cartographique
+## 13. Interface cartographique
 
-### Composant `MapView`
-
-#### Codes couleur des nœuds
+### Codes couleur des nœuds
 
 | Couleur | Signification |
 |---------|--------------|
@@ -644,7 +629,13 @@ interface NetworkState {
 | 🟦 Cyan | Source 230V |
 | 🟣 Magenta | Source 400V |
 
-#### Tracé de câbles interactif
+### Badges d'équipements de simulation
+
+- 🟢 **Badge vert** : EQUI8 actif
+- 🔵 **Badge bleu** : SRG2 actif
+- 🟡 **Badge jaune** : Équipement présent mais désactivé
+
+### Tracé de câbles interactif
 
 1. Clic sur nœud source → mode routage activé
 2. Clics intermédiaires → points du tracé
@@ -653,7 +644,7 @@ interface NetworkState {
 
 ---
 
-## 10. Export PDF
+## 14. Export PDF
 
 ### Structure du rapport
 
@@ -663,8 +654,6 @@ interface NetworkState {
 4. **Détails par tronçon** : tableau complet
 
 ### Contenu avec simulation active
-
-Lorsque la simulation est active, le PDF intègre :
 
 **Section EQUI8** (pour chaque compensateur actif) :
 - Réduction % du courant de neutre
@@ -678,7 +667,20 @@ Lorsque la simulation est active, le PDF intègre :
 
 ---
 
-## 11. Extensibilité
+## 15. Normes et conformité
+
+### Limites réglementaires
+- **Chute de tension max** : 3% selon NF C 15-100
+- **Facteur de puissance** : 0.8 à 1.0
+- **Conformité EN 50160** : ±10% de la tension nominale
+
+### Cas particuliers
+- **Remontée de tension** : En cas de production PV importante
+- **Déséquilibre** : Répartition des phases sur les charges monophasées
+
+---
+
+## 16. Extensibilité
 
 ### Ajouter un nouveau type de câble
 
@@ -688,37 +690,26 @@ Lorsque la simulation est active, le PDF intègre :
 {
   id: "nouveau_cable",
   label: "Nouveau câble XYZ",
-  R12_ohm_per_km: 0.xxx,  // Résistance phase-phase Ω/km
-  X12_ohm_per_km: 0.xxx,  // Réactance phase-phase Ω/km
-  R0_ohm_per_km: 0.xxx,   // Résistance phase-neutre Ω/km
-  X0_ohm_per_km: 0.xxx,   // Réactance phase-neutre Ω/km
-  I_max_A: xxx,           // Courant admissible A
+  R12_ohm_per_km: 0.xxx,
+  X12_ohm_per_km: 0.xxx,
+  R0_ohm_per_km: 0.xxx,
+  X0_ohm_per_km: 0.xxx,
+  I_max_A: xxx,
   poses: ["ENTERRÉ", "AÉRIEN"]
 }
 ```
 
 ### Personnaliser les calculs
 
-La classe `ElectricalCalculator` peut être étendue pour :
-- Ajouter de nouveaux types de raccordement
-- Modifier les formules de chute de tension
-- Implémenter d'autres normes (IEC, NEC, etc.)
+La classe `ElectricalCalculator` peut être étendue via `SimulationCalculator` pour ajouter de nouveaux types d'équipements ou modifier les formules.
 
 ---
 
-## 12. Maintenance et debugging
+## 17. Maintenance et debugging
 
 ### Console de debug
 
-L'application affiche des logs détaillés :
-
-```typescript
-console.log('=== CALCUL ÉLECTRIQUE ===');
-console.log('Scénario:', scenario);
-console.log('Mode:', isUnbalanced ? 'déséquilibré' : 'équilibré');
-console.log('Foisonnement résidentiel:', foisonnementResidentiel + '%');
-console.log('Foisonnement industriel:', foisonnementIndustriel + '%');
-```
+L'application affiche des logs détaillés pour le diagnostic.
 
 ### Points d'attention
 
@@ -726,12 +717,14 @@ console.log('Foisonnement industriel:', foisonnementIndustriel + '%');
 |----------|-------|----------|
 | Calculs incorrects | Mauvais paramètres câble | Vérifier R12/X12, R0/X0 |
 | EQUI8 inactif | Réseau 230V | Passer en 400V (neutre requis) |
+| EQUI8 inactif | Pas de déséquilibre | Vérifier la distribution des phases |
 | Foisonnement incorrect | Type raccordement non défini | Vérifier `clientType` |
-| Phases déséquilibrées | Mode équilibré actif | Activer `monophase_reparti` |
+| SRG2 limite atteinte | Puissance aval > 85/110 kVA | Répartir les charges |
+| Conflit SRG2/EQUI8 | Même nœud ou parent/enfant | SRG2 prioritaire, EQUI8 désactivé |
 
 ---
 
-## 13. Roadmap
+## 18. Roadmap
 
 ### Fonctionnalités implémentées
 
@@ -741,6 +734,12 @@ console.log('Foisonnement industriel:', foisonnementIndustriel + '%');
 - ✅ Foisonnement différencié résidentiel/industriel
 - ✅ Mode déséquilibré avec répartition par phase
 - ✅ Export PDF avancé avec simulation
+- ✅ Formule d'impédance GRD belges
+- ✅ Correction vectorielle MONO 230V triangle
+- ✅ Tension source configurable
+- ✅ Totaux Clients Cabine et alerte transfo
+- ✅ Profils journaliers avec mémoire mécanique SRG2
+- ✅ Calibration CME EQUI8 avec limites thermiques
 
 ### Améliorations prévues
 
@@ -751,9 +750,5 @@ console.log('Foisonnement industriel:', foisonnementIndustriel + '%');
 
 ---
 
-## Contacts
-
-Pour questions techniques ou contributions :
-- Vérifier la console navigateur pour les erreurs
-- Utiliser l'historique Lovable pour revenir à une version stable
-- Consulter la documentation des dépendances (Leaflet, jsPDF, etc.)
+*Application développée pour les professionnels de l'électricité - Conforme aux normes NF C 15-100*
+*Dernière mise à jour : 10 février 2026*

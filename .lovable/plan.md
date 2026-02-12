@@ -1,62 +1,52 @@
 
-# Plan : Ajout des totaux "Clients Cabine" et alerte transfo dans l'onglet Parametres
 
-## Contexte
+# Plan : Deplacer cos phi et nom du projet dans l'onglet Reseau
 
-Actuellement, l'onglet Parametres affiche uniquement les totaux foisonnes du **circuit** (noeuds connectes). Le besoin est d'afficher egalement les totaux foisonnes de **tous les clients importes** (lies et non lies au reseau), appeles "Clients Cabine", et d'alerter si le net depasse la puissance du transformateur.
+## Objectif
+
+Rendre editables dans l'onglet **Reseau** :
+1. Le **nom du projet** (actuellement non editable dans cet onglet)
+2. Le **cos phi Charges** (actuellement affiche en lecture seule dans NetworkTab, lignes 126-128)
+3. Le **cos phi Productions** (idem)
 
 ## Modification
 
-**Fichier unique : `src/components/topMenu/ParametersTab.tsx`**
+**Fichier unique : `src/components/topMenu/NetworkTab.tsx`**
 
-### 1. Calcul des totaux "Clients Cabine"
+### 1. Remplacement de l'affichage lecture seule cos phi
 
-Ajouter le calcul de la somme de tous les `clientsImportes` (lies et non lies), avec application des coefficients de foisonnement differencies (residentiel/industriel) :
+Les lignes 125-128 affichent actuellement :
+```
+cos phi Charges: 0.95
+cos phi Productions: 1.00
+```
+en texte simple. Elles seront remplacees par deux champs `<Input type="number">` editables (step 0.01, min 0.80, max 1.00) qui appelleront `updateProjectConfig({ cosPhiCharges: value })` et `updateProjectConfig({ cosPhiProductions: value })`.
+
+### 2. Ajout du nom de projet editable
+
+Une nouvelle **Card** (ou section en haut de la grille) contiendra un champ `<Input>` lie a `currentProject.name`, avec `updateProjectConfig({ name: value })` au changement. Ce champ sera place en premier dans la grille pour une visibilite immediate.
+
+### 3. Import supplementaires
+
+Ajouter `Input` depuis `@/components/ui/input` et l'icone `FileText` depuis `lucide-react`.
+
+### Resume visuel
 
 ```text
-clientsImportes.forEach(client => {
-  if (client.clientType === 'industriel') {
-    cabineChargesIndustrielles += client.puissanceContractuelle_kVA
-  } else {
-    cabineChargesResidentielles += client.puissanceContractuelle_kVA  
-  }
-  cabineProductionsTotal += client.puissancePV_kVA
-})
-
-cabineChargesFoisonnees = cabineResidentielles * (foisResidentiel/100) + cabineIndustrielles * (foisIndustriel/100)
-cabineProductionsFoisonnees = cabineProductionsTotal * (foisProductions/100)
+┌─ Projet ─────────┬─ Systeme de tension ──────────┬─ Tension source ──┬─ Modele de charge ─┐
+│ Nom: [Mon projet] │ 400V Tri / Transfo            │ Slider V          │ Select modele      │
+│                   │ cos phi Ch: [0.95]             │ Busbar info       │                    │
+│                   │ cos phi Pr: [1.00]             │                   │                    │
+└───────────────────┴───────────────────────────────-┴───────────────────┴────────────────────┘
 ```
 
-### 2. Affichage dans le panneau Total
+### Detail technique
 
-A cote du bloc existant "Charges foisonnees / Productions foisonnees" (circuit), ajouter un second bloc separe par un trait vertical :
+| Element | Composant | Props |
+|---|---|---|
+| Nom projet | `<Input>` | `value={currentProject.name}`, `onChange` -> `updateProjectConfig({ name })` |
+| cos phi Charges | `<Input type="number">` | `min=0.80, max=1.00, step=0.01`, `onChange` -> `updateProjectConfig({ cosPhiCharges })` |
+| cos phi Productions | `<Input type="number">` | `min=0.80, max=1.00, step=0.01`, `onChange` -> `updateProjectConfig({ cosPhiProductions })` |
 
-```text
-| Circuit              | Clients Cabine        |
-| Ch.F: XX.X kVA      | Ch.F: XX.X kVA        |
-| Pr.F: XX.X kVA      | Pr.F: XX.X kVA        |
-```
+Un recalcul (`updateAllCalculations()`) sera declenche apres modification des cos phi.
 
-### 3. Alerte transfo
-
-Sous le bloc "Clients Cabine", si `cabineChargesFoisonnees - cabineProductionsFoisonnees > transformerPower` et `transformerPower > 0`, afficher une ligne d'alerte avec icone AlertTriangle en rouge et le texte du depassement.
-
-La logique d'alerte reprend celle du `GlobalAlertPopup` existant dans `Index.tsx` (surcharge : charges > transfo + productions, injection : productions > transfo + charges).
-
-### Resume visuel du bloc Total modifie
-
-```text
-┌─ Circuit ──────────┬─ Clients Cabine ─────────────┐
-│ Charges foisonnees │ Charges foisonnees            │
-│ 12.5 kVA           │ 45.2 kVA                     │
-│ Productions fois.  │ Productions foisonnees        │
-│ 3.0 kVA            │ 8.5 kVA                      │
-│                    │ [!] Surcharge: +XX kVA/transfo│
-└────────────────────┴──────────────────────────────-┘
-```
-
-## Fichier modifie
-
-| Fichier | Modification |
-|---|---|
-| `src/components/topMenu/ParametersTab.tsx` | Calcul totaux cabine + affichage bloc + alerte transfo |

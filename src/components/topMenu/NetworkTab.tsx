@@ -5,7 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Zap, Layers, Gauge } from "lucide-react";
+import { Zap, Layers, Gauge, FileText } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { useNetworkStore } from "@/store/networkStore";
 import { useState, useEffect, useRef } from 'react';
 import type { LoadModel, TransformerRating } from '@/types/network';
@@ -54,7 +55,60 @@ export const NetworkTab = () => {
   if (!currentProject) return null;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 p-4">
+      {/* Card 0: Projet */}
+      <Card className="bg-card/50 backdrop-blur border-border/50">
+        <CardHeader className="pb-2 pt-3 px-4">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <FileText className="h-4 w-4 text-primary" />
+            Projet
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-3 space-y-3">
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1 block">Nom du projet</Label>
+            <Input
+              value={currentProject.name || ''}
+              onChange={(e) => updateProjectConfig({ name: e.target.value })}
+              className="h-8 text-sm"
+              placeholder="Nom du projet"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">cos φ Charges</Label>
+              <Input
+                type="number"
+                min={0.80}
+                max={1.00}
+                step={0.01}
+                value={currentProject.cosPhiCharges ?? currentProject.cosPhi ?? 0.95}
+                onChange={(e) => {
+                  updateProjectConfig({ cosPhiCharges: parseFloat(e.target.value) });
+                  updateAllCalculations();
+                }}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">cos φ Prod.</Label>
+              <Input
+                type="number"
+                min={0.80}
+                max={1.00}
+                step={0.01}
+                value={currentProject.cosPhiProductions ?? 1.00}
+                onChange={(e) => {
+                  updateProjectConfig({ cosPhiProductions: parseFloat(e.target.value) });
+                  updateAllCalculations();
+                }}
+                className="h-8 text-sm"
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Card 1: Système de tension + Transformateur */}
       <Card className="bg-card/50 backdrop-blur border-border/50">
         <CardHeader className="pb-2 pt-3 px-4">
@@ -122,10 +176,6 @@ export const NetworkTab = () => {
             </Select>
           </div>
           
-          <div className="text-xs text-muted-foreground">
-            <div>cos φ Charges: {currentProject.cosPhiCharges ?? currentProject.cosPhi}</div>
-            <div>cos φ Productions: {currentProject.cosPhiProductions ?? 1.00}</div>
-          </div>
         </CardContent>
       </Card>
 

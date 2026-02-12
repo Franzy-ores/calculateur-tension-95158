@@ -39,24 +39,24 @@ export const ClientsPanel = ({ onShowImporter }: ClientsPanelProps) => {
 
   if (!currentProject?.clientsImportes || currentProject.clientsImportes.length === 0) {
     return (
-      <Card className="p-6">
+      <div className="p-3 bg-card/80 backdrop-blur border border-border/50 rounded-lg">
         <div className="text-center text-muted-foreground">
-          <p>Aucun raccordement importé</p>
-          <p className="text-sm mt-2">Utilisez le bouton "Importer Raccordements" ou créez un raccordement manuellement</p>
-          <div className="flex gap-2 justify-center mt-4">
+          <p className="text-xs">Aucun raccordement importé</p>
+          <p className="text-[10px] mt-1">Utilisez le bouton "Importer Raccordements" ou créez un raccordement manuellement</p>
+          <div className="flex gap-2 justify-center mt-3">
             {onShowImporter && (
-              <Button variant="outline" onClick={onShowImporter}>
-                <FileUp className="h-4 w-4 mr-2" />
-                Importer Raccordements
+              <Button variant="outline" size="sm" onClick={onShowImporter} className="text-xs h-7">
+                <FileUp className="h-3 w-3 mr-1" />
+                Importer
               </Button>
             )}
-            <Button onClick={() => startClientCreation()}>
-              <Plus className="h-4 w-4 mr-2" />
-              Créer un raccordement
+            <Button size="sm" onClick={() => startClientCreation()} className="text-xs h-7">
+              <Plus className="h-3 w-3 mr-1" />
+              Créer
             </Button>
           </div>
         </div>
-      </Card>
+      </div>
     );
   }
 
@@ -148,27 +148,27 @@ export const ClientsPanel = ({ onShowImporter }: ClientsPanelProps) => {
   };
 
   return (
-    <div className="h-full flex flex-col gap-4">
+    <div className="h-full flex flex-col gap-2">
       {/* Boutons d'actions */}
       <div className="flex gap-2">
         {onShowImporter && (
-          <Button variant="outline" onClick={onShowImporter} className="flex-1">
-            <FileUp className="h-4 w-4 mr-2" />
-            Importer Raccordements
+          <Button variant="outline" size="sm" onClick={onShowImporter} className="flex-1 text-xs h-7">
+            <FileUp className="h-3 w-3 mr-1" />
+            Importer
           </Button>
         )}
-        <Button onClick={() => startClientCreation()} className="flex-1">
-          <Plus className="h-4 w-4 mr-2" />
-          Créer un raccordement
+        <Button size="sm" onClick={() => startClientCreation()} className="flex-1 text-xs h-7">
+          <Plus className="h-3 w-3 mr-1" />
+          Créer
         </Button>
       </div>
 
       {/* Légende mode de coloration */}
-      <Card className="p-3">
-        <div className="text-sm">
-          <div className="font-medium mb-2">
-            Mode de coloration : 
-            <span className="ml-1 text-primary">
+      <div className="p-2 bg-card/80 backdrop-blur border border-border/50 rounded-lg">
+        <div className="text-xs">
+          <div className="font-medium mb-1 text-[10px] text-muted-foreground">
+            Coloration : 
+            <span className="ml-1 text-primary font-semibold">
               {clientColorMode === 'couplage' && 'Par Couplage'}
               {clientColorMode === 'circuit' && 'Par Circuit'}
               {clientColorMode === 'tension' && 'Par Tension'}
@@ -252,126 +252,129 @@ export const ClientsPanel = ({ onShowImporter }: ClientsPanelProps) => {
             </div>
           )}
         </div>
-      </Card>
+      </div>
 
       {/* Statistiques */}
-      <Card className="p-4">
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <p className="text-muted-foreground">Total raccordements</p>
-            <p className="text-2xl font-bold">{totalClients}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Liés / Non liés</p>
-            <p className="text-2xl font-bold">
-              <span className="text-green-600">{linkedClients}</span> / <span className="text-orange-600">{unlinkedClients}</span>
-            </p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Charge totale</p>
-            <p className="text-xl font-bold">{totalCharge.toFixed(1)} kVA</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Production totale</p>
-            <p className="text-xl font-bold">{totalPV.toFixed(1)} kVA</p>
-          </div>
-          {smallPolyProdClients > 0 && (
-            <div className="col-span-2">
-              <p className="text-muted-foreground">TRI/TETRA avec prod. ≤5 kVA</p>
-              <p className="text-xl font-bold text-purple-600">{smallPolyProdClients}</p>
-            </div>
-          )}
+      <div className="flex flex-wrap items-stretch gap-3 p-2 bg-card/80 backdrop-blur border border-border/50 rounded-lg">
+        <div className="flex flex-col items-center px-2">
+          <span className="text-[10px] text-muted-foreground">Total</span>
+          <span className="text-sm font-bold text-primary">{totalClients}</span>
         </div>
-      </Card>
+        <div className="w-px bg-border/50 self-stretch" />
+        <div className="flex flex-col items-center px-2">
+          <span className="text-[10px] text-muted-foreground">Liés / Non liés</span>
+          <span className="text-sm font-bold">
+            <span className="text-green-600">{linkedClients}</span> / <span className="text-orange-600">{unlinkedClients}</span>
+          </span>
+        </div>
+        <div className="w-px bg-border/50 self-stretch" />
+        <div className="flex flex-col items-center px-2">
+          <span className="text-[10px] text-muted-foreground">Charges</span>
+          <span className="text-sm font-bold text-primary">{totalCharge.toFixed(1)} kVA</span>
+        </div>
+        <div className="w-px bg-border/50 self-stretch" />
+        <div className="flex flex-col items-center px-2">
+          <span className="text-[10px] text-muted-foreground">Production</span>
+          <span className="text-sm font-bold text-yellow-500">{totalPV.toFixed(1)} kVA</span>
+        </div>
+        {smallPolyProdClients > 0 && (
+          <>
+            <div className="w-px bg-border/50 self-stretch" />
+            <div className="flex flex-col items-center px-2">
+              <span className="text-[10px] text-muted-foreground">TRI prod ≤5</span>
+              <span className="text-sm font-bold text-purple-600">{smallPolyProdClients}</span>
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Filtres */}
-      <Card className="p-4">
-        <div className="space-y-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <div className="p-2 bg-card/80 backdrop-blur border border-border/50 rounded-lg">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[150px] max-w-[220px]">
+            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-muted-foreground" />
             <Input
-              placeholder="Rechercher un circuit..."
+              placeholder="Rechercher..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9"
+              className="pl-7 h-7 text-xs"
             />
           </div>
           
-          <div className="grid grid-cols-2 gap-2">
-            <Select value={filterCouplage} onValueChange={(v: any) => setFilterCouplage(v)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Tous couplages</SelectItem>
-                <SelectItem value="TRI">TRI seulement</SelectItem>
-                <SelectItem value="MONO">MONO seulement</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={filterLinked} onValueChange={(v: any) => setFilterLinked(v)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Tous états</SelectItem>
-                <SelectItem value="LINKED">Liés</SelectItem>
-                <SelectItem value="UNLINKED">Non liés</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          
-          <Select value={filterPower} onValueChange={(v: any) => setFilterPower(v)}>
-            <SelectTrigger>
+          <Select value={filterCouplage} onValueChange={(v: any) => setFilterCouplage(v)}>
+            <SelectTrigger className="w-[100px] h-7 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="ALL">Toutes puissances</SelectItem>
-              <SelectItem value="HIGH_POWER">⚡ Forte puissance (≥10 kVA MONO)</SelectItem>
+              <SelectItem value="ALL">Couplage</SelectItem>
+              <SelectItem value="TRI">TRI</SelectItem>
+              <SelectItem value="MONO">MONO</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={filterLinked} onValueChange={(v: any) => setFilterLinked(v)}>
+            <SelectTrigger className="w-[100px] h-7 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">État</SelectItem>
+              <SelectItem value="LINKED">Liés</SelectItem>
+              <SelectItem value="UNLINKED">Non liés</SelectItem>
+            </SelectContent>
+          </Select>
+          
+          <Select value={filterPower} onValueChange={(v: any) => setFilterPower(v)}>
+            <SelectTrigger className="w-[120px] h-7 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Puissance</SelectItem>
+              <SelectItem value="HIGH_POWER">⚡ Forte</SelectItem>
             </SelectContent>
           </Select>
 
           <Select value={filterClientType} onValueChange={(v: any) => setFilterClientType(v)}>
-            <SelectTrigger>
+            <SelectTrigger className="w-[110px] h-7 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="ALL">Tous types</SelectItem>
-              <SelectItem value="résidentiel">🏠 Résidentiel</SelectItem>
-              <SelectItem value="industriel">🏭 Industriel</SelectItem>
+              <SelectItem value="ALL">Type</SelectItem>
+              <SelectItem value="résidentiel">🏠 Rés.</SelectItem>
+              <SelectItem value="industriel">🏭 Ind.</SelectItem>
             </SelectContent>
           </Select>
 
-          <div className="flex items-center space-x-2 pt-1">
+          <div className="flex items-center space-x-1">
             <Checkbox 
               id="filter-small-poly-prod"
               checked={filterSmallPolyProd}
               onCheckedChange={(checked) => setFilterSmallPolyProd(!!checked)}
+              className="h-3.5 w-3.5"
             />
-            <Label htmlFor="filter-small-poly-prod" className="text-sm cursor-pointer">
-              TRI/TETRA avec production ≤ 5 kVA
+            <Label htmlFor="filter-small-poly-prod" className="text-[10px] cursor-pointer text-muted-foreground">
+              TRI prod ≤5
             </Label>
           </div>
         </div>
-      </Card>
+      </div>
 
       {/* Liste des raccordements */}
-      <Card className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden bg-card/80 backdrop-blur border border-border/50 rounded-lg">
         <ScrollArea className="h-full">
-          <div className="p-4 space-y-2">
+          <div className="p-2 space-y-1">
             {filteredClients.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">Aucun raccordement trouvé</p>
+              <p className="text-center text-muted-foreground py-4 text-xs">Aucun raccordement trouvé</p>
             ) : (
               filteredClients.map(client => {
                 const link = links.find(l => l.clientId === client.id);
                 const linkedNode = link ? currentProject.nodes.find(n => n.id === link.nodeId) : null;
 
                 return (
-                  <Card key={client.id} className="p-3 space-y-2">
-                     <div key={client.id} className="flex items-start justify-between">
+                  <div key={client.id} className="p-2 space-y-1 border border-border/30 rounded-md bg-background/50 hover:bg-muted/30 transition-colors">
+                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-semibold">{client.nomCircuit}</h4>
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <span className="text-xs font-semibold">{client.nomCircuit}</span>
                           <Badge variant={client.couplage === 'TRI' ? 'default' : 'secondary'}>
                             {client.couplage}
                           </Badge>
@@ -412,75 +415,45 @@ export const ClientsPanel = ({ onShowImporter }: ClientsPanelProps) => {
                             {client.clientType === 'industriel' ? '🏭 Industriel' : '🏠 Résidentiel'}
                           </Badge>
                         </div>
-                        <p className="text-xs text-muted-foreground">{client.identifiantCircuit}</p>
+                        <p className="text-[10px] text-muted-foreground">{client.identifiantCircuit}</p>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <span className="text-muted-foreground">Charge:</span> {client.puissanceContractuelle_kVA.toFixed(1)} kVA
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">PV:</span> {client.puissancePV_kVA.toFixed(1)} kVA
-                      </div>
+                    <div className="flex items-center gap-3 text-[10px]">
+                      <span><span className="text-muted-foreground">Ch:</span> <span className="font-mono font-medium">{client.puissanceContractuelle_kVA.toFixed(1)}</span></span>
+                      <span><span className="text-muted-foreground">PV:</span> <span className="font-mono font-medium">{client.puissancePV_kVA.toFixed(1)}</span></span>
+                      {linkedNode && (
+                        <span className="text-muted-foreground">→ <span className="font-medium text-foreground">{linkedNode.name}</span></span>
+                      )}
                     </div>
 
-                    {linkedNode && (
-                      <div className="text-xs text-muted-foreground">
-                        Lié à: <span className="font-medium">{linkedNode.name}</span>
-                      </div>
-                    )}
-
-                    <div className="flex gap-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleZoomToClient(client)}
-                      >
+                    <div className="flex gap-0.5">
+                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleZoomToClient(client)}>
                         <MapPin className="h-3 w-3" />
                       </Button>
-                      
                       {link ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleUnlink(client.id)}
-                        >
+                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleUnlink(client.id)}>
                           <Unlink className="h-3 w-3" />
                         </Button>
                       ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleStartLinking(client.id)}
-                        >
+                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleStartLinking(client.id)}>
                           <Link2 className="h-3 w-3" />
                         </Button>
                       )}
-
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleEdit(client.id)}
-                      >
+                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleEdit(client.id)}>
                         <Edit className="h-3 w-3" />
                       </Button>
-
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDelete(client.id)}
-                      >
+                      <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive/70 hover:text-destructive" onClick={() => handleDelete(client.id)}>
                         <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
-                  </Card>
+                  </div>
                 );
               })
             )}
           </div>
         </ScrollArea>
-      </Card>
+      </div>
     </div>
   );
 };

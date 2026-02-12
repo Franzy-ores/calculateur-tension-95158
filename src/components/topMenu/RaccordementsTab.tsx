@@ -6,7 +6,7 @@ interface RaccordementsTabProps {
 
 export const RaccordementsTab = ({ onShowImporter }: RaccordementsTabProps) => {
   return (
-    <div className="p-4 max-h-[60vh] overflow-y-auto">
+    <div className="p-2 max-h-[60vh] overflow-y-auto">
       <ClientsPanel onShowImporter={onShowImporter} />
     </div>
   );

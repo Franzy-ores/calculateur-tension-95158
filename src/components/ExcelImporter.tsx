@@ -116,7 +116,7 @@ export const ExcelImporter = ({ onClose }: ExcelImporterProps) => {
   };
 
   const handleImport = () => {
-    // Filtrer les raccordements valides seulement
+    // Importer tous les raccordements (y compris non localisés)
     const validClients = previewData.filter(client => !validationErrors.has(client.id));
     
     if (validClients.length === 0) {
@@ -308,6 +308,8 @@ export const ExcelImporter = ({ onClose }: ExcelImporterProps) => {
                           <td className="p-2">
                             {hasError ? (
                               <X className="h-4 w-4 text-destructive" />
+                            ) : client.lat === 0 && client.lng === 0 ? (
+                              <Badge variant="warning" className="text-[10px] px-1 py-0">Non localisé</Badge>
                             ) : (
                               <Check className="h-4 w-4 text-green-600" />
                             )}

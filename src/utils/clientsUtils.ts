@@ -267,15 +267,12 @@ export const getLinkedClientsForNode = (
 export const validateClient = (client: ClientImporte): { valid: boolean; errors: string[] } => {
   const errors: string[] = [];
   
-  if (!client.lat || !client.lng) {
-    errors.push('Coordonnées GPS manquantes ou invalides');
-  }
-  
-  if (client.lat < -90 || client.lat > 90) {
+  // GPS nulles ne sont plus bloquantes - le client sera marqué "non localisé"
+  if (client.lat !== 0 && (client.lat < -90 || client.lat > 90)) {
     errors.push('Latitude invalide (doit être entre -90 et 90)');
   }
   
-  if (client.lng < -180 || client.lng > 180) {
+  if (client.lng !== 0 && (client.lng < -180 || client.lng > 180)) {
     errors.push('Longitude invalide (doit être entre -180 et 180)');
   }
   

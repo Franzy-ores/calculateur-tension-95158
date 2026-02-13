@@ -59,8 +59,11 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
     linkLinesRef.current.forEach(line => map.removeLayer(line));
     linkLinesRef.current.clear();
 
+    // Exclure les clients non localisés (lat=0 et lng=0) du rendu carte
+    const localizedClients = clients.filter(c => c.lat !== 0 || c.lng !== 0);
+    
     // Regrouper les clients co-localisés
-    const { groupes, clientsIsoles } = groupColocatedClients(clients);
+    const { groupes, clientsIsoles } = groupColocatedClients(localizedClients);
 
     // Créer les marqueurs pour les groupes
     groupes.forEach(groupe => {

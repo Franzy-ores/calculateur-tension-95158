@@ -1,110 +1,103 @@
 
-# Plan : Corrections et ameliorations de l'onglet Raccordements
+# Plan : Modele thermique saisonnier des cables
 
-## 6 problemes identifies et solutions
+## Objectif
 
----
+Implementer une correction thermique de la resistance des cables en fonction de la saison (hiver/ete) et du type de pose (aerien/souterrain). Cette correction impacte le calcul de chute de tension de maniere realiste : tensions plus basses en ete (resistance augmente), plus hautes en hiver.
 
-### 1. Filtre par couplage ne fonctionne pas
+## Principe physique
 
-**Cause** : Le filtre compare `client.couplage` (valeur brute Excel, ex: `"TRI"`, `"MONO"`) mais les valeurs Excel peuvent contenir des variantes (espaces, casse). De plus, le type `ClientCouplage` est un `string` libre. Pour les clients crees manuellement, `couplage` est mis a `connectionType` (ex: `"MONO"`) ce qui devrait fonctionner.
+```text
+1. Temperature ambiante selon saison et pose :
+   ┌─────────────┬─────────┬─────────┐
+   │ Pose        │ Hiver   │ Ete     │
+   ├─────────────┼─────────┼─────────┤
+   │ Aerien      │  5 °C   │ 28 °C   │
+   │ Souterrain  │ 12 °C   │ 20 °C   │
+   └─────────────┴─────────┴─────────┘
 
-**Solution** : Modifier le filtre (ligne 75) pour comparer en majuscules et aussi verifier `client.connectionType` comme fallback :
-```
-if (filterCouplage !== 'ALL') {
-  const couplageNorm = (client.couplage || '').toUpperCase().trim();
-  const connType = client.connectionType || '';
-  const isTri = couplageNorm.includes('TRI') || connType === 'TRI' || connType === 'TETRA';
-  const isMono = couplageNorm.includes('MONO') || connType === 'MONO';
-  if (filterCouplage === 'TRI' && !isTri) return false;
-  if (filterCouplage === 'MONO' && !isMono) return false;
-}
-```
-Ajouter aussi `TETRA` comme option dans le Select.
+2. Temperature du cable :
+   T = T_ambient + k * (I / Imax)^2
+   k = 40°C (aerien), 35°C (souterrain)
 
-**Fichier** : `src/components/ClientsPanel.tsx` (lignes 74-77, 304-313)
-
----
-
-### 2. Liste des raccordements repliable + recapitulatif par couplage
-
-**Solution** : Envelopper la liste des raccordements dans un `Accordion` (meme pattern que ParametersTab lignes 224-258). Ajouter un accordeon "Recapitulatif par couplage" au-dessus de la liste, affichant le comptage MONO/TRI/TETRA avec charges et productions totales par type.
-
-**Fichier** : `src/components/ClientsPanel.tsx`
-
----
-
-### 3. Icone de localisation ne fonctionne pas
-
-**Cause identifiee** : `ClientsPanel.handleZoomToClient` (ligne 129) dispatche l'evenement `zoomToLocation`, mais `MapView` (ligne 257) ecoute `centerMapOnClient`.
-
-**Solution** : Remplacer `zoomToLocation` par `centerMapOnClient` dans `ClientsPanel.tsx` ligne 129 :
-```
-const event = new CustomEvent('centerMapOnClient', {
-  detail: { lat: client.lat, lng: client.lng }
-});
+3. Correction de R :
+   R(T) = R20 * (1 + alpha * (T - 20))
+   alpha = 0.00393 (Cuivre), 0.00403 (Aluminium)
+   X non corrige.
 ```
 
-**Fichier** : `src/components/ClientsPanel.tsx` (ligne 129)
+## Architecture de la solution
 
----
+### 1. Nouveau fichier : `src/utils/thermalModel.ts`
 
-### 4. Ajouter tri par circuits
+Module utilitaire pur contenant :
+- `getAmbientTemperature(season, pose)` : retourne T_ambient
+- `calculateCableTemperature(T_ambient, I_A, Imax_A, pose)` : retourne T cable
+- `correctResistance(R20, T_cable, matiere)` : retourne R(T)
+- `getThermalCorrectionFactor(season, pose, matiere, I_A, Imax_A)` : fonction tout-en-un retournant le coefficient multiplicateur de R
 
-**Solution** : Ajouter un nouveau Select "Tri par" avec les options : `nom` (defaut), `circuit`, `puissance`, `type`. Quand "circuit" est selectionne, trier `filteredClients` par `identifiantCircuit`. Optionnellement regrouper visuellement par circuit avec des separateurs.
+### 2. Type projet : `src/types/network.ts`
 
-**Fichier** : `src/components/ClientsPanel.tsx`
+Ajouter un champ optionnel a `Project` :
+```
+season?: 'winter' | 'summer';
+```
+Valeur par defaut : `'winter'` (comportement conservateur).
 
----
+### 3. Moteur de calcul : `src/utils/electricalCalculations.ts`
 
-### 5. Ajouter tri par type (importe / cree manuellement)
+Modifier la methode `selectRX` (ligne 268) pour accepter un contexte thermique optionnel :
+- Recevoir `season`, `pose` (du cable), `matiere` (du cableType), `I_A` et `Imax_A`
+- Appliquer `correctResistance` sur R12 et R0 **avant** le calcul GRD `(R0 + 2*R12) / 3`
+- X reste inchange
 
-**Solution** : Detecter la source du client via son `id` : les clients manuels ont un id prefixe `client-manual-`, les importes ont `client-import-`. Ajouter une option de filtre "Source" avec les valeurs : Tous / Importes / Crees. Ajouter un tag visuel (badge) sur chaque client pour indiquer sa source.
+Le BFS principal (ligne 804-820) sera modifie pour :
+1. Passer `season` et `pose` du cable a `selectRX`
+2. Utiliser une estimation initiale du courant (iteration precedente ou S_aval/V) pour le terme `(I/Imax)^2`
+3. Lors de la premiere iteration BFS, utiliser I=0 (pas de surcharge), ce qui donne T = T_ambient seul. Les iterations suivantes raffinent naturellement.
 
-**Fichier** : `src/components/ClientsPanel.tsx`
+Meme correction pour le calcul du neutre (ligne 1476-1479).
 
----
+### 4. Profil journalier : `src/utils/dailyProfileCalculator.ts`
 
-### 6. Import des clients avec coordonnees nulles + tag "non localise"
+Le `DailyProfileCalculator` utilise deja `this.options.season` ('winter'/'summer'). Cette valeur sera propagee au `Project` copie pour chaque heure :
+```
+projectWithHourlyFoisonnement.season = this.options.season;
+```
+Ainsi, le moteur de calcul utilise automatiquement la bonne saison pour chaque pas horaire.
 
-Actuellement, `validateClient` (clientsUtils.ts ligne 270) marque les clients sans GPS comme invalides, et `ExcelImporter` (ligne 117) les exclut de l'import.
+### 5. UI Parametres : `src/components/topMenu/ParametersTab.tsx`
 
-**Solution en 3 fichiers** :
+Ajouter un selecteur "Saison" (Hiver / Ete) dans la barre de parametres, a cote du scenario. Ce selecteur :
+- Met a jour `project.season` via `updateProjectConfig({ season })`
+- Declenche `updateAllCalculations()`
+- Affiche une icone Snowflake (hiver) ou Sun (ete)
 
-#### a) `src/utils/clientsUtils.ts`
-- Modifier `validateClient` : ne plus rejeter les clients sans coordonnees GPS. Les coordonnees nulles ne sont plus une erreur bloquante.
+### 6. Store : `src/store/networkStore.ts`
 
-#### b) `src/types/network.ts`
-- Ajouter un champ optionnel `isLocalized?: boolean` a `ClientImporte` (ou le deduire de `lat === 0 && lng === 0`).
+- Passer `currentProject.season` lors de l'appel a `calculateScenarioWithHTConfig` (aucun changement de signature necessaire car la saison est lue depuis le `Project`)
+- Valeur par defaut `'winter'` dans `updateAllCalculations` si non definie
 
-#### c) `src/components/ClientsPanel.tsx`
-- Afficher un badge "Non localise" (tag orange) pour les clients avec `lat === 0 && lng === 0`.
-- Desactiver le bouton MapPin pour ces clients.
-- Ajouter une option de filtre "Non localise" dans le Select d'etat.
+## Fichiers modifies
 
-#### d) `src/components/ClientMarkers.tsx`
-- Exclure les clients avec `lat === 0 && lng === 0` du rendu des marqueurs sur la carte.
-
-#### e) `src/components/ExcelImporter.tsx`
-- Les clients sans coordonnees restent dans `previewData` et sont importes normalement. Afficher un badge "Non localise" au lieu de l'icone erreur dans le tableau de previsualisation.
-
----
-
-## Resume des fichiers modifies
-
-| Fichier | Modifications |
+| Fichier | Modification |
 |---|---|
-| `src/components/ClientsPanel.tsx` | Fix filtre couplage, fix evenement zoom, ajout tri par circuit/source, liste repliable, recapitulatif couplage, badge "non localise" |
-| `src/utils/clientsUtils.ts` | Modifier `validateClient` pour accepter GPS nuls |
-| `src/components/ExcelImporter.tsx` | Afficher badge "non localise" au lieu de rejeter |
-| `src/components/ClientMarkers.tsx` | Exclure clients non localises du rendu carte |
+| `src/utils/thermalModel.ts` | **Nouveau** - module de calcul thermique |
+| `src/types/network.ts` | Ajout champ `season?: 'winter' \| 'summer'` a `Project` |
+| `src/utils/electricalCalculations.ts` | Correction thermique dans `selectRX` et `calculateGRDImpedance`, lecture de `project.season` dans `calculateScenario` |
+| `src/utils/dailyProfileCalculator.ts` | Propagation de `options.season` au projet pour chaque heure |
+| `src/components/topMenu/ParametersTab.tsx` | Selecteur Saison (Hiver/Ete) |
+| `src/store/networkStore.ts` | Initialisation `season: 'winter'` par defaut |
 
-## Sequence d'implementation
+## Impact sur les resultats
 
-1. Fix evenement zoom (`zoomToLocation` -> `centerMapOnClient`)
-2. Fix filtre couplage (normalisation + ajout TETRA)
-3. Modifier `validateClient` pour accepter GPS nuls
-4. Mettre a jour `ExcelImporter` pour importer les clients sans GPS
-5. Ajouter filtre/badge "non localise" + exclure de la carte
-6. Ajouter les tris (circuit, source importe/cree)
-7. Ajouter l'accordeon repliable + recapitulatif par couplage
+- **Hiver** : T_ambient basse -> R(T) < R20 -> chute de tension plus faible -> tensions plus hautes
+- **Ete** : T_ambient haute -> R(T) > R20 -> chute de tension plus forte -> tensions plus basses
+- **Surcharge** : Le terme `(I/Imax)^2` amplifie l'echauffement et donc la resistance, modelisant l'effet de surcharge
+- **Courbe 24h** : Le choix de saison dans l'onglet profil journalier (deja existant) pilotera automatiquement la correction thermique heure par heure
+
+## Points d'attention
+
+- Le courant `I` n'est connu qu'apres le BFS. La correction thermique sera donc appliquee avec le courant de l'iteration precedente (convergence naturelle du BFS iteratif existant)
+- `maxCurrent_A` n'est pas toujours defini dans `CableType`. En l'absence de cette valeur, le terme de surcharge `(I/Imax)^2` sera ignore (T = T_ambient uniquement)
+- Les cables de branchement (`branchementCableTypes.ts`) ont deja `maxCurrent_A` et `R_ohm_per_km` - la correction s'appliquera aussi au calcul de tension client si pertinent

@@ -341,6 +341,8 @@ export interface Project {
       verbose?: boolean;
     };
   };
+  // Saison pour le modèle thermique des câbles
+  season?: 'winter' | 'summer';
 }
 
 

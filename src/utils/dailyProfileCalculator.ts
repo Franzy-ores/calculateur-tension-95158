@@ -209,7 +209,9 @@ export class DailyProfileCalculator {
       ...this.project,
       foisonnementChargesResidentiel: residentialFoisonnementHoraire,
       foisonnementChargesIndustriel: industrialFoisonnementHoraire,
-      foisonnementProductions: productionsFoisonnement
+      foisonnementProductions: productionsFoisonnement,
+      // Propager la saison choisie dans le profil 24h pour la correction thermique
+      season: this.options.season
     };
 
     // Foisonnement pondéré pour affichage uniquement (pas pour le calcul)

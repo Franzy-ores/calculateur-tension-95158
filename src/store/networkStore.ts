@@ -122,7 +122,7 @@ interface NetworkActions {
   // Project actions
   createNewProject: (name: string, voltageSystem: VoltageSystem) => void;
   loadProject: (project: Project) => void;
-  updateProjectConfig: (updates: Partial<Pick<Project, 'name' | 'voltageSystem' | 'cosPhi' | 'cosPhiCharges' | 'cosPhiProductions' | 'foisonnementCharges' | 'foisonnementProductions' | 'defaultChargeKVA' | 'defaultProductionKVA' | 'loadModel' | 'desequilibrePourcent' | 'forcedModeConfig' | 'manualPhaseDistribution' | 'phaseDistributionModeCharges' | 'phaseDistributionModeProductions' | 'transformerConfig'>>) => void;
+  updateProjectConfig: (updates: Partial<Pick<Project, 'name' | 'voltageSystem' | 'cosPhi' | 'cosPhiCharges' | 'cosPhiProductions' | 'foisonnementCharges' | 'foisonnementProductions' | 'defaultChargeKVA' | 'defaultProductionKVA' | 'loadModel' | 'desequilibrePourcent' | 'forcedModeConfig' | 'manualPhaseDistribution' | 'phaseDistributionModeCharges' | 'phaseDistributionModeProductions' | 'transformerConfig' | 'season'>>) => void;
   
   // Node actions
   addNode: (lat: number, lng: number) => void;
@@ -318,6 +318,7 @@ const createDefaultProject = (): Project => ({
   transformerConfig: createDefaultTransformerConfig("TÉTRAPHASÉ_400V"), // Configuration transformateur par défaut
   loadModel: 'mixte_mono_poly', // NOUVEAU : mode mixte par défaut
   desequilibrePourcent: 0,
+  season: 'winter',
   manualPhaseDistribution: {
     charges: { A: 33.33, B: 33.33, C: 33.34 },
     productions: { A: 33.33, B: 33.33, C: 33.34 },
@@ -346,6 +347,7 @@ const createDefaultProject2 = (name: string, voltageSystem: VoltageSystem): Proj
   transformerConfig: createDefaultTransformerConfig(voltageSystem), // Configuration transformateur adaptée au système
   loadModel: 'mixte_mono_poly', // NOUVEAU : mode mixte par défaut
   desequilibrePourcent: 0,
+  season: 'winter', // Saison par défaut : hiver (comportement conservateur)
   addEmptyNodeByDefault: true, // Par défaut, ajouter des nœuds vierges
   treatSmallPolyProductionsAsMono: true, // Par défaut, traiter productions TRI/TETRA ≤5kVA comme MONO
   manualPhaseDistribution: {

@@ -1,8 +1,9 @@
-import { Node, Cable, Project, CalculationResult, CalculationScenario, ConnectionType, CableType, TransformerConfig, VirtualBusbar, LoadModel, ClientImporte, ClientLink } from '@/types/network';
+import { Node, Cable, Project, CalculationResult, CalculationScenario, ConnectionType, CableType, TransformerConfig, VirtualBusbar, LoadModel, ClientImporte, ClientLink, CablePose } from '@/types/network';
 import { getConnectedNodes } from '@/utils/networkConnectivity';
 import { Complex, C, add, sub, mul, div, conj, scale, abs, fromPolar, arg } from '@/utils/complex';
 import { getNodeConnectionType } from '@/utils/nodeConnectionType';
 import { getLinkedClientsForNode, calculateNodePowersFromClients } from '@/utils/clientsUtils';
+import { getThermalCorrectionFactor, ThermalSeason } from '@/utils/thermalModel';
 
 export class ElectricalCalculator {
   private cosPhi: number; // Legacy - utilisé comme fallback
@@ -245,8 +246,11 @@ export class ElectricalCalculator {
    * 
    * Référence: Modèles GRD belges (CYME, NEPLAN, PowerFactory)
    */
-  private calculateGRDImpedance(cableType: CableType): { R: number, X: number } {
-    const R = (cableType.R0_ohm_per_km + 2 * cableType.R12_ohm_per_km) / 3;
+  private calculateGRDImpedance(cableType: CableType, thermalFactor: number = 1): { R: number, X: number } {
+    // Appliquer la correction thermique sur R uniquement (X inchangé)
+    const R12_corrected = cableType.R12_ohm_per_km * thermalFactor;
+    const R0_corrected = cableType.R0_ohm_per_km * thermalFactor;
+    const R = (R0_corrected + 2 * R12_corrected) / 3;
     const X = (cableType.X0_ohm_per_km + 2 * cableType.X12_ohm_per_km) / 3;
     return { R, X };
   }
@@ -257,28 +261,46 @@ export class ElectricalCalculator {
    * FORMULE GRD BELGE appliquée pour les conducteurs de phase:
    * R = (R0 + 2*R12) / 3, X = (X0 + 2*X12) / 3
    * 
-   * Cette formule combine les impédances directe et homopolaire car le réseau
-   * de distribution est structurellement déséquilibré.
+   * Avec correction thermique saisonnière optionnelle :
+   * R(T) = R20 × (1 + α × (T - 20))
+   * où T dépend de la saison, du type de pose et du courant de charge
    * 
    * @param cableType Type de câble
    * @param is400V true si réseau 400V étoile, false si 230V triangle
    * @param isUnbalanced true si calcul monophasé déséquilibré
    * @param forNeutral true si sélection pour conducteur neutre
+   * @param thermalContext Contexte thermique optionnel pour correction de R
    */
   private selectRX(
     cableType: CableType, 
     is400V: boolean, 
     isUnbalanced: boolean,
-    forNeutral: boolean = false
+    forNeutral: boolean = false,
+    thermalContext?: { season: ThermalSeason; pose: CablePose; I_A?: number; Imax_A?: number }
   ): { R: number, X: number } {
-    // Conducteur neutre → toujours R0/X0
+    // Calcul du facteur de correction thermique
+    let thermalFactor = 1;
+    if (thermalContext) {
+      thermalFactor = getThermalCorrectionFactor(
+        thermalContext.season,
+        thermalContext.pose,
+        cableType.matiere,
+        thermalContext.I_A || 0,
+        thermalContext.Imax_A || cableType.maxCurrent_A || 0
+      );
+    }
+
+    // Conducteur neutre → toujours R0/X0 (avec correction thermique)
     if (forNeutral) {
-      return { R: cableType.R0_ohm_per_km, X: cableType.X0_ohm_per_km };
+      return { 
+        R: cableType.R0_ohm_per_km * thermalFactor, 
+        X: cableType.X0_ohm_per_km 
+      };
     }
     
     // Conducteurs de phase → formule GRD belge (R0 + 2*R12) / 3
     // Applicable en 230V triangle ET 400V étoile
-    return this.calculateGRDImpedance(cableType);
+    return this.calculateGRDImpedance(cableType, thermalFactor);
   }
 
   /**
@@ -545,7 +567,9 @@ export class ElectricalCalculator {
       clientsImportes,
       clientLinks,
       (project as any).foisonnementChargesResidentiel,
-      (project as any).foisonnementChargesIndustriel
+      (project as any).foisonnementChargesIndustriel,
+      undefined, // equi8CurrentInjections
+      project.season as ThermalSeason | undefined
     );
   }
   calculateScenario(
@@ -570,7 +594,9 @@ export class ElectricalCalculator {
       I_phaseB: { re: number; im: number };    // -I_EQUI8/3 sur phase B
       I_phaseC: { re: number; im: number };    // -I_EQUI8/3 sur phase C
       magnitude: number;                        // Magnitude de I_EQUI8
-    }>
+    }>,
+    // Saison pour correction thermique des câbles
+    season?: ThermalSeason
   ): CalculationResult {
     // Validation robuste des entrées
     this.validateInputs(nodes, cables, cableTypes, foisonnementCharges, foisonnementProductions, desequilibrePourcent);
@@ -801,6 +827,9 @@ export class ElectricalCalculator {
     const cableChildId = new Map<string, string>();
     const cableParentId = new Map<string, string>();
 
+    // Contexte thermique saisonnier (paramètre de calculateScenario)
+    const projectSeason = season;
+
     for (const [childId, cab] of parentCableOfChild.entries()) {
       const parentId = parent.get(childId)!;
       const distalNode = nodeById.get(childId)!;
@@ -811,7 +840,16 @@ export class ElectricalCalculator {
 
       // Déterminer le type de réseau et le mode
       const is400V = U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
-      const { R: R_ohm_per_km, X: X_ohm_per_km } = this.selectRX(ct, is400V, isUnbalanced, false);
+      
+      // Construire le contexte thermique si saison définie
+      const thermalCtx = projectSeason ? {
+        season: projectSeason,
+        pose: cab.pose,
+        I_A: 0, // Première passe : pas de courant connu
+        Imax_A: ct.maxCurrent_A || 0
+      } : undefined;
+      
+      const { R: R_ohm_per_km, X: X_ohm_per_km } = this.selectRX(ct, is400V, isUnbalanced, false, thermalCtx);
       // Series impedance per phase for the full segment
       const Z = C(R_ohm_per_km * L_km, X_ohm_per_km * L_km);
       cableZ_phase.set(cab.id, Z);
@@ -1475,7 +1513,13 @@ export class ElectricalCalculator {
             
             // Utiliser R0/X0 pour le conducteur neutre (forNeutral = true)
             const is400V_local = U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
-            const { R: R0, X: X0 } = this.selectRX(ct, is400V_local, isUnbalanced, true);
+            const thermalCtxNeutral = projectSeason ? {
+              season: projectSeason,
+              pose: cab.pose,
+              I_A: 0,
+              Imax_A: ct.maxCurrent_A || 0
+            } : undefined;
+            const { R: R0, X: X0 } = this.selectRX(ct, is400V_local, isUnbalanced, true, thermalCtxNeutral);
             const Z_neutral = C(R0 * L_km, X0 * L_km);
             
             // Chute de tension dans le neutre (phasor)

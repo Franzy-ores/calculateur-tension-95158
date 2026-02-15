@@ -2,7 +2,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Home, Factory, Sun, Activity, Table, BarChart3, AlertTriangle } from "lucide-react";
+import { Home, Factory, Sun, Activity, Table, BarChart3, AlertTriangle, Snowflake, Thermometer } from "lucide-react";
 import { useNetworkStore } from "@/store/networkStore";
 import { PhaseDistributionSliders } from "@/components/PhaseDistributionSliders";
 import { PhaseDistributionDisplay } from "@/components/PhaseDistributionDisplay";
@@ -18,6 +18,8 @@ export const ParametersTab = () => {
     setFoisonnementChargesIndustriel,
     setFoisonnementProductions,
     simulationPreview,
+    updateProjectConfig,
+    updateAllCalculations,
   } = useNetworkStore();
 
   if (!currentProject) return null;
@@ -98,6 +100,43 @@ export const ParametersTab = () => {
               <SelectItem value="PRÉLÈVEMENT">🔌 Prélèvement</SelectItem>
               <SelectItem value="MIXTE">⚡ Mixte</SelectItem>
               <SelectItem value="PRODUCTION">☀️ Production</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Séparateur */}
+        <div className="w-px bg-border/50 self-stretch" />
+
+        {/* Saison (modèle thermique) */}
+        <div className="flex flex-col gap-1 min-w-[120px]">
+          <Label className="text-[10px] flex items-center gap-1 text-muted-foreground">
+            <Thermometer className="h-3 w-3" />
+            Saison
+          </Label>
+          <Select 
+            value={currentProject.season || 'winter'} 
+            onValueChange={(value: 'winter' | 'summer') => {
+              updateProjectConfig({ season: value } as any);
+              updateAllCalculations();
+            }}
+            disabled={simulationPreview.isActive}
+          >
+            <SelectTrigger className="w-full bg-background border text-xs h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-popover border z-[10000]">
+              <SelectItem value="winter">
+                <span className="flex items-center gap-1">
+                  <Snowflake className="h-3 w-3 text-blue-400" />
+                  Hiver
+                </span>
+              </SelectItem>
+              <SelectItem value="summer">
+                <span className="flex items-center gap-1">
+                  <Sun className="h-3 w-3 text-orange-400" />
+                  Été
+                </span>
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>

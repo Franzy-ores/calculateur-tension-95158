@@ -31,6 +31,16 @@ export const DailyProfileChart = ({ data, comparisonData, clientData, showNodeCu
     critical_low: nominalVoltage * 0.90
   }), [nominalVoltage]);
 
+  // Détecter si les 3 phases sont identiques (réseau équilibré)
+  const isBalanced = useMemo(() => {
+    return data.every(d => {
+      const a = Math.round(d.voltageA_V * 10);
+      const b = Math.round(d.voltageB_V * 10);
+      const c = Math.round(d.voltageC_V * 10);
+      return a === b && b === c;
+    });
+  }, [data]);
+
   // Calculer les bornes du graphe
   const { minY, maxY } = useMemo(() => {
     const allVoltages = data.flatMap(d => [d.voltageA_V, d.voltageB_V, d.voltageC_V]);
@@ -50,16 +60,26 @@ export const DailyProfileChart = ({ data, comparisonData, clientData, showNodeCu
     data.map((d, i) => {
       const base: Record<string, any> = {
         hour: `${d.hour}h`,
-        'Phase A': Math.round(d.voltageA_V * 10) / 10,
-        'Phase B': Math.round(d.voltageB_V * 10) / 10,
-        'Phase C': Math.round(d.voltageC_V * 10) / 10,
         status: d.status
       };
+
+      if (isBalanced) {
+        // En mode équilibré, une seule courbe
+        base['Vmoy (3 phases)'] = Math.round(d.voltageA_V * 10) / 10;
+      } else {
+        base['Phase A'] = Math.round(d.voltageA_V * 10) / 10;
+        base['Phase B'] = Math.round(d.voltageB_V * 10) / 10;
+        base['Phase C'] = Math.round(d.voltageC_V * 10) / 10;
+      }
       
       if (comparisonData?.[i]) {
-        base['Phase A (base)'] = Math.round(comparisonData[i].voltageA_V * 10) / 10;
-        base['Phase B (base)'] = Math.round(comparisonData[i].voltageB_V * 10) / 10;
-        base['Phase C (base)'] = Math.round(comparisonData[i].voltageC_V * 10) / 10;
+        if (isBalanced) {
+          base['Vmoy (base)'] = Math.round(comparisonData[i].voltageA_V * 10) / 10;
+        } else {
+          base['Phase A (base)'] = Math.round(comparisonData[i].voltageA_V * 10) / 10;
+          base['Phase B (base)'] = Math.round(comparisonData[i].voltageB_V * 10) / 10;
+          base['Phase C (base)'] = Math.round(comparisonData[i].voltageC_V * 10) / 10;
+        }
       }
       
       if (clientData?.[i]) {
@@ -69,7 +89,7 @@ export const DailyProfileChart = ({ data, comparisonData, clientData, showNodeCu
       }
       
       return base;
-    }), [data, comparisonData, clientData]);
+    }), [data, comparisonData, clientData, isBalanced]);
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -222,66 +242,34 @@ export const DailyProfileChart = ({ data, comparisonData, clientData, showNodeCu
             strokeWidth={1}
           />
 
-          {/* Courbes des 3 phases (avec simulation) - masquées si showNodeCurves=false */}
-          {showNodeCurves && (
+          {/* Courbes des phases - mode équilibré ou 3 phases distinctes */}
+          {showNodeCurves && isBalanced && (
+            <Line 
+              type="monotone" 
+              dataKey="Vmoy (3 phases)" 
+              stroke="#8b5cf6" 
+              strokeWidth={2.5}
+              dot={false}
+              activeDot={{ r: 4, fill: '#8b5cf6' }}
+            />
+          )}
+          {showNodeCurves && !isBalanced && (
             <>
-              <Line 
-                type="monotone" 
-                dataKey="Phase A" 
-                stroke="#ef4444" 
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4, fill: '#ef4444' }}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="Phase B" 
-                stroke="#22c55e" 
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4, fill: '#22c55e' }}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="Phase C" 
-                stroke="#3b82f6" 
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4, fill: '#3b82f6' }}
-              />
+              <Line type="monotone" dataKey="Phase A" stroke="#ef4444" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: '#ef4444' }} />
+              <Line type="monotone" dataKey="Phase B" stroke="#22c55e" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: '#22c55e' }} />
+              <Line type="monotone" dataKey="Phase C" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: '#3b82f6' }} />
             </>
           )}
           
-          {/* Courbes de comparaison (réseau de base, pointillés) - masquées si showNodeCurves=false */}
-          {showNodeCurves && comparisonData && comparisonData.length > 0 && (
+          {/* Courbes de comparaison (réseau de base, pointillés) */}
+          {showNodeCurves && comparisonData && comparisonData.length > 0 && isBalanced && (
+            <Line type="monotone" dataKey="Vmoy (base)" stroke="#8b5cf6" strokeWidth={1.5} strokeDasharray="5 5" strokeOpacity={0.5} dot={false} />
+          )}
+          {showNodeCurves && comparisonData && comparisonData.length > 0 && !isBalanced && (
             <>
-              <Line 
-                type="monotone" 
-                dataKey="Phase A (base)" 
-                stroke="#ef4444" 
-                strokeWidth={1.5}
-                strokeDasharray="5 5"
-                strokeOpacity={0.5}
-                dot={false}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="Phase B (base)" 
-                stroke="#22c55e" 
-                strokeWidth={1.5}
-                strokeDasharray="5 5"
-                strokeOpacity={0.5}
-                dot={false}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="Phase C (base)" 
-                stroke="#3b82f6" 
-                strokeWidth={1.5}
-                strokeDasharray="5 5"
-                strokeOpacity={0.5}
-                dot={false}
-              />
+              <Line type="monotone" dataKey="Phase A (base)" stroke="#ef4444" strokeWidth={1.5} strokeDasharray="5 5" strokeOpacity={0.5} dot={false} />
+              <Line type="monotone" dataKey="Phase B (base)" stroke="#22c55e" strokeWidth={1.5} strokeDasharray="5 5" strokeOpacity={0.5} dot={false} />
+              <Line type="monotone" dataKey="Phase C (base)" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="5 5" strokeOpacity={0.5} dot={false} />
             </>
           )}
           
@@ -300,8 +288,11 @@ export const DailyProfileChart = ({ data, comparisonData, clientData, showNodeCu
       </ResponsiveContainer>
       
       {/* Légendes supplémentaires */}
-      {(comparisonData?.length || clientData?.length) && (
+      {(comparisonData?.length || clientData?.length || isBalanced) && (
         <div className="flex items-center justify-center gap-6 mt-2 text-xs text-muted-foreground flex-wrap">
+          {isBalanced && (
+            <span className="text-muted-foreground italic">⚖️ Équilibré (3 phases confondues)</span>
+          )}
           {comparisonData && comparisonData.length > 0 && (
             <>
               <span className="flex items-center gap-2">

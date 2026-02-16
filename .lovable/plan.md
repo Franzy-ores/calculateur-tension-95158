@@ -1,103 +1,74 @@
 
-# Plan : Modele thermique saisonnier des cables
 
-## Objectif
+# Plan : Correction affichage 3 phases sur profil 24h et verification modele thermique
 
-Implementer une correction thermique de la resistance des cables en fonction de la saison (hiver/ete) et du type de pose (aerien/souterrain). Cette correction impacte le calcul de chute de tension de maniere realiste : tensions plus basses en ete (resistance augmente), plus hautes en hiver.
+## Diagnostic
 
-## Principe physique
+### Probleme 1 : Une seule courbe visible au lieu de 3 phases
 
-```text
-1. Temperature ambiante selon saison et pose :
-   ┌─────────────┬─────────┬─────────┐
-   │ Pose        │ Hiver   │ Ete     │
-   ├─────────────┼─────────┼─────────┤
-   │ Aerien      │  5 °C   │ 28 °C   │
-   │ Souterrain  │ 12 °C   │ 20 °C   │
-   └─────────────┴─────────┴─────────┘
+Apres analyse approfondie du code, le probleme peut avoir deux causes :
 
-2. Temperature du cable :
-   T = T_ambient + k * (I / Imax)^2
-   k = 40°C (aerien), 35°C (souterrain)
+**Cause probable A** : Si le reseau est parfaitement equilibre (distribution 33.3%/33.3%/33.3% sur les 3 phases), les trois courbes ont des valeurs IDENTIQUES et se superposent visuellement en une seule ligne. C'etait probablement deja le cas avant, mais peut-etre moins visible avec des valeurs de R differentes.
 
-3. Correction de R :
-   R(T) = R20 * (1 + alpha * (T - 20))
-   alpha = 0.00393 (Cuivre), 0.00403 (Aluminium)
-   X non corrige.
-```
+**Cause probable B** : Si `project.loadModel` est `undefined` (ancien projet), le fallback sur ligne 564 de `electricalCalculations.ts` utilise `'polyphase_equilibre'` au lieu de `'mixte_mono_poly'`. Cela active le mode equilibre (ligne 2276-2303) qui retourne A=B=C identiques. Ceci serait une regression si le store a ete modifie.
 
-## Architecture de la solution
+### Probleme 2 : Verification coherence modele thermique
 
-### 1. Nouveau fichier : `src/utils/thermalModel.ts`
+Le modele thermique dans `thermalModel.ts` est **coherent** avec le prompt :
 
-Module utilitaire pur contenant :
-- `getAmbientTemperature(season, pose)` : retourne T_ambient
-- `calculateCableTemperature(T_ambient, I_A, Imax_A, pose)` : retourne T cable
-- `correctResistance(R20, T_cable, matiere)` : retourne R(T)
-- `getThermalCorrectionFactor(season, pose, matiere, I_A, Imax_A)` : fonction tout-en-un retournant le coefficient multiplicateur de R
+| Exigence | Implementation | Statut |
+|---|---|---|
+| Temperatures ambiantes (aerien/souterrain × hiver/ete) | `AMBIENT_TEMPERATURES` lignes 24-27 | OK |
+| T_cable = T_ambient + k × (I/Imax)^2 | `calculateCableTemperature` ligne 61 | OK |
+| k = 40 aerien, 35 souterrain | `HEATING_CONSTANTS` lignes 30-33 | OK |
+| R(T) = R20 × (1 + alpha × (T-20)) | `correctResistance` ligne 86 | OK |
+| alpha Cu=0.00393, Al=0.00403 | `ALPHA_COEFFICIENTS` lignes 36-41 | OK |
+| X non corrige | `selectRX` ligne 297 : X sans thermalFactor | OK |
+| R_eq = (R0_T + 2×R12_T) / 3 | `calculateGRDImpedance` applique thermalFactor aux R uniquement | OK |
+| Integration dans BFS | `cableZ_phase` construit avec correction thermique | OK |
+| Saison propagee dans profil 24h | `dailyProfileCalculator.ts` ligne 214 | OK |
+| Neutre corrige aussi | Ligne 1516-1522 avec `forNeutral: true` | OK |
 
-### 2. Type projet : `src/types/network.ts`
+**Un point d'amelioration identifie** : Le courant `I_A` est fixe a 0 dans le calcul thermique (lignes 848 et 1519). Le prompt demande que le courant horaire `I(h)` soit utilise pour chaque heure. Cela signifie que l'echauffement par surcharge `(I/Imax)^2` n'est jamais applique - seule la temperature ambiante est prise en compte. Pour une premiere implementation c'est acceptable (effet principal = saison), mais cela devrait etre ameliore.
 
-Ajouter un champ optionnel a `Project` :
-```
-season?: 'winter' | 'summer';
-```
-Valeur par defaut : `'winter'` (comportement conservateur).
+## Solution proposee
 
-### 3. Moteur de calcul : `src/utils/electricalCalculations.ts`
+### Correction 1 : Forcer le graphe a montrer 3 courbes distinctes (4 fichiers)
 
-Modifier la methode `selectRX` (ligne 268) pour accepter un contexte thermique optionnel :
-- Recevoir `season`, `pose` (du cable), `matiere` (du cableType), `I_A` et `Imax_A`
-- Appliquer `correctResistance` sur R12 et R0 **avant** le calcul GRD `(R0 + 2*R12) / 3`
-- X reste inchange
+**Fichier `src/utils/electricalCalculations.ts`** (ligne 564) :
+- Remplacer le fallback `'polyphase_equilibre'` par `'mixte_mono_poly'` dans `calculateScenarioWithHTConfig`
+- Idem ligne 583 pour le parametre par defaut de `calculateScenario`
 
-Le BFS principal (ligne 804-820) sera modifie pour :
-1. Passer `season` et `pose` du cable a `selectRX`
-2. Utiliser une estimation initiale du courant (iteration precedente ou S_aval/V) pour le terme `(I/Imax)^2`
-3. Lors de la premiere iteration BFS, utiliser I=0 (pas de surcharge), ce qui donne T = T_ambient seul. Les iterations suivantes raffinent naturellement.
+Cela garantit que le mode desequilibre (per-phase) est toujours actif, meme pour les anciens projets.
 
-Meme correction pour le calcul du neutre (ligne 1476-1479).
+**Fichier `src/components/DailyProfileChart.tsx`** :
+- Ajouter une detection quand les 3 phases ont des valeurs identiques (equilibre parfait)
+- Dans ce cas, afficher une seule courbe "Vmoy" au lieu de 3 courbes superposees, avec une legende indiquant "Equilibre (3 phases confondues)"
 
-### 4. Profil journalier : `src/utils/dailyProfileCalculator.ts`
+### Correction 2 : Integration du courant horaire dans le modele thermique
 
-Le `DailyProfileCalculator` utilise deja `this.options.season` ('winter'/'summer'). Cette valeur sera propagee au `Project` copie pour chaque heure :
-```
-projectWithHourlyFoisonnement.season = this.options.season;
-```
-Ainsi, le moteur de calcul utilise automatiquement la bonne saison pour chaque pas horaire.
+**Fichier `src/utils/electricalCalculations.ts`** (lignes 844-850) :
+- Lors du BFS per-phase, apres la premiere iteration (quand les courants de branche sont connus), recalculer le contexte thermique avec le courant reel `I(h)` et mettre a jour les impedances
+- Utiliser le courant total des 3 phases pour estimer I dans le terme `(I/Imax)^2`
 
-### 5. UI Parametres : `src/components/topMenu/ParametersTab.tsx`
+Cela complete l'exigence du prompt : "Pour chaque heure : T_cable(h) = T_ambient + k × (I(h)/Imax)^2"
 
-Ajouter un selecteur "Saison" (Hiver / Ete) dans la barre de parametres, a cote du scenario. Ce selecteur :
-- Met a jour `project.season` via `updateProjectConfig({ season })`
-- Declenche `updateAllCalculations()`
-- Affiche une icone Snowflake (hiver) ou Sun (ete)
+### Correction 3 : Harmonisation des defaults (mineur)
 
-### 6. Store : `src/store/networkStore.ts`
-
-- Passer `currentProject.season` lors de l'appel a `calculateScenarioWithHTConfig` (aucun changement de signature necessaire car la saison est lue depuis le `Project`)
-- Valeur par defaut `'winter'` dans `updateAllCalculations` si non definie
+**Fichier `src/utils/electricalCalculations.ts`** :
+- Ligne 564 : `project.loadModel ?? 'mixte_mono_poly'` (au lieu de `'polyphase_equilibre'`)
+- Ligne 583 : `loadModel: LoadModel = 'mixte_mono_poly'` (au lieu de `'polyphase_equilibre'`)
 
 ## Fichiers modifies
 
 | Fichier | Modification |
 |---|---|
-| `src/utils/thermalModel.ts` | **Nouveau** - module de calcul thermique |
-| `src/types/network.ts` | Ajout champ `season?: 'winter' \| 'summer'` a `Project` |
-| `src/utils/electricalCalculations.ts` | Correction thermique dans `selectRX` et `calculateGRDImpedance`, lecture de `project.season` dans `calculateScenario` |
-| `src/utils/dailyProfileCalculator.ts` | Propagation de `options.season` au projet pour chaque heure |
-| `src/components/topMenu/ParametersTab.tsx` | Selecteur Saison (Hiver/Ete) |
-| `src/store/networkStore.ts` | Initialisation `season: 'winter'` par defaut |
+| `src/utils/electricalCalculations.ts` | Defaults `loadModel` a `mixte_mono_poly`, integration courant reel dans contexte thermique |
+| `src/components/DailyProfileChart.tsx` | Gestion visuelle quand 3 phases confondues |
 
-## Impact sur les resultats
+## Sequence d'implementation
 
-- **Hiver** : T_ambient basse -> R(T) < R20 -> chute de tension plus faible -> tensions plus hautes
-- **Ete** : T_ambient haute -> R(T) > R20 -> chute de tension plus forte -> tensions plus basses
-- **Surcharge** : Le terme `(I/Imax)^2` amplifie l'echauffement et donc la resistance, modelisant l'effet de surcharge
-- **Courbe 24h** : Le choix de saison dans l'onglet profil journalier (deja existant) pilotera automatiquement la correction thermique heure par heure
+1. Corriger les defaults `loadModel` dans `electricalCalculations.ts`
+2. Integrer le courant de branche dans le contexte thermique (BFS iteration)
+3. Ameliorer l'affichage du graphe quand les phases sont identiques
 
-## Points d'attention
-
-- Le courant `I` n'est connu qu'apres le BFS. La correction thermique sera donc appliquee avec le courant de l'iteration precedente (convergence naturelle du BFS iteratif existant)
-- `maxCurrent_A` n'est pas toujours defini dans `CableType`. En l'absence de cette valeur, le terme de surcharge `(I/Imax)^2` sera ignore (T = T_ambient uniquement)
-- Les cables de branchement (`branchementCableTypes.ts`) ont deja `maxCurrent_A` et `R_ohm_per_km` - la correction s'appliquera aussi au calcul de tension client si pertinent

@@ -842,32 +842,19 @@ export const MapView = () => {
         
         if (hasProduction && hasLoad) {
           iconContent = 'M'; // Mixte
-          // Déterminer la couleur selon le pourcentage de variation de tension nominal (±)
-          if (Math.abs(nominalDropPercent) <= 8) {
-            iconClass = 'bg-yellow-500 border-yellow-600 text-white';
-          } else if (Math.abs(nominalDropPercent) <= 10) {
-            iconClass = 'bg-voltage-warning border-orange-600 text-white';
-          } else {
-            iconClass = 'bg-voltage-critical border-red-600 text-white';
-          }
         } else if (hasProduction) {
           iconContent = 'P'; // Production seule
-          if (Math.abs(nominalDropPercent) <= 8) {
-            iconClass = 'bg-yellow-300 border-yellow-500 text-gray-800';
-          } else if (Math.abs(nominalDropPercent) <= 10) {
-            iconClass = 'bg-voltage-warning border-orange-600 text-white';
-          } else {
-            iconClass = 'bg-voltage-critical border-red-600 text-white';
-          }
         } else if (hasLoad) {
           iconContent = 'C'; // Charge seule
-          if (Math.abs(nominalDropPercent) <= 8) {
-            iconClass = 'bg-blue-500 border-blue-600 text-white';
-          } else if (Math.abs(nominalDropPercent) <= 10) {
-            iconClass = 'bg-voltage-warning border-orange-600 text-white';
-          } else {
-            iconClass = 'bg-voltage-critical border-red-600 text-white';
-          }
+        }
+        
+        // Couleur uniforme selon la tension pour tous les types (C, M, P, N)
+        if (Math.abs(nominalDropPercent) <= 8) {
+          iconClass = 'bg-voltage-normal border-green-600 text-white';
+        } else if (Math.abs(nominalDropPercent) <= 10) {
+          iconClass = 'bg-voltage-warning border-orange-600 text-white';
+        } else {
+          iconClass = 'bg-voltage-critical border-red-600 text-white';
         }
       }
 

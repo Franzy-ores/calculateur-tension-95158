@@ -32,11 +32,12 @@ export const DailyProfileChart = ({ data, comparisonData, clientData, showNodeCu
   }), [nominalVoltage]);
 
   // Détecter si les 3 phases sont identiques (réseau équilibré)
+  // Détection équilibré: précision 0.01V pour éviter faux positifs après changement saison
   const isBalanced = useMemo(() => {
     return data.every(d => {
-      const a = Math.round(d.voltageA_V * 10);
-      const b = Math.round(d.voltageB_V * 10);
-      const c = Math.round(d.voltageC_V * 10);
+      const a = Math.round(d.voltageA_V * 100);
+      const b = Math.round(d.voltageB_V * 100);
+      const c = Math.round(d.voltageC_V * 100);
       return a === b && b === c;
     });
   }, [data]);

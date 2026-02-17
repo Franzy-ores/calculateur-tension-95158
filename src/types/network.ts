@@ -476,6 +476,8 @@ export interface CalculationResult {
     nodeCompliance?: 'normal' | 'warning' | 'critical';
   }[];
   cablePowerFlows?: { cableId: string; P_kW: number; Q_kVAr: number; S_kVA: number; pf: number }[];
+  /** Températures estimées des conducteurs (°C) - calculées dynamiquement par micro-itération thermique */
+  cableTemperatures?: { cableId: string; temperature_C: number }[];
   virtualBusbar?: VirtualBusbar; // Informations du jeu de barres virtuel
   manualPhaseDistribution?: {
     charges: { A: number; B: number; C: number };

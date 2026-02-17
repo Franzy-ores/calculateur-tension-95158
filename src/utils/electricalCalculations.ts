@@ -3,7 +3,7 @@ import { getConnectedNodes } from '@/utils/networkConnectivity';
 import { Complex, C, add, sub, mul, div, conj, scale, abs, fromPolar, arg } from '@/utils/complex';
 import { getNodeConnectionType } from '@/utils/nodeConnectionType';
 import { getLinkedClientsForNode, calculateNodePowersFromClients } from '@/utils/clientsUtils';
-import { getThermalCorrectionFactor, ThermalSeason } from '@/utils/thermalModel';
+import { getThermalCorrectionFactor, ThermalSeason, getAmbientTemperature, calculateCableTemperature } from '@/utils/thermalModel';
 
 export class ElectricalCalculator {
   private cosPhi: number; // Legacy - utilisé comme fallback
@@ -1406,10 +1406,65 @@ export class ElectricalCalculator {
       };
 
       // Déphasages corrects pour les phases A, B, C
-      const phaseA = runBFSForPhase(0, S_A_map, 'A');      // 0°
-      const phaseB = runBFSForPhase(-120, S_B_map, 'B');   // -120°
-      const phaseC = runBFSForPhase(120, S_C_map, 'C');    // +120°
+      let phaseA = runBFSForPhase(0, S_A_map, 'A');      // 0°
+      let phaseB = runBFSForPhase(-120, S_B_map, 'B');   // -120°
+      let phaseC = runBFSForPhase(120, S_C_map, 'C');    // +120°
+
+      // ===== MICRO-ITÉRATION THERMIQUE DYNAMIQUE (Effet Joule) =====
+      // Recalcul des impédances avec les courants réels du BFS
+      // T_cable(h) = T_ambient + inertie × k × (I(h)/Imax)²
+      // AÉRIEN: réponse instantanée | SOUTERRAIN: réponse amortie (inertie thermique)
+      const cableTempMap = new Map<string, number>();
       
+      if (projectSeason) {
+        let impedancesUpdated = false;
+        
+        for (const [childId, cab] of parentCableOfChild.entries()) {
+          const ct = cableTypeById.get(cab.typeId);
+          if (!ct) continue;
+          const length_m = this.calculateLengthMeters(cab.coordinates || []);
+          const L_km = length_m / 1000;
+          
+          // Courant max des 3 phases (pire cas pour échauffement)
+          const IA_mag = abs(phaseA.I_branch_phase.get(cab.id) || C(0, 0));
+          const IB_mag = abs(phaseB.I_branch_phase.get(cab.id) || C(0, 0));
+          const IC_mag = abs(phaseC.I_branch_phase.get(cab.id) || C(0, 0));
+          const I_max_phase = Math.max(IA_mag, IB_mag, IC_mag);
+          
+          // Température du câble avec courant réel et inertie thermique
+          const T_amb = getAmbientTemperature(projectSeason, cab.pose);
+          const T_cable = calculateCableTemperature(T_amb, I_max_phase, ct.maxCurrent_A || 0, cab.pose);
+          cableTempMap.set(cab.id, T_cable);
+          
+          // Recalcul de l'impédance avec correction thermique dynamique
+          const thermalCtxReal = {
+            season: projectSeason,
+            pose: cab.pose,
+            I_A: I_max_phase,
+            Imax_A: ct.maxCurrent_A || 0
+          };
+          
+          const is400V_local = U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
+          const { R: R_new, X: X_new } = this.selectRX(ct, is400V_local, isUnbalanced, false, thermalCtxReal);
+          const Z_new = C(R_new * L_km, X_new * L_km);
+          const Z_old = cableZ_phase.get(cab.id) || C(0, 0);
+          
+          // Mettre à jour si R change significativement (>0.1%)
+          if (Math.abs(Z_new.re - Z_old.re) / (Math.abs(Z_old.re) + 1e-12) > 0.001) {
+            cableZ_phase.set(cab.id, Z_new);
+            impedancesUpdated = true;
+          }
+        }
+        
+        // Relancer le BFS avec les impédances corrigées par l'effet Joule
+        if (impedancesUpdated) {
+          console.log('🌡️ Micro-itération thermique: recalcul BFS avec R corrigé (effet Joule dynamique)');
+          phaseA = runBFSForPhase(0, S_A_map, 'A');
+          phaseB = runBFSForPhase(-120, S_B_map, 'B');
+          phaseC = runBFSForPhase(120, S_C_map, 'C');
+        }
+      }
+
       // Détection du système 400V pour le calcul du courant neutre
       const is400V = U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
       
@@ -1513,10 +1568,15 @@ export class ElectricalCalculator {
             
             // Utiliser R0/X0 pour le conducteur neutre (forNeutral = true)
             const is400V_local = U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
+            // Courant neutre réel pour correction thermique dynamique
+            const IA_n = phaseA.I_branch_phase.get(cab.id) || C(0, 0);
+            const IB_n = phaseB.I_branch_phase.get(cab.id) || C(0, 0);
+            const IC_n = phaseC.I_branch_phase.get(cab.id) || C(0, 0);
+            const IN_real_A = abs(add(add(IA_n, IB_n), IC_n));
             const thermalCtxNeutral = projectSeason ? {
               season: projectSeason,
               pose: cab.pose,
-              I_A: 0,
+              I_A: IN_real_A,
               Imax_A: ct.maxCurrent_A || 0
             } : undefined;
             const { R: R0, X: X0 } = this.selectRX(ct, is400V_local, isUnbalanced, true, thermalCtxNeutral);
@@ -1871,6 +1931,14 @@ export class ElectricalCalculator {
       const finalCompliance = globalComplianceFromPhases === 'critical' ? 'critical' :
                               globalComplianceFromPhases === 'warning' ? 'warning' : compliance;
 
+      // Construire les températures de câble estimées
+      const cableTemperatures = cableTempMap.size > 0 
+        ? Array.from(cableTempMap.entries()).map(([cableId, temperature_C]) => ({ 
+            cableId, 
+            temperature_C: Math.round(temperature_C * 10) / 10 
+          }))
+        : undefined;
+
       const result: CalculationResult = {
         scenario,
         cables: calculatedCables,
@@ -1884,8 +1952,9 @@ export class ElectricalCalculator {
         nodeMetrics: undefined,
         nodePhasors: undefined,
         nodePhasorsPerPhase,
-        nodeMetricsPerPhase, // Nouvelles métriques par phase avec conformité individuelle
+        nodeMetricsPerPhase,
         cablePowerFlows: undefined,
+        cableTemperatures,
         virtualBusbar
       };
 

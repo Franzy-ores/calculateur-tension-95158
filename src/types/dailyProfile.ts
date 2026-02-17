@@ -94,6 +94,8 @@ export interface HourlyVoltageResult {
   evBonus: number;
   // État SRG2 pour cette heure (si simulation active)
   srg2States?: SRG2HourlyActivation[];
+  /** Température maximale estimée des conducteurs pour cette heure (°C) */
+  maxCableTemp_C?: number;
 }
 
 export const defaultDailySimulationOptions: DailySimulationOptions = {

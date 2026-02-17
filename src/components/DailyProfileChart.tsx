@@ -60,11 +60,11 @@ export const DailyProfileChart = ({ data, comparisonData, clientData, showNodeCu
     data.map((d, i) => {
       const base: Record<string, any> = {
         hour: `${d.hour}h`,
-        status: d.status
+        status: d.status,
+        maxCableTemp_C: d.maxCableTemp_C
       };
 
       if (isBalanced) {
-        // En mode équilibré, une seule courbe
         base['Vmoy (3 phases)'] = Math.round(d.voltageA_V * 10) / 10;
       } else {
         base['Phase A'] = Math.round(d.voltageA_V * 10) / 10;
@@ -142,12 +142,19 @@ export const DailyProfileChart = ({ data, comparisonData, clientData, showNodeCu
           )}
           
           {hourData && (
-            <p className={`mt-2 text-xs font-medium ${
-              hourData.status === 'critical' ? 'text-destructive' :
-              hourData.status === 'warning' ? 'text-warning' : 'text-success'
-            }`}>
-              Écart: {hourData.deviationPercent > 0 ? '+' : ''}{hourData.deviationPercent.toFixed(1)}%
-            </p>
+            <>
+              <p className={`mt-2 text-xs font-medium ${
+                hourData.status === 'critical' ? 'text-destructive' :
+                hourData.status === 'warning' ? 'text-warning' : 'text-success'
+              }`}>
+                Écart: {hourData.deviationPercent > 0 ? '+' : ''}{hourData.deviationPercent.toFixed(1)}%
+              </p>
+              {hourData.maxCableTemp_C != null && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  🌡️ T° conducteur max: {hourData.maxCableTemp_C.toFixed(1)}°C
+                </p>
+              )}
+            </>
           )}
         </div>
       );

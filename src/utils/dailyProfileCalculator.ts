@@ -965,6 +965,11 @@ export class DailyProfileCalculator {
     const chargesIndustrialPower_kVA = industrialPower * (industrialFoisonnement / 100);
     const productionsPower_kVA = totalProductionPower * (productionsFoisonnement / 100);
 
+    // Température maximale estimée des conducteurs
+    const maxCableTemp_C = result.cableTemperatures?.length 
+      ? Math.max(...result.cableTemperatures.map(ct => ct.temperature_C))
+      : undefined;
+
     return {
       hour,
       voltageA_V: voltageA,
@@ -982,7 +987,8 @@ export class DailyProfileCalculator {
       chargesResidentialPower_kVA,
       chargesIndustrialPower_kVA,
       productionsPower_kVA,
-      evBonus
+      evBonus,
+      maxCableTemp_C
     };
   }
 

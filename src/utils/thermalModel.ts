@@ -32,6 +32,14 @@ const HEATING_CONSTANTS: Record<string, number> = {
   'SOUTERRAIN': 35,
 };
 
+// Facteur d'inertie thermique par type de pose
+// AÉRIEN: réponse instantanée au courant (air = faible inertie, convection rapide)
+// SOUTERRAIN: réponse amortie (terre = forte inertie thermique, dissipation lente)
+const THERMAL_INERTIA: Record<string, number> = {
+  'AÉRIEN': 1.0,      // 100% de l'échauffement Joule instantané
+  'SOUTERRAIN': 0.6,   // 60% - la terre absorbe et lisse l'échauffement
+};
+
 // Coefficients de température α (1/°C) par matériau
 const ALPHA_COEFFICIENTS: Record<string, number> = {
   'CUIVRE': 0.00393,
@@ -65,6 +73,7 @@ export function calculateCableTemperature(
   pose: CablePose
 ): number {
   const k = HEATING_CONSTANTS[pose] || 0;
+  const inertia = THERMAL_INERTIA[pose] ?? 1.0;
   
   // Si Imax non défini ou nul, pas d'échauffement par surcharge
   if (!Imax_A || Imax_A <= 0 || !isFinite(Imax_A)) {
@@ -72,7 +81,9 @@ export function calculateCableTemperature(
   }
   
   const ratio = Math.min(I_A / Imax_A, 2); // Limiter le ratio à 2x pour éviter les valeurs extrêmes
-  return T_ambient + k * ratio * ratio;
+  // AÉRIEN: échauffement instantané (inertia=1.0)
+  // SOUTERRAIN: échauffement amorti par l'inertie thermique du sol (inertia=0.6)
+  return T_ambient + inertia * k * ratio * ratio;
 }
 
 /**

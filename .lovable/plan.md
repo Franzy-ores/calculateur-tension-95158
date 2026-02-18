@@ -1,74 +1,74 @@
 
 
-# Plan : Correction affichage 3 phases sur profil 24h et verification modele thermique
+# Plan : Vue thermique globale du circuit dans le profil 24h
 
-## Diagnostic
+## Objectif
 
-### Probleme 1 : Une seule courbe visible au lieu de 3 phases
+Remplacer l'affichage d'un seul cable amont par une vision globale du circuit : pour chaque heure, montrer un resume thermique de l'ensemble des cables du reseau (temperature min/max/moyenne, nombre de cables surchauffes, pertes totales estimees).
 
-Apres analyse approfondie du code, le probleme peut avoir deux causes :
+## Donnees deja disponibles
 
-**Cause probable A** : Si le reseau est parfaitement equilibre (distribution 33.3%/33.3%/33.3% sur les 3 phases), les trois courbes ont des valeurs IDENTIQUES et se superposent visuellement en une seule ligne. C'etait probablement deja le cas avant, mais peut-etre moins visible avec des valeurs de R differentes.
+Le moteur de calcul retourne deja `result.cableTemperatures` : un tableau contenant la temperature estimee de CHAQUE cable du circuit a chaque heure. Actuellement, seul le `max` est extrait (ligne 969 de `dailyProfileCalculator.ts`).
 
-**Cause probable B** : Si `project.loadModel` est `undefined` (ancien projet), le fallback sur ligne 564 de `electricalCalculations.ts` utilise `'polyphase_equilibre'` au lieu de `'mixte_mono_poly'`. Cela active le mode equilibre (ligne 2276-2303) qui retourne A=B=C identiques. Ceci serait une regression si le store a ete modifie.
+## Modifications
 
-### Probleme 2 : Verification coherence modele thermique
+### 1. Enrichir `HourlyVoltageResult` (src/types/dailyProfile.ts)
 
-Le modele thermique dans `thermalModel.ts` est **coherent** avec le prompt :
+Ajouter des champs pour la synthese thermique globale :
 
-| Exigence | Implementation | Statut |
-|---|---|---|
-| Temperatures ambiantes (aerien/souterrain × hiver/ete) | `AMBIENT_TEMPERATURES` lignes 24-27 | OK |
-| T_cable = T_ambient + k × (I/Imax)^2 | `calculateCableTemperature` ligne 61 | OK |
-| k = 40 aerien, 35 souterrain | `HEATING_CONSTANTS` lignes 30-33 | OK |
-| R(T) = R20 × (1 + alpha × (T-20)) | `correctResistance` ligne 86 | OK |
-| alpha Cu=0.00393, Al=0.00403 | `ALPHA_COEFFICIENTS` lignes 36-41 | OK |
-| X non corrige | `selectRX` ligne 297 : X sans thermalFactor | OK |
-| R_eq = (R0_T + 2×R12_T) / 3 | `calculateGRDImpedance` applique thermalFactor aux R uniquement | OK |
-| Integration dans BFS | `cableZ_phase` construit avec correction thermique | OK |
-| Saison propagee dans profil 24h | `dailyProfileCalculator.ts` ligne 214 | OK |
-| Neutre corrige aussi | Ligne 1516-1522 avec `forNeutral: true` | OK |
+```
+// Synthese thermique circuit complet
+circuitThermal?: {
+  minTemp_C: number;          // Temperature cable le plus froid
+  maxTemp_C: number;          // Temperature cable le plus chaud
+  avgTemp_C: number;          // Temperature moyenne de tous les cables
+  hotCablesCount: number;     // Nombre de cables au-dessus de 50 deg C
+  totalCables: number;        // Nombre total de cables
+  hottestCableId: string;     // ID du cable le plus chaud
+  hottestCableName?: string;  // Nom lisible du cable le plus chaud
+};
+```
 
-**Un point d'amelioration identifie** : Le courant `I_A` est fixe a 0 dans le calcul thermique (lignes 848 et 1519). Le prompt demande que le courant horaire `I(h)` soit utilise pour chaque heure. Cela signifie que l'echauffement par surcharge `(I/Imax)^2` n'est jamais applique - seule la temperature ambiante est prise en compte. Pour une premiere implementation c'est acceptable (effet principal = saison), mais cela devrait etre ameliore.
+### 2. Extraire les donnees dans `dailyProfileCalculator.ts`
 
-## Solution proposee
+Dans `extractNodeVoltages` (ligne 968), au lieu de ne garder que le max, construire la synthese complete :
 
-### Correction 1 : Forcer le graphe a montrer 3 courbes distinctes (4 fichiers)
+- Parcourir `result.cableTemperatures` pour calculer min, max, moyenne
+- Compter les cables au-dessus de 50 deg C (seuil d'attention)
+- Identifier le cable le plus chaud et retrouver son nom depuis `project.cables`
+- Conserver `maxCableTemp_C` pour compatibilite
 
-**Fichier `src/utils/electricalCalculations.ts`** (ligne 564) :
-- Remplacer le fallback `'polyphase_equilibre'` par `'mixte_mono_poly'` dans `calculateScenarioWithHTConfig`
-- Idem ligne 583 pour le parametre par defaut de `calculateScenario`
+### 3. Enrichir le tooltip dans `DailyProfileChart.tsx`
 
-Cela garantit que le mode desequilibre (per-phase) est toujours actif, meme pour les anciens projets.
+Ajouter une section "Circuit thermique" dans le `CustomTooltip` :
 
-**Fichier `src/components/DailyProfileChart.tsx`** :
-- Ajouter une detection quand les 3 phases ont des valeurs identiques (equilibre parfait)
-- Dans ce cas, afficher une seule courbe "Vmoy" au lieu de 3 courbes superposees, avec une legende indiquant "Equilibre (3 phases confondues)"
+```
+--- Circuit thermique ---
+Temp. cables : 28.3 a 47.2 deg C (moy: 35.1)
+Cable le + chaud : TRC-04 (47.2 deg C)
+Cables en surcharge : 0 / 12
+```
 
-### Correction 2 : Integration du courant horaire dans le modele thermique
+Cette section apparait sous les donnees de tension existantes, uniquement si `circuitThermal` est present.
 
-**Fichier `src/utils/electricalCalculations.ts`** (lignes 844-850) :
-- Lors du BFS per-phase, apres la premiere iteration (quand les courants de branche sont connus), recalculer le contexte thermique avec le courant reel `I(h)` et mettre a jour les impedances
-- Utiliser le courant total des 3 phases pour estimer I dans le terme `(I/Imax)^2`
-
-Cela complete l'exigence du prompt : "Pour chaque heure : T_cable(h) = T_ambient + k × (I(h)/Imax)^2"
-
-### Correction 3 : Harmonisation des defaults (mineur)
-
-**Fichier `src/utils/electricalCalculations.ts`** :
-- Ligne 564 : `project.loadModel ?? 'mixte_mono_poly'` (au lieu de `'polyphase_equilibre'`)
-- Ligne 583 : `loadModel: LoadModel = 'mixte_mono_poly'` (au lieu de `'polyphase_equilibre'`)
+Code couleur dans le tooltip :
+- Vert : maxTemp inferieure a 50 deg C
+- Orange : maxTemp entre 50 et 65 deg C
+- Rouge : maxTemp superieure a 65 deg C
 
 ## Fichiers modifies
 
 | Fichier | Modification |
 |---|---|
-| `src/utils/electricalCalculations.ts` | Defaults `loadModel` a `mixte_mono_poly`, integration courant reel dans contexte thermique |
-| `src/components/DailyProfileChart.tsx` | Gestion visuelle quand 3 phases confondues |
+| `src/types/dailyProfile.ts` | Ajout interface `circuitThermal` dans `HourlyVoltageResult` |
+| `src/utils/dailyProfileCalculator.ts` | Construction de la synthese thermique dans `extractNodeVoltages` |
+| `src/components/DailyProfileChart.tsx` | Section tooltip "Circuit thermique" avec code couleur |
 
-## Sequence d'implementation
+## Avantages de cette approche
 
-1. Corriger les defaults `loadModel` dans `electricalCalculations.ts`
-2. Integrer le courant de branche dans le contexte thermique (BFS iteration)
-3. Ameliorer l'affichage du graphe quand les phases sont identiques
+- Vision globale plutot que locale : l'utilisateur voit l'etat thermique de tout le reseau
+- Impact de la saison visible : en ete les temperatures ambiantes montent, donc les cables chauffent plus
+- Impact de la charge visible : aux heures de pointe (18h-20h), les temperatures cables sont plus elevees
+- Pas de courbe supplementaire : l'information reste dans le tooltip, lisible et non intrusive
+- Le cable le plus chaud est identifie par son nom, ce qui permet de localiser le point faible du reseau
 

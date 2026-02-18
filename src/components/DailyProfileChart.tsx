@@ -62,7 +62,8 @@ export const DailyProfileChart = ({ data, comparisonData, clientData, showNodeCu
       const base: Record<string, any> = {
         hour: `${d.hour}h`,
         status: d.status,
-        maxCableTemp_C: d.maxCableTemp_C
+        maxCableTemp_C: d.maxCableTemp_C,
+        circuitThermal: d.circuitThermal
       };
 
       if (isBalanced) {
@@ -150,11 +151,36 @@ export const DailyProfileChart = ({ data, comparisonData, clientData, showNodeCu
               }`}>
                 Écart: {hourData.deviationPercent > 0 ? '+' : ''}{hourData.deviationPercent.toFixed(1)}%
               </p>
-              {hourData.maxCableTemp_C != null && (
+              {hourData.maxCableTemp_C != null && !hourData.circuitThermal && (
                 <p className="text-xs text-muted-foreground mt-1">
                   🌡️ T° conducteur max: {hourData.maxCableTemp_C.toFixed(1)}°C
                 </p>
               )}
+              {hourData.circuitThermal && (() => {
+                const ct = hourData.circuitThermal;
+                const colorClass = ct.maxTemp_C > 65 
+                  ? 'text-destructive' 
+                  : ct.maxTemp_C > 50 
+                    ? 'text-warning' 
+                    : 'text-success';
+                return (
+                  <div className="border-t border-border mt-2 pt-2">
+                    <p className="text-xs font-semibold text-foreground mb-1">🌡️ Circuit thermique</p>
+                    <p className="text-xs text-muted-foreground">
+                      Temp. câbles : <span className={`font-mono font-medium ${colorClass}`}>{ct.minTemp_C.toFixed(1)} à {ct.maxTemp_C.toFixed(1)}°C</span>
+                      <span className="text-muted-foreground"> (moy: {ct.avgTemp_C.toFixed(1)})</span>
+                    </p>
+                    {ct.hottestCableName && (
+                      <p className="text-xs text-muted-foreground">
+                        Câble le + chaud : <span className="font-medium text-foreground">{ct.hottestCableName}</span> ({ct.maxTemp_C.toFixed(1)}°C)
+                      </p>
+                    )}
+                    <p className={`text-xs ${ct.hotCablesCount > 0 ? 'text-warning font-medium' : 'text-muted-foreground'}`}>
+                      Câbles &gt;50°C : {ct.hotCablesCount} / {ct.totalCables}
+                    </p>
+                  </div>
+                );
+              })()}
             </>
           )}
         </div>

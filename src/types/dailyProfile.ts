@@ -96,6 +96,16 @@ export interface HourlyVoltageResult {
   srg2States?: SRG2HourlyActivation[];
   /** Température maximale estimée des conducteurs pour cette heure (°C) */
   maxCableTemp_C?: number;
+  /** Synthèse thermique du circuit complet pour cette heure */
+  circuitThermal?: {
+    minTemp_C: number;
+    maxTemp_C: number;
+    avgTemp_C: number;
+    hotCablesCount: number;
+    totalCables: number;
+    hottestCableId: string;
+    hottestCableName?: string;
+  };
 }
 
 export const defaultDailySimulationOptions: DailySimulationOptions = {

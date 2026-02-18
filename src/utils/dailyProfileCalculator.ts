@@ -970,6 +970,31 @@ export class DailyProfileCalculator {
       ? Math.max(...result.cableTemperatures.map(ct => ct.temperature_C))
       : undefined;
 
+    // Synthèse thermique globale du circuit
+    let circuitThermal: HourlyVoltageResult['circuitThermal'] = undefined;
+    if (result.cableTemperatures && result.cableTemperatures.length > 0) {
+      const temps = result.cableTemperatures;
+      const allTemps = temps.map(ct => ct.temperature_C);
+      const minTemp = Math.min(...allTemps);
+      const maxTemp = Math.max(...allTemps);
+      const avgTemp = allTemps.reduce((s, t) => s + t, 0) / allTemps.length;
+      const hotCablesCount = allTemps.filter(t => t > 50).length;
+      
+      // Identifier le câble le plus chaud
+      const hottestEntry = temps.reduce((best, ct) => ct.temperature_C > best.temperature_C ? ct : best, temps[0]);
+      const hottestCable = this.project.cables.find(c => c.id === hottestEntry.cableId);
+
+      circuitThermal = {
+        minTemp_C: minTemp,
+        maxTemp_C: maxTemp,
+        avgTemp_C: avgTemp,
+        hotCablesCount,
+        totalCables: temps.length,
+        hottestCableId: hottestEntry.cableId,
+        hottestCableName: hottestCable?.name
+      };
+    }
+
     return {
       hour,
       voltageA_V: voltageA,
@@ -988,7 +1013,8 @@ export class DailyProfileCalculator {
       chargesIndustrialPower_kVA,
       productionsPower_kVA,
       evBonus,
-      maxCableTemp_C
+      maxCableTemp_C,
+      circuitThermal
     };
   }
 

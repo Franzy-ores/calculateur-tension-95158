@@ -1660,6 +1660,7 @@ export class ElectricalCalculator {
         const distalId = childId && parentId ? childId : (parent.get(cab.nodeBId) === cab.nodeAId ? cab.nodeBId : cab.nodeAId);
         const distalNode = nodeById.get(distalId)!;
         const { isThreePhase } = this.getVoltage(distalNode.connectionType);
+        const isStarNetwork = distalNode.connectionType === 'TÉTRA_3P+N_230_400V';
         const Z = cableZ_phase.get(cab.id) || C(0, 0);
 
         const IA = phaseA.I_branch_phase.get(cab.id) || C(0, 0);
@@ -1675,10 +1676,9 @@ export class ElectricalCalculator {
         const dVC = abs(mul(Z, IC));
 
         const current_A = Math.max(IA_mag, IB_mag, IC_mag);
-        // ===== CORRECTION : Appliquer √3 pour TOUS les réseaux triphasés (triangle ET étoile) =====
-        // Formule officielle: ΔU = √3 × I × (R×cosφ + X×sinφ) × L
-        // Le facteur √3 convertit la chute de tension par phase en chute de tension ligne-ligne
-        const deltaU_line_V = isThreePhase 
+        // sqrt(3) uniquement pour étoile (phase-neutre -> ligne-ligne)
+        // En triangle, la chute est déjà en tension composée
+        const deltaU_line_V = isStarNetwork
           ? Math.max(dVA, dVB, dVC) * Math.sqrt(3)
           : Math.max(dVA, dVB, dVC);
 
@@ -2139,6 +2139,7 @@ export class ElectricalCalculator {
       const distalId = childId && parentId ? childId : (parent.get(cab.nodeBId) === cab.nodeAId ? cab.nodeBId : cab.nodeAId);
       const distalNode = nodeById.get(distalId)!;
       const { isThreePhase } = this.getVoltage(distalNode.connectionType);
+      const isStarNetwork = distalNode.connectionType === 'TÉTRA_3P+N_230_400V';
 
       // Per-phase Z
       let Z = cableZ_phase.get(cab.id);
@@ -2152,9 +2153,9 @@ export class ElectricalCalculator {
       const Iph = I_branch.get(cab.id) || C(0, 0);
       const dVph = mul(Z!, Iph);
       const current_A = abs(Iph);
-      // ===== CORRECTION : Appliquer √3 pour TOUS les réseaux triphasés (triangle ET étoile) =====
-      // Formule officielle: ΔU = √3 × I × (R×cosφ + X×sinφ) × L
-      const deltaU_line_V = isThreePhase 
+      // sqrt(3) uniquement pour étoile (phase-neutre -> ligne-ligne)
+      // En triangle, la chute est déjà en tension composée
+      const deltaU_line_V = isStarNetwork
         ? abs(dVph) * Math.sqrt(3)
         : abs(dVph);
 

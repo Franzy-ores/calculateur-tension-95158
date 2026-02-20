@@ -1475,6 +1475,8 @@ export class ElectricalCalculator {
       // ===== CORRECTION MAJEURE : Propagation de la chute de tension du conducteur neutre =====
       // Pour les réseaux 400V phase-neutre, le courant neutre crée une chute de tension supplémentaire
       // qui doit être ajoutée aux tensions phase-neutre calculées
+      // ✅ EQUI8 : Déclaré ici (hors du bloc is400V) pour être accessible dans les résultats câbles
+      const equi8UpstreamReduction = new Map<string, number>();
       if (is400V) {
         // ✅ EQUI8 CME: Identifier les nœuds avec injection de courant
         // Le courant injecté sur le neutre réduit directement le courant neutre dans les câbles amont
@@ -1500,7 +1502,6 @@ export class ElectricalCalculator {
         
         // ✅ EQUI8 : Calculer le courant de compensation cumulé vers l'amont pour chaque nœud
         // Un nœud en amont d'un EQUI8 voit son courant neutre réduit
-        const equi8UpstreamReduction = new Map<string, number>();
         
         // Pour chaque nœud EQUI8, propager la réduction vers la source
         for (const [equi8NodeId, I_comp] of equi8CompensationByNode.entries()) {
@@ -1643,27 +1644,8 @@ export class ElectricalCalculator {
         }
       }
 
-      // ✅ EQUI8 : Stocker la map des réductions pour l'utiliser dans les résultats des câbles
-      // (La map equi8UpstreamReduction est créée dans le bloc is400V ci-dessus)
-      const equi8UpstreamReductionForCables = new Map<string, number>();
-      if (is400V) {
-        // Recalculer ici pour avoir accès en dehors du bloc (même logique que ci-dessus)
-        for (const n of nodes) {
-          if (n.customProps?.['equi8_I_compensation']) {
-            const I_comp = n.customProps['equi8_I_compensation'] as number;
-            let currentNodeId = n.id;
-            while (parent.get(currentNodeId)) {
-              const parentNodeId = parent.get(currentNodeId)!;
-              const cable = parentCableOfChild.get(currentNodeId);
-              if (cable) {
-                const existing = equi8UpstreamReductionForCables.get(cable.id) || 0;
-                equi8UpstreamReductionForCables.set(cable.id, existing + I_comp);
-              }
-              currentNodeId = parentNodeId;
-            }
-          }
-        }
-      }
+      // ✅ EQUI8 : equi8UpstreamReduction est déclaré avant le bloc is400V
+      // et rempli à l'intérieur — une seule source de vérité
 
       // Compose cable results (par phase)
       calculatedCables.length = 0;
@@ -1715,7 +1697,7 @@ export class ElectricalCalculator {
         // Courant de neutre (si 400V L-N)
         // ✅ EQUI8 : Appliquer la réduction du courant neutre pour les câbles en amont
         let IN_mag = is400V ? abs(add(add(IA, IB), IC)) : 0;
-        const equi8Reduction = equi8UpstreamReductionForCables.get(cab.id);
+        const equi8Reduction = equi8UpstreamReduction.get(cab.id);
         if (equi8Reduction && equi8Reduction > 0) {
           const IN_before = IN_mag;
           IN_mag = Math.max(0, IN_mag - equi8Reduction);

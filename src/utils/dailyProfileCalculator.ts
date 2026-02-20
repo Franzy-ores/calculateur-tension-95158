@@ -4,6 +4,8 @@ import { SRG2Config, SRG2SwitchState } from '@/types/srg2';
 import { ElectricalCalculator } from './electricalCalculations';
 import { SimulationCalculator } from './simulationCalculator';
 import defaultProfiles from '@/data/hourlyProfiles.json';
+import { getClusterById, DEFAULT_CLUSTER_ID } from '@/data/clusterProfiles';
+import { calculateAdaptiveFoisonnement } from './foisonnementCalculator';
 
 /**
  * Service de calcul des tensions horaires sur 24h
@@ -87,6 +89,15 @@ export class DailyProfileCalculator {
   }
 
   /**
+   * Compte les clients résidentiels liés dans le projet
+   */
+  private countResidentialClients(): number {
+    if (!this.project.clientsImportes || !this.project.clientLinks) return 0;
+    const linkedIds = new Set(this.project.clientLinks.map(l => l.clientId));
+    return this.project.clientsImportes.filter(c => c.clientType !== 'industriel' && linkedIds.has(c.id)).length;
+  }
+
+  /**
    * Calcule le foisonnement pondéré en fonction du mix résidentiel/industriel
    */
   private calculateWeightedFoisonnement(
@@ -167,16 +178,28 @@ export class DailyProfileCalculator {
     const weatherFactor = this.profiles.weatherFactors[this.options.weather];
     const hourStr = hour.toString();
 
+    // Cluster de circuit : modificateurs sur les profils de base
+    const cluster = getClusterById(this.options.selectedClusterId || DEFAULT_CLUSTER_ID);
+    const facteurConso = cluster?.facteurConso ?? 1.0;
+    const facteurPV = cluster?.facteurPV ?? 1.0;
+    const facteurVE = cluster?.facteurVE ?? 1.0;
+
+    // Nombre de clients résidentiels connectés (pour foisonnement adaptatif)
+    const nResidentialClients = this.countResidentialClients();
+
     // Si profil mesuré activé, utiliser le profil mesuré pour toutes les charges
     const useMeasured = this.options.useMeasuredProfile && this.measuredProfile;
 
     // Profils horaires par type (directement depuis le JSON ou profil mesuré)
-    const residentialProfile = useMeasured 
+    let residentialProfile = useMeasured 
       ? (this.measuredProfile![hourStr] || 0)
       : (seasonProfile.residential[hourStr] || 0);
     const industrialProfile = useMeasured 
       ? (this.measuredProfile![hourStr] || 0)
       : (seasonProfile.industrial_pme[hourStr] || 0);
+    
+    // Appliquer le facteur cluster sur la consommation résidentielle
+    residentialProfile *= facteurConso;
     
     // Récupérer les puissances transitantes (nœud sélectionné + aval)
     const nodePowers = this.getUpstreamAndNodePowers();
@@ -191,18 +214,27 @@ export class DailyProfileCalculator {
       const bonusNight = this.options.evBonusNight ?? 5;
       
       if (hour >= 18 && hour <= 21) {
-        evBonus = bonusEvening;
+        evBonus = bonusEvening * facteurVE;
       } else if (hour >= 22 || hour <= 5) {
-        evBonus = bonusNight;
+        evBonus = bonusNight * facteurVE;
       }
     }
-    const residentialFoisonnementHoraire = residentialProfile + evBonus;
+    let residentialFoisonnementHoraire = residentialProfile + evBonus;
+    
+    // Foisonnement adaptatif : moduler selon le nombre de clients résidentiels
+    if (this.options.adaptiveFoisonnement !== false && nResidentialClients > 1) {
+      residentialFoisonnementHoraire = calculateAdaptiveFoisonnement(
+        nResidentialClients, 
+        residentialFoisonnementHoraire
+      );
+    }
+    
     const industrialFoisonnementHoraire = industrialProfile;
 
-    // Foisonnement productions = profil PV × facteur météo (ou 0% si zeroProduction activé)
+    // Foisonnement productions = profil PV × facteur météo × facteur cluster (ou 0% si zeroProduction activé)
     const productionsFoisonnement = this.options.zeroProduction 
       ? 0 
-      : (seasonProfile.pv[hourStr] || 0) * weatherFactor;
+      : (seasonProfile.pv[hourStr] || 0) * weatherFactor * facteurPV;
 
     // Créer un projet modifié avec les foisonnements horaires par type de client
     const projectWithHourlyFoisonnement: Project = {

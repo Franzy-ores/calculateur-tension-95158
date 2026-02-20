@@ -17,7 +17,8 @@ import { DailyProfileChart } from '@/components/DailyProfileChart';
 import { ProfileVisualEditor } from '@/components/ProfileVisualEditor';
 import { MeasuredProfileImporter } from '@/components/MeasuredProfileImporter';
 import { HourlyVoltageResult, ClientHourlyVoltageResult } from '@/types/dailyProfile';
-import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent, Home, Zap, FlaskConical, Moon, Upload, FileBarChart, X, Download, MapPin, User, Cable } from 'lucide-react';
+import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent, Home, Zap, FlaskConical, Moon, Upload, FileBarChart, X, Download, MapPin, User, Cable, Building2, TreePine, Wheat } from 'lucide-react';
+import { clusterProfiles, getClusterById, DEFAULT_CLUSTER_ID } from '@/data/clusterProfiles';
 import { toast } from 'sonner';
 import { HourlyProfile, MeasuredProfileMetadata } from '@/types/dailyProfile';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -355,6 +356,50 @@ export const DailyProfileTab = () => {
                 Nuit
               </Button>
             </div>
+          </div>
+
+          {/* Cluster de circuit */}
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Cluster de circuit</Label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {clusterProfiles.map(cluster => (
+                <Button
+                  key={cluster.id}
+                  size="sm"
+                  variant={(dailyProfileOptions.selectedClusterId || DEFAULT_CLUSTER_ID) === cluster.id ? 'default' : 'outline'}
+                  onClick={() => setDailyProfileOptions({ selectedClusterId: cluster.id })}
+                  className="text-xs h-auto py-1.5 px-2 flex flex-col items-start gap-0.5"
+                  title={cluster.description}
+                >
+                  <span className="flex items-center gap-1">
+                    <span>{cluster.icon}</span>
+                    <span className="font-medium">{cluster.name}</span>
+                  </span>
+                  <span className="text-[9px] text-muted-foreground opacity-70 font-normal">
+                    PV ×{cluster.facteurPV} · VE ×{cluster.facteurVE}
+                  </span>
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {/* Foisonnement adaptatif */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs flex items-center gap-1.5">
+                <Percent className="h-3.5 w-3.5 text-muted-foreground" />
+                Foisonnement adaptatif
+              </Label>
+              <Switch
+                checked={dailyProfileOptions.adaptiveFoisonnement !== false}
+                onCheckedChange={(checked) => setDailyProfileOptions({ adaptiveFoisonnement: checked })}
+              />
+            </div>
+            {dailyProfileOptions.adaptiveFoisonnement !== false && (
+              <p className="text-[10px] text-muted-foreground/70 italic pl-1">
+                Le foisonnement horaire est modulé selon le nombre de clients résidentiels connectés (formule Velander)
+              </p>
+            )}
           </div>
 
           {/* Mode simulation */}

@@ -1883,14 +1883,10 @@ export class ElectricalCalculator {
           Vb_display = Vb_phase * scaleLine;
           Vc_display = Vc_phase * scaleLine;
           
-          // Référence standard
-          const sourceNode = nodes.find(s => s.isSource);
-          if (sourceNode?.tensionCible) {
-            U_ref = sourceNode.tensionCible;
-          } else {
-            const { U_base } = this.getVoltage(n.connectionType);
-            U_ref = U_base;
-          }
+          // EN50160 : conformité toujours évaluée par rapport à la tension nominale
+          // (tensionCible est utilisée pour le BFS/Vslack, pas pour la conformité)
+          const { U_base } = this.getVoltage(n.connectionType);
+          U_ref = U_base;
         }
         
         // ===== CORRECTION 2 : CALCUL DE CONFORMITÉ EN50160 AVEC RÉFÉRENCE APPROPRIÉE =====

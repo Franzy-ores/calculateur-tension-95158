@@ -3,8 +3,10 @@
  * 
  * Chaque cluster applique des modificateurs sur les profils horaires de base :
  * - facteurConso : multiplicateur sur le profil résidentiel
- * - facteurPV : multiplicateur sur le profil de production PV
  * - facteurVE : multiplicateur sur le bonus de charge VE
+ * 
+ * Note : le PV n'est pas modifié par le cluster car c'est une donnée physique
+ * connue (puissance installée par client) qui suit toujours la même courbe solaire.
  */
 export interface ClusterProfile {
   id: string;
@@ -12,7 +14,6 @@ export interface ClusterProfile {
   description: string;
   icon: string;
   facteurConso: number;
-  facteurPV: number;
   facteurVE: number;
 }
 
@@ -23,7 +24,6 @@ export const clusterProfiles: ClusterProfile[] = [
     description: 'Centre-ville, peu de toitures PV, peu de VE',
     icon: '🏢',
     facteurConso: 1.0,
-    facteurPV: 0.3,
     facteurVE: 0.5,
   },
   {
@@ -32,7 +32,6 @@ export const clusterProfiles: ClusterProfile[] = [
     description: 'Pavillonnaire standard, PV moyen, VE standard',
     icon: '🏘️',
     facteurConso: 1.0,
-    facteurPV: 0.7,
     facteurVE: 1.0,
   },
   {
@@ -41,7 +40,6 @@ export const clusterProfiles: ClusterProfile[] = [
     description: 'Maisons individuelles, PV en croissance, plus de VE',
     icon: '🏡',
     facteurConso: 1.1,
-    facteurPV: 1.2,
     facteurVE: 1.5,
   },
   {
@@ -50,7 +48,6 @@ export const clusterProfiles: ClusterProfile[] = [
     description: 'Grandes parcelles, fort PV, forte VE',
     icon: '🌾',
     facteurConso: 1.2,
-    facteurPV: 1.5,
     facteurVE: 2.0,
   },
 ];

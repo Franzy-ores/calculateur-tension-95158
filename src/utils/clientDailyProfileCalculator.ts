@@ -57,7 +57,6 @@ export function calculateClientDailyVoltages(
   // Cluster de circuit : modificateurs
   const cluster = getClusterById(options.selectedClusterId || DEFAULT_CLUSTER_ID);
   const facteurConso = cluster?.facteurConso ?? 1.0;
-  const facteurPV = cluster?.facteurPV ?? 1.0;
   const facteurVE = cluster?.facteurVE ?? 1.0;
 
   return nodeVoltages.map((nodeResult) => {
@@ -90,7 +89,7 @@ export function calculateClientDailyVoltages(
     hourlyFoisonnement = baseFoisonnement;
     
     // Profil production (PV)
-    const productionProfile = options.zeroProduction ? 0 : (seasonProfile.pv[hourStr] || 0) * weatherFactor * facteurPV;
+    const productionProfile = options.zeroProduction ? 0 : (seasonProfile.pv[hourStr] || 0) * weatherFactor;
     
     // Puissances du client avec foisonnement horaire
     const S_charge = client.puissanceContractuelle_kVA * (hourlyFoisonnement / 100) * 1000; // VA

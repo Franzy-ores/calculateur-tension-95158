@@ -181,7 +181,6 @@ export class DailyProfileCalculator {
     // Cluster de circuit : modificateurs sur les profils de base
     const cluster = getClusterById(this.options.selectedClusterId || DEFAULT_CLUSTER_ID);
     const facteurConso = cluster?.facteurConso ?? 1.0;
-    const facteurPV = cluster?.facteurPV ?? 1.0;
     const facteurVE = cluster?.facteurVE ?? 1.0;
 
     // Nombre de clients résidentiels connectés (pour foisonnement adaptatif)
@@ -231,10 +230,10 @@ export class DailyProfileCalculator {
     
     const industrialFoisonnementHoraire = industrialProfile;
 
-    // Foisonnement productions = profil PV × facteur météo × facteur cluster (ou 0% si zeroProduction activé)
+    // Foisonnement productions = profil PV × facteur météo (ou 0% si zeroProduction activé)
     const productionsFoisonnement = this.options.zeroProduction 
       ? 0 
-      : (seasonProfile.pv[hourStr] || 0) * weatherFactor * facteurPV;
+      : (seasonProfile.pv[hourStr] || 0) * weatherFactor;
 
     // Créer un projet modifié avec les foisonnements horaires par type de client
     const projectWithHourlyFoisonnement: Project = {

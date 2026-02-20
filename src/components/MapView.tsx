@@ -83,6 +83,8 @@ export const MapView = () => {
     nodeSelectionMode,
     handleNodeSelectionClick,
     cancelNodeSelection,
+    dailyProfileHighlightNodeId,
+    dailyProfileHighlightClientId,
   } = useNetworkStore();
 
   // Helper pour détecter les équipements de simulation sur un nœud
@@ -360,6 +362,7 @@ export const MapView = () => {
     circuitColorMapping: circuitColorMapping,
     showTensionLabels: showClientTensionLabels,
     voltageSystem: currentProject?.voltageSystem,
+    highlightedClientId: dailyProfileHighlightClientId,
   });
 
   // Gérer le changement de type de carte
@@ -884,9 +887,12 @@ export const MapView = () => {
       
       // MODE RÉDUIT : Tensions désactivées → 24px sans texte ni icône
       if (!showVoltages) {
+        const isNodeHighlighted = dailyProfileHighlightNodeId === node.id;
+        const highlightStyle = isNodeHighlighted ? 'box-shadow: 0 0 0 4px rgba(6, 182, 212, 0.7), 0 0 12px rgba(6, 182, 212, 0.4); border-color: #06b6d4;' : '';
+        const highlightClass = isNodeHighlighted ? 'daily-profile-highlight' : '';
         const icon = L.divIcon({
           className: 'custom-node-marker',
-          html: `<div style="position: relative;"><div class="border-2 ${iconClass}" style="width: 24px; height: 24px; border-radius: 6px; ${equipmentBorderStyle}"></div>${equipmentIndicator}</div>`,
+          html: `<div style="position: relative;"><div class="border-2 ${iconClass} ${highlightClass}" style="width: 24px; height: 24px; border-radius: 6px; ${equipmentBorderStyle} ${highlightStyle}"></div>${equipmentIndicator}</div>`,
           iconSize: [24, 24],
           iconAnchor: [12, 12]
         });
@@ -894,7 +900,7 @@ export const MapView = () => {
         const marker = L.marker([node.lat, node.lng], { 
           icon,
           draggable: selectedTool === 'move',
-          zIndexOffset: 0
+          zIndexOffset: isNodeHighlighted ? 5000 : 0
         })
           .addTo(map)
           .bindTooltip(node.name, {
@@ -1104,9 +1110,12 @@ export const MapView = () => {
       const iconSizeClass = isPhaseDisplayMode ? 'w-[90px] h-[90px]' : (hasDisplayableText ? 'w-[70px] h-[70px]' : 'w-14 h-14');
 
       const shapeClass = isPhaseDisplayMode ? 'rounded-md' : 'rounded-lg';
+      const isNodeHighlighted = dailyProfileHighlightNodeId === node.id;
+      const nodeHighlightStyle = isNodeHighlighted ? 'box-shadow: 0 0 0 4px rgba(6, 182, 212, 0.7), 0 0 12px rgba(6, 182, 212, 0.4); border-color: #06b6d4;' : '';
+      const nodeHighlightClass = isNodeHighlighted ? 'daily-profile-highlight' : '';
       const icon = L.divIcon({
         className: 'custom-node-marker',
-        html: `<div style="position: relative;"><div class="${iconSizeClass} ${shapeClass} border-2 flex flex-col items-center justify-center text-xs font-bold ${iconClass} p-1" style="${equipmentBorderStyle}">
+        html: `<div style="position: relative;"><div class="${iconSizeClass} ${shapeClass} border-2 flex flex-col items-center justify-center text-xs font-bold ${iconClass} ${nodeHighlightClass} p-1" style="${equipmentBorderStyle} ${nodeHighlightStyle}">
           <div class="text-base">${iconContent}</div>
           ${circuitNumber ? `<div class="text-[9px] bg-black bg-opacity-50 rounded px-1">C${circuitNumber}</div>` : ''}
           ${(() => {
@@ -1206,7 +1215,7 @@ export const MapView = () => {
       const marker = L.marker([node.lat, node.lng], { 
         icon,
         draggable: selectedTool === 'move',
-        zIndexOffset: 0
+        zIndexOffset: isNodeHighlighted ? 5000 : 0
       })
         .addTo(map)
         .bindTooltip(node.name, {
@@ -1391,7 +1400,7 @@ export const MapView = () => {
 
       markersRef.current.set(node.id, marker);
     });
-  }, [currentProject?.nodes, selectedTool, selectedNodeId, selectedCableType, addCable, setSelectedNode, openEditPanel, deleteNode, showVoltages, resultsToUse, selectedScenario, moveNode, routingActive, routingFromNode, routingToNode, selectedClientForLinking, linkClientToNode, nodeSelectionMode, handleNodeSelectionClick]);
+  }, [currentProject?.nodes, selectedTool, selectedNodeId, selectedCableType, addCable, setSelectedNode, openEditPanel, deleteNode, showVoltages, resultsToUse, selectedScenario, moveNode, routingActive, routingFromNode, routingToNode, selectedClientForLinking, linkClientToNode, nodeSelectionMode, handleNodeSelectionClick, dailyProfileHighlightNodeId]);
 
   // Update cables
   useEffect(() => {

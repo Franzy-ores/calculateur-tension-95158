@@ -109,6 +109,7 @@ export const DailyProfileTab = () => {
     setSelectedClient,
     selectedBranchementCableId,
     setSelectedBranchementCableId,
+    setDailyProfileHighlight,
   } = useNetworkStore();
 
   const [editorOpen, setEditorOpen] = useState(false);
@@ -181,6 +182,20 @@ export const DailyProfileTab = () => {
       setResultsWithoutSim([]);
     }
   }, [currentProject, dailyProfileOptions, dailyProfileCustomProfiles, simulationEquipment, isSimulationActive, hasActiveSimulation, comparisonMode, measuredProfile]);
+
+  // Synchroniser le highlight sur la carte avec la sélection profil 24H
+  useEffect(() => {
+    const nodeId = dailyProfileOptions.selectedNodeId || null;
+    const clientId = showClientCurve ? selectedClientId : null;
+    setDailyProfileHighlight(nodeId, clientId);
+  }, [dailyProfileOptions.selectedNodeId, selectedClientId, showClientCurve, setDailyProfileHighlight]);
+
+  // Cleanup au démontage : retirer le highlight
+  useEffect(() => {
+    return () => {
+      setDailyProfileHighlight(null, null);
+    };
+  }, [setDailyProfileHighlight]);
 
   // Heures critiques
   const criticalHours = useMemo(() => {

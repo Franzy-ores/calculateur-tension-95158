@@ -1,90 +1,78 @@
 
 
-# Plan : Correction du critere de convergence BFS
+# Correction du facteur sqrt(3) sur la chute de tension pour reseau 230V triangle
 
-## Probleme identifie
+## Probleme confirme
 
-La convergence du Backward-Forward Sweep normalise le delta de tension par `Vslack_phase` (tension fixe au point source, environ 230V) au lieu de la tension reelle du noeud. Cela rend le critere trop permissif pour les noeuds en bout de reseau a basse tension.
+Le code applique un facteur sqrt(3) a la chute de tension de TOUS les reseaux triphases, sans distinction entre etoile et triangle :
 
-Deux endroits concernes :
-- Ligne 1400 : BFS per-phase (triphase)
-- Ligne 2112 : BFS monophase/simplifie
+```
+const deltaU_line_V = isThreePhase 
+  ? Math.max(dVA, dVB, dVC) * Math.sqrt(3)
+  : Math.max(dVA, dVB, dVC);
+```
+
+Or :
+- **Reseau TETRA 400V (etoile)** : le BFS travaille en phase-neutre (~230V). Le facteur sqrt(3) est necessaire pour convertir la chute phase-neutre en chute ligne-ligne. **Correct.**
+- **Reseau TRI 230V (triangle)** : le BFS travaille directement en tension composee (230V). La chute |Z x I| est deja une chute ligne-ligne. Appliquer sqrt(3) surestime la chute de tension d'un facteur 1.73. **Bug.**
+
+Impact : sur un reseau 230V triangle, les chutes de tension affichees sont surestimees de 73%, ce qui peut fausser les diagnostics de conformite.
 
 ## Solution
 
-Remplacer la normalisation par `Vslack_phase` par une normalisation par la tension reelle de chaque noeud, noeud par noeud. Le critere de convergence devient : pour tout noeud, `|V_new - V_old| / |V_new|` doit etre inferieur a la tolerance.
+Remplacer le test `isThreePhase` par une condition qui distingue etoile (TETRA) de triangle (TRI_230V_3F). Le facteur sqrt(3) ne doit s'appliquer que pour TETRA_3P+N_230_400V.
 
-## Modifications
+Deux endroits a corriger :
+1. **Ligne 1681** : BFS per-phase (triphase desequilibre)
+2. **Ligne 2157** : BFS monophase/simplifie (equilibre)
+
+## Modifications techniques
 
 ### Fichier : `src/utils/electricalCalculations.ts`
 
-**Ligne 1393-1400 (BFS per-phase)** :
+**Correction 1 - BFS per-phase (ligne 1662-1683)**
 
-Avant :
+Ajouter la detection du type de reseau pour le noeud distal, et appliquer sqrt(3) uniquement pour les reseaux etoile :
+
 ```typescript
-let maxDelta = 0;
-for (const [nid, Vn] of V_node_phase.entries()) {
-  const Vp = V_prev2.get(nid) || Vslack_phase_ph;
-  const d = abs(sub(Vn, Vp));
-  if (d > maxDelta) maxDelta = d;
-}
-if (maxDelta / (Vslack_phase || 1) < CONVERGENCE_TOLERANCE) { converged2 = true; break; }
+const { isThreePhase } = this.getVoltage(distalNode.connectionType);
+const isStarNetwork = distalNode.connectionType === 'TETRA_3P+N_230_400V';
+
+// ...
+
+// sqrt(3) uniquement pour etoile (phase-neutre -> ligne-ligne)
+// En triangle, la chute est deja en tension composee
+const deltaU_line_V = isStarNetwork
+  ? Math.max(dVA, dVB, dVC) * Math.sqrt(3)
+  : Math.max(dVA, dVB, dVC);
 ```
 
-Apres :
+**Correction 2 - BFS simplifie (ligne 2141-2159)**
+
+Meme logique :
+
 ```typescript
-let allConverged = true;
-for (const [nid, Vn] of V_node_phase.entries()) {
-  const Vp = V_prev2.get(nid) || Vslack_phase_ph;
-  const d = abs(sub(Vn, Vp));
-  const Vn_mag = abs(Vn) || 1;
-  if (d / Vn_mag >= CONVERGENCE_TOLERANCE) {
-    allConverged = false;
-    break;
-  }
-}
-if (allConverged) { converged2 = true; break; }
+const { isThreePhase } = this.getVoltage(distalNode.connectionType);
+const isStarNetwork = distalNode.connectionType === 'TETRA_3P+N_230_400V';
+
+// ...
+
+const deltaU_line_V = isStarNetwork
+  ? abs(dVph) * Math.sqrt(3)
+  : abs(dVph);
 ```
-
-**Ligne 2105-2112 (BFS monophase)** :
-
-Avant :
-```typescript
-let maxDelta = 0;
-for (const [nid, Vn] of V_node.entries()) {
-  const Vp = V_prev.get(nid) || Vslack;
-  const d = abs(sub(Vn, Vp));
-  if (d > maxDelta) maxDelta = d;
-}
-if (maxDelta / (Vslack_phase || 1) < tol) { converged = true; break; }
-```
-
-Apres :
-```typescript
-let allConverged = true;
-for (const [nid, Vn] of V_node.entries()) {
-  const Vp = V_prev.get(nid) || Vslack;
-  const d = abs(sub(Vn, Vp));
-  const Vn_mag = abs(Vn) || 1;
-  if (d / Vn_mag >= tol) {
-    allConverged = false;
-    break;
-  }
-}
-if (allConverged) { converged = true; break; }
-```
-
-## Impact
-
-- Le critere est desormais relatif a la tension locale de chaque noeud
-- Un noeud a 195V aura le meme critere relatif qu'un noeud a 230V
-- Aucun impact sur la performance (meme boucle, meme nombre d'operations)
-- Les tests existants devraient passer sans modification car la tolerance (1e-4) est suffisamment large
 
 ## Fichier modifie
 
 | Fichier | Lignes | Modification |
 |---|---|---|
-| `src/utils/electricalCalculations.ts` | 1393-1400 | Normalisation par V_node au lieu de Vslack (BFS triphase) |
-| `src/utils/electricalCalculations.ts` | 2105-2112 | Normalisation par V_node au lieu de Vslack (BFS monophase) |
+| `src/utils/electricalCalculations.ts` | 1662, 1681-1683 | Detection `isStarNetwork`, suppression sqrt(3) pour triangle |
+| `src/utils/electricalCalculations.ts` | 2141, 2157-2159 | Idem pour le BFS simplifie |
+
+## Impact attendu
+
+- Les chutes de tension sur reseau 230V triangle seront reduites d'un facteur sqrt(3) (~42% plus basses qu'avant)
+- Les reseaux 400V etoile restent inchanges
+- Les reseaux monophases restent inchanges (le `else` ne change pas)
+- Les tests existants portant sur des reseaux triangle pourraient necessiter une mise a jour des valeurs attendues
 

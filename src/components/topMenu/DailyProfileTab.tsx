@@ -120,6 +120,12 @@ export const DailyProfileTab = () => {
   const [clientCurveMode, setClientCurveMode] = useState<'overlay' | 'solo'>('overlay');
   const [showDetails, setShowDetails] = useState(true);
 
+  // États météo indépendants par saison
+  const [weatherWinter, setWeatherWinter] = useState<'sunny' | 'gray'>(dailyProfileOptions.weather || 'sunny');
+  const [zeroProductionWinter, setZeroProductionWinter] = useState(dailyProfileOptions.zeroProduction || false);
+  const [weatherSummer, setWeatherSummer] = useState<'sunny' | 'gray'>(dailyProfileOptions.weather || 'sunny');
+  const [zeroProductionSummer, setZeroProductionSummer] = useState(dailyProfileOptions.zeroProduction || false);
+
   // Résultats du calcul (hiver + été)
   const [resultsWinter, setResultsWinter] = useState<HourlyVoltageResult[]>([]);
   const [resultsSummer, setResultsSummer] = useState<HourlyVoltageResult[]>([]);
@@ -161,9 +167,9 @@ export const DailyProfileTab = () => {
       return;
     }
 
-    // Options hiver
-    const winterOptions = { ...dailyProfileOptions, season: 'winter' as const };
-    const summerOptions = { ...dailyProfileOptions, season: 'summer' as const };
+    // Options hiver avec météo indépendante
+    const winterOptions = { ...dailyProfileOptions, season: 'winter' as const, weather: weatherWinter, zeroProduction: zeroProductionWinter };
+    const summerOptions = { ...dailyProfileOptions, season: 'summer' as const, weather: weatherSummer, zeroProduction: zeroProductionSummer };
     const measuredProfileData = dailyProfileOptions.useMeasuredProfile ? measuredProfile ?? undefined : undefined;
 
     // Calcul HIVER avec simulation
@@ -197,7 +203,7 @@ export const DailyProfileTab = () => {
     } else {
       setResultsWithoutSim([]);
     }
-  }, [currentProject, dailyProfileOptions, dailyProfileCustomProfiles, simulationEquipment, isSimulationActive, hasActiveSimulation, comparisonMode, measuredProfile]);
+  }, [currentProject, dailyProfileOptions, dailyProfileCustomProfiles, simulationEquipment, isSimulationActive, hasActiveSimulation, comparisonMode, measuredProfile, weatherWinter, zeroProductionWinter, weatherSummer, zeroProductionSummer]);
 
   // Synchroniser le highlight sur la carte avec la sélection profil 24H
   useEffect(() => {
@@ -337,39 +343,6 @@ export const DailyProfileTab = () => {
             </div>
           </div>
 
-          {/* Météo / Production */}
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Météo / Production</Label>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant={dailyProfileOptions.weather === 'sunny' && !dailyProfileOptions.zeroProduction ? 'default' : 'outline'}
-                onClick={() => setDailyProfileOptions({ weather: 'sunny', zeroProduction: false })}
-                className="flex-1 gap-1"
-              >
-                <Sun className="h-4 w-4" />
-                Soleil
-              </Button>
-              <Button
-                size="sm"
-                variant={dailyProfileOptions.weather === 'gray' && !dailyProfileOptions.zeroProduction ? 'default' : 'outline'}
-                onClick={() => setDailyProfileOptions({ weather: 'gray', zeroProduction: false })}
-                className="flex-1 gap-1"
-              >
-                <Cloud className="h-4 w-4" />
-                Gris
-              </Button>
-              <Button
-                size="sm"
-                variant={dailyProfileOptions.zeroProduction ? 'default' : 'outline'}
-                onClick={() => setDailyProfileOptions({ zeroProduction: true })}
-                className="flex-1 gap-1"
-              >
-                <Moon className="h-4 w-4" />
-                Nuit
-              </Button>
-            </div>
-          </div>
 
           {/* Cluster de circuit */}
           <div className="space-y-2">
@@ -760,6 +733,9 @@ export const DailyProfileTab = () => {
                 clientData={clientResults || undefined}
                 showNodeCurves={!(showClientCurve && clientCurveMode === 'solo')}
                 nominalVoltage={nominalVoltage}
+                weather={weatherWinter}
+                zeroProduction={zeroProductionWinter}
+                onWeatherChange={(w, zp) => { setWeatherWinter(w); setZeroProductionWinter(zp); }}
               />
             ) : (
               <div className="h-[250px] flex items-center justify-center text-muted-foreground">
@@ -779,6 +755,9 @@ export const DailyProfileTab = () => {
                 clientData={clientResults || undefined}
                 showNodeCurves={!(showClientCurve && clientCurveMode === 'solo')}
                 nominalVoltage={nominalVoltage}
+                weather={weatherSummer}
+                zeroProduction={zeroProductionSummer}
+                onWeatherChange={(w, zp) => { setWeatherSummer(w); setZeroProductionSummer(zp); }}
               />
             ) : (
               <div className="h-[250px] flex items-center justify-center text-muted-foreground">

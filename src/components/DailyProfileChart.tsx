@@ -12,18 +12,24 @@ import {
   ReferenceArea
 } from 'recharts';
 import { HourlyVoltageResult, ClientHourlyVoltageResult } from '@/types/dailyProfile';
+import { Weather } from '@/types/dailyProfile';
+import { Sun, Cloud, Moon } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface DailyProfileChartProps {
   data: HourlyVoltageResult[];
   comparisonData?: HourlyVoltageResult[];
   clientData?: ClientHourlyVoltageResult[];
-  showNodeCurves?: boolean; // true par défaut, false pour mode "courbe seule"
+  showNodeCurves?: boolean;
   nominalVoltage: number;
   title?: string;
   className?: string;
+  weather?: Weather;
+  zeroProduction?: boolean;
+  onWeatherChange?: (weather: Weather, zeroProduction: boolean) => void;
 }
 
-export const DailyProfileChart = ({ data, comparisonData, clientData, showNodeCurves = true, nominalVoltage, title, className }: DailyProfileChartProps) => {
+export const DailyProfileChart = ({ data, comparisonData, clientData, showNodeCurves = true, nominalVoltage, title, className, weather, zeroProduction, onWeatherChange }: DailyProfileChartProps) => {
   // Calculer les limites de tension (±5% et ±10%)
   const limits = useMemo(() => ({
     warning_high: nominalVoltage * 1.05,
@@ -193,8 +199,39 @@ export const DailyProfileChart = ({ data, comparisonData, clientData, showNodeCu
   return (
     <div className={className}>
       {title && (
-        <div className="flex items-center gap-2 mb-1 px-1">
+        <div className="flex items-center justify-between mb-1 px-1">
           <span className="text-sm font-medium text-foreground">{title}</span>
+          {onWeatherChange && (
+            <div className="flex items-center gap-0.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`h-6 w-6 p-0 ${weather === 'sunny' && !zeroProduction ? 'text-amber-500' : 'text-muted-foreground/40 hover:text-muted-foreground'}`}
+                onClick={() => onWeatherChange('sunny', false)}
+                title="Soleil"
+              >
+                <Sun className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`h-6 w-6 p-0 ${weather === 'gray' && !zeroProduction ? 'text-slate-500' : 'text-muted-foreground/40 hover:text-muted-foreground'}`}
+                onClick={() => onWeatherChange('gray', false)}
+                title="Gris"
+              >
+                <Cloud className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`h-6 w-6 p-0 ${zeroProduction ? 'text-indigo-400' : 'text-muted-foreground/40 hover:text-muted-foreground'}`}
+                onClick={() => onWeatherChange(weather || 'sunny', true)}
+                title="Nuit (production = 0)"
+              >
+                <Moon className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </div>
       )}
       <ResponsiveContainer width="100%" height={250}>

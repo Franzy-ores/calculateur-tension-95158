@@ -1589,9 +1589,28 @@ export class ElectricalCalculator {
             // Chute de tension dans le neutre (phasor)
             const dVn = mul(Z_neutral, IN_phasor);
             
-            // ✅ CORRECTION CRITIQUE : Le courant neutre circule en retour (opposé aux phases)
-            // Dans un système déséquilibré, IN = IA + IB + IC représente le déséquilibre
-            // Ce courant crée une élévation du potentiel du neutre, pas une diminution
+            // ─── Convention de signe du neutre ───────────────────────────────
+            // Phases : le courant conventionnel circule de parent (u) vers enfant (v).
+            //          La chute de tension est donc V_phase(v) = V_phase(u) − Z·I_phase
+            //          (le potentiel diminue dans le sens du courant).
+            //
+            // Neutre : par KCL, IN = IA + IB + IC (somme vectorielle des courants de ligne).
+            //          Physiquement, ce courant de retour circule de l'enfant (v) vers le
+            //          parent (u), c'est-à-dire en sens inverse des phases.
+            //          La chute Z_n·IN se produit donc dans le sens v → u, ce qui revient
+            //          à une ÉLÉVATION du potentiel neutre au nœud enfant :
+            //              V_neutral(v) = V_neutral(u) + Z_n · IN
+            //
+            // Conséquence sur la tension phase-neutre côté charge :
+            //   V_ph-n(v) = V_phase(v) − V_neutral(v)
+            //             = [V_phase(u) − Z·I_ph] − [V_neutral(u) + Z_n·IN]
+            //   → La tension phase-neutre diminue à la fois par la chute dans la phase
+            //     ET par l'élévation du neutre. C'est le comportement attendu en cas de
+            //     déséquilibre : plus le déséquilibre est fort, plus IN est grand, plus
+            //     le neutre s'élève, et plus la tension phase-neutre diminue.
+            //
+            // C'est pourquoi on utilise add() ici et non sub().
+            // ─────────────────────────────────────────────────────────────────────
             const Vn_child = add(Vn_parent, dVn);
             V_neutral.set(v, Vn_child);
             

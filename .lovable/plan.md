@@ -1,74 +1,90 @@
 
 
-# Plan : Vue thermique globale du circuit dans le profil 24h
+# Plan : Correction du critere de convergence BFS
 
-## Objectif
+## Probleme identifie
 
-Remplacer l'affichage d'un seul cable amont par une vision globale du circuit : pour chaque heure, montrer un resume thermique de l'ensemble des cables du reseau (temperature min/max/moyenne, nombre de cables surchauffes, pertes totales estimees).
+La convergence du Backward-Forward Sweep normalise le delta de tension par `Vslack_phase` (tension fixe au point source, environ 230V) au lieu de la tension reelle du noeud. Cela rend le critere trop permissif pour les noeuds en bout de reseau a basse tension.
 
-## Donnees deja disponibles
+Deux endroits concernes :
+- Ligne 1400 : BFS per-phase (triphase)
+- Ligne 2112 : BFS monophase/simplifie
 
-Le moteur de calcul retourne deja `result.cableTemperatures` : un tableau contenant la temperature estimee de CHAQUE cable du circuit a chaque heure. Actuellement, seul le `max` est extrait (ligne 969 de `dailyProfileCalculator.ts`).
+## Solution
+
+Remplacer la normalisation par `Vslack_phase` par une normalisation par la tension reelle de chaque noeud, noeud par noeud. Le critere de convergence devient : pour tout noeud, `|V_new - V_old| / |V_new|` doit etre inferieur a la tolerance.
 
 ## Modifications
 
-### 1. Enrichir `HourlyVoltageResult` (src/types/dailyProfile.ts)
+### Fichier : `src/utils/electricalCalculations.ts`
 
-Ajouter des champs pour la synthese thermique globale :
+**Ligne 1393-1400 (BFS per-phase)** :
 
-```
-// Synthese thermique circuit complet
-circuitThermal?: {
-  minTemp_C: number;          // Temperature cable le plus froid
-  maxTemp_C: number;          // Temperature cable le plus chaud
-  avgTemp_C: number;          // Temperature moyenne de tous les cables
-  hotCablesCount: number;     // Nombre de cables au-dessus de 50 deg C
-  totalCables: number;        // Nombre total de cables
-  hottestCableId: string;     // ID du cable le plus chaud
-  hottestCableName?: string;  // Nom lisible du cable le plus chaud
-};
+Avant :
+```typescript
+let maxDelta = 0;
+for (const [nid, Vn] of V_node_phase.entries()) {
+  const Vp = V_prev2.get(nid) || Vslack_phase_ph;
+  const d = abs(sub(Vn, Vp));
+  if (d > maxDelta) maxDelta = d;
+}
+if (maxDelta / (Vslack_phase || 1) < CONVERGENCE_TOLERANCE) { converged2 = true; break; }
 ```
 
-### 2. Extraire les donnees dans `dailyProfileCalculator.ts`
-
-Dans `extractNodeVoltages` (ligne 968), au lieu de ne garder que le max, construire la synthese complete :
-
-- Parcourir `result.cableTemperatures` pour calculer min, max, moyenne
-- Compter les cables au-dessus de 50 deg C (seuil d'attention)
-- Identifier le cable le plus chaud et retrouver son nom depuis `project.cables`
-- Conserver `maxCableTemp_C` pour compatibilite
-
-### 3. Enrichir le tooltip dans `DailyProfileChart.tsx`
-
-Ajouter une section "Circuit thermique" dans le `CustomTooltip` :
-
-```
---- Circuit thermique ---
-Temp. cables : 28.3 a 47.2 deg C (moy: 35.1)
-Cable le + chaud : TRC-04 (47.2 deg C)
-Cables en surcharge : 0 / 12
+Apres :
+```typescript
+let allConverged = true;
+for (const [nid, Vn] of V_node_phase.entries()) {
+  const Vp = V_prev2.get(nid) || Vslack_phase_ph;
+  const d = abs(sub(Vn, Vp));
+  const Vn_mag = abs(Vn) || 1;
+  if (d / Vn_mag >= CONVERGENCE_TOLERANCE) {
+    allConverged = false;
+    break;
+  }
+}
+if (allConverged) { converged2 = true; break; }
 ```
 
-Cette section apparait sous les donnees de tension existantes, uniquement si `circuitThermal` est present.
+**Ligne 2105-2112 (BFS monophase)** :
 
-Code couleur dans le tooltip :
-- Vert : maxTemp inferieure a 50 deg C
-- Orange : maxTemp entre 50 et 65 deg C
-- Rouge : maxTemp superieure a 65 deg C
+Avant :
+```typescript
+let maxDelta = 0;
+for (const [nid, Vn] of V_node.entries()) {
+  const Vp = V_prev.get(nid) || Vslack;
+  const d = abs(sub(Vn, Vp));
+  if (d > maxDelta) maxDelta = d;
+}
+if (maxDelta / (Vslack_phase || 1) < tol) { converged = true; break; }
+```
 
-## Fichiers modifies
+Apres :
+```typescript
+let allConverged = true;
+for (const [nid, Vn] of V_node.entries()) {
+  const Vp = V_prev.get(nid) || Vslack;
+  const d = abs(sub(Vn, Vp));
+  const Vn_mag = abs(Vn) || 1;
+  if (d / Vn_mag >= tol) {
+    allConverged = false;
+    break;
+  }
+}
+if (allConverged) { converged = true; break; }
+```
 
-| Fichier | Modification |
-|---|---|
-| `src/types/dailyProfile.ts` | Ajout interface `circuitThermal` dans `HourlyVoltageResult` |
-| `src/utils/dailyProfileCalculator.ts` | Construction de la synthese thermique dans `extractNodeVoltages` |
-| `src/components/DailyProfileChart.tsx` | Section tooltip "Circuit thermique" avec code couleur |
+## Impact
 
-## Avantages de cette approche
+- Le critere est desormais relatif a la tension locale de chaque noeud
+- Un noeud a 195V aura le meme critere relatif qu'un noeud a 230V
+- Aucun impact sur la performance (meme boucle, meme nombre d'operations)
+- Les tests existants devraient passer sans modification car la tolerance (1e-4) est suffisamment large
 
-- Vision globale plutot que locale : l'utilisateur voit l'etat thermique de tout le reseau
-- Impact de la saison visible : en ete les temperatures ambiantes montent, donc les cables chauffent plus
-- Impact de la charge visible : aux heures de pointe (18h-20h), les temperatures cables sont plus elevees
-- Pas de courbe supplementaire : l'information reste dans le tooltip, lisible et non intrusive
-- Le cable le plus chaud est identifie par son nom, ce qui permet de localiser le point faible du reseau
+## Fichier modifie
+
+| Fichier | Lignes | Modification |
+|---|---|---|
+| `src/utils/electricalCalculations.ts` | 1393-1400 | Normalisation par V_node au lieu de Vslack (BFS triphase) |
+| `src/utils/electricalCalculations.ts` | 2105-2112 | Normalisation par V_node au lieu de Vslack (BFS monophase) |
 

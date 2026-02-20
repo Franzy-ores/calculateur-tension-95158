@@ -391,7 +391,7 @@ export const DailyProfileTab = () => {
                     <span className="font-medium">{cluster.name}</span>
                   </span>
                   <span className="text-[9px] text-muted-foreground opacity-70 font-normal">
-                    PV ×{cluster.facteurPV} · VE ×{cluster.facteurVE}
+                    VE ×{cluster.facteurVE}
                   </span>
                 </Button>
               ))}

@@ -69,6 +69,10 @@ export interface DailySimulationOptions {
   zeroProduction?: boolean;
   /** Utiliser le profil mesuré importé au lieu des profils théoriques */
   useMeasuredProfile?: boolean;
+  /** Cluster de circuit sélectionné ('cluster_1' .. 'cluster_4') */
+  selectedClusterId?: string;
+  /** Activer le foisonnement adaptatif selon le nombre de clients (profil 24H uniquement) */
+  adaptiveFoisonnement?: boolean;
 }
 
 export interface HourlyVoltageResult {
@@ -116,7 +120,9 @@ export const defaultDailySimulationOptions: DailySimulationOptions = {
   evBonusNight: 5,
   enableIndustrialPME: true,
   selectedNodeId: '',
-  zeroProduction: false
+  zeroProduction: false,
+  selectedClusterId: 'cluster_2',
+  adaptiveFoisonnement: true,
 };
 
 /**

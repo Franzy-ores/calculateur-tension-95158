@@ -2,6 +2,7 @@ import { HourlyVoltageResult, ClientHourlyVoltageResult, DailySimulationOptions,
 import { ClientImporte, Project } from '@/types/network';
 import { BranchementCableType } from '@/data/branchementCableTypes';
 import defaultProfiles from '@/data/hourlyProfiles.json';
+import { getClusterById, DEFAULT_CLUSTER_ID } from '@/data/clusterProfiles';
 
 /**
  * Détermine le statut de conformité EN50160 pour une tension donnée
@@ -53,18 +54,20 @@ export function calculateClientDailyVoltages(
   // Tension nominale de référence
   const nominalVoltage = 230;
   
+  // Cluster de circuit : modificateurs
+  const cluster = getClusterById(options.selectedClusterId || DEFAULT_CLUSTER_ID);
+  const facteurConso = cluster?.facteurConso ?? 1.0;
+  const facteurPV = cluster?.facteurPV ?? 1.0;
+  const facteurVE = cluster?.facteurVE ?? 1.0;
+
   return nodeVoltages.map((nodeResult) => {
     const hour = nodeResult.hour;
     const hourStr = hour.toString();
     
     // Foisonnement horaire selon le type de client
-    // Utiliser le profil "client" spécifique avec foisonnement plus élevé (jusqu'à 80%)
-    // Ce profil suit les mêmes logiques été/hiver/soleil/gris que le résidentiel
     let hourlyFoisonnement: number;
     
-    // Profil client avec logique météo pour simuler comportement réel
-    // Le profil "client" a des valeurs plus élevées que résidentiel (jusqu'à 70-80% vs 21%)
-    let baseFoisonnement = seasonProfile.client?.[hourStr] ?? seasonProfile.residential[hourStr] ?? 0;
+    let baseFoisonnement = (seasonProfile.client?.[hourStr] ?? seasonProfile.residential[hourStr] ?? 0) * facteurConso;
     
     // Si industriel, prendre le max entre profil client et industriel
     if (isIndustrial) {
@@ -72,10 +75,10 @@ export function calculateClientDailyVoltages(
       baseFoisonnement = Math.max(baseFoisonnement, industrialProfile);
     }
     
-    // Appliquer bonus VE si activé (même logique que résidentiel)
+    // Appliquer bonus VE si activé (avec facteur cluster)
     if (options.enableEV && !isIndustrial) {
-      const bonusEvening = options.evBonusEvening ?? 2.5;
-      const bonusNight = options.evBonusNight ?? 5;
+      const bonusEvening = (options.evBonusEvening ?? 2.5) * facteurVE;
+      const bonusNight = (options.evBonusNight ?? 5) * facteurVE;
       
       if (hour >= 18 && hour <= 21) {
         baseFoisonnement += bonusEvening;
@@ -87,7 +90,7 @@ export function calculateClientDailyVoltages(
     hourlyFoisonnement = baseFoisonnement;
     
     // Profil production (PV)
-    const productionProfile = options.zeroProduction ? 0 : (seasonProfile.pv[hourStr] || 0) * weatherFactor;
+    const productionProfile = options.zeroProduction ? 0 : (seasonProfile.pv[hourStr] || 0) * weatherFactor * facteurPV;
     
     // Puissances du client avec foisonnement horaire
     const S_charge = client.puissanceContractuelle_kVA * (hourlyFoisonnement / 100) * 1000; // VA

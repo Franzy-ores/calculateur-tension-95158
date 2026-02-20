@@ -1390,14 +1390,18 @@ export class ElectricalCalculator {
             }
           }
 
-          // Convergence per-phase
-          let maxDelta = 0;
+          // Convergence per-phase (normalisation par tension locale de chaque noeud)
+          let allConverged = true;
           for (const [nid, Vn] of V_node_phase.entries()) {
             const Vp = V_prev2.get(nid) || Vslack_phase_ph;
             const d = abs(sub(Vn, Vp));
-            if (d > maxDelta) maxDelta = d;
+            const Vn_mag = abs(Vn) || 1;
+            if (d / Vn_mag >= ElectricalCalculator.CONVERGENCE_TOLERANCE) {
+              allConverged = false;
+              break;
+            }
           }
-          if (maxDelta / (Vslack_phase || 1) < ElectricalCalculator.CONVERGENCE_TOLERANCE) { converged2 = true; break; }
+          if (allConverged) { converged2 = true; break; }
         }
         if (!converged2) {
           console.warn(`⚠️ BFS phase ${angleDeg}° non convergé`);
@@ -2102,14 +2106,18 @@ export class ElectricalCalculator {
         }
       }
 
-      // Convergence check
-      let maxDelta = 0;
+      // Convergence check (normalisation par tension locale de chaque noeud)
+      let allConverged = true;
       for (const [nid, Vn] of V_node.entries()) {
         const Vp = V_prev.get(nid) || Vslack;
         const d = abs(sub(Vn, Vp));
-        if (d > maxDelta) maxDelta = d;
+        const Vn_mag = abs(Vn) || 1;
+        if (d / Vn_mag >= tol) {
+          allConverged = false;
+          break;
+        }
       }
-      if (maxDelta / (Vslack_phase || 1) < tol) { converged = true; break; }
+      if (allConverged) { converged = true; break; }
     }
     if (!converged) {
       console.warn(`⚠️ Backward–Forward Sweep non convergé (tol=${tol}, maxIter=${maxIter}). Les résultats peuvent être approximatifs.`);

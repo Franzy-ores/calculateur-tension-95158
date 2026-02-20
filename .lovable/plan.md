@@ -1,72 +1,68 @@
 
 
-# Affichage double diagramme Ete/Hiver dans le profil 24H
+# Filtres meteo independants par graphique (Hiver / Ete)
 
 ## Objectif
 
-Remplacer le selecteur de saison (boutons Ete/Hiver) par deux diagrammes cote a cote : un pour l'hiver, un pour l'ete. Le filtre meteo (Soleil/Gris/Nuit) reste et s'applique aux deux graphiques simultanement. Les heures critiques et le foisonnement horaire sont lies a chaque graphique, avec un bouton de masquage.
+Remplacer les 3 boutons meteo globaux (Soleil/Gris/Nuit) dans le panneau parametres par 3 icones integrees directement dans chaque graphique. Chaque graphique (Hiver, Ete) a son propre filtre meteo independant. On peut donc avoir par exemple "Hiver + Nuit" et "Ete + Soleil" simultanement.
 
-## Modifications techniques
+## Modifications
 
 ### 1. `src/components/topMenu/DailyProfileTab.tsx`
 
-**Calcul double** : au lieu d'un seul `useEffect` de calcul, calculer deux jeux de resultats :
-- `resultsWinter` : calcul avec `season: 'winter'`
-- `resultsSummer` : calcul avec `season: 'summer'`
+**Nouveaux etats locaux** :
+- `weatherWinter`: etat meteo du graphe hiver (`'sunny' | 'gray'` + `zeroProductionWinter: boolean`)
+- `weatherSummer`: etat meteo du graphe ete (`'sunny' | 'gray'` + `zeroProductionSummer: boolean`)
 
-Les deux utilisent les memes options (meteo, cluster, VE, foisonnement adaptatif, noeud selectionne).
+Initialises depuis `dailyProfileOptions.weather` et `dailyProfileOptions.zeroProduction` actuels.
 
-**Heures critiques doubles** :
-- `criticalHoursWinter` et `criticalHoursSummer` calcules independamment
+**Suppression** : retirer le bloc "Meteo / Production" (lignes 340-372) du panneau parametres gauche.
 
-**Interface** :
-- Supprimer le bloc selecteur de saison (lignes 319-340)
-- Remplacer le graphique unique par deux graphiques empiles verticalement (ou cote a cote en large ecran)
-- Chaque graphique a un titre "Hiver" / "Ete" avec un badge
-- Ajouter un etat local `showDetails` (boolean, defaut true) avec un bouton oeil pour masquer/afficher les sections heures critiques et foisonnement
-- Les heures critiques sont affichees sous chaque graphique (ou groupees)
-- Le tableau de foisonnement est duplique (un par saison) ou affiche via un onglet Hiver/Ete
+**Calcul** : adapter le useEffect pour que :
+- `winterOptions` utilise `weatherWinter` / `zeroProductionWinter`
+- `summerOptions` utilise `weatherSummer` / `zeroProductionSummer`
 
-**Bouton de masquage** : un bouton icone (Eye/EyeOff) dans l'en-tete de la zone graphiques qui bascule la visibilite des heures critiques et du tableau de foisonnement.
+**Props aux graphiques** : passer a chaque `DailyProfileChart` les props de selection meteo pour qu'il affiche les 3 icones dans son en-tete.
 
 ### 2. `src/components/DailyProfileChart.tsx`
 
-Ajouter une prop optionnelle `title` (string) pour afficher un titre au-dessus du graphique (ex: "Hiver", "Ete"). Reduire la hauteur par defaut de 300px a 250px pour que les deux graphiques tiennent dans l'espace.
+**Nouvelles props** :
+- `weather`: `'sunny' | 'gray'` (meteo actuelle du graphe)
+- `zeroProduction`: `boolean` (mode nuit)
+- `onWeatherChange`: `(weather: 'sunny' | 'gray', zeroProduction: boolean) => void`
 
-### 3. `src/types/dailyProfile.ts`
+**Affichage** : dans l'en-tete du graphique (a cote du titre), afficher 3 icones cliquables :
+- Soleil (Sun) : actif si `weather === 'sunny' && !zeroProduction`
+- Gris (Cloud) : actif si `weather === 'gray' && !zeroProduction`
+- Nuit (Moon) : actif si `zeroProduction === true`
 
-Aucun changement de type necessaire. Le champ `season` reste dans `DailySimulationOptions` mais il ne sera plus pilote par l'UI directement : il sera utilise en interne pour les deux calculs.
+L'icone active est mise en surbrillance (couleur primaire), les autres sont en gris attenue. Un clic sur une icone appelle `onWeatherChange` avec les valeurs correspondantes.
 
-## Layout prevu
+### 3. Layout visuel
 
 ```text
-+---------------------------+-------------------------------------------+
-| Parametres                | Graphique Hiver (250px)                   |
-|  - Noeud                  |   [titre: "Hiver ❄️"]                    |
-|  - Meteo (soleil/gris)    +-------------------------------------------+
-|  - Cluster                | Graphique Ete (250px)                     |
-|  - Foisonnement           |   [titre: "Ete ☀️"]                      |
-|  - Simulation             +-------------------------------------------+
-|  - VE                     | [Eye] Heures critiques Hiver | Ete       |
-|  - Profil mesure          +-------------------------------------------+
-|  - Courbe raccordement    | [Eye] Foisonnement horaire Hiver | Ete   |
-+---------------------------+-------------------------------------------+
++-------------------------------------------+
+| ❄️ Hiver    [☀️] [☁️] [🌙]              |
+| [graphique 250px]                         |
++-------------------------------------------+
+| ☀️ Été      [☀️] [☁️] [🌙]              |
+| [graphique 250px]                         |
++-------------------------------------------+
 ```
 
-Le bouton masquage (oeil) permet de cacher/montrer les sections "Heures critiques" et "Foisonnement horaire" pour ne garder que les deux graphiques.
+Les icones sont petites (h-4 w-4), alignees a droite du titre, avec un style bouton ghost compact.
 
 ## Fichiers modifies
 
 | Fichier | Modification |
 |---|---|
-| `src/components/topMenu/DailyProfileTab.tsx` | Calcul double hiver/ete, suppression selecteur saison, deux graphiques, bouton masquage, heures critiques et foisonnement par saison |
-| `src/components/DailyProfileChart.tsx` | Ajout prop `title`, hauteur reduite a 250px |
+| `src/components/topMenu/DailyProfileTab.tsx` | Etats meteo locaux par saison, suppression bloc meteo global, passage props aux charts, adaptation calcul |
+| `src/components/DailyProfileChart.tsx` | Ajout props meteo + 3 icones cliquables dans l'en-tete du graphique |
 
 ## Ce qui ne change pas
 
-- Le filtre Meteo (Soleil/Gris/Nuit) reste identique
+- Les clusters, VE, foisonnement adaptatif restent globaux (panneau gauche)
 - Le calcul electrique sous-jacent ne change pas
-- La courbe client s'affiche sur les deux graphiques si activee
-- Le mode comparaison simulation s'applique aux deux graphiques
-- Le foisonnement adaptatif et les clusters restent inchanges
+- La courbe client et le mode comparaison restent identiques
+- Les heures critiques et le foisonnement horaire restent masquables
 

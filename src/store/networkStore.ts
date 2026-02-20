@@ -112,6 +112,9 @@ interface NetworkStoreState extends NetworkState {
   measuredProfileMetadata: MeasuredProfileMetadata | null;
   // Mode de sélection de nœud sur la carte (centralisé)
   nodeSelectionMode: 'profil24h' | 'srg2' | 'equi8' | null;
+  // Highlight profil 24H sur la carte
+  dailyProfileHighlightNodeId: string | null;
+  dailyProfileHighlightClientId: string | null;
   // Gestion de la sauvegarde
   isDirty: boolean;
   lastSavedAt: Date | null;
@@ -224,6 +227,8 @@ interface NetworkActions {
   handleNodeSelectionClick: (nodeId: string) => void;
   // Action câble de branchement
   setSelectedBranchementCableId: (cableId: string | null) => void;
+  // Highlight profil 24H
+  setDailyProfileHighlight: (nodeId: string | null, clientId: string | null) => void;
   // Actions de gestion de sauvegarde
   markAsDirty: () => void;
   markAsSaved: () => void;
@@ -421,6 +426,9 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   measuredProfileMetadata: null,
   // Mode de sélection de nœud sur la carte
   nodeSelectionMode: null,
+  // Highlight profil 24H
+  dailyProfileHighlightNodeId: null,
+  dailyProfileHighlightClientId: null,
   // Gestion de la sauvegarde
   isDirty: false,
   lastSavedAt: null,
@@ -2786,6 +2794,9 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
   },
   
   setSelectedBranchementCableId: (cableId) => set({ selectedBranchementCableId: cableId }),
+  
+  // Highlight profil 24H
+  setDailyProfileHighlight: (nodeId, clientId) => set({ dailyProfileHighlightNodeId: nodeId, dailyProfileHighlightClientId: clientId }),
   
   // Actions de gestion de sauvegarde
   markAsDirty: () => set({ isDirty: true }),

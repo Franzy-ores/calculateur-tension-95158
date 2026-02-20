@@ -16,9 +16,10 @@ interface ClientMarkersProps {
   circuitColorMapping?: Map<string, string>;
   showTensionLabels?: boolean;
   voltageSystem?: 'TRIPHASÉ_230V' | 'TÉTRAPHASÉ_400V';
+  highlightedClientId?: string | null;
 }
 
-export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId, onClientClick, onClientDragToNode, colorMode, circuitColorMapping, showTensionLabels = false, voltageSystem }: ClientMarkersProps) => {
+export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId, onClientClick, onClientDragToNode, colorMode, circuitColorMapping, showTensionLabels = false, voltageSystem, highlightedClientId }: ClientMarkersProps) => {
   const clientMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   const groupeMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   const linkLinesRef = useRef<Map<string, L.Polyline>>(new Map());
@@ -360,8 +361,9 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
     clientsIsoles.forEach(client => {
       const color = getClientMarkerColor(client, colorMode, circuitColorMapping, links);
       const isSelected = selectedClientId === client.id;
-      const borderColor = isSelected ? '#22c55e' : 'white';
-      const borderWidth = isSelected ? 3 : 2;
+      const isHighlighted = highlightedClientId === client.id;
+      const borderColor = isHighlighted ? '#06b6d4' : (isSelected ? '#22c55e' : 'white');
+      const borderWidth = isHighlighted ? 3 : (isSelected ? 3 : 2);
       
       // Analyser le niveau de puissance pour adapter la taille du marqueur
       const powerAnalysis = analyzeClientPower(client, voltageSystem);
@@ -376,17 +378,18 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
       const iconAnchor = iconSize / 2;
       const innerSize = hasProduction ? baseSize : baseSize;
       
-      const pulseClass = shouldPulse ? 'animate-pulse' : '';
+      const pulseClass = shouldPulse || isHighlighted ? 'animate-pulse' : '';
+      const highlightClass = isHighlighted ? 'daily-profile-highlight' : '';
       const hoverClass = isSelected ? 'animate-pulse' : 'hover:scale-125 transition-transform';
       
       const icon = L.divIcon({
         className: 'client-marker',
         html: hasProduction 
-          ? `<div class="relative ${hoverClass} ${pulseClass}" style="width: ${iconSize}px; height: ${iconSize}px; cursor: grab;">
+          ? `<div class="relative ${hoverClass} ${pulseClass} ${highlightClass}" style="width: ${iconSize}px; height: ${iconSize}px; cursor: grab;">
                <div class="absolute inset-0 rounded-full border-2 border-yellow-400" style="box-shadow: 0 0 8px rgba(250, 204, 21, 0.7);"></div>
                <div class="absolute" style="top: 3px; left: 3px; width: ${innerSize}px; height: ${innerSize}px; background-color: ${color}; border: ${borderWidth}px solid ${borderColor}; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>
              </div>`
-          : `<div class="rounded-full shadow-lg ${hoverClass} ${pulseClass}" style="width: ${iconSize}px; height: ${iconSize}px; background-color: ${color}; border: ${borderWidth}px solid ${borderColor}; cursor: grab;"></div>`,
+          : `<div class="rounded-full shadow-lg ${hoverClass} ${pulseClass} ${highlightClass}" style="width: ${iconSize}px; height: ${iconSize}px; background-color: ${color}; border: ${borderWidth}px solid ${borderColor}; cursor: grab;"></div>`,
         iconSize: [iconSize, iconSize],
         iconAnchor: [iconAnchor, iconAnchor]
       });
@@ -606,7 +609,7 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
       if (dragLineRef.current) map.removeLayer(dragLineRef.current);
       if (highlightCircleRef.current) map.removeLayer(highlightCircleRef.current);
     };
-  }, [map, clients, links, nodes, selectedClientId, onClientClick, onClientDragToNode, colorMode, circuitColorMapping, showTensionLabels]);
+  }, [map, clients, links, nodes, selectedClientId, onClientClick, onClientDragToNode, colorMode, circuitColorMapping, showTensionLabels, highlightedClientId]);
 
   return { clientMarkersRef, groupeMarkersRef, linkLinesRef };
 };

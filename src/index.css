@@ -248,3 +248,13 @@ All colors MUST be HSL.
 .node-tooltip::before {
   border-top-color: rgba(0, 0, 0, 0.85) !important;
 }
+
+/* Animation highlight profil 24H */
+.daily-profile-highlight {
+  animation: daily-highlight-pulse 1.5s ease-in-out infinite !important;
+}
+
+@keyframes daily-highlight-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(6, 182, 212, 0.7), 0 0 12px rgba(6, 182, 212, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(6, 182, 212, 0.3), 0 0 20px rgba(6, 182, 212, 0.1); }
+}

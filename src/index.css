@@ -51,7 +51,7 @@ All colors MUST be HSL.
     --gradient-surface: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(220 10% 98%) 100%);
 
     /* Electrical status colors */
-    --voltage-normal: 166 85% 35%; /* Green ≤ ±8% */
+    --voltage-normal: 142 40% 65%; /* Pale green ≤ ±8% */
     --voltage-warning: 43 96% 56%; /* Orange ±8% to ±10% */
     --voltage-critical: 0 84% 60%; /* Red > ±10% */
     

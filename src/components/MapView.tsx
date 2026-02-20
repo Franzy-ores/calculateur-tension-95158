@@ -888,7 +888,7 @@ export const MapView = () => {
       // MODE RÉDUIT : Tensions désactivées → 24px sans texte ni icône
       if (!showVoltages) {
         const isNodeHighlighted = dailyProfileHighlightNodeId === node.id;
-        const highlightStyle = isNodeHighlighted ? 'box-shadow: 0 0 0 4px rgba(6, 182, 212, 0.7), 0 0 12px rgba(6, 182, 212, 0.4); border-color: #06b6d4;' : '';
+        const highlightStyle = isNodeHighlighted ? 'border-color: #06b6d4 !important;' : '';
         const highlightClass = isNodeHighlighted ? 'daily-profile-highlight' : '';
         const icon = L.divIcon({
           className: 'custom-node-marker',
@@ -1111,7 +1111,7 @@ export const MapView = () => {
 
       const shapeClass = isPhaseDisplayMode ? 'rounded-md' : 'rounded-lg';
       const isNodeHighlighted = dailyProfileHighlightNodeId === node.id;
-      const nodeHighlightStyle = isNodeHighlighted ? 'box-shadow: 0 0 0 4px rgba(6, 182, 212, 0.7), 0 0 12px rgba(6, 182, 212, 0.4); border-color: #06b6d4;' : '';
+      const nodeHighlightStyle = isNodeHighlighted ? 'border-color: #06b6d4 !important;' : '';
       const nodeHighlightClass = isNodeHighlighted ? 'daily-profile-highlight' : '';
       const icon = L.divIcon({
         className: 'custom-node-marker',

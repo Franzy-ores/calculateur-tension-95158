@@ -1,48 +1,139 @@
 
 
-# Refactoring : Eliminer la duplication de `equi8UpstreamReduction`
+# Clusters de circuits et foisonnement adaptatif dans le profil 24H
 
-## Probleme
+## Contexte
 
-Deux maps identiques sont calculees avec la meme logique de propagation amont :
+Ces deux fonctionnalites s'appliquent **uniquement au module profil journalier 24H**. Le foisonnement manuel (curseurs dans l'onglet Parametres) reste inchange et continue de piloter le calcul statique principal.
 
-1. **`equi8UpstreamReduction`** (ligne 1503) : construite a partir de `equi8CompensationByNode`, utilisee dans le BFS neutre (ligne 1551) pour reduire `IN_phasor` pendant le calcul de propagation.
-2. **`equi8UpstreamReductionForCables`** (ligne 1648) : recalculee a partir de `n.customProps['equi8_I_compensation']`, utilisee plus bas (ligne 1718) pour reduire `IN_mag` dans la composition des resultats cables.
+## 1. Les 4 clusters de circuits
 
-Le commentaire en ligne 1650 dit explicitement : *"Recalculer ici pour avoir acces en dehors du bloc"*. La cause est un probleme de portee (scope) : la premiere map est declaree a l'interieur d'un bloc `if (is400V)` et n'est pas accessible apres.
+Chaque cluster definit des modificateurs appliques aux profils horaires du JSON (`hourlyProfiles.json`). Le profil de base "residential" reste la reference.
 
-Les deux sources de donnees (`equi8CompensationByNode` vs `customProps`) contiennent normalement les memes valeurs, mais cette duplication cree un risque de divergence silencieuse si l'une est mise a jour sans l'autre.
+| Cluster | Nom | Conso | PV | VE | Description |
+|---|---|---|---|---|---|
+| 1 | Urbain dense | x1.0 | x0.3 | x0.5 | Centre-ville, peu de toitures, peu de VE |
+| 2 | Urbain residentiel | x1.0 | x0.7 | x1.0 | Pavillonnaire, PV moyen, VE standard |
+| 3 | Peri-urbain | x1.1 | x1.2 | x1.5 | Maisons individuelles, PV en croissance, plus de VE |
+| 4 | Rural / diffus | x1.2 | x1.5 | x2.0 | Grandes parcelles, fort PV, forte VE |
 
-## Solution
+Application dans le calcul horaire :
 
-Remonter la declaration de `equi8UpstreamReduction` en dehors du bloc `if (is400V)` pour qu'elle soit accessible dans toute la fonction, puis supprimer entierement le second calcul (`equi8UpstreamReductionForCables`).
+```text
+residentialProfile_effectif = residentialProfile * cluster.facteurConso
+productionProfile_effectif  = pvProfile * cluster.facteurPV
+evBonus_effectif            = evBonus * cluster.facteurVE
+```
+
+## 2. Foisonnement adaptatif (profil 24H uniquement)
+
+Dans le profil 24H, le foisonnement horaire issu du JSON est module par le nombre de clients connectes au reseau. Formule type Velander :
+
+```text
+facteur(n) = plancher + (1 - plancher) / sqrt(n)
+```
+
+Ou `plancher` = valeur minimale du profil horaire normalisee (converge vers le profil JSON pour n grand).
+
+| Clients | Facteur (plancher 0.15) |
+|---|---|
+| 1 | 100% |
+| 5 | 53% |
+| 10 | 42% |
+| 50 | 27% |
+| 100 | 24% |
+
+Concretement : le profil horaire du JSON (ex: 21% a 19h en hiver) est multiplie par ce facteur adaptatif. Avec 5 clients, 21% devient ~11%. Avec 100 clients, 21% reste ~5%.
+
+**Important** : cela ne touche PAS les curseurs de foisonnement manuel du calcul statique.
 
 ## Modifications techniques
 
-### Fichier : `src/utils/electricalCalculations.ts`
+### Nouveau fichier : `src/data/clusterProfiles.ts`
 
-**Etape 1 : Remonter la declaration (ligne 1503)**
+Definition des 4 clusters avec leurs facteurs :
 
-Deplacer `const equi8UpstreamReduction = new Map<string, number>();` avant le bloc `if (is400V)` qui la contient, pour qu'elle soit visible dans toute la portee de la fonction. Le remplissage de la map reste a l'interieur du bloc `if (is400V)` (car il ne s'applique qu'aux reseaux 400V).
+```typescript
+export interface ClusterProfile {
+  id: string;
+  name: string;
+  description: string;
+  facteurConso: number;
+  facteurPV: number;
+  facteurVE: number;
+}
 
-**Etape 2 : Supprimer le doublon (lignes 1646-1666)**
+export const clusterProfiles: ClusterProfile[] = [
+  { id: 'cluster_1', name: 'Urbain dense', description: 'Centre-ville, peu de PV/VE', facteurConso: 1.0, facteurPV: 0.3, facteurVE: 0.5 },
+  { id: 'cluster_2', name: 'Urbain résidentiel', description: 'Pavillonnaire standard', facteurConso: 1.0, facteurPV: 0.7, facteurVE: 1.0 },
+  { id: 'cluster_3', name: 'Péri-urbain', description: 'PV en croissance, plus de VE', facteurConso: 1.1, facteurPV: 1.2, facteurVE: 1.5 },
+  { id: 'cluster_4', name: 'Rural / diffus', description: 'Fort PV, forte VE', facteurConso: 1.2, facteurPV: 1.5, facteurVE: 2.0 },
+];
+```
 
-Supprimer entierement le bloc qui cree et remplit `equi8UpstreamReductionForCables`.
+### Nouveau fichier : `src/utils/foisonnementCalculator.ts`
 
-**Etape 3 : Renommer les references (ligne 1718)**
+Fonction pure pour le foisonnement adaptatif, utilisee uniquement par le profil 24H :
 
-Remplacer `equi8UpstreamReductionForCables.get(cab.id)` par `equi8UpstreamReduction.get(cab.id)` dans la composition des resultats cables.
+```typescript
+export function calculateAdaptiveFoisonnement(nClients: number, baseProfile: number): number {
+  if (nClients <= 0) return 0;
+  if (nClients === 1) return baseProfile; // pas de diversite possible
+  const plancher = baseProfile / 100;
+  return (plancher + (1 - plancher) / Math.sqrt(nClients)) * 100;
+}
+```
 
-## Impact
+### Type `DailySimulationOptions` (`src/types/dailyProfile.ts`)
 
-- Suppression d'environ 20 lignes de code duplique
-- Une seule source de verite pour les reductions EQUI8 amont
-- Aucun changement de comportement : les valeurs calculees sont identiques
-- Les tests existants (EQUI8 upstream propagation, non-regression SRG2) doivent passer sans modification
+Ajouter :
 
-| Fichier | Lignes | Modification |
-|---|---|---|
-| `src/utils/electricalCalculations.ts` | ~1503 | Remonter la declaration avant le bloc `if (is400V)` |
-| `src/utils/electricalCalculations.ts` | 1646-1666 | Supprimer le bloc duplique `equi8UpstreamReductionForCables` |
-| `src/utils/electricalCalculations.ts` | ~1718 | Remplacer `equi8UpstreamReductionForCables` par `equi8UpstreamReduction` |
+```typescript
+selectedClusterId?: string;  // 'cluster_1' .. 'cluster_4', defaut 'cluster_2'
+adaptiveFoisonnement?: boolean; // activer le foisonnement adaptatif, defaut true
+```
+
+### Calcul journalier (`src/utils/dailyProfileCalculator.ts`)
+
+Dans `calculateHourlyVoltage` (lignes 166-215), appliquer les deux mecanismes :
+
+1. **Cluster** : multiplier `residentialProfile`, `pvProfile` et `evBonus` par les facteurs du cluster selectionne
+2. **Foisonnement adaptatif** : compter les clients residentiels lies au reseau, puis appliquer `calculateAdaptiveFoisonnement(nResidentiels, profileApresCluster)` pour obtenir le foisonnement effectif
+
+L'ordre est : profil JSON -> modificateur cluster -> foisonnement adaptatif -> valeur injectee dans le projet horaire.
+
+### Calcul client (`src/utils/clientDailyProfileCalculator.ts`)
+
+Appliquer le cluster au profil de base utilise pour le calcul de la courbe client (meme logique : `baseFoisonnement * cluster.facteurConso`).
+
+### Interface (`src/components/topMenu/DailyProfileTab.tsx`)
+
+Ajouter dans les parametres de simulation (entre Saison et Meteo) :
+
+- **Selecteur de cluster** : 4 boutons avec nom + icone
+- **Toggle foisonnement adaptatif** : switch on/off avec affichage du nombre de clients detectes et du facteur applique
+
+### Store (`src/store/networkStore.ts`)
+
+Ajouter `selectedClusterId` et `adaptiveFoisonnement` dans `dailyProfileOptions` avec valeurs par defaut.
+
+## Fichiers modifies
+
+| Fichier | Modification |
+|---|---|
+| `src/data/clusterProfiles.ts` | Nouveau : definition des 4 clusters |
+| `src/utils/foisonnementCalculator.ts` | Nouveau : fonction foisonnement adaptatif |
+| `src/types/dailyProfile.ts` | Ajout `selectedClusterId` et `adaptiveFoisonnement` sur `DailySimulationOptions` |
+| `src/utils/dailyProfileCalculator.ts` | Application cluster + foisonnement adaptatif dans `calculateHourlyVoltage` |
+| `src/utils/clientDailyProfileCalculator.ts` | Application cluster dans le calcul client |
+| `src/components/topMenu/DailyProfileTab.tsx` | Selecteur cluster + toggle adaptatif |
+| `src/store/networkStore.ts` | Persistance des nouvelles options |
+
+## Ce qui ne change PAS
+
+- Les curseurs de foisonnement manuel (onglet Parametres)
+- Le calcul statique principal (`electricalCalculations.ts`)
+- Les profils JSON de base (`hourlyProfiles.json`)
+- La logique de repartition de phases
+- Les clients industriels (leur profil reste independant des clusters)
 

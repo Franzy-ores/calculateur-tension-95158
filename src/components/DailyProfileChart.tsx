@@ -19,10 +19,11 @@ interface DailyProfileChartProps {
   clientData?: ClientHourlyVoltageResult[];
   showNodeCurves?: boolean; // true par défaut, false pour mode "courbe seule"
   nominalVoltage: number;
+  title?: string;
   className?: string;
 }
 
-export const DailyProfileChart = ({ data, comparisonData, clientData, showNodeCurves = true, nominalVoltage, className }: DailyProfileChartProps) => {
+export const DailyProfileChart = ({ data, comparisonData, clientData, showNodeCurves = true, nominalVoltage, title, className }: DailyProfileChartProps) => {
   // Calculer les limites de tension (±5% et ±10%)
   const limits = useMemo(() => ({
     warning_high: nominalVoltage * 1.05,
@@ -191,7 +192,12 @@ export const DailyProfileChart = ({ data, comparisonData, clientData, showNodeCu
 
   return (
     <div className={className}>
-      <ResponsiveContainer width="100%" height={300}>
+      {title && (
+        <div className="flex items-center gap-2 mb-1 px-1">
+          <span className="text-sm font-medium text-foreground">{title}</span>
+        </div>
+      )}
+      <ResponsiveContainer width="100%" height={250}>
         <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
           

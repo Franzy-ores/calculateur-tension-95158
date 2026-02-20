@@ -17,7 +17,7 @@ import { DailyProfileChart } from '@/components/DailyProfileChart';
 import { ProfileVisualEditor } from '@/components/ProfileVisualEditor';
 import { MeasuredProfileImporter } from '@/components/MeasuredProfileImporter';
 import { HourlyVoltageResult, ClientHourlyVoltageResult } from '@/types/dailyProfile';
-import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent, Home, Zap, FlaskConical, Moon, Upload, FileBarChart, X, Download, MapPin, User, Cable, Building2, TreePine, Wheat } from 'lucide-react';
+import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent, Home, Zap, FlaskConical, Moon, Upload, FileBarChart, X, Download, MapPin, User, Cable, Building2, TreePine, Wheat, Eye, EyeOff } from 'lucide-react';
 import { clusterProfiles, getClusterById, DEFAULT_CLUSTER_ID } from '@/data/clusterProfiles';
 import { toast } from 'sonner';
 import { HourlyProfile, MeasuredProfileMetadata } from '@/types/dailyProfile';
@@ -118,8 +118,11 @@ export const DailyProfileTab = () => {
   const [comparisonMode, setComparisonMode] = useState(false);
   const [showClientCurve, setShowClientCurve] = useState(false);
   const [clientCurveMode, setClientCurveMode] = useState<'overlay' | 'solo'>('overlay');
+  const [showDetails, setShowDetails] = useState(true);
 
-  // Résultats du calcul
+  // Résultats du calcul (hiver + été)
+  const [resultsWinter, setResultsWinter] = useState<HourlyVoltageResult[]>([]);
+  const [resultsSummer, setResultsSummer] = useState<HourlyVoltageResult[]>([]);
   const [results, setResults] = useState<HourlyVoltageResult[]>([]);
   const [resultsWithoutSim, setResultsWithoutSim] = useState<HourlyVoltageResult[]>([]);
 
@@ -151,31 +154,44 @@ export const DailyProfileTab = () => {
   // Calcul des tensions quand les options changent
   useEffect(() => {
     if (!currentProject || !dailyProfileOptions.selectedNodeId) {
+      setResultsWinter([]);
+      setResultsSummer([]);
       setResults([]);
       setResultsWithoutSim([]);
       return;
     }
 
-    // Calcul AVEC simulation (si active)
-    const calculatorWithSim = new DailyProfileCalculator(
-      currentProject, 
-      dailyProfileOptions, 
-      dailyProfileCustomProfiles,
+    // Options hiver
+    const winterOptions = { ...dailyProfileOptions, season: 'winter' as const };
+    const summerOptions = { ...dailyProfileOptions, season: 'summer' as const };
+    const measuredProfileData = dailyProfileOptions.useMeasuredProfile ? measuredProfile ?? undefined : undefined;
+
+    // Calcul HIVER avec simulation
+    const calcWinter = new DailyProfileCalculator(
+      currentProject, winterOptions, dailyProfileCustomProfiles,
       hasActiveSimulation ? simulationEquipment : undefined,
-      hasActiveSimulation,
-      dailyProfileOptions.useMeasuredProfile ? measuredProfile ?? undefined : undefined
+      hasActiveSimulation, measuredProfileData
     );
-    setResults(calculatorWithSim.calculateDailyVoltages());
+    const rWinter = calcWinter.calculateDailyVoltages();
+    setResultsWinter(rWinter);
+
+    // Calcul ÉTÉ avec simulation
+    const calcSummer = new DailyProfileCalculator(
+      currentProject, summerOptions, dailyProfileCustomProfiles,
+      hasActiveSimulation ? simulationEquipment : undefined,
+      hasActiveSimulation, measuredProfileData
+    );
+    const rSummer = calcSummer.calculateDailyVoltages();
+    setResultsSummer(rSummer);
+
+    // Garder results = winter pour compatibilité (client curve etc.)
+    setResults(rWinter);
 
     // Calcul SANS simulation (pour comparaison)
     if (hasActiveSimulation && comparisonMode) {
       const calculatorBase = new DailyProfileCalculator(
-        currentProject, 
-        dailyProfileOptions, 
-        dailyProfileCustomProfiles,
-        undefined,
-        false,
-        dailyProfileOptions.useMeasuredProfile ? measuredProfile ?? undefined : undefined
+        currentProject, winterOptions, dailyProfileCustomProfiles,
+        undefined, false, measuredProfileData
       );
       setResultsWithoutSim(calculatorBase.calculateDailyVoltages());
     } else {
@@ -198,9 +214,14 @@ export const DailyProfileTab = () => {
   }, [setDailyProfileHighlight]);
 
   // Heures critiques
-  const criticalHours = useMemo(() => {
-    return DailyProfileCalculator.findCriticalHours(results).slice(0, 5);
-  }, [results]);
+  // Heures critiques par saison
+  const criticalHoursWinter = useMemo(() => {
+    return DailyProfileCalculator.findCriticalHours(resultsWinter).slice(0, 5);
+  }, [resultsWinter]);
+
+  const criticalHoursSummer = useMemo(() => {
+    return DailyProfileCalculator.findCriticalHours(resultsSummer).slice(0, 5);
+  }, [resultsSummer]);
 
   // Tension nominale : toujours 230V car on calcule en phase-neutre
   const nominalVoltage = 230;
@@ -312,29 +333,6 @@ export const DailyProfileTab = () => {
                 className="shrink-0"
               >
                 <MapPin className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Saison */}
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Saison</Label>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant={dailyProfileOptions.season === 'winter' ? 'default' : 'outline'}
-                onClick={() => setDailyProfileOptions({ season: 'winter' })}
-                className="flex-1"
-              >
-                ❄️ Hiver
-              </Button>
-              <Button
-                size="sm"
-                variant={dailyProfileOptions.season === 'summer' ? 'default' : 'outline'}
-                onClick={() => setDailyProfileOptions({ season: 'summer' })}
-                className="flex-1"
-              >
-                ☀️ Été
               </Button>
             </div>
           </div>
@@ -709,60 +707,89 @@ export const DailyProfileTab = () => {
         </CardContent>
       </Card>
 
-      {/* Colonne centrale et droite: Graphe + Heures critiques */}
+      {/* Colonne centrale et droite: Graphes Hiver/Été */}
       <div className="lg:col-span-2 space-y-4">
-        {/* Graphe */}
-        <Card className="bg-card/50 backdrop-blur border-border/50">
-          <CardHeader className="pb-2 pt-3 px-4">
-          <CardTitle className="text-sm font-medium flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                Tension au nœud {selectedNode?.name || dailyProfileOptions.selectedNodeId}
-                {hasActiveSimulation && (
-                  <Badge variant="default" className="text-[10px] px-1.5 py-0 bg-success text-success-foreground">
-                    <Zap className="h-3 w-3 mr-0.5" />
-                    Simulation
-                  </Badge>
-                )}
-              </span>
-              <div className="flex items-center gap-2">
-                {hasActiveSimulation && (
-                  <div className="flex items-center gap-1.5">
-                    <Switch
-                      id="comparison-mode"
-                      checked={comparisonMode}
-                      onCheckedChange={setComparisonMode}
-                      className="scale-75"
-                    />
-                    <Label htmlFor="comparison-mode" className="text-xs text-muted-foreground cursor-pointer">
-                      Comparer
-                    </Label>
-                  </div>
-                )}
-                <Badge variant="outline" className="text-xs">
-                  {nominalVoltage}V nominal
-                </Badge>
+        {/* En-tête avec badge + comparaison + masquage */}
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium flex items-center gap-2">
+            Tension au nœud {selectedNode?.name || dailyProfileOptions.selectedNodeId}
+            {hasActiveSimulation && (
+              <Badge variant="default" className="text-[10px] px-1.5 py-0 bg-success text-success-foreground">
+                <Zap className="h-3 w-3 mr-0.5" />
+                Simulation
+              </Badge>
+            )}
+          </span>
+          <div className="flex items-center gap-2">
+            {hasActiveSimulation && (
+              <div className="flex items-center gap-1.5">
+                <Switch
+                  id="comparison-mode"
+                  checked={comparisonMode}
+                  onCheckedChange={setComparisonMode}
+                  className="scale-75"
+                />
+                <Label htmlFor="comparison-mode" className="text-xs text-muted-foreground cursor-pointer">
+                  Comparer
+                </Label>
               </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            {results.length > 0 ? (
+            )}
+            <Badge variant="outline" className="text-xs">
+              {nominalVoltage}V nominal
+            </Badge>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setShowDetails(!showDetails)}
+              title={showDetails ? 'Masquer heures critiques et foisonnement' : 'Afficher heures critiques et foisonnement'}
+            >
+              {showDetails ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+            </Button>
+          </div>
+        </div>
+
+        {/* Graphe Hiver */}
+        <Card className="bg-card/50 backdrop-blur border-border/50">
+          <CardContent className="px-4 py-3">
+            {resultsWinter.length > 0 ? (
               <DailyProfileChart
-                data={results}
+                title="❄️ Hiver"
+                data={resultsWinter}
                 comparisonData={comparisonMode ? resultsWithoutSim : undefined}
                 clientData={clientResults || undefined}
                 showNodeCurves={!(showClientCurve && clientCurveMode === 'solo')}
                 nominalVoltage={nominalVoltage}
               />
             ) : (
-              <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+              <div className="h-[250px] flex items-center justify-center text-muted-foreground">
                 Sélectionnez un nœud pour afficher le graphe
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Heures critiques */}
-        {criticalHours.length > 0 && (
+        {/* Graphe Été */}
+        <Card className="bg-card/50 backdrop-blur border-border/50">
+          <CardContent className="px-4 py-3">
+            {resultsSummer.length > 0 ? (
+              <DailyProfileChart
+                title="☀️ Été"
+                data={resultsSummer}
+                clientData={clientResults || undefined}
+                showNodeCurves={!(showClientCurve && clientCurveMode === 'solo')}
+                nominalVoltage={nominalVoltage}
+              />
+            ) : (
+              <div className="h-[250px] flex items-center justify-center text-muted-foreground">
+                Sélectionnez un nœud pour afficher le graphe
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Heures critiques (masquable) */}
+        {showDetails && (criticalHoursWinter.length > 0 || criticalHoursSummer.length > 0) && (
           <Card className="bg-card/50 backdrop-blur border-border/50">
             <CardHeader className="pb-2 pt-3 px-4">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -770,32 +797,56 @@ export const DailyProfileTab = () => {
                 Heures critiques
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <div className="flex flex-wrap gap-2">
-                {criticalHours.map((h) => (
-                  <Badge
-                    key={h.hour}
-                    variant={h.status === 'critical' ? 'destructive' : 'secondary'}
-                    className="text-xs px-3 py-1"
-                  >
-                    {h.hour}h: {h.deviationPercent > 0 ? '+' : ''}{h.deviationPercent.toFixed(1)}%
-                    <span className="ml-1 opacity-70">
-                      (A:{Math.round(h.voltageA_V)}V B:{Math.round(h.voltageB_V)}V C:{Math.round(h.voltageC_V)}V)
-                    </span>
-                  </Badge>
-                ))}
-              </div>
+            <CardContent className="px-4 pb-4 space-y-3">
+              {criticalHoursWinter.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5">❄️ Hiver</p>
+                  <div className="flex flex-wrap gap-2">
+                    {criticalHoursWinter.map((h) => (
+                      <Badge
+                        key={h.hour}
+                        variant={h.status === 'critical' ? 'destructive' : 'secondary'}
+                        className="text-xs px-3 py-1"
+                      >
+                        {h.hour}h: {h.deviationPercent > 0 ? '+' : ''}{h.deviationPercent.toFixed(1)}%
+                        <span className="ml-1 opacity-70">
+                          (A:{Math.round(h.voltageA_V)}V B:{Math.round(h.voltageB_V)}V C:{Math.round(h.voltageC_V)}V)
+                        </span>
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {criticalHoursSummer.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5">☀️ Été</p>
+                  <div className="flex flex-wrap gap-2">
+                    {criticalHoursSummer.map((h) => (
+                      <Badge
+                        key={h.hour}
+                        variant={h.status === 'critical' ? 'destructive' : 'secondary'}
+                        className="text-xs px-3 py-1"
+                      >
+                        {h.hour}h: {h.deviationPercent > 0 ? '+' : ''}{h.deviationPercent.toFixed(1)}%
+                        <span className="ml-1 opacity-70">
+                          (A:{Math.round(h.voltageA_V)}V B:{Math.round(h.voltageB_V)}V C:{Math.round(h.voltageC_V)}V)
+                        </span>
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
 
-        {/* Tableau foisonnement horaire */}
-        {results.length > 0 && (
+        {/* Tableau foisonnement horaire (masquable) - Hiver */}
+        {showDetails && resultsWinter.length > 0 && (
           <Card className="bg-card/50 backdrop-blur border-border/50">
             <CardHeader className="pb-2 pt-3 px-4">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Percent className="h-4 w-4 text-primary" />
-                Foisonnement horaire - Nœud {selectedNode?.name || dailyProfileOptions.selectedNodeId}
+                ❄️ Foisonnement horaire Hiver - {selectedNode?.name || dailyProfileOptions.selectedNodeId}
               </CardTitle>
               <p className="text-[10px] text-muted-foreground mt-1">
                 Puissances transitantes (nœud sélectionné + aval)
@@ -839,7 +890,99 @@ export const DailyProfileTab = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {results.map((r) => (
+                    {resultsWinter.map((r) => (
+                      <tr 
+                        key={r.hour} 
+                        className={`border-b border-border/30 ${
+                          r.status === 'critical' ? 'bg-destructive/10' : 
+                          r.status === 'warning' ? 'bg-yellow-500/10' : ''
+                        }`}
+                      >
+                        <td className="py-1 px-1 font-mono">{r.hour.toString().padStart(2, '0')}h</td>
+                        <td className="text-right py-1 px-1 font-mono text-orange-400">
+                          {r.chargesResidentialFoisonnement.toFixed(0)}%
+                        </td>
+                        <td className="text-right py-1 px-1 font-mono text-orange-300">
+                          {r.chargesResidentialPower_kVA.toFixed(1)}
+                        </td>
+                        <td className="text-right py-1 px-1 font-mono text-emerald-400">
+                          {r.evBonus > 0 ? `+${r.evBonus.toFixed(1)}%` : '-'}
+                        </td>
+                        <td className="text-right py-1 px-1 font-mono text-amber-500">
+                          {r.chargesIndustrialFoisonnement.toFixed(0)}%
+                        </td>
+                        <td className="text-right py-1 px-1 font-mono text-amber-300">
+                          {r.chargesIndustrialPower_kVA.toFixed(1)}
+                        </td>
+                        <td className="text-right py-1 px-1 font-mono text-green-400">
+                          {r.productionsFoisonnement.toFixed(0)}%
+                        </td>
+                        <td className="text-right py-1 px-1 font-mono text-green-300">
+                          {r.productionsPower_kVA.toFixed(1)}
+                        </td>
+                        <td className="text-right py-1 px-1 font-mono text-blue-400">
+                          {r.voltageAvg_V.toFixed(1)}V
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Tableau foisonnement horaire - Été */}
+        {showDetails && resultsSummer.length > 0 && (
+          <Card className="bg-card/50 backdrop-blur border-border/50">
+            <CardHeader className="pb-2 pt-3 px-4">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Percent className="h-4 w-4 text-primary" />
+                ☀️ Foisonnement horaire Été - {selectedNode?.name || dailyProfileOptions.selectedNodeId}
+              </CardTitle>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Puissances transitantes (nœud sélectionné + aval)
+              </p>
+            </CardHeader>
+            <CardContent className="px-4 pb-4">
+              <ScrollArea className="h-[180px]">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-card/95">
+                    <tr className="border-b border-border">
+                      <th className="text-left py-1 px-1 font-medium text-muted-foreground" rowSpan={2}>Heure</th>
+                      <th className="text-center py-1 px-1 font-medium text-orange-400" colSpan={2}>
+                        <span className="flex items-center justify-center gap-1">
+                          <Home className="h-3 w-3" /> Résidentiel
+                        </span>
+                      </th>
+                      <th className="text-center py-1 px-1 font-medium text-emerald-400" rowSpan={2}>
+                        <span className="flex items-center justify-center gap-1">
+                          <Car className="h-3 w-3" /> VE
+                        </span>
+                      </th>
+                      <th className="text-center py-1 px-1 font-medium text-amber-500" colSpan={2}>
+                        <span className="flex items-center justify-center gap-1">
+                          <Factory className="h-3 w-3" /> Industriel
+                        </span>
+                      </th>
+                      <th className="text-center py-1 px-1 font-medium text-green-400" colSpan={2}>
+                        <span className="flex items-center justify-center gap-1">
+                          <Sun className="h-3 w-3" /> Production
+                        </span>
+                      </th>
+                      <th className="text-right py-1 px-1 font-medium text-blue-400" rowSpan={2}>V moy</th>
+                    </tr>
+                    <tr className="border-b border-border text-[10px] text-muted-foreground">
+                      <th className="text-right px-1">%</th>
+                      <th className="text-right px-1">kVA</th>
+                      <th className="text-right px-1">%</th>
+                      <th className="text-right px-1">kVA</th>
+                      <th className="text-right px-1">%</th>
+                      <th className="text-right px-1">kVA</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resultsSummer.map((r) => (
                       <tr 
                         key={r.hour} 
                         className={`border-b border-border/30 ${

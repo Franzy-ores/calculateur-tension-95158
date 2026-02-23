@@ -1,152 +1,106 @@
 
 
-# Corrections GRD du moteur electrique BT
+# Correction du foisonnement adaptatif et impact des clusters
 
-## Contexte
+## Probleme identifie
 
-Apres analyse complete des fichiers `electricalCalculations.ts` (2466 lignes), `dailyProfileCalculator.ts` (1099 lignes) et `thermalModel.ts` (134 lignes), voici les corrections identifiees et la strategie d'implementation.
+Dans `dailyProfileCalculator.ts` (lignes 193-228), le cluster `facteurConso` est applique **avant** la formule de Velander :
 
----
+```text
+1. residentialProfile = base * facteurConso    (ex: 21% * 1.2 = 25.2%)
+2. + evBonus * facteurVE                       (ex: 5 * 2.0 = 10)
+3. = residentialFoisonnementHoraire = 35.2%
+4. Velander: plancher = 35.2/100 = 0.352
+5. Resultat = (0.352 + 0.648/sqrt(n)) * 100
+```
 
-## PRIORITE 1 -- Corrections critiques
+Le probleme : le cluster modifie le **plancher** de la formule Velander. Plus le facteurConso est eleve, plus le plancher monte et plus l'effet de diversite (1-plancher) diminue. Cela cree une incoherence : un cluster Rural avec peu de clients devrait avoir PLUS de diversite, pas moins.
 
-### 1.1 Reseau 230V triangle -- eviter la double-correction phase-phase
+**Impact chiffre** (19h, hiver, n=30 clients) :
+- Urbain dense : plancher=0.21, foisonnement=35.4%
+- Rural/diffus : plancher=0.252, foisonnement=38.9%
+- Ecart reel de seulement 3.5 points alors que facteurConso passe de 1.0 a 1.2 (devrait etre +20%)
 
-**Probleme identifie** : Lignes 1128-1240 de `electricalCalculations.ts`, une correction vectorielle est appliquee sur les `phasePhaseLoads` pour calculer les courants corrects en triangle. Mais les puissances par phase (S_A_map, S_B_map, S_C_map) sont deja calculees aux lignes 1060-1126 a partir de `autoPhaseDistribution`. La correction vectorielle REMPLACE ensuite ces valeurs (ligne 1233-1235), ce qui peut creer une incoherence si le foisonnement est applique deux fois (une fois dans les proportions pA/pB/pC, une fois via `foisChargeCoeff`).
+La formule Velander "absorbe" une partie du multiplicateur cluster car elle reduit la diversite en meme temps.
 
-**Correction** :
-- Ajouter un flag `vectorialCorrectionApplied` dans `autoPhaseDistribution` pour eviter la double-application
-- Si `autoPhaseDistribution.phasePhaseLoads` existe et que les valeurs sont deja foisonnees (via `foisonneAvecCurseurs`), ne pas re-appliquer `foisChargeCoeff` dans le bloc vectoriel (lignes 1165-1166)
-- Verifier que S_AB, S_BC, S_AC ne subissent le foisonnement qu'une seule fois
+## Correction proposee
 
-**Fichier** : `src/utils/electricalCalculations.ts` (lignes 1139-1240)
+**Regle** : appliquer le foisonnement Velander sur le profil de **base** (sans cluster), puis multiplier le resultat par les facteurs cluster.
 
-### 1.2 Foisonnement -- suppression du double foisonnement
+```text
+AVANT (incorrect) :
+  profile = base * facteurConso + evBonus * facteurVE
+  foisonne = Velander(n, profile)
 
-**Probleme identifie** : Dans `dailyProfileCalculator.ts`, le foisonnement horaire est calcule (lignes 193-236) puis injecte dans le projet via `foisonnementChargesResidentiel` et `foisonnementChargesIndustriel` (lignes 239-246). Ensuite dans `electricalCalculations.ts` (lignes 647-668), ces valeurs sont utilisees pour multiplier `client.puissanceContractuelle_kVA * (foisonnement / 100)`. Le probleme est que les `phasePhaseLoads` dans `autoPhaseDistribution` sont calcules a partir des puissances BRUTES des clients, donc le foisonnement est correctement applique une fois. MAIS si `foisonneAvecCurseurs` est deja foisonne et que le bloc vectoriel (ligne 1144-1145) re-applique `foisChargeCoeff`, on obtient S x F^2.
+APRES (correct) :
+  baseFois = Velander(n, base)
+  evFois   = Velander(n, evBonus)     // ou pas de Velander sur EV
+  profile  = baseFois * facteurConso + evFois * facteurVE
+```
 
-**Correction** :
-- Dans le bloc vectoriel 230V (lignes 1140-1240), detecter si les valeurs `phasePhaseLoads` sont deja foisonnees
-- Si `foisonneAvecCurseurs` est utilise pour les proportions (ce qui implique que le foisonnement est integre), ne pas re-appliquer `foisChargeCoeff` aux `phasePhaseLoads.charges`
-- Ajouter un commentaire clair `// 🔧 FIX GRD -- foisonnement applique une seule fois`
+Cela garantit que :
+- Le cluster agit comme un **multiplicateur pur** sur le resultat foisonne
+- La diversite Velander est calculee sur le profil physique de base (indepedant du cluster)
+- Le passage d'un cluster a l'autre donne un ecart proportionnel et coherent
 
-**Fichier** : `src/utils/electricalCalculations.ts` (lignes 1140-1240)
+## Ajout d'un editeur de clusters
 
-### 1.3 Thermique -- limitation normative T_max
+Actuellement les 4 clusters sont en dur dans `clusterProfiles.ts`. L'utilisateur ne peut pas modifier `facteurConso` ni `facteurVE`. On va ajouter un editeur leger directement dans le panneau Profil 24H.
 
-**Probleme identifie** : Dans `thermalModel.ts`, la temperature du cable n'est pas bornee. Le ratio I/Imax est limite a 2x (ligne 83) mais aucune limite normative IEC 60287 n'est appliquee :
-- PVC : T_max = 70 degC
-- XLPE/PR : T_max = 90 degC
+## Modifications
 
-Sans cette limite, R(T) peut devenir irrealiste et destabiliser le BFS.
+### 1. `src/utils/dailyProfileCalculator.ts` -- Correction de l'ordre foisonnement/cluster
 
-**Correction** :
-- Ajouter une constante `INSULATION_TEMP_LIMITS` avec PVC=70 et XLPE=90
-- Ajouter un parametre optionnel `insulationType` a `calculateCableTemperature` et `getThermalCorrectionFactor`
-- Appliquer `T_cable = Math.min(T_cable, T_max_insulation)` avant le retour
-- Dans `CableType` (types/network.ts), ajouter un champ optionnel `insulationType?: 'PVC' | 'XLPE' | 'PR'`
-- Fallback: si `insulationType` non defini, borner a 90 degC (XLPE par defaut, le plus courant en BT)
+**Lignes 193-228** : reorganiser le calcul :
+1. Calculer `baseResidential` = profil horaire brut (sans cluster)
+2. Calculer `evBonus` brut (sans facteurVE)
+3. Appliquer Velander sur `baseResidential + evBonus` (profil physique reel)
+4. Multiplier le resultat par `facteurConso` (pour la partie residentielle)
+5. Multiplier le bonus EV par `facteurVE` separement
+6. Resultat final = (baseFoisonne * facteurConso) + (evBonusFoisonne * facteurVE)
 
-**Fichiers** :
-- `src/utils/thermalModel.ts` : ajout des limites et du parametre
-- `src/types/network.ts` : ajout du champ `insulationType` dans `CableType`
-- `src/utils/electricalCalculations.ts` : passer `insulationType` au contexte thermique
+Le plancher de Velander reste base sur le profil physique, le cluster ne modifie que l'amplitude finale.
 
-### 1.4 EN50160 -- reference de tension correcte
+### 2. `src/data/clusterProfiles.ts` -- Rendre les clusters personnalisables
 
-**Probleme identifie** : Partiellement corrige. Pour `MONO_230V_PN`, la reference est bien 230V (lignes 1748-1750, 1763-1766). Mais pour `TETRA_3P+N_230_400V`, la reference U_ref_display utilise `sourceNode.tensionCible` (ligne 1751-1752) au lieu de la tension nominale 230V (phase-neutre). Idem pour le mode equilibre (lignes 2200-2201).
+- Ajouter un champ `custom?: boolean` a `ClusterProfile`
+- Exporter une fonction `createCustomCluster(base, overrides)` pour creer des variantes
+- Garder les 4 clusters par defaut inchanges (valeurs de reference)
 
-**Correction** :
-- Pour TOUS les types de connexion, la conformite EN50160 doit etre evaluee par rapport a la tension nominale du type de connexion (230V pour phase-neutre, 230V pour triangle, 400V pour ligne-ligne en etoile)
-- Ne JAMAIS utiliser `tensionCible` comme reference EN50160
-- Modifier lignes 1746-1756 : toujours utiliser `U_base` du type de connexion
-- Modifier lignes 2199-2201 : idem pour le mode equilibre
+### 3. `src/components/topMenu/DailyProfileTab.tsx` -- Editeur de cluster inline
 
-**Fichier** : `src/utils/electricalCalculations.ts` (lignes 1746-1756 et 2199-2201)
+Remplacer la grille de boutons cluster par un selecteur + mini-editeur :
+- Selecteur cluster (boutons existants, inchanges)
+- Sous le selecteur : 2 sliders editables pour le cluster actif :
+  - `facteurConso` : slider 0.5 - 2.0 (pas de 0.1)
+  - `facteurVE` : slider 0.0 - 3.0 (pas de 0.1)
+- Les valeurs modifiees sont stockees dans `dailyProfileOptions` (pas dans `clusterProfiles` directement)
+- Un bouton "Reset" pour revenir aux valeurs par defaut du cluster selectionne
+- Affichage en temps reel de l'impact sur le graphe
 
----
+### 4. `src/types/dailyProfile.ts` -- Etendre DailySimulationOptions
 
-## PRIORITE 2 -- Corrections importantes
+Ajouter dans `DailySimulationOptions` :
+```typescript
+customFacteurConso?: number;   // Override du facteurConso du cluster
+customFacteurVE?: number;      // Override du facteurVE du cluster
+```
 
-### 2.1 SRG2 -- contraintes reelles
+Si presents, ces valeurs remplacent celles du cluster selectionne.
 
-**Probleme identifie** : `applySRG230Constraints` (lignes 724-761 de dailyProfileCalculator.ts) gere deja l'interdiction boost+buck simultanes pour SRG2-230, mais :
-- Pas de priorisation du mode commun (A=B=C)
-- Pas de limite totale a +/-10%
-- L'hysteresis existe (lignes 664-708) mais pourrait etre renforcee
+## Resume technique
 
-**Correction** :
-- Ajouter une priorisation du mode commun : si les 3 phases sont dans le meme sens (toutes BO ou toutes LO), les aligner sur le meme niveau (le plus conservateur)
-- Ajouter une verification que le coefficient total SRG2 ne depasse pas +/-10% par phase
-- Etendre `applySRG230Constraints` a tous les types de SRG2, pas seulement SRG2-230
-
-**Fichier** : `src/utils/dailyProfileCalculator.ts` (lignes 724-761)
-
-### 2.2 Thermique -- recalcul apres convergence (2 passes)
-
-**Probleme identifie** : La micro-iteration thermique (lignes 1417-1470 de electricalCalculations.ts) fait deja un recalcul apres le premier BFS, ce qui est correct. Mais elle ne fait qu'une seule passe supplementaire, ce qui peut etre insuffisant si les courants changent significativement apres correction thermique.
-
-**Correction** :
-- Structurer en 2 passes explicites :
-  - Passe 1 : BFS avec R a 20 degC -> courants I_phase
-  - Passe 2 : correction R(T) avec I reel -> BFS final
-- Limiter a 2 passes maximum (pas de boucle infinie)
-- Logger les temperatures avant/apres pour diagnostic
-
-**Fichier** : `src/utils/electricalCalculations.ts` (lignes 1417-1470)
-
----
-
-## PRIORITE 3 -- Ameliorations optionnelles
-
-### 3.1 Module de validation interne
-
-**Nouveau fichier** : `src/utils/validationModule.ts`
-
-Fonctions de verification :
-- `validatePowerBalance(nodes, cables)` : S_aval <= S_amont
-- `validatePhaseBalance(node)` : A + B + C = S_total +/- 1%
-- `validateNeutralCurrent(cable, maxCurrent)` : I_N <= I_max cable
-- `validateFoisonnement(project)` : detecter les incoherences de foisonnement
-
-Appele automatiquement apres chaque calcul BFS, avec logs clairs dans la console.
-
-### 3.2 Logs explicites
-
-Ajouter des tags `// 🔧 FIX GRD` sur chaque section modifiee pour faciliter l'audit.
-Remplacer les logs emoji par des messages structures : `[GRD-FIX] description`.
-
----
-
-## Tests de non-regression
-
-**Fichier** : `src/utils/__tests__/grdCorrections.test.ts`
-
-Cas de test :
-1. Reseau 230V triangle, 30 clients, 20 kVA AB + 10 kVA BC : verifier courants realistes (pas de double-correction)
-2. Reseau 400/230V, 15 kW PV sur phase B : verifier I_N > 0
-3. SRG2 boost une seule phase : verifier pas de buck simultane
-4. Cable XLPE surcharge legere : verifier T bloquee a 90 degC
-5. Profil 24h EV + PV : verifier pas de double foisonnement (comparer S avec et sans profil)
-
----
-
-## Resume des fichiers modifies
-
-| Fichier | Modifications |
+| Fichier | Modification |
 |---|---|
-| `src/utils/thermalModel.ts` | Ajout limites T_max PVC/XLPE, parametre insulationType |
-| `src/types/network.ts` | Ajout `insulationType` dans `CableType` |
-| `src/utils/electricalCalculations.ts` | Fix double-correction 230V, fix double foisonnement, fix EN50160, thermique 2 passes, passage insulationType |
-| `src/utils/dailyProfileCalculator.ts` | Renforcement contraintes SRG2 (mode commun, limite +/-10%) |
-| `src/utils/validationModule.ts` | Nouveau module de validation interne |
-| `src/utils/__tests__/grdCorrections.test.ts` | Tests de non-regression |
+| `src/utils/dailyProfileCalculator.ts` | Reordonner : Velander sur base brute, puis cluster en multiplicateur |
+| `src/data/clusterProfiles.ts` | Ajout `custom` flag et helper |
+| `src/types/dailyProfile.ts` | Ajout `customFacteurConso` et `customFacteurVE` dans options |
+| `src/components/topMenu/DailyProfileTab.tsx` | Sliders editables sous le selecteur de cluster |
 
 ## Ordre d'implementation
 
-1. thermalModel.ts + types/network.ts (fondations thermiques)
-2. electricalCalculations.ts -- priorite 1 (double-correction, double foisonnement, EN50160)
-3. electricalCalculations.ts -- priorite 2 (thermique 2 passes)
-4. dailyProfileCalculator.ts -- SRG2 contraintes
-5. validationModule.ts + tests
+1. Types (`dailyProfile.ts`) -- ajout des champs custom
+2. Calcul (`dailyProfileCalculator.ts`) -- correction de l'ordre foisonnement/cluster
+3. Data (`clusterProfiles.ts`) -- helper pour clusters personnalises
+4. UI (`DailyProfileTab.tsx`) -- sliders editables + reset
 

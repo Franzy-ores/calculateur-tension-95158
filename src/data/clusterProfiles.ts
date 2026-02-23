@@ -15,7 +15,18 @@ export interface ClusterProfile {
   icon: string;
   facteurConso: number;
   facteurVE: number;
+  custom?: boolean;
 }
+
+/** Crée un cluster personnalisé à partir d'un cluster de base avec des overrides */
+export const createCustomCluster = (
+  base: ClusterProfile,
+  overrides: Partial<Pick<ClusterProfile, 'facteurConso' | 'facteurVE'>>
+): ClusterProfile => ({
+  ...base,
+  ...overrides,
+  custom: true,
+});
 
 export const clusterProfiles: ClusterProfile[] = [
   {

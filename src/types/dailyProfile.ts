@@ -73,6 +73,10 @@ export interface DailySimulationOptions {
   selectedClusterId?: string;
   /** Activer le foisonnement adaptatif selon le nombre de clients (profil 24H uniquement) */
   adaptiveFoisonnement?: boolean;
+  /** Override du facteurConso du cluster sélectionné */
+  customFacteurConso?: number;
+  /** Override du facteurVE du cluster sélectionné */
+  customFacteurVE?: number;
 }
 
 export interface HourlyVoltageResult {

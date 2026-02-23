@@ -14,11 +14,26 @@
  * 
  * Impact : R plus élevée en été → chute de tension plus forte
  *          R plus basse en hiver → chute de tension plus faible
+ * 
+ * 🔧 FIX GRD — Ajout limites normatives IEC 60287 (PVC=70°C, XLPE=90°C)
  */
 
 import { CablePose } from '@/types/network';
 
 export type ThermalSeason = 'winter' | 'summer';
+
+// 🔧 FIX GRD — Type d'isolation pour limites thermiques normatives
+export type InsulationType = 'PVC' | 'XLPE' | 'PR';
+
+// 🔧 FIX GRD — Limites de température normatives IEC 60287 par type d'isolation
+const INSULATION_TEMP_LIMITS: Record<InsulationType, number> = {
+  'PVC': 70,   // °C max en service continu
+  'XLPE': 90,  // °C max en service continu
+  'PR': 90,    // PR = Polyéthylène Réticulé = même limite que XLPE
+};
+
+// Fallback si insulationType non défini : XLPE (le plus courant en BT)
+const DEFAULT_INSULATION_TEMP_LIMIT = 90;
 
 // Températures ambiantes de référence (°C)
 const AMBIENT_TEMPERATURES: Record<string, Record<ThermalSeason, number>> = {
@@ -61,16 +76,20 @@ export function getAmbientTemperature(season: ThermalSeason, pose: CablePose): n
  * Calcule la température du câble en °C
  * T = T_ambient + k × (I / Imax)²
  * 
+ * 🔧 FIX GRD — Borne la température à T_max_insulation (IEC 60287)
+ * 
  * @param T_ambient Température ambiante (°C)
  * @param I_A Courant de charge actuel (A)
  * @param Imax_A Courant admissible maximal (A)
  * @param pose Type de pose du câble
+ * @param insulationType Type d'isolation (PVC, XLPE, PR) — optionnel, défaut XLPE (90°C)
  */
 export function calculateCableTemperature(
   T_ambient: number,
   I_A: number,
   Imax_A: number,
-  pose: CablePose
+  pose: CablePose,
+  insulationType?: InsulationType
 ): number {
   const k = HEATING_CONSTANTS[pose] || 0;
   const inertia = THERMAL_INERTIA[pose] ?? 1.0;
@@ -83,7 +102,15 @@ export function calculateCableTemperature(
   const ratio = Math.min(I_A / Imax_A, 2); // Limiter le ratio à 2x pour éviter les valeurs extrêmes
   // AÉRIEN: échauffement instantané (inertia=1.0)
   // SOUTERRAIN: échauffement amorti par l'inertie thermique du sol (inertia=0.6)
-  return T_ambient + inertia * k * ratio * ratio;
+  let T_cable = T_ambient + inertia * k * ratio * ratio;
+  
+  // 🔧 FIX GRD — Borner à la limite normative IEC 60287
+  const T_max = insulationType 
+    ? INSULATION_TEMP_LIMITS[insulationType] 
+    : DEFAULT_INSULATION_TEMP_LIMIT;
+  T_cable = Math.min(T_cable, T_max);
+  
+  return T_cable;
 }
 
 /**
@@ -111,21 +138,25 @@ export function correctResistance(
  * 
  * Fonction tout-en-un pour application directe sur R12 et R0
  * 
+ * 🔧 FIX GRD — Ajout paramètre insulationType pour borne T_max
+ * 
  * @param season Saison ('winter' | 'summer')
  * @param pose Type de pose ('AÉRIEN' | 'SOUTERRAIN')
  * @param matiere Matériau ('CUIVRE' | 'ALUMINIUM' | 'Cu' | 'Alu')
  * @param I_A Courant de charge actuel (A), 0 si inconnu
  * @param Imax_A Courant admissible maximal (A), 0 si non défini
+ * @param insulationType Type d'isolation (PVC, XLPE, PR) — optionnel, défaut XLPE
  */
 export function getThermalCorrectionFactor(
   season: ThermalSeason,
   pose: CablePose,
   matiere: string,
   I_A: number = 0,
-  Imax_A: number = 0
+  Imax_A: number = 0,
+  insulationType?: InsulationType
 ): number {
   const T_ambient = getAmbientTemperature(season, pose);
-  const T_cable = calculateCableTemperature(T_ambient, I_A, Imax_A, pose);
+  const T_cable = calculateCableTemperature(T_ambient, I_A, Imax_A, pose, insulationType);
   
   const alpha = ALPHA_COEFFICIENTS[matiere];
   if (!alpha) return 1; // Pas de correction

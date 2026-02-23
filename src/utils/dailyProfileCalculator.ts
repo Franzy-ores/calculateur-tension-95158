@@ -179,9 +179,11 @@ export class DailyProfileCalculator {
     const hourStr = hour.toString();
 
     // Cluster de circuit : modificateurs sur les profils de base
+    // 🔧 FIX GRD -- Les facteurs cluster sont appliqués APRÈS le foisonnement Velander
+    // pour éviter que le cluster modifie le plancher de diversité
     const cluster = getClusterById(this.options.selectedClusterId || DEFAULT_CLUSTER_ID);
-    const facteurConso = cluster?.facteurConso ?? 1.0;
-    const facteurVE = cluster?.facteurVE ?? 1.0;
+    const facteurConso = this.options.customFacteurConso ?? cluster?.facteurConso ?? 1.0;
+    const facteurVE = this.options.customFacteurVE ?? cluster?.facteurVE ?? 1.0;
 
     // Nombre de clients résidentiels connectés (pour foisonnement adaptatif)
     const nResidentialClients = this.countResidentialClients();
@@ -189,44 +191,46 @@ export class DailyProfileCalculator {
     // Si profil mesuré activé, utiliser le profil mesuré pour toutes les charges
     const useMeasured = this.options.useMeasuredProfile && this.measuredProfile;
 
-    // Profils horaires par type (directement depuis le JSON ou profil mesuré)
-    let residentialProfile = useMeasured 
+    // Profils horaires par type — valeurs BRUTES (sans cluster)
+    const baseResidentialProfile = useMeasured 
       ? (this.measuredProfile![hourStr] || 0)
       : (seasonProfile.residential[hourStr] || 0);
     const industrialProfile = useMeasured 
       ? (this.measuredProfile![hourStr] || 0)
       : (seasonProfile.industrial_pme[hourStr] || 0);
     
-    // Appliquer le facteur cluster sur la consommation résidentielle
-    residentialProfile *= facteurConso;
-    
     // Récupérer les puissances transitantes (nœud sélectionné + aval)
     const nodePowers = this.getUpstreamAndNodePowers();
     
-    // Foisonnement horaire par type de client (pas de pondération !)
-    // Majoration VE sur résidentiel uniquement (valeurs personnalisables) :
-    // - evBonusEvening de 18h à 21h (début de soirée)
-    // - evBonusNight de 22h à 5h (nuit profonde)
-    let evBonus = 0;
+    // Bonus VE brut (sans facteurVE) — sera multiplié par facteurVE après Velander
+    let baseEvBonus = 0;
     if (this.options.enableEV) {
       const bonusEvening = this.options.evBonusEvening ?? 2.5;
       const bonusNight = this.options.evBonusNight ?? 5;
       
       if (hour >= 18 && hour <= 21) {
-        evBonus = bonusEvening * facteurVE;
+        baseEvBonus = bonusEvening;
       } else if (hour >= 22 || hour <= 5) {
-        evBonus = bonusNight * facteurVE;
+        baseEvBonus = bonusNight;
       }
     }
-    let residentialFoisonnementHoraire = residentialProfile + evBonus;
     
-    // Foisonnement adaptatif : moduler selon le nombre de clients résidentiels
+    // Foisonnement adaptatif sur le profil physique de BASE (sans cluster)
+    let baseFoisonne = baseResidentialProfile;
+    let evFoisonne = baseEvBonus;
+    
     if (this.options.adaptiveFoisonnement !== false && nResidentialClients > 1) {
-      residentialFoisonnementHoraire = calculateAdaptiveFoisonnement(
-        nResidentialClients, 
-        residentialFoisonnementHoraire
-      );
+      // Velander sur le profil résidentiel brut
+      baseFoisonne = calculateAdaptiveFoisonnement(nResidentialClients, baseResidentialProfile);
+      // Velander sur le bonus EV brut (si non nul)
+      if (baseEvBonus > 0) {
+        evFoisonne = calculateAdaptiveFoisonnement(nResidentialClients, baseEvBonus);
+      }
     }
+    
+    // 🔧 FIX GRD -- Cluster appliqué comme multiplicateur PUR après Velander
+    // Le plancher de diversité reste basé sur le profil physique
+    const residentialFoisonnementHoraire = baseFoisonne * facteurConso + evFoisonne * facteurVE;
     
     const industrialFoisonnementHoraire = industrialProfile;
 
@@ -319,7 +323,7 @@ export class DailyProfileCalculator {
         nodePowers.residentialPower,
         nodePowers.industrialPower,
         nodePowers.productionPower,
-        evBonus
+        evFoisonne * facteurVE
       );
       
       // Ajouter l'état SRG2 au résultat
@@ -340,7 +344,7 @@ export class DailyProfileCalculator {
         nodePowers.residentialPower,
         nodePowers.industrialPower,
         nodePowers.productionPower,
-        evBonus
+        evFoisonne * facteurVE
       );
     }
   }

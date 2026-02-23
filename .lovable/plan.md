@@ -1,106 +1,71 @@
 
 
-# Correction du foisonnement adaptatif et impact des clusters
+# Mise a jour des impedances cables existants (corrections GRD)
 
-## Probleme identifie
+## Perimetre
 
-Dans `dailyProfileCalculator.ts` (lignes 193-228), le cluster `facteurConso` est applique **avant** la formule de Velander :
+Mise a jour des valeurs d'impedance des cables **existants uniquement** dans `src/data/defaultCableTypes.ts`, d'apres le fichier GRD consolide fourni. Aucun ajout de cable. Backup prealable.
 
-```text
-1. residentialProfile = base * facteurConso    (ex: 21% * 1.2 = 25.2%)
-2. + evBonus * facteurVE                       (ex: 5 * 2.0 = 10)
-3. = residentialFoisonnementHoraire = 35.2%
-4. Velander: plancher = 35.2/100 = 0.352
-5. Resultat = (0.352 + 0.648/sqrt(n)) * 100
-```
+## Valeurs a modifier
 
-Le probleme : le cluster modifie le **plancher** de la formule Velander. Plus le facteurConso est eleve, plus le plancher monte et plus l'effet de diversite (1-plancher) diminue. Cela cree une incoherence : un cluster Rural avec peu de clients devrait avoir PLUS de diversite, pas moins.
+### Cables souterrains cuivre (CA Cu) — corrections X12, R0, X0
 
-**Impact chiffre** (19h, hiver, n=30 clients) :
-- Urbain dense : plancher=0.21, foisonnement=35.4%
-- Rural/diffus : plancher=0.252, foisonnement=38.9%
-- Ecart reel de seulement 3.5 points alors que facteurConso passe de 1.0 a 1.2 (devrait etre +20%)
+| Cable | Champ | Avant | Apres | Source |
+|---|---|---|---|---|
+| CA 10 Cu | X12 | 0.160 | 0.0942 | [T1] |
+| CA 10 Cu | R0 | 6.060 | 7.320 | [T2] |
+| CA 10 Cu | X0 | 0.480 | 0.3768 | [T2] |
+| CA 16 Cu | X12 | 0.144 | 0.0895 | [T1] |
+| CA 16 Cu | R0 | 3.780 | 4.600 | [T2] |
+| CA 16 Cu | X0 | 0.432 | 0.3580 | [T2] |
+| CA 25 Cu | X12 | 0.134 | 0.0880 | [T1] |
+| CA 25 Cu | R0 | 2.430 | 1.716 | [T2] |
+| CA 25 Cu | X0 | 0.402 | 1.1414 | [T2] |
+| CA 35 Cu | X12 | 0.127 | 0.0851 | [T1] |
+| CA 35 Cu | R0 | 1.740 | 1.420 | [T2] |
+| CA 35 Cu | X0 | 0.381 | 0.8527 | [T2] |
+| CA 50 Cu | X12 | 0.120 | 0.0848 | [T1] |
+| CA 50 Cu | R0 | 1.215 | 1.142 | [T2] |
+| CA 50 Cu | X0 | 0.360 | **conserve 0.360** | absent du fichier source |
+| CA 50 Cu | maxCurrent_A | 190 | **conserve 190** | absent du fichier source |
+| CA 70 Cu | R0 | 0.870 | 0.957 | [RC] |
+| CA 70 Cu | X0 | 0.330 | 0.275 | [RC] |
+| CA 95 Cu | R0 | 0.630 | 0.693 | [RC] |
+| CA 95 Cu | X0 | 0.330 | 0.275 | [RC] |
+| CA 120 Cu | X12 | 0.104 | 0.0804 | [T1] |
+| CA 120 Cu | R0 | 0.507 | 0.5159 | [T2] |
+| CA 120 Cu | X0 | 0.312 | 0.3385 | [T2] |
+| CA 150 Cu | R0 | 0.405 | 0.446 | [RC] |
+| CA 150 Cu | X0 | 0.300 | 0.250 | [RC] |
+| CA 240 Cu | X12 | 0.096 | 0.0801 | [T1] |
+| CA 240 Cu | R0 | 0.252 | 0.2657 | [T2] |
+| CA 240 Cu | X0 | 0.288 | 0.2900 | [T2] |
+| CA 240 Cu | maxCurrent_A | 420 | **conserve 420** | absent du fichier source |
 
-La formule Velander "absorbe" une partie du multiplicateur cluster car elle reduit la diversite en meme temps.
+### Cables torsades aluminium aeriens (TR)
 
-## Correction proposee
+| Cable | Champ | Avant | Apres |
+|---|---|---|---|
+| TR 150 Alu | label | "Tr 150 Alu" | "TR 150 Alu" |
 
-**Regle** : appliquer le foisonnement Velander sur le profil de **base** (sans cluster), puis multiplier le resultat par les facteurs cluster.
+### Cables non modifies
 
-```text
-AVANT (incorrect) :
-  profile = base * facteurConso + evBonus * facteurVE
-  foisonne = Velander(n, profile)
+Les cables NU (cuivre aeriens), TR 16-95 Alu, et CA Alu (4G 95 et 4G 150) restent **inchanges** — les valeurs du fichier source correspondent aux valeurs actuelles.
 
-APRES (correct) :
-  baseFois = Velander(n, base)
-  evFois   = Velander(n, evBonus)     // ou pas de Velander sur EV
-  profile  = baseFois * facteurConso + evFois * facteurVE
-```
+## Actions
 
-Cela garantit que :
-- Le cluster agit comme un **multiplicateur pur** sur le resultat foisonne
-- La diversite Velander est calculee sur le profil physique de base (indepedant du cluster)
-- Le passage d'un cluster a l'autre donne un ecart proportionnel et coherent
+### 1. Backup
 
-## Ajout d'un editeur de clusters
+Creer `src/data/defaultCableTypes.backup.20260223.ts` — copie exacte du fichier actuel.
 
-Actuellement les 4 clusters sont en dur dans `clusterProfiles.ts`. L'utilisateur ne peut pas modifier `facteurConso` ni `facteurVE`. On va ajouter un editeur leger directement dans le panneau Profil 24H.
+### 2. Modifications
 
-## Modifications
+Appliquer les corrections d'impedance listees ci-dessus dans `src/data/defaultCableTypes.ts` via des edits cibles (pas de reecriture totale).
 
-### 1. `src/utils/dailyProfileCalculator.ts` -- Correction de l'ordre foisonnement/cluster
+## Fichiers concernes
 
-**Lignes 193-228** : reorganiser le calcul :
-1. Calculer `baseResidential` = profil horaire brut (sans cluster)
-2. Calculer `evBonus` brut (sans facteurVE)
-3. Appliquer Velander sur `baseResidential + evBonus` (profil physique reel)
-4. Multiplier le resultat par `facteurConso` (pour la partie residentielle)
-5. Multiplier le bonus EV par `facteurVE` separement
-6. Resultat final = (baseFoisonne * facteurConso) + (evBonusFoisonne * facteurVE)
-
-Le plancher de Velander reste base sur le profil physique, le cluster ne modifie que l'amplitude finale.
-
-### 2. `src/data/clusterProfiles.ts` -- Rendre les clusters personnalisables
-
-- Ajouter un champ `custom?: boolean` a `ClusterProfile`
-- Exporter une fonction `createCustomCluster(base, overrides)` pour creer des variantes
-- Garder les 4 clusters par defaut inchanges (valeurs de reference)
-
-### 3. `src/components/topMenu/DailyProfileTab.tsx` -- Editeur de cluster inline
-
-Remplacer la grille de boutons cluster par un selecteur + mini-editeur :
-- Selecteur cluster (boutons existants, inchanges)
-- Sous le selecteur : 2 sliders editables pour le cluster actif :
-  - `facteurConso` : slider 0.5 - 2.0 (pas de 0.1)
-  - `facteurVE` : slider 0.0 - 3.0 (pas de 0.1)
-- Les valeurs modifiees sont stockees dans `dailyProfileOptions` (pas dans `clusterProfiles` directement)
-- Un bouton "Reset" pour revenir aux valeurs par defaut du cluster selectionne
-- Affichage en temps reel de l'impact sur le graphe
-
-### 4. `src/types/dailyProfile.ts` -- Etendre DailySimulationOptions
-
-Ajouter dans `DailySimulationOptions` :
-```typescript
-customFacteurConso?: number;   // Override du facteurConso du cluster
-customFacteurVE?: number;      // Override du facteurVE du cluster
-```
-
-Si presents, ces valeurs remplacent celles du cluster selectionne.
-
-## Resume technique
-
-| Fichier | Modification |
+| Fichier | Action |
 |---|---|
-| `src/utils/dailyProfileCalculator.ts` | Reordonner : Velander sur base brute, puis cluster en multiplicateur |
-| `src/data/clusterProfiles.ts` | Ajout `custom` flag et helper |
-| `src/types/dailyProfile.ts` | Ajout `customFacteurConso` et `customFacteurVE` dans options |
-| `src/components/topMenu/DailyProfileTab.tsx` | Sliders editables sous le selecteur de cluster |
-
-## Ordre d'implementation
-
-1. Types (`dailyProfile.ts`) -- ajout des champs custom
-2. Calcul (`dailyProfileCalculator.ts`) -- correction de l'ordre foisonnement/cluster
-3. Data (`clusterProfiles.ts`) -- helper pour clusters personnalises
-4. UI (`DailyProfileTab.tsx`) -- sliders editables + reset
+| `src/data/defaultCableTypes.backup.20260223.ts` | Nouveau — backup |
+| `src/data/defaultCableTypes.ts` | Modifie — corrections impedances |
 

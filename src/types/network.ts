@@ -148,6 +148,8 @@ export interface CableType {
   matiere: "CUIVRE" | "ALUMINIUM";
   posesPermises: CablePose[];
   maxCurrent_A?: number; // Ampacité (I_iz) optionnelle si disponible
+  // 🔧 FIX GRD — Type d'isolation pour limites thermiques IEC 60287
+  insulationType?: 'PVC' | 'XLPE' | 'PR';
 }
 
 export interface ClientCharge {

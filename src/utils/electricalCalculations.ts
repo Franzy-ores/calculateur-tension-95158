@@ -3,7 +3,7 @@ import { getConnectedNodes } from '@/utils/networkConnectivity';
 import { Complex, C, add, sub, mul, div, conj, scale, abs, fromPolar, arg } from '@/utils/complex';
 import { getNodeConnectionType } from '@/utils/nodeConnectionType';
 import { getLinkedClientsForNode, calculateNodePowersFromClients } from '@/utils/clientsUtils';
-import { getThermalCorrectionFactor, ThermalSeason, getAmbientTemperature, calculateCableTemperature } from '@/utils/thermalModel';
+import { getThermalCorrectionFactor, ThermalSeason, getAmbientTemperature, calculateCableTemperature, InsulationType } from '@/utils/thermalModel';
 
 export class ElectricalCalculator {
   private cosPhi: number; // Legacy - utilisé comme fallback
@@ -276,9 +276,10 @@ export class ElectricalCalculator {
     is400V: boolean, 
     isUnbalanced: boolean,
     forNeutral: boolean = false,
-    thermalContext?: { season: ThermalSeason; pose: CablePose; I_A?: number; Imax_A?: number }
+    thermalContext?: { season: ThermalSeason; pose: CablePose; I_A?: number; Imax_A?: number; insulationType?: InsulationType }
   ): { R: number, X: number } {
     // Calcul du facteur de correction thermique
+    // 🔧 FIX GRD — Passe insulationType pour borner T_cable à T_max normative
     let thermalFactor = 1;
     if (thermalContext) {
       thermalFactor = getThermalCorrectionFactor(
@@ -286,7 +287,8 @@ export class ElectricalCalculator {
         thermalContext.pose,
         cableType.matiere,
         thermalContext.I_A || 0,
-        thermalContext.Imax_A || cableType.maxCurrent_A || 0
+        thermalContext.Imax_A || cableType.maxCurrent_A || 0,
+        thermalContext.insulationType || cableType.insulationType as InsulationType | undefined
       );
     }
 
@@ -1136,11 +1138,21 @@ export class ElectricalCalculator {
         //
         // NOTE : On ne REMPLACE PAS la distribution 50/50 (qui reste pour l'affichage),
         // on AJUSTE les phaseurs pour le calcul de courant correct.
+        //
+        // 🔧 FIX GRD — Foisonnement appliqué une seule fois
+        // Si autoPhaseDistribution.charges.foisonneAvecCurseurs existe, les valeurs
+        // dans phasePhaseLoads sont BRUTES (non foisonnées). Le foisonnement a déjà été
+        // appliqué dans S_prel_map (lignes 646-668). On applique donc foisChargeCoeff
+        // uniquement sur les phasePhaseLoads bruts.
+        // MAIS si S_prel_map utilise déjà foisonnementCharges, alors phasePhaseLoads
+        // doit aussi l'utiliser pour rester cohérent.
         const is230VTriangle = U_line_base < ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
         if (is230VTriangle && n.autoPhaseDistribution?.phasePhaseLoads) {
           const ppLoads = n.autoPhaseDistribution.phasePhaseLoads;
           
-          // FIX: Utiliser ?? pour éviter que 0 soit traité comme falsy
+          // 🔧 FIX GRD — Le foisonnement est appliqué via S_prel_map et S_pv_map.
+          // Les phasePhaseLoads contiennent les puissances BRUTES par couplage.
+          // On doit appliquer le même coefficient de foisonnement que S_prel_map/S_pv_map.
           const foisChargeCoeff = (foisonnementCharges ?? 100) / 100;
           const foisProdCoeff = (foisonnementProductions ?? 100) / 100;
           
@@ -1414,58 +1426,72 @@ export class ElectricalCalculator {
       let phaseB = runBFSForPhase(-120, S_B_map, 'B');   // -120°
       let phaseC = runBFSForPhase(120, S_C_map, 'C');    // +120°
 
-      // ===== MICRO-ITÉRATION THERMIQUE DYNAMIQUE (Effet Joule) =====
-      // Recalcul des impédances avec les courants réels du BFS
-      // T_cable(h) = T_ambient + inertie × k × (I(h)/Imax)²
-      // AÉRIEN: réponse instantanée | SOUTERRAIN: réponse amortie (inertie thermique)
+      // ===== 🔧 FIX GRD — MICRO-ITÉRATION THERMIQUE 2 PASSES (Effet Joule) =====
+      // Passe 1: BFS avec R à 20°C → courants I_phase
+      // Passe 2: correction R(T) avec I réel → BFS final
+      // Limité à 2 passes max pour stabilité
       const cableTempMap = new Map<string, number>();
       
       if (projectSeason) {
-        let impedancesUpdated = false;
+        const MAX_THERMAL_PASSES = 2;
         
-        for (const [childId, cab] of parentCableOfChild.entries()) {
-          const ct = cableTypeById.get(cab.typeId);
-          if (!ct) continue;
-          const length_m = this.calculateLengthMeters(cab.coordinates || []);
-          const L_km = length_m / 1000;
+        for (let thermalPass = 0; thermalPass < MAX_THERMAL_PASSES; thermalPass++) {
+          let impedancesUpdated = false;
           
-          // Courant max des 3 phases (pire cas pour échauffement)
-          const IA_mag = abs(phaseA.I_branch_phase.get(cab.id) || C(0, 0));
-          const IB_mag = abs(phaseB.I_branch_phase.get(cab.id) || C(0, 0));
-          const IC_mag = abs(phaseC.I_branch_phase.get(cab.id) || C(0, 0));
-          const I_max_phase = Math.max(IA_mag, IB_mag, IC_mag);
-          
-          // Température du câble avec courant réel et inertie thermique
-          const T_amb = getAmbientTemperature(projectSeason, cab.pose);
-          const T_cable = calculateCableTemperature(T_amb, I_max_phase, ct.maxCurrent_A || 0, cab.pose);
-          cableTempMap.set(cab.id, T_cable);
-          
-          // Recalcul de l'impédance avec correction thermique dynamique
-          const thermalCtxReal = {
-            season: projectSeason,
-            pose: cab.pose,
-            I_A: I_max_phase,
-            Imax_A: ct.maxCurrent_A || 0
-          };
-          
-          const is400V_local = U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
-          const { R: R_new, X: X_new } = this.selectRX(ct, is400V_local, isUnbalanced, false, thermalCtxReal);
-          const Z_new = C(R_new * L_km, X_new * L_km);
-          const Z_old = cableZ_phase.get(cab.id) || C(0, 0);
-          
-          // Mettre à jour si R change significativement (>0.1%)
-          if (Math.abs(Z_new.re - Z_old.re) / (Math.abs(Z_old.re) + 1e-12) > 0.001) {
-            cableZ_phase.set(cab.id, Z_new);
-            impedancesUpdated = true;
+          for (const [childId, cab] of parentCableOfChild.entries()) {
+            const ct = cableTypeById.get(cab.typeId);
+            if (!ct) continue;
+            const length_m = this.calculateLengthMeters(cab.coordinates || []);
+            const L_km = length_m / 1000;
+            
+            // Courant max des 3 phases (pire cas pour échauffement)
+            const IA_mag = abs(phaseA.I_branch_phase.get(cab.id) || C(0, 0));
+            const IB_mag = abs(phaseB.I_branch_phase.get(cab.id) || C(0, 0));
+            const IC_mag = abs(phaseC.I_branch_phase.get(cab.id) || C(0, 0));
+            const I_max_phase = Math.max(IA_mag, IB_mag, IC_mag);
+            
+            // 🔧 FIX GRD — Température bornée à T_max_insulation (IEC 60287)
+            const T_amb = getAmbientTemperature(projectSeason, cab.pose);
+            const T_cable = calculateCableTemperature(
+              T_amb, I_max_phase, ct.maxCurrent_A || 0, cab.pose,
+              ct.insulationType as InsulationType | undefined
+            );
+            cableTempMap.set(cab.id, T_cable);
+            
+            // Recalcul de l'impédance avec correction thermique dynamique
+            const thermalCtxReal = {
+              season: projectSeason,
+              pose: cab.pose,
+              I_A: I_max_phase,
+              Imax_A: ct.maxCurrent_A || 0,
+              insulationType: ct.insulationType as InsulationType | undefined
+            };
+            
+            const is400V_local = U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
+            const { R: R_new, X: X_new } = this.selectRX(ct, is400V_local, isUnbalanced, false, thermalCtxReal);
+            const Z_new = C(R_new * L_km, X_new * L_km);
+            const Z_old = cableZ_phase.get(cab.id) || C(0, 0);
+            
+            // Mettre à jour si R change significativement (>0.1%)
+            if (Math.abs(Z_new.re - Z_old.re) / (Math.abs(Z_old.re) + 1e-12) > 0.001) {
+              cableZ_phase.set(cab.id, Z_new);
+              impedancesUpdated = true;
+            }
           }
-        }
-        
-        // Relancer le BFS avec les impédances corrigées par l'effet Joule
-        if (impedancesUpdated) {
-          console.log('🌡️ Micro-itération thermique: recalcul BFS avec R corrigé (effet Joule dynamique)');
-          phaseA = runBFSForPhase(0, S_A_map, 'A');
-          phaseB = runBFSForPhase(-120, S_B_map, 'B');
-          phaseC = runBFSForPhase(120, S_C_map, 'C');
+          
+          // Relancer le BFS avec les impédances corrigées par l'effet Joule
+          if (impedancesUpdated) {
+            console.log(`🌡️ [GRD-FIX] Thermique passe ${thermalPass + 1}/${MAX_THERMAL_PASSES}: recalcul BFS avec R corrigé`);
+            phaseA = runBFSForPhase(0, S_A_map, 'A');
+            phaseB = runBFSForPhase(-120, S_B_map, 'B');
+            phaseC = runBFSForPhase(120, S_C_map, 'C');
+          } else {
+            // Convergence thermique atteinte
+            if (thermalPass > 0) {
+              console.log(`🌡️ [GRD-FIX] Convergence thermique atteinte à la passe ${thermalPass + 1}`);
+            }
+            break;
+          }
         }
       }
 
@@ -1743,17 +1769,10 @@ export class ElectricalCalculator {
         const scaleLine = this.getDisplayLineScale(n.connectionType);
         U_node_line_tension = Math.min(Va_mag, Vb_mag, Vc_mag) * scaleLine;
 
-        // ===== CORRECTION 2 BIS : RÉFÉRENCE DE TENSION POUR CONFORMITÉ =====
-        let U_ref_display: number;
-        if (n.connectionType === 'MONO_230V_PN') {
-          // Référence phase-neutre EN50160
-          U_ref_display = 230;
-        } else if (sourceNode?.tensionCible) {
-          U_ref_display = sourceNode.tensionCible;
-        } else {
-          const { U_base } = this.getVoltage(n.connectionType);
-          U_ref_display = U_base;
-        }
+        // ===== 🔧 FIX GRD — RÉFÉRENCE EN50160 : TOUJOURS U_base NOMINALE =====
+        // La conformité EN50160 s'évalue par rapport à la tension nominale du réseau,
+        // JAMAIS par rapport à tensionCible (qui sert uniquement au BFS).
+        const { U_base: U_ref_display } = this.getVoltage(n.connectionType);
 
         const deltaU_V = U_ref_display - U_node_line_tension;
         const deltaU_pct = U_ref_display ? (deltaU_V / U_ref_display) * 100 : 0;
@@ -2196,9 +2215,10 @@ export class ElectricalCalculator {
       const scaleLine = this.getDisplayLineScale(n.connectionType);
       const U_node_line = abs(Vn) * scaleLine;
 
-      // Référence d'affichage: tension cible source si fournie, sinon base de ce type de connexion
-      let { U_base: U_ref_display } = this.getVoltage(n.connectionType);
-      if (sourceNode?.tensionCible) U_ref_display = sourceNode.tensionCible;
+      // 🔧 FIX GRD — RÉFÉRENCE EN50160 : TOUJOURS U_base NOMINALE
+      // La conformité EN50160 s'évalue par rapport à la tension nominale du réseau,
+      // JAMAIS par rapport à tensionCible (qui sert uniquement au BFS).
+      const { U_base: U_ref_display } = this.getVoltage(n.connectionType);
 
       const deltaU_V = U_ref_display - U_node_line;
       const deltaU_pct = U_ref_display ? (deltaU_V / U_ref_display) * 100 : 0;

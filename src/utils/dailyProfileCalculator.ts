@@ -718,46 +718,79 @@ export class DailyProfileCalculator {
     return 'BYP';
   }
   
-  /**
-   * Applique les contraintes SRG2-230 (pas de boost et lower simultanés sur phases différentes)
-   */
+  // 🔧 FIX GRD — Contraintes SRG2 renforcées (tous types, pas seulement SRG2-230)
+  // - Interdire boost (BO) et buck (LO) simultanés
+  // - Prioriser le mode commun (A=B=C) quand possible
+  // - Limiter l'effet total à ±10%
   private applySRG230Constraints(
     states: { A: SRG2SwitchState; B: SRG2SwitchState; C: SRG2SwitchState },
     tensions: { A: number; B: number; C: number },
     srg2: SRG2Config
   ): { A: SRG2SwitchState; B: SRG2SwitchState; C: SRG2SwitchState } {
-    if (srg2.type !== 'SRG2-230') return states;
+    const isBoost = (s: SRG2SwitchState) => s === 'BO1' || s === 'BO2';
+    const isLower = (s: SRG2SwitchState) => s === 'LO1' || s === 'LO2';
     
-    const hasBoost = states.A === 'BO1' || states.A === 'BO2' || 
-                     states.B === 'BO1' || states.B === 'BO2' || 
-                     states.C === 'BO1' || states.C === 'BO2';
-    const hasLower = states.A === 'LO1' || states.A === 'LO2' || 
-                     states.B === 'LO1' || states.B === 'LO2' || 
-                     states.C === 'LO1' || states.C === 'LO2';
+    const hasBoost = isBoost(states.A) || isBoost(states.B) || isBoost(states.C);
+    const hasLower = isLower(states.A) || isLower(states.B) || isLower(states.C);
     
+    let result = { ...states };
+    
+    // 🔧 FIX GRD — Priorisation du mode commun : si les 3 phases sont dans le même sens,
+    // aligner sur le niveau le plus conservateur
+    const allBoost = isBoost(states.A) && isBoost(states.B) && isBoost(states.C);
+    const allLower = isLower(states.A) && isLower(states.B) && isLower(states.C);
+    
+    if (allBoost) {
+      // Aligner sur le boost le plus conservateur (BO1 < BO2)
+      const hasBO1 = states.A === 'BO1' || states.B === 'BO1' || states.C === 'BO1';
+      if (hasBO1) {
+        result = { A: 'BO1', B: 'BO1', C: 'BO1' };
+        console.log(`[GRD-FIX] SRG2 ${srg2.id}: mode commun BOOST → BO1 (conservateur)`);
+      }
+    } else if (allLower) {
+      // Aligner sur le lower le plus conservateur (LO1 < LO2)
+      const hasLO1 = states.A === 'LO1' || states.B === 'LO1' || states.C === 'LO1';
+      if (hasLO1) {
+        result = { A: 'LO1', B: 'LO1', C: 'LO1' };
+        console.log(`[GRD-FIX] SRG2 ${srg2.id}: mode commun LOWER → LO1 (conservateur)`);
+      }
+    }
+    
+    // 🔧 FIX GRD — Interdiction boost + buck simultanés (étendu à tous les types SRG2)
     if (hasBoost && hasLower) {
-      // Conflit: garder le mode correspondant à l'écart le plus important
       const avgTension = (tensions.A + tensions.B + tensions.C) / 3;
       const consigne = srg2.tensionConsigne_V;
       
       if (avgTension > consigne) {
         // Privilégier LOWER (tensions trop hautes)
-        return {
-          A: (states.A === 'BO1' || states.A === 'BO2') ? 'BYP' : states.A,
-          B: (states.B === 'BO1' || states.B === 'BO2') ? 'BYP' : states.B,
-          C: (states.C === 'BO1' || states.C === 'BO2') ? 'BYP' : states.C
+        result = {
+          A: isBoost(result.A) ? 'BYP' : result.A,
+          B: isBoost(result.B) ? 'BYP' : result.B,
+          C: isBoost(result.C) ? 'BYP' : result.C
         };
+        console.log(`[GRD-FIX] SRG2 ${srg2.id}: conflit BO/LO → privilégie LOWER (Uavg=${avgTension.toFixed(1)}V > ${consigne}V)`);
       } else {
         // Privilégier BOOST (tensions trop basses)
-        return {
-          A: (states.A === 'LO1' || states.A === 'LO2') ? 'BYP' : states.A,
-          B: (states.B === 'LO1' || states.B === 'LO2') ? 'BYP' : states.B,
-          C: (states.C === 'LO1' || states.C === 'LO2') ? 'BYP' : states.C
+        result = {
+          A: isLower(result.A) ? 'BYP' : result.A,
+          B: isLower(result.B) ? 'BYP' : result.B,
+          C: isLower(result.C) ? 'BYP' : result.C
         };
+        console.log(`[GRD-FIX] SRG2 ${srg2.id}: conflit BO/LO → privilégie BOOST (Uavg=${avgTension.toFixed(1)}V < ${consigne}V)`);
       }
     }
     
-    return states;
+    // 🔧 FIX GRD — Vérifier que le coefficient total ne dépasse pas ±10%
+    const MAX_SRG2_COEFF_PERCENT = 10;
+    for (const phase of ['A', 'B', 'C'] as const) {
+      const coeff = this.getVoltageCoefficient(result[phase], srg2);
+      if (Math.abs(coeff) > MAX_SRG2_COEFF_PERCENT) {
+        console.warn(`[GRD-FIX] SRG2 ${srg2.id} phase ${phase}: coeff ${coeff}% > ±${MAX_SRG2_COEFF_PERCENT}% → BYP`);
+        result[phase] = 'BYP';
+      }
+    }
+    
+    return result;
   }
   
   /**

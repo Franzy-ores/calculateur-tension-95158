@@ -106,15 +106,13 @@ function calculatePhaseData(
   const totalChargeFoisonne = chargeMonoFoisonne + chargePolyResFoisonne + chargePolyIndFoisonne;
   const totalProdFoisonne = prodMonoFoisonne + prodPolyResFoisonne + prodPolyIndFoisonne;
   
-  // Calcul déséquilibre via curseurs (charge et production séparément)
-  const curseurCharge = manualPhaseDistribution?.charges[phase] || 33.33;
-  const curseurProduction = manualPhaseDistribution?.productions[phase] || 33.33;
-  const ecartChargePercent = ((curseurCharge - 33.33) / 33.33) * 100;
-  const ecartProductionPercent = ((curseurProduction - 33.33) / 33.33) * 100;
+  // NOTE: ecartChargePercent et ecartProductionPercent seront calculés 
+  // dans renderTable() à partir des totaux réels des 3 phases (pas des curseurs)
   
   // Intensité : Appliquer les curseurs de déséquilibre aux totaux globaux
-  // I(A) = ((Total global charge foisonné * % curseur charge) - (Total global prod foisonné * % curseur prod)) * 1000 / 230V
   const voltage = 230;
+  const curseurCharge = manualPhaseDistribution?.charges[phase] || 33.33;
+  const curseurProduction = manualPhaseDistribution?.productions[phase] || 33.33;
   const chargeAvecCurseur = totalFoisonneChargeGlobal * (curseurCharge / 100);
   const prodAvecCurseur = totalFoisonneProductionGlobal * (curseurProduction / 100);
   const courantTotal = ((chargeAvecCurseur - prodAvecCurseur) * 1000) / voltage;
@@ -147,9 +145,6 @@ function calculatePhaseData(
     totalChargeFoisonne,
     totalProdFoisonne,
     
-    // Déséquilibres séparés
-    ecartChargePercent,
-    ecartProductionPercent,
     courantTotal
   };
 }
@@ -372,68 +367,79 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
             </tr>
           </thead>
           <tbody>
-            {(['A', 'B', 'C'] as const).map((phase) => {
-              const phaseLabel = is230V 
-                ? (phase === 'A' ? 'L1-L2' : phase === 'B' ? 'L2-L3' : 'L3-L1')
-                : `L${phase === 'A' ? '1' : phase === 'B' ? '2' : '3'}`;
-              
-              const data = calculatePhaseData(
-                currentProject.nodes,
+            {(() => {
+              // Pré-calculer les données des 3 phases pour pouvoir calculer le déséquilibre réel
+              const allPhaseData = (['A', 'B', 'C'] as const).map(phase => ({
                 phase,
-                foisonnementResidentiel,
-                foisonnementIndustriel,
-                foisonnementProductions,
-                globalFoisonne.totalFoisonneChargeGlobal,
-                globalFoisonne.totalFoisonneProductionGlobal,
-                currentProject.clientsImportes,
-                currentProject.clientLinks,
-                is230V,
-                currentProject.manualPhaseDistribution
-              );
-            
-              const bgClass = phase === 'A' ? 'bg-blue-50/50 dark:bg-blue-500/5' : phase === 'B' ? 'bg-green-50/50 dark:bg-green-500/5' : 'bg-red-50/50 dark:bg-red-500/5';
-              const ecartColor = Math.abs(data.ecartChargePercent) < 5 ? 'text-green-600' : Math.abs(data.ecartChargePercent) < 15 ? 'text-yellow-600' : 'text-red-600';
+                data: calculatePhaseData(
+                  currentProject.nodes, phase,
+                  foisonnementResidentiel, foisonnementIndustriel, foisonnementProductions,
+                  globalFoisonne.totalFoisonneChargeGlobal, globalFoisonne.totalFoisonneProductionGlobal,
+                  currentProject.clientsImportes, currentProject.clientLinks, is230V,
+                  currentProject.manualPhaseDistribution
+                )
+              }));
               
-              const ecartProdColor = Math.abs(data.ecartProductionPercent) < 5 ? 'text-green-600' : Math.abs(data.ecartProductionPercent) < 15 ? 'text-yellow-600' : 'text-red-600';
+              // Moyennes des charges/productions physiques sur les 3 phases
+              const avgCharge = allPhaseData.reduce((s, p) => s + p.data.totalChargePhysique, 0) / 3;
+              const avgProd = allPhaseData.reduce((s, p) => s + p.data.totalProdPhysique, 0) / 3;
               
-              return (
-                <tr key={phase} className={`border-b border-border/50 ${bgClass}`}>
-                  <td className="py-1 px-1 text-foreground font-semibold">{phaseLabel}</td>
-                  {/* MONO */}
-                  <td className="text-center py-1 px-0.5 text-foreground">{data.nbMono}</td>
-                  <td className="text-right py-1 px-0.5 text-foreground">{data.chargeMono.toFixed(1)}</td>
-                  <td className="text-right py-1 px-0.5 text-foreground">{data.prodMono.toFixed(1)}</td>
-                  <td className="text-right py-1 px-0.5 text-primary font-medium">{data.chargeMonoFoisonne.toFixed(1)}</td>
-                  <td className="text-right py-1 px-0.5 text-primary font-medium border-r border-border/50">{data.prodMonoFoisonne.toFixed(1)}</td>
-                  {/* Poly Rés. */}
-                  <td className="text-center py-1 px-0.5 text-foreground">{Math.round(data.nbPolyRes)}</td>
-                  <td className="text-right py-1 px-0.5 text-foreground">{data.chargePolyRes.toFixed(1)}</td>
-                  <td className="text-right py-1 px-0.5 text-foreground">{data.prodPolyRes.toFixed(1)}</td>
-                  <td className="text-right py-1 px-0.5 text-green-700 dark:text-green-400 font-medium">{data.chargePolyResFoisonne.toFixed(1)}</td>
-                  <td className="text-right py-1 px-0.5 text-green-700 dark:text-green-400 font-medium border-r border-border/50">{data.prodPolyResFoisonne.toFixed(1)}</td>
-                  {/* Poly Ind. */}
-                  <td className="text-center py-1 px-0.5 text-foreground">{Math.round(data.nbPolyInd)}</td>
-                  <td className="text-right py-1 px-0.5 text-foreground">{data.chargePolyInd.toFixed(1)}</td>
-                  <td className="text-right py-1 px-0.5 text-foreground">{data.prodPolyInd.toFixed(1)}</td>
-                  <td className="text-right py-1 px-0.5 text-orange-700 dark:text-orange-400 font-medium">{data.chargePolyIndFoisonne.toFixed(1)}</td>
-                  <td className="text-right py-1 px-0.5 text-orange-700 dark:text-orange-400 font-medium border-r border-border/50">{data.prodPolyIndFoisonne.toFixed(1)}</td>
-                  {/* TOTAUX */}
-                  <td className="text-right py-1 px-0.5 text-foreground font-medium">{data.totalChargePhysique.toFixed(1)}</td>
-                  <td className="text-right py-1 px-0.5 text-foreground font-bold">{data.totalChargeFoisonne.toFixed(1)}</td>
-                  <td className="text-right py-1 px-0.5 text-foreground font-medium">{data.totalProdPhysique.toFixed(1)}</td>
-                  <td className="text-right py-1 px-0.5 text-foreground font-bold border-r border-border/50">{data.totalProdFoisonne.toFixed(1)}</td>
-                  {/* Déséquilibre */}
-                  <td className={`text-right py-1 px-0.5 font-bold ${ecartColor}`}>
-                    {data.ecartChargePercent > 0 ? '+' : ''}{data.ecartChargePercent.toFixed(0)}%
-                  </td>
-                  <td className={`text-right py-1 px-0.5 font-bold border-r border-border/50 ${ecartProdColor}`}>
-                    {data.ecartProductionPercent > 0 ? '+' : ''}{data.ecartProductionPercent.toFixed(0)}%
-                  </td>
-                  {/* Intensité */}
-                  <td className="text-right py-1 px-1 text-foreground font-semibold">{Math.abs(data.courantTotal).toFixed(1)}</td>
-                </tr>
-              );
-            })}
+              return allPhaseData.map(({ phase, data }) => {
+                const phaseLabel = is230V 
+                  ? (phase === 'A' ? 'L1-L2' : phase === 'B' ? 'L2-L3' : 'L3-L1')
+                  : `L${phase === 'A' ? '1' : phase === 'B' ? '2' : '3'}`;
+                
+                // Déséquilibre réel basé sur les charges/productions physiques par phase
+                const ecartChargePercent = avgCharge > 0 
+                  ? ((data.totalChargePhysique - avgCharge) / avgCharge) * 100 
+                  : 0;
+                const ecartProductionPercent = avgProd > 0 
+                  ? ((data.totalProdPhysique - avgProd) / avgProd) * 100 
+                  : 0;
+              
+                const bgClass = phase === 'A' ? 'bg-blue-50/50 dark:bg-blue-500/5' : phase === 'B' ? 'bg-green-50/50 dark:bg-green-500/5' : 'bg-red-50/50 dark:bg-red-500/5';
+                const ecartColor = Math.abs(ecartChargePercent) < 5 ? 'text-green-600' : Math.abs(ecartChargePercent) < 15 ? 'text-yellow-600' : 'text-red-600';
+                const ecartProdColor = Math.abs(ecartProductionPercent) < 5 ? 'text-green-600' : Math.abs(ecartProductionPercent) < 15 ? 'text-yellow-600' : 'text-red-600';
+                
+                return (
+                  <tr key={phase} className={`border-b border-border/50 ${bgClass}`}>
+                    <td className="py-1 px-1 text-foreground font-semibold">{phaseLabel}</td>
+                    {/* MONO */}
+                    <td className="text-center py-1 px-0.5 text-foreground">{data.nbMono}</td>
+                    <td className="text-right py-1 px-0.5 text-foreground">{data.chargeMono.toFixed(1)}</td>
+                    <td className="text-right py-1 px-0.5 text-foreground">{data.prodMono.toFixed(1)}</td>
+                    <td className="text-right py-1 px-0.5 text-primary font-medium">{data.chargeMonoFoisonne.toFixed(1)}</td>
+                    <td className="text-right py-1 px-0.5 text-primary font-medium border-r border-border/50">{data.prodMonoFoisonne.toFixed(1)}</td>
+                    {/* Poly Rés. */}
+                    <td className="text-center py-1 px-0.5 text-foreground">{Math.round(data.nbPolyRes)}</td>
+                    <td className="text-right py-1 px-0.5 text-foreground">{data.chargePolyRes.toFixed(1)}</td>
+                    <td className="text-right py-1 px-0.5 text-foreground">{data.prodPolyRes.toFixed(1)}</td>
+                    <td className="text-right py-1 px-0.5 text-green-700 dark:text-green-400 font-medium">{data.chargePolyResFoisonne.toFixed(1)}</td>
+                    <td className="text-right py-1 px-0.5 text-green-700 dark:text-green-400 font-medium border-r border-border/50">{data.prodPolyResFoisonne.toFixed(1)}</td>
+                    {/* Poly Ind. */}
+                    <td className="text-center py-1 px-0.5 text-foreground">{Math.round(data.nbPolyInd)}</td>
+                    <td className="text-right py-1 px-0.5 text-foreground">{data.chargePolyInd.toFixed(1)}</td>
+                    <td className="text-right py-1 px-0.5 text-foreground">{data.prodPolyInd.toFixed(1)}</td>
+                    <td className="text-right py-1 px-0.5 text-orange-700 dark:text-orange-400 font-medium">{data.chargePolyIndFoisonne.toFixed(1)}</td>
+                    <td className="text-right py-1 px-0.5 text-orange-700 dark:text-orange-400 font-medium border-r border-border/50">{data.prodPolyIndFoisonne.toFixed(1)}</td>
+                    {/* TOTAUX */}
+                    <td className="text-right py-1 px-0.5 text-foreground font-medium">{data.totalChargePhysique.toFixed(1)}</td>
+                    <td className="text-right py-1 px-0.5 text-foreground font-bold">{data.totalChargeFoisonne.toFixed(1)}</td>
+                    <td className="text-right py-1 px-0.5 text-foreground font-medium">{data.totalProdPhysique.toFixed(1)}</td>
+                    <td className="text-right py-1 px-0.5 text-foreground font-bold border-r border-border/50">{data.totalProdFoisonne.toFixed(1)}</td>
+                    {/* Déséquilibre */}
+                    <td className={`text-right py-1 px-0.5 font-bold ${ecartColor}`}>
+                      {ecartChargePercent > 0 ? '+' : ''}{ecartChargePercent.toFixed(0)}%
+                    </td>
+                    <td className={`text-right py-1 px-0.5 font-bold border-r border-border/50 ${ecartProdColor}`}>
+                      {ecartProductionPercent > 0 ? '+' : ''}{ecartProductionPercent.toFixed(0)}%
+                    </td>
+                    {/* Intensité */}
+                    <td className="text-right py-1 px-1 text-foreground font-semibold">{Math.abs(data.courantTotal).toFixed(1)}</td>
+                  </tr>
+                );
+              });
+            })()}
             {/* LIGNE TOTAL */}
             {(() => {
               // Calculer les totaux globaux pour toutes les phases

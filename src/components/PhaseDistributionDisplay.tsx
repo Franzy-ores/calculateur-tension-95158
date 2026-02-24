@@ -380,21 +380,21 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
                 )
               }));
               
-              // Moyennes des charges/productions physiques sur les 3 phases
-              const avgCharge = allPhaseData.reduce((s, p) => s + p.data.totalChargePhysique, 0) / 3;
-              const avgProd = allPhaseData.reduce((s, p) => s + p.data.totalProdPhysique, 0) / 3;
+              // Moyennes des charges/productions foisonnées sur les 3 phases (cohérent avec les curseurs)
+              const avgCharge = allPhaseData.reduce((s, p) => s + p.data.totalChargeFoisonne, 0) / 3;
+              const avgProd = allPhaseData.reduce((s, p) => s + p.data.totalProdFoisonne, 0) / 3;
               
               return allPhaseData.map(({ phase, data }) => {
                 const phaseLabel = is230V 
                   ? (phase === 'A' ? 'L1-L2' : phase === 'B' ? 'L2-L3' : 'L3-L1')
                   : `L${phase === 'A' ? '1' : phase === 'B' ? '2' : '3'}`;
                 
-                // Déséquilibre réel basé sur les charges/productions physiques par phase
+                // Déséquilibre réel basé sur les charges/productions foisonnées par phase
                 const ecartChargePercent = avgCharge > 0 
-                  ? ((data.totalChargePhysique - avgCharge) / avgCharge) * 100 
+                  ? ((data.totalChargeFoisonne - avgCharge) / avgCharge) * 100 
                   : 0;
                 const ecartProductionPercent = avgProd > 0 
-                  ? ((data.totalProdPhysique - avgProd) / avgProd) * 100 
+                  ? ((data.totalProdFoisonne - avgProd) / avgProd) * 100 
                   : 0;
               
                 const bgClass = phase === 'A' ? 'bg-blue-50/50 dark:bg-blue-500/5' : phase === 'B' ? 'bg-green-50/50 dark:bg-green-500/5' : 'bg-red-50/50 dark:bg-red-500/5';

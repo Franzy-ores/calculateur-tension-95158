@@ -1,9 +1,12 @@
+// BACKUP - Fichier defaultCableTypes.ts avant mise à jour IEC 60909 du 24/02/2026
+// Conservé pour référence - NE PAS UTILISER EN PRODUCTION
+// Valeurs GRD corrigées (sources [T1], [T2], [RC])
+
 import { CableType } from '@/types/network';
- 
-export const defaultCableTypes: CableType[] = [
+
+export const defaultCableTypesBackup20260224: CableType[] = [
   // ============================================
   // CÂBLES NUS CUIVRE AÉRIENS (NU)
-  // (R0 = 3·R12, X0 = 3·X12 — modèle IEC 60909)
   // ============================================
   {
     id: 'cu-7',
@@ -115,10 +118,9 @@ export const defaultCableTypes: CableType[] = [
     posesPermises: ['AÉRIEN'],
     maxCurrent_A: 299,
   },
- 
+
   // ============================================
-  // CÂBLES TORSADÉS ALUMINIUM AÉRIENS (TR / ABC)
-  // (R0 = 3·R12, X0 = 3·X12 — modèle IEC 60909)
+  // CÂBLES TORSADÉS ALUMINIUM AÉRIENS (TR)
   // ============================================
   {
     id: 'baxb-16',
@@ -177,7 +179,7 @@ export const defaultCableTypes: CableType[] = [
   },
   {
     id: 'baxb-150',
-    label: 'Tr 150 Alu',
+    label: 'TR 150 Alu',
     R12_ohm_per_km: 0.244,
     X12_ohm_per_km: 0.098,
     R0_ohm_per_km: 0.732,
@@ -186,18 +188,17 @@ export const defaultCableTypes: CableType[] = [
     posesPermises: ['AÉRIEN'],
     maxCurrent_A: 300,
   },
- 
+
   // ============================================
   // CÂBLES SOUTERRAINS CUIVRE (CA Cu)
-  // (R12 et X12 alignés données constructeurs / pratiques ; R0/X0 = 3×)
   // ============================================
   {
     id: 'ca-10cu',
     label: 'CA 10 Cu',
-    R12_ohm_per_km: 1.830,
-    X12_ohm_per_km: 0.090,
-    R0_ohm_per_km: 5.490,
-    X0_ohm_per_km: 0.270,
+    R12_ohm_per_km: 2.020,
+    X12_ohm_per_km: 0.0942,
+    R0_ohm_per_km: 7.320,
+    X0_ohm_per_km: 0.3768,
     matiere: 'CUIVRE',
     posesPermises: ['SOUTERRAIN'],
     maxCurrent_A: 73,
@@ -205,10 +206,10 @@ export const defaultCableTypes: CableType[] = [
   {
     id: 'ca-16cu',
     label: 'CA 16 Cu',
-    R12_ohm_per_km: 1.150,
-    X12_ohm_per_km: 0.090,
-    R0_ohm_per_km: 3.450,
-    X0_ohm_per_km: 0.270,
+    R12_ohm_per_km: 1.260,
+    X12_ohm_per_km: 0.0895,
+    R0_ohm_per_km: 4.600,
+    X0_ohm_per_km: 0.3580,
     matiere: 'CUIVRE',
     posesPermises: ['SOUTERRAIN'],
     maxCurrent_A: 95,
@@ -216,10 +217,10 @@ export const defaultCableTypes: CableType[] = [
   {
     id: 'ca-25cu',
     label: 'CA 25 Cu',
-    R12_ohm_per_km: 0.727,
-    X12_ohm_per_km: 0.090,
-    R0_ohm_per_km: 2.181,
-    X0_ohm_per_km: 0.270,
+    R12_ohm_per_km: 0.810,
+    X12_ohm_per_km: 0.0880,
+    R0_ohm_per_km: 1.716,
+    X0_ohm_per_km: 1.1414,
     matiere: 'CUIVRE',
     posesPermises: ['SOUTERRAIN'],
     maxCurrent_A: 130,
@@ -227,10 +228,10 @@ export const defaultCableTypes: CableType[] = [
   {
     id: 'ca-35cu',
     label: 'CA 35 Cu',
-    R12_ohm_per_km: 0.524,
-    X12_ohm_per_km: 0.090,
-    R0_ohm_per_km: 1.572,
-    X0_ohm_per_km: 0.270,
+    R12_ohm_per_km: 0.580,
+    X12_ohm_per_km: 0.0851,
+    R0_ohm_per_km: 1.420,
+    X0_ohm_per_km: 0.8527,
     matiere: 'CUIVRE',
     posesPermises: ['SOUTERRAIN'],
     maxCurrent_A: 160,
@@ -238,10 +239,10 @@ export const defaultCableTypes: CableType[] = [
   {
     id: 'ca-50cu',
     label: 'CA 50 Cu',
-    R12_ohm_per_km: 0.387,
-    X12_ohm_per_km: 0.085,
-    R0_ohm_per_km: 1.161,
-    X0_ohm_per_km: 0.255,
+    R12_ohm_per_km: 0.405,
+    X12_ohm_per_km: 0.0848,
+    R0_ohm_per_km: 1.142,
+    X0_ohm_per_km: 0.360,
     matiere: 'CUIVRE',
     posesPermises: ['SOUTERRAIN'],
     maxCurrent_A: 190,
@@ -249,10 +250,10 @@ export const defaultCableTypes: CableType[] = [
   {
     id: 'ca-70cu',
     label: 'CA 70 Cu',
-    R12_ohm_per_km: 0.269,
-    X12_ohm_per_km: 0.085,
-    R0_ohm_per_km: 0.807,
-    X0_ohm_per_km: 0.255,
+    R12_ohm_per_km: 0.290,
+    X12_ohm_per_km: 0.110,
+    R0_ohm_per_km: 0.957,
+    X0_ohm_per_km: 0.275,
     matiere: 'CUIVRE',
     posesPermises: ['SOUTERRAIN'],
     maxCurrent_A: 235,
@@ -260,10 +261,10 @@ export const defaultCableTypes: CableType[] = [
   {
     id: 'ca-95cu',
     label: 'CA 95 Cu',
-    R12_ohm_per_km: 0.195,
-    X12_ohm_per_km: 0.085,
-    R0_ohm_per_km: 0.585,
-    X0_ohm_per_km: 0.255,
+    R12_ohm_per_km: 0.210,
+    X12_ohm_per_km: 0.110,
+    R0_ohm_per_km: 0.693,
+    X0_ohm_per_km: 0.275,
     matiere: 'CUIVRE',
     posesPermises: ['SOUTERRAIN'],
     maxCurrent_A: 280,
@@ -271,10 +272,10 @@ export const defaultCableTypes: CableType[] = [
   {
     id: 'ca-120cu',
     label: 'CA 120 Cu',
-    R12_ohm_per_km: 0.153,
-    X12_ohm_per_km: 0.080,
-    R0_ohm_per_km: 0.459,
-    X0_ohm_per_km: 0.240,
+    R12_ohm_per_km: 0.169,
+    X12_ohm_per_km: 0.0804,
+    R0_ohm_per_km: 0.5159,
+    X0_ohm_per_km: 0.3385,
     matiere: 'CUIVRE',
     posesPermises: ['SOUTERRAIN'],
     maxCurrent_A: 320,
@@ -282,10 +283,10 @@ export const defaultCableTypes: CableType[] = [
   {
     id: 'ca-150cu',
     label: 'CA 150 Cu',
-    R12_ohm_per_km: 0.124,
-    X12_ohm_per_km: 0.075,
-    R0_ohm_per_km: 0.372,
-    X0_ohm_per_km: 0.225,
+    R12_ohm_per_km: 0.135,
+    X12_ohm_per_km: 0.100,
+    R0_ohm_per_km: 0.446,
+    X0_ohm_per_km: 0.250,
     matiere: 'CUIVRE',
     posesPermises: ['SOUTERRAIN'],
     maxCurrent_A: 355,
@@ -293,18 +294,17 @@ export const defaultCableTypes: CableType[] = [
   {
     id: 'ca-240cu',
     label: 'CA 240 Cu',
-    R12_ohm_per_km: 0.078,
-    X12_ohm_per_km: 0.070,
-    R0_ohm_per_km: 0.234,
-    X0_ohm_per_km: 0.210,
+    R12_ohm_per_km: 0.084,
+    X12_ohm_per_km: 0.0801,
+    R0_ohm_per_km: 0.2657,
+    X0_ohm_per_km: 0.2900,
     matiere: 'CUIVRE',
     posesPermises: ['SOUTERRAIN'],
     maxCurrent_A: 420,
   },
- 
+
   // ============================================
   // CÂBLES SOUTERRAINS ALUMINIUM (CA Alu)
-  // (R0 = 3·R12, X0 = 3·X12 — modèle IEC 60909)
   // ============================================
   {
     id: 'eaxecwb-95al',

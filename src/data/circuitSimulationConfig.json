@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "description": "Paramètres de simulation circuit BT — GRD wallon",
+
+  "diversityFactors": {
+    "description": "Coefficient 'a' par cluster pour f(N) = a + (1-a)/√N",
+    "A": 0.15,
+    "B": 0.13,
+    "C": 0.11,
+    "D": 0.18
+  },
+
+  "clusterDeltas": {
+    "description": "Multiplicateurs horaires par cluster sur le profil résidentiel uniquement. Clés: 'HH-HH' (toutes saisons) ou 'season_HH-HH'.",
+    "A": {},
+    "B": { "18-21": 1.10 },
+    "C": { "winter_6-9": 1.15 },
+    "D": { "winter_6-9": 1.15, "22-6": 1.25 }
+  },
+
+  "thresholds": {
+    "description": "Seuils de puissance nette (kW) pour flagging horaire",
+    "overload_kW": 100,
+    "injection_kW": -50
+  }
+}

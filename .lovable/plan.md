@@ -1,71 +1,84 @@
 
 
-# Mise a jour des impedances cables existants (corrections GRD)
+# Mise a jour defaultCableTypes.ts — nouvelles valeurs constructeurs
 
-## Perimetre
+## Changements identifies
 
-Mise a jour des valeurs d'impedance des cables **existants uniquement** dans `src/data/defaultCableTypes.ts`, d'apres le fichier GRD consolide fourni. Aucun ajout de cable. Backup prealable.
+Comparaison entre le fichier actuel et les donnees fournies :
 
-## Valeurs a modifier
+### Cables souterrains cuivre (CA Cu) — corrections majeures
 
-### Cables souterrains cuivre (CA Cu) — corrections X12, R0, X0
-
-| Cable | Champ | Avant | Apres | Source |
-|---|---|---|---|---|
-| CA 10 Cu | X12 | 0.160 | 0.0942 | [T1] |
-| CA 10 Cu | R0 | 6.060 | 7.320 | [T2] |
-| CA 10 Cu | X0 | 0.480 | 0.3768 | [T2] |
-| CA 16 Cu | X12 | 0.144 | 0.0895 | [T1] |
-| CA 16 Cu | R0 | 3.780 | 4.600 | [T2] |
-| CA 16 Cu | X0 | 0.432 | 0.3580 | [T2] |
-| CA 25 Cu | X12 | 0.134 | 0.0880 | [T1] |
-| CA 25 Cu | R0 | 2.430 | 1.716 | [T2] |
-| CA 25 Cu | X0 | 0.402 | 1.1414 | [T2] |
-| CA 35 Cu | X12 | 0.127 | 0.0851 | [T1] |
-| CA 35 Cu | R0 | 1.740 | 1.420 | [T2] |
-| CA 35 Cu | X0 | 0.381 | 0.8527 | [T2] |
-| CA 50 Cu | X12 | 0.120 | 0.0848 | [T1] |
-| CA 50 Cu | R0 | 1.215 | 1.142 | [T2] |
-| CA 50 Cu | X0 | 0.360 | **conserve 0.360** | absent du fichier source |
-| CA 50 Cu | maxCurrent_A | 190 | **conserve 190** | absent du fichier source |
-| CA 70 Cu | R0 | 0.870 | 0.957 | [RC] |
-| CA 70 Cu | X0 | 0.330 | 0.275 | [RC] |
-| CA 95 Cu | R0 | 0.630 | 0.693 | [RC] |
-| CA 95 Cu | X0 | 0.330 | 0.275 | [RC] |
-| CA 120 Cu | X12 | 0.104 | 0.0804 | [T1] |
-| CA 120 Cu | R0 | 0.507 | 0.5159 | [T2] |
-| CA 120 Cu | X0 | 0.312 | 0.3385 | [T2] |
-| CA 150 Cu | R0 | 0.405 | 0.446 | [RC] |
-| CA 150 Cu | X0 | 0.300 | 0.250 | [RC] |
-| CA 240 Cu | X12 | 0.096 | 0.0801 | [T1] |
-| CA 240 Cu | R0 | 0.252 | 0.2657 | [T2] |
-| CA 240 Cu | X0 | 0.288 | 0.2900 | [T2] |
-| CA 240 Cu | maxCurrent_A | 420 | **conserve 420** | absent du fichier source |
-
-### Cables torsades aluminium aeriens (TR)
-
-| Cable | Champ | Avant | Apres |
+| Cable | Champ | Actuel | Nouveau |
 |---|---|---|---|
-| TR 150 Alu | label | "Tr 150 Alu" | "TR 150 Alu" |
+| CA 10 Cu | R12 | 2.020 | 1.830 |
+| CA 10 Cu | X12 | 0.0942 | 0.090 |
+| CA 10 Cu | R0 | 7.320 | 5.490 |
+| CA 10 Cu | X0 | 0.3768 | 0.270 |
+| CA 16 Cu | R12 | 1.260 | 1.150 |
+| CA 16 Cu | X12 | 0.0895 | 0.090 |
+| CA 16 Cu | R0 | 4.600 | 3.450 |
+| CA 16 Cu | X0 | 0.3580 | 0.270 |
+| CA 25 Cu | R12 | 0.810 | 0.727 |
+| CA 25 Cu | X12 | 0.0880 | 0.090 |
+| CA 25 Cu | R0 | 1.716 | 2.181 |
+| CA 25 Cu | X0 | 1.1414 | 0.270 |
+| CA 35 Cu | R12 | 0.580 | 0.524 |
+| CA 35 Cu | X12 | 0.0851 | 0.090 |
+| CA 35 Cu | R0 | 1.420 | 1.572 |
+| CA 35 Cu | X0 | 0.8527 | 0.270 |
+| CA 50 Cu | R12 | 0.405 | 0.387 |
+| CA 50 Cu | X12 | 0.0848 | 0.085 |
+| CA 50 Cu | R0 | 1.142 | 1.161 |
+| CA 50 Cu | X0 | 0.360 | 0.255 |
+| CA 70 Cu | R12 | 0.290 | 0.269 |
+| CA 70 Cu | X12 | 0.110 | 0.085 |
+| CA 70 Cu | R0 | 0.957 | 0.807 |
+| CA 70 Cu | X0 | 0.275 | 0.255 |
+| CA 95 Cu | R12 | 0.210 | 0.195 |
+| CA 95 Cu | X12 | 0.110 | 0.085 |
+| CA 95 Cu | R0 | 0.693 | 0.585 |
+| CA 95 Cu | X0 | 0.275 | 0.255 |
+| CA 120 Cu | R12 | 0.169 | 0.153 |
+| CA 120 Cu | X12 | 0.0804 | 0.080 |
+| CA 120 Cu | R0 | 0.5159 | 0.459 |
+| CA 120 Cu | X0 | 0.3385 | 0.240 |
+| CA 150 Cu | R12 | 0.135 | 0.124 |
+| CA 150 Cu | X12 | 0.100 | 0.075 |
+| CA 150 Cu | R0 | 0.446 | 0.372 |
+| CA 150 Cu | X0 | 0.250 | 0.225 |
+| CA 240 Cu | R12 | 0.084 | 0.078 |
+| CA 240 Cu | X12 | 0.0801 | 0.070 |
+| CA 240 Cu | R0 | 0.2657 | 0.234 |
+| CA 240 Cu | X0 | 0.2900 | 0.210 |
 
-### Cables non modifies
+### Cables TR — revert label
 
-Les cables NU (cuivre aeriens), TR 16-95 Alu, et CA Alu (4G 95 et 4G 150) restent **inchanges** — les valeurs du fichier source correspondent aux valeurs actuelles.
+| Cable | Champ | Actuel | Nouveau |
+|---|---|---|---|
+| TR 150 Alu | label | "TR 150 Alu" | "Tr 150 Alu" (revert) |
+
+### Cables inchanges
+
+NU Cu (10 cables), TR 16-95 Alu (5 cables), CA Alu (2 cables) — valeurs identiques.
+
+### Note importante
+
+Les nouvelles valeurs CA Cu utilisent un modele R0=3xR12, X0=3xX12 (IEC 60909) au lieu des valeurs GRD specifiques [T1]/[T2]/[RC] precedentes. C'est un changement de philosophie de calcul.
 
 ## Actions
 
 ### 1. Backup
 
-Creer `src/data/defaultCableTypes.backup.20260223.ts` — copie exacte du fichier actuel.
+Creer `src/data/defaultCableTypes.backup.20260224.ts` — copie du fichier actuel (post-corrections GRD precedentes).
 
-### 2. Modifications
+### 2. Remplacement
 
-Appliquer les corrections d'impedance listees ci-dessus dans `src/data/defaultCableTypes.ts` via des edits cibles (pas de reecriture totale).
+Ecrire le contenu fourni par l'utilisateur tel quel dans `src/data/defaultCableTypes.ts`.
 
 ## Fichiers concernes
 
 | Fichier | Action |
 |---|---|
-| `src/data/defaultCableTypes.backup.20260223.ts` | Nouveau — backup |
-| `src/data/defaultCableTypes.ts` | Modifie — corrections impedances |
+| `src/data/defaultCableTypes.backup.20260224.ts` | Nouveau — backup date |
+| `src/data/defaultCableTypes.ts` | Remplace — nouvelles donnees constructeurs IEC 60909 |
 

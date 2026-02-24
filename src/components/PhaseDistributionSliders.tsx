@@ -222,7 +222,6 @@ function calculateAutoDistributionInternal(
   }
   
   const is230V = project.voltageSystem === "TRIPHASÉ_230V";
-  const DELTA_FACTOR = 1 / Math.sqrt(3);
   let totalA = 0, totalB = 0, totalC = 0;
   
   const foisonnementResidentiel = project.foisonnementChargesResidentiel ?? 15;
@@ -247,16 +246,10 @@ function calculateAutoDistributionInternal(
       
       if (client.connectionType === 'MONO') {
         if (is230V && client.phaseCoupling) {
-          if (client.phaseCoupling === 'A-B') {
-            totalA += value * DELTA_FACTOR;
-            totalB += value * DELTA_FACTOR;
-          } else if (client.phaseCoupling === 'B-C') {
-            totalB += value * DELTA_FACTOR;
-            totalC += value * DELTA_FACTOR;
-          } else if (client.phaseCoupling === 'A-C') {
-            totalA += value * DELTA_FACTOR;
-            totalC += value * DELTA_FACTOR;
-          }
+          // Même logique que le tableau : charge complète sur le couplage correspondant
+          if (client.phaseCoupling === 'A-B') totalA += value;
+          else if (client.phaseCoupling === 'B-C') totalB += value;
+          else if (client.phaseCoupling === 'A-C') totalC += value;
         } else if (client.assignedPhase) {
           if (client.assignedPhase === 'A') totalA += value;
           else if (client.assignedPhase === 'B') totalB += value;
@@ -270,21 +263,6 @@ function calculateAutoDistributionInternal(
       }
     });
   });
-  
-  if (is230V) {
-    const couplingAB = totalA + totalB - totalC;
-    const couplingBC = totalB + totalC - totalA;
-    const couplingAC = totalA + totalC - totalB;
-    const grandTotal = couplingAB + couplingBC + couplingAC;
-    
-    if (grandTotal === 0) return { A: 33.33, B: 33.33, C: 33.34 };
-    
-    return {
-      A: (couplingAB / grandTotal) * 100,
-      B: (couplingBC / grandTotal) * 100,
-      C: (couplingAC / grandTotal) * 100
-    };
-  }
   
   const grandTotal = totalA + totalB + totalC;
   if (grandTotal === 0) return { A: 33.33, B: 33.33, C: 33.34 };

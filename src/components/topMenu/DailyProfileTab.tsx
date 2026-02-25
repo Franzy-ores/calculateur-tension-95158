@@ -17,7 +17,7 @@ import { DailyProfileChart } from '@/components/DailyProfileChart';
 import { ProfileVisualEditor } from '@/components/ProfileVisualEditor';
 import { MeasuredProfileImporter } from '@/components/MeasuredProfileImporter';
 import { HourlyVoltageResult, ClientHourlyVoltageResult } from '@/types/dailyProfile';
-import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent, Home, Zap, FlaskConical, Moon, Upload, FileBarChart, X, Download, MapPin, User, Cable, Building2, TreePine, Wheat, Eye, EyeOff, RotateCcw } from 'lucide-react';
+import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent, Home, Zap, FlaskConical, Moon, Upload, FileBarChart, X, Download, MapPin, User, Cable, Building2, TreePine, Wheat, Eye, EyeOff, RotateCcw, HelpCircle } from 'lucide-react';
 import { clusterProfiles, getClusterById, DEFAULT_CLUSTER_ID } from '@/data/clusterProfiles';
 import { toast } from 'sonner';
 import { HourlyProfile, MeasuredProfileMetadata } from '@/types/dailyProfile';
@@ -26,6 +26,7 @@ import { Slider } from '@/components/ui/slider';
 import { Project } from '@/types/network';
 import { calculateClientDailyVoltages } from '@/utils/clientDailyProfileCalculator';
 import { branchementCableTypes, calculateGeodeticDistance } from '@/data/branchementCableTypes';
+import { CalculationInfoDialog } from '@/components/CalculationInfoDialog';
 
 /**
  * Composant affichant les statistiques de clients résidentiels/industriels
@@ -120,6 +121,7 @@ export const DailyProfileTab = () => {
   const [showClientCurve, setShowClientCurve] = useState(false);
   const [clientCurveMode, setClientCurveMode] = useState<'overlay' | 'solo'>('overlay');
   const [showDetails, setShowDetails] = useState(true);
+  const [showInfoDialog, setShowInfoDialog] = useState(false);
 
   // États météo indépendants par saison
   const [weatherWinter, setWeatherWinter] = useState<'sunny' | 'gray'>(dailyProfileOptions.weather || 'sunny');
@@ -310,6 +312,13 @@ export const DailyProfileTab = () => {
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <Clock className="h-4 w-4 text-primary" />
             Paramètres de simulation
+            <button
+              onClick={() => setShowInfoDialog(true)}
+              className="ml-auto p-0.5 rounded-full hover:bg-muted transition-colors"
+              title="Note de calcul"
+            >
+              <HelpCircle className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+            </button>
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4 space-y-4">
@@ -1087,6 +1096,30 @@ export const DailyProfileTab = () => {
         onOpenChange={setEditMeasuredOpen}
         editMode={true}
       />
+
+      {/* Dialog d'information sur le calcul */}
+      {(() => {
+        const clients = currentProject.clientsImportes || [];
+        const links = currentProject.clientLinks || [];
+        let nRes = 0, nInd = 0;
+        clients.forEach(c => {
+          if (links.some(l => l.clientId === c.id)) {
+            if (c.clientType === 'industriel') nInd++; else nRes++;
+          }
+        });
+        const cluster = getClusterById(dailyProfileOptions.selectedClusterId || DEFAULT_CLUSTER_ID);
+        return (
+          <CalculationInfoDialog
+            open={showInfoDialog}
+            onOpenChange={setShowInfoDialog}
+            nResidentialClients={nRes}
+            nIndustrialClients={nInd}
+            selectedClusterName={cluster?.name || 'Urbain résidentiel'}
+            facteurConso={dailyProfileOptions.customFacteurConso ?? cluster?.facteurConso ?? 1.0}
+            facteurVE={dailyProfileOptions.customFacteurVE ?? cluster?.facteurVE ?? 1.0}
+          />
+        );
+      })()}
     </div>
   );
 };

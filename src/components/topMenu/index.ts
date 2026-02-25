@@ -6,3 +6,4 @@ export { SimulationTab } from './SimulationTab';
 export { DailyProfileTab } from './DailyProfileTab';
 export { ExportTab } from './ExportTab';
 export { TensionClientTab } from './TensionClientTab';
+export { LaboFoisonnementTab } from './LaboFoisonnementTab';

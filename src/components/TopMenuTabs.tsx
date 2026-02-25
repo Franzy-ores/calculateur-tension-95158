@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Zap, Users, Settings2, FlaskConical, FileDown, Clock, Cable } from "lucide-react";
+import { Badge } from '@/components/ui/badge';
 import { useNetworkStore } from "@/store/networkStore";
 import { ExcelImporter } from '@/components/ExcelImporter';
-import { NetworkTab, RaccordementsTab, ParametersTab, SimulationTab, DailyProfileTab, ExportTab, TensionClientTab } from '@/components/topMenu';
+import { NetworkTab, RaccordementsTab, ParametersTab, SimulationTab, DailyProfileTab, ExportTab, TensionClientTab, LaboFoisonnementTab } from '@/components/topMenu';
 
 interface TopMenuTabsProps {
   defaultTab?: string;
@@ -74,6 +75,14 @@ export const TopMenuTabs = ({ defaultTab = 'network', className = '' }: TopMenuT
               Tension Client
             </TabsTrigger>
             <TabsTrigger 
+              value="labo" 
+              className="relative h-10 rounded-none border-b-2 border-transparent bg-transparent px-4 font-medium text-muted-foreground shadow-none transition-none data-[state=active]:border-violet-500 data-[state=active]:text-violet-500 data-[state=active]:shadow-none"
+            >
+              <FlaskConical className="h-4 w-4 mr-2" />
+              Labo
+              <Badge variant="outline" className="ml-1.5 text-[9px] px-1.5 py-0 border-violet-500/50 text-violet-500">TEST</Badge>
+            </TabsTrigger>
+            <TabsTrigger 
               value="export" 
               className="relative h-10 rounded-none border-b-2 border-transparent bg-transparent px-4 font-medium text-muted-foreground shadow-none transition-none data-[state=active]:border-destructive data-[state=active]:text-destructive data-[state=active]:shadow-none"
             >
@@ -104,6 +113,9 @@ export const TopMenuTabs = ({ defaultTab = 'network', className = '' }: TopMenuT
         </TabsContent>
         <TabsContent value="export" className="mt-0">
           <ExportTab />
+        </TabsContent>
+        <TabsContent value="labo" className="mt-0">
+          <LaboFoisonnementTab />
         </TabsContent>
       </Tabs>
 

@@ -1,56 +1,79 @@
 
 
-## Analyse de vos paliers vs. la norme NF C 14-100
+# Note d'information Profil 24H — Bouton "?" avec dialog explicatif
 
-Voici la comparaison directe entre vos paliers et le tableau normatif NF C 14-100 (facteur de simultaneite ks) :
+## Objectif
 
-| Nombre de clients | Vos paliers | NF C 14-100 (ks) |
-|---|---|---|
-| 1 | 100% | 100% |
-| 2-4 | 30% | 100% |
-| 5-9 | 30% | 78% |
-| 10-14 | 10% | 63% |
-| 15-19 | 10% | 53% |
-| 20-24 | 5% | 49% |
-| 25-39 | 5% | 43% |
-| 40-49 | 5% | 40% |
-| 50+ | 5% | 38% |
+Ajouter un bouton **?** (icone `HelpCircle`) a cote du titre "Parametres de simulation" dans `DailyProfileTab.tsx`. Au clic, une dialog s'ouvre avec une explication complete du processus de calcul : parametres utilises, profils, foisonnement, clusters, VE, et calcul client.
 
-### Le point essentiel : vous avez raison, mais les deux tableaux ne parlent pas de la meme chose
+## Contenu de la note d'information
 
-La norme NF C 14-100 definit le ks par rapport a la **puissance appelee reelle** (ce que le client consomme effectivement au pic). Vos paliers s'appliquent a la **puissance contractuelle** (ce que le client a le droit de soutirer).
+La dialog contiendra les sections suivantes :
 
-Le ratio entre les deux est typiquement de **0.25 a 0.40** pour du residentiel standard (un client a 12 kVA appelle rarement plus de 3-5 kVA en pointe).
+### 1. Parametres d'entree
+- **Noeud analyse** : point du reseau ou la tension est calculee
+- **Saison** : hiver / ete (profils horaires differents)
+- **Meteo** : soleil / gris (facteur PV : ×1.0 ou ×0.3)
+- **Cluster** : Urbain dense / Urbain residentiel / Peri-urbain / Rural (modifie facteurConso et facteurVE)
 
-Si on corrige la norme par ce ratio d'utilisation :
+### 2. Profil de base (residential)
+- Valeurs horaires 0-23h en % de la puissance contractuelle
+- Hiver : pic a 21% (h19) / Ete : pic a 16.5% (h19)
+- Profil industriel_pme : pic a 100% (h10-11, h14-16)
+- Profil PV : courbe solaire, pic a 65% hiver / 100% ete
 
-| n clients | NF C 14-100 × ratio utilisation (~0.35) | Vos paliers |
-|---|---|---|
-| 2-4 | 35% | 30% |
-| 5-9 | 27% | 30% |
-| 10-14 | 22% | 10% |
-| 15-19 | 19% | 10% |
-| 20-24 | 17% | 5% |
-| 40+ | 14% | 5% |
+### 3. Auto-foisonnement (paliers terrain)
+Oui, l'auto-foisonnement = application des paliers sur le profil de base :
 
-### Verdict
+```text
+Nombre de clients (n)    Coefficient    Exemple (profil 21%)
+─────────────────────    ───────────    ────────────────────
+n = 1                    × 1.00         → 21.0%
+n = 2 à 10               × 0.30         → 6.3%
+n = 11 à 20              × 0.15         → 3.15%
+n > 20                   × 0.08         → 1.68%
+```
 
-- **Palier 2-10 clients a 30%** : coherent, bien aligne avec la norme corrigee du ratio d'utilisation.
-- **Palier 11-20 clients a 10%** : un peu bas. La norme corrigee donne plutot 17-22%. Valeur terrain de **15-20%** serait plus prudente.
-- **Palier 21+ clients a 5%** : egalement bas. La norme corrigee donne 14-17%. Valeur terrain de **10%** serait plus securitaire.
+Formule : `profil_foisonne = profil_base(h) × palier(n)`
 
-### Recommandation
+Les paliers s'appliquent a la **puissance contractuelle** (pas a la puissance appelee). Le ratio d'utilisation (~0.25-0.40) est implicitement integre dans les valeurs du profil de base.
 
-Si vos mesures terrain confirment ces valeurs basses (10% et 5%), alors elles sont valides pour **votre contexte specifique**. Mais pour un outil generique, des valeurs legerement plus conservatrices seraient plus sures :
+### 4. Cluster (modificateur)
+Applique **apres** le foisonnement comme multiplicateur pur :
+- facteurConso : ×1.0 (urbain) a ×1.2 (rural)
+- facteurVE : ×0.5 (urbain dense) a ×2.0 (rural)
 
-| n clients | Proposition ajustee |
-|---|---|
-| 1 | 100% |
-| 2-10 | 30% |
-| 11-20 | 15% |
-| 21+ | 8% |
+### 5. Bonus VE
+- Heures 18-21 : +2.5% (soiree)
+- Heures 22-05 : +5.0% (nuit)
+- Le bonus VE est aussi foisonne par les paliers terrain
+- Puis multiplie par facteurVE du cluster
 
-Cela reste bien en dessous de la norme NF C 14-100 brute, tout en offrant une petite marge de securite par rapport a vos paliers initiaux. 
+### 6. Formule finale reseau
+```text
+foisonnement_residentiel(h) = 
+    profil_residential(h) × palier(n) × facteurConso
+  + bonus_VE(h) × palier(n) × facteurVE
+```
 
-A vous de decider : garder vos valeurs terrain exactes ou prendre cette version legerement conservatrice.
+### 7. Calcul client (courbe cyan)
+- Utilise le profil `client` (individuel, sans foisonnement)
+- ΔU = chute de tension dans le cable de branchement
+- V_client = V_noeud - ΔU
+
+## Implementation technique
+
+### Fichier modifie : `src/components/topMenu/DailyProfileTab.tsx`
+
+1. Importer `HelpCircle` de lucide-react et `Dialog` de radix
+2. Ajouter un state `showInfoDialog`
+3. Placer un bouton `<HelpCircle>` a cote du titre CardTitle (ligne ~311)
+4. Creer un composant `CalculationInfoDialog` avec ScrollArea contenant toutes les sections ci-dessus, formatees en texte lisible avec des tableaux ASCII et des exemples numeriques concrets
+5. Le dialog utilise les **vrais parametres actuels** du projet : nombre de clients residentiels/industriels detectes, cluster selectionne, palier de foisonnement applique
+
+### Nouveau composant interne : `CalculationInfoDialog`
+
+- Props : `open`, `onOpenChange`, `nResidentialClients`, `selectedCluster`, `currentPalier`
+- Affiche les valeurs dynamiques du projet en cours
+- Sections avec separateurs visuels et titres en gras
 

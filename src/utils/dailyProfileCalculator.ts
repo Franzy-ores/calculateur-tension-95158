@@ -219,7 +219,13 @@ export class DailyProfileCalculator {
     let baseFoisonne = baseResidentialProfile;
     let evFoisonne = baseEvBonus;
     
-    if (this.options.adaptiveFoisonnement !== false && nResidentialClients > 1) {
+    if (this.options.customDiversityCoeff !== undefined && nResidentialClients > 1) {
+      // Override par coefficient de diversité continu f(N) = a + (1-a)/√N
+      baseFoisonne = baseResidentialProfile * this.options.customDiversityCoeff;
+      if (baseEvBonus > 0) {
+        evFoisonne = baseEvBonus * this.options.customDiversityCoeff;
+      }
+    } else if (this.options.adaptiveFoisonnement !== false && nResidentialClients > 1) {
       // Velander sur le profil résidentiel brut
       baseFoisonne = calculateAdaptiveFoisonnement(nResidentialClients, baseResidentialProfile);
       // Velander sur le bonus EV brut (si non nul)

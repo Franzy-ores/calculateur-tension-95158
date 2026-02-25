@@ -11,13 +11,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useNetworkStore } from '@/store/networkStore';
-import { FlaskConical, MapPin, Sun, Cloud, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
+import { FlaskConical, MapPin, Sun, Cloud, AlertTriangle, TrendingUp, TrendingDown, Zap } from 'lucide-react';
 import { clusterProfiles, getClusterById, DEFAULT_CLUSTER_ID } from '@/data/clusterProfiles';
 import {
   simulateCircuit24h,
   diversityFactor,
 } from '@/utils/circuitPowerCalculator';
 import { getFoisonnementPalier } from '@/utils/foisonnementCalculator';
+import { DailyProfileCalculator } from '@/utils/dailyProfileCalculator';
 import type {
   CircuitConfig,
   CircuitClient,
@@ -28,10 +29,11 @@ import type {
   CircuitSimulationResult,
   SeasonProfiles,
 } from '@/types/circuitSimulation';
+import type { HourlyVoltageResult, DailySimulationOptions } from '@/types/dailyProfile';
 import circuitSimulationConfigData from '@/data/circuitSimulationConfig.json';
 import hourlyProfilesData from '@/data/hourlyProfiles.json';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -66,6 +68,8 @@ export const LaboFoisonnementTab = () => {
     setDailyProfileOptions,
     startNodeSelection,
     nodeSelectionMode,
+    simulationEquipment,
+    isSimulationActive,
   } = useNetworkStore();
 
   const [season, setSeason] = useState<CircuitSeason>('winter');
@@ -109,7 +113,6 @@ export const LaboFoisonnementTab = () => {
         puissanceContrat_kW: c.puissanceContractuelle_kVA * cosPhi,
       };
 
-      // Add PV as separate client if present
       return cc;
     });
 
@@ -133,25 +136,75 @@ export const LaboFoisonnementTab = () => {
     return { circuit: cfg, nResidential: nRes };
   }, [currentProject, selectedNodeId, circuitCluster]);
 
-  // Run simulation
+  // Run power simulation (moteur continu)
   const result: CircuitSimulationResult | null = useMemo(() => {
     if (!circuit || circuit.clients.length === 0) return null;
     return simulateCircuit24h(circuit, season, weather, profiles, weatherFactors, circuitConfig);
   }, [circuit, season, weather]);
 
-  // Comparison data: palier vs continu for each hour
+  // ─── Voltage simulations: Palier vs Continu ──────────────────────────────────
+  const continuCoeff = nResidential > 0 ? diversityFactor(nResidential, circuitCluster, circuitConfig) : 0;
+  const palierCoeff = nResidential > 0 ? getFoisonnementPalier(nResidential) : 0;
+
+  const { voltagePalier, voltageContinu } = useMemo(() => {
+    if (!currentProject || !selectedNodeId || nResidential === 0) {
+      return { voltagePalier: [] as HourlyVoltageResult[], voltageContinu: [] as HourlyVoltageResult[] };
+    }
+
+    const baseOptions: DailySimulationOptions = {
+      season: season as 'winter' | 'summer',
+      weather: weather as 'sunny' | 'gray',
+      enableEV: dailyProfileOptions.enableEV ?? true,
+      evBonusEvening: dailyProfileOptions.evBonusEvening ?? 2.5,
+      evBonusNight: dailyProfileOptions.evBonusNight ?? 5,
+      selectedNodeId,
+      selectedClusterId,
+      zeroProduction: dailyProfileOptions.zeroProduction ?? false,
+      adaptiveFoisonnement: true,
+    };
+
+    // Run 1: Palier (standard)
+    const calcPalier = new DailyProfileCalculator(
+      currentProject,
+      baseOptions,
+      undefined,
+      simulationEquipment,
+      isSimulationActive
+    );
+    const resPalier = calcPalier.calculateDailyVoltages();
+
+    // Run 2: Continu (customDiversityCoeff)
+    const calcContinu = new DailyProfileCalculator(
+      currentProject,
+      {
+        ...baseOptions,
+        adaptiveFoisonnement: false,
+        customDiversityCoeff: continuCoeff,
+      },
+      undefined,
+      simulationEquipment,
+      isSimulationActive
+    );
+    const resContinu = calcContinu.calculateDailyVoltages();
+
+    return { voltagePalier: resPalier, voltageContinu: resContinu };
+  }, [currentProject, selectedNodeId, season, weather, selectedClusterId, nResidential, continuCoeff, dailyProfileOptions, simulationEquipment, isSimulationActive]);
+
+  // Comparison data: palier vs continu for each hour (power + voltage)
   const comparisonData = useMemo(() => {
     if (!result || nResidential === 0) return [];
 
-    const palierCoeff = getFoisonnementPalier(nResidential);
-    const continuCoeff = diversityFactor(nResidential, circuitCluster, circuitConfig);
     const seasonProfiles = profiles[season];
 
-    return result.hourly.map(h => {
+    return result.hourly.map((h, i) => {
       const baseProfile = seasonProfiles.residential[h.hour.toString()] ?? 0;
       const palierProfile = baseProfile * palierCoeff;
       const continuProfile = baseProfile * continuCoeff;
       const delta = palierProfile > 0 ? ((continuProfile - palierProfile) / palierProfile * 100) : 0;
+
+      const vPalier = voltagePalier[i]?.voltageAvg_V ?? 0;
+      const vContinu = voltageContinu[i]?.voltageAvg_V ?? 0;
+      const deltaV = vPalier > 0 ? (vContinu - vPalier) : 0;
 
       return {
         hour: h.hour,
@@ -167,15 +220,27 @@ export const LaboFoisonnementTab = () => {
         palierProfile: +palierProfile.toFixed(2),
         continuProfile: +continuProfile.toFixed(2),
         delta: +delta.toFixed(1),
+        // Voltages
+        V_palier: +vPalier.toFixed(2),
+        V_continu: +vContinu.toFixed(2),
+        deltaV: +deltaV.toFixed(2),
       };
     });
-  }, [result, nResidential, circuitCluster, season]);
+  }, [result, nResidential, circuitCluster, season, voltagePalier, voltageContinu, palierCoeff, continuCoeff]);
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
   const clusterInfo = getClusterById(selectedClusterId);
-  const continuCoeff = nResidential > 0 ? diversityFactor(nResidential, circuitCluster, circuitConfig) : 0;
-  const palierCoeff = nResidential > 0 ? getFoisonnementPalier(nResidential) : 0;
   const aCoeff = circuitConfig.diversityFactors[circuitCluster];
+
+  // Compute voltage Y-axis domain
+  const voltageRange = useMemo(() => {
+    if (comparisonData.length === 0) return { min: 200, max: 250 };
+    const allV = comparisonData.flatMap(d => [d.V_palier, d.V_continu]).filter(v => v > 0);
+    if (allV.length === 0) return { min: 200, max: 250 };
+    const min = Math.min(...allV);
+    const max = Math.max(...allV);
+    return { min: Math.floor(min - 3), max: Math.ceil(max + 3) };
+  }, [comparisonData]);
 
   if (!currentProject) {
     return <div className="p-4 text-center text-muted-foreground">Aucun projet chargé</div>;
@@ -288,7 +353,7 @@ export const LaboFoisonnementTab = () => {
           {/* Summary */}
           {result && (
             <div className="bg-muted/50 rounded-md p-3 space-y-1.5 text-xs">
-              <div className="font-medium text-foreground">Synthèse</div>
+              <div className="font-medium text-foreground">Synthèse puissances</div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Pic charge</span>
                 <span className="font-mono">{result.peakLoad_kW.toFixed(1)} kW</span>
@@ -312,12 +377,49 @@ export const LaboFoisonnementTab = () => {
               )}
             </div>
           )}
+
+          {/* Voltage summary */}
+          {comparisonData.length > 0 && comparisonData.some(d => d.V_palier > 0) && (
+            <div className="bg-muted/50 rounded-md p-3 space-y-1.5 text-xs">
+              <div className="font-medium text-foreground flex items-center gap-1">
+                <Zap className="h-3 w-3 text-violet-500" /> Synthèse tensions
+              </div>
+              {(() => {
+                const vPaliers = comparisonData.map(d => d.V_palier).filter(v => v > 0);
+                const vContinus = comparisonData.map(d => d.V_continu).filter(v => v > 0);
+                const minP = vPaliers.length > 0 ? Math.min(...vPaliers) : 0;
+                const minC = vContinus.length > 0 ? Math.min(...vContinus) : 0;
+                const maxP = vPaliers.length > 0 ? Math.max(...vPaliers) : 0;
+                const maxC = vContinus.length > 0 ? Math.max(...vContinus) : 0;
+                return (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">V min palier</span>
+                      <span className={`font-mono ${minP < 207 ? 'text-destructive' : minP < 218.5 ? 'text-orange-500' : ''}`}>{minP.toFixed(1)} V</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-violet-500">V min continu</span>
+                      <span className={`font-mono ${minC < 207 ? 'text-destructive' : minC < 218.5 ? 'text-orange-500' : ''}`}>{minC.toFixed(1)} V</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">V max palier</span>
+                      <span className="font-mono">{maxP.toFixed(1)} V</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-violet-500">V max continu</span>
+                      <span className="font-mono">{maxC.toFixed(1)} V</span>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Col 2-3: Graphique + Tableau */}
+      {/* Col 2-3: Graphiques + Tableau */}
       <div className="lg:col-span-2 space-y-4">
-        {/* Graphique 24h */}
+        {/* Graphique Puissances 24h */}
         {comparisonData.length > 0 ? (
           <Card className="bg-card/50 backdrop-blur border-violet-500/30">
             <CardHeader className="pb-2 pt-3 px-4">
@@ -329,7 +431,7 @@ export const LaboFoisonnementTab = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4">
-              <ResponsiveContainer width="100%" height={280}>
+              <ResponsiveContainer width="100%" height={250}>
                 <LineChart data={comparisonData}>
                   <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
                   <XAxis dataKey="label" tick={{ fontSize: 10 }} />
@@ -357,12 +459,58 @@ export const LaboFoisonnementTab = () => {
           </Card>
         )}
 
-        {/* Tableau comparatif */}
+        {/* Graphique Tensions 24h — Palier vs Continu */}
+        {comparisonData.length > 0 && comparisonData.some(d => d.V_palier > 0) && (
+          <Card className="bg-card/50 backdrop-blur border-violet-500/30">
+            <CardHeader className="pb-2 pt-3 px-4">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Zap className="h-4 w-4 text-violet-500" />
+                Tension nodale 24h — Palier vs Continu
+                <Badge variant="outline" className="text-[10px] border-violet-500/50 text-violet-500">
+                  ΔV = {comparisonData.reduce((max, d) => Math.max(max, Math.abs(d.deltaV)), 0).toFixed(1)} V max
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4">
+              <ResponsiveContainer width="100%" height={280}>
+                <LineChart data={comparisonData}>
+                  <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                  <YAxis 
+                    domain={[voltageRange.min, voltageRange.max]} 
+                    tick={{ fontSize: 10 }} 
+                    unit=" V"
+                  />
+                  <Tooltip
+                    contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                    formatter={(value: number, name: string) => [`${value.toFixed(1)} V`, name]}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  {/* Zone ±5% (218.5V — 241.5V) */}
+                  <ReferenceArea y1={218.5} y2={241.5} fill="hsl(var(--muted))" fillOpacity={0.3} />
+                  {/* Seuils ±10% */}
+                  <ReferenceLine y={207} stroke="hsl(var(--destructive))" strokeDasharray="5 5" label={{ value: '-10%', fontSize: 9, fill: 'hsl(var(--destructive))' }} />
+                  <ReferenceLine y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" label={{ value: '+10%', fontSize: 9, fill: 'hsl(var(--destructive))' }} />
+                  {/* Seuils ±5% */}
+                  <ReferenceLine y={218.5} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.5} />
+                  <ReferenceLine y={241.5} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.5} />
+                  {/* Nominale */}
+                  <ReferenceLine y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} label={{ value: '230V', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
+                  {/* Courbes */}
+                  <Line type="monotone" dataKey="V_palier" name="V palier" stroke="hsl(217, 91%, 60%)" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="V_continu" name="V continu" stroke="hsl(270, 70%, 60%)" strokeWidth={2} strokeDasharray="6 3" dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Tableau comparatif étendu */}
         {comparisonData.length > 0 && (
           <Card className="bg-card/50 backdrop-blur border-violet-500/30">
             <CardHeader className="pb-2 pt-3 px-4">
               <CardTitle className="text-sm font-medium">
-                Comparaison coefficients : Palier ({palierCoeff.toFixed(2)}) vs Continu ({continuCoeff.toFixed(4)})
+                Comparaison : Palier ({palierCoeff.toFixed(2)}) vs Continu ({continuCoeff.toFixed(4)})
               </CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4">
@@ -371,11 +519,14 @@ export const LaboFoisonnementTab = () => {
                   <thead>
                     <tr className="border-b border-border/50">
                       <th className="text-left py-1.5 px-2 text-muted-foreground font-medium">Heure</th>
-                      <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">Profil base %</th>
+                      <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">Base %</th>
                       <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">Palier %</th>
                       <th className="text-right py-1.5 px-2 text-violet-500 font-medium">Continu %</th>
                       <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">Δ %</th>
-                      <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">P net (kW)</th>
+                      <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">P net</th>
+                      <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">V pal.</th>
+                      <th className="text-right py-1.5 px-2 text-violet-500 font-medium">V cont.</th>
+                      <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">ΔV</th>
                       <th className="text-center py-1.5 px-2 text-muted-foreground font-medium">Flag</th>
                     </tr>
                   </thead>
@@ -393,6 +544,11 @@ export const LaboFoisonnementTab = () => {
                           {row.delta > 0 ? '+' : ''}{row.delta}%
                         </td>
                         <td className="py-1 px-2 text-right font-mono">{row.P_net}</td>
+                        <td className="py-1 px-2 text-right font-mono">{row.V_palier > 0 ? row.V_palier.toFixed(1) : '—'}</td>
+                        <td className="py-1 px-2 text-right font-mono text-violet-500">{row.V_continu > 0 ? row.V_continu.toFixed(1) : '—'}</td>
+                        <td className={`py-1 px-2 text-right font-mono ${Math.abs(row.deltaV) > 1 ? 'text-orange-500' : ''}`}>
+                          {row.V_palier > 0 ? `${row.deltaV > 0 ? '+' : ''}${row.deltaV.toFixed(1)}` : '—'}
+                        </td>
                         <td className="py-1 px-2 text-center">
                           {row.flagged && (
                             <AlertTriangle className={`h-3 w-3 inline ${row.flagType === 'overload' ? 'text-destructive' : 'text-emerald-500'}`} />

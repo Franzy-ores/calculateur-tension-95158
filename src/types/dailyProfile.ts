@@ -77,6 +77,8 @@ export interface DailySimulationOptions {
   customFacteurConso?: number;
   /** Override du facteurVE du cluster sélectionné */
   customFacteurVE?: number;
+  /** Override du coefficient de diversité (remplace les paliers terrain) */
+  customDiversityCoeff?: number;
 }
 
 export interface HourlyVoltageResult {

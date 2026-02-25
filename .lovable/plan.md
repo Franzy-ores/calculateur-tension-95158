@@ -1,79 +1,90 @@
 
 
-# Note d'information Profil 24H — Bouton "?" avec dialog explicatif
+# Nouvel onglet "Labo Foisonnement" — Test du moteur continu f(N)
 
-## Objectif
+## Approche
 
-Ajouter un bouton **?** (icone `HelpCircle`) a cote du titre "Parametres de simulation" dans `DailyProfileTab.tsx`. Au clic, une dialog s'ouvre avec une explication complete du processus de calcul : parametres utilises, profils, foisonnement, clusters, VE, et calcul client.
+Creer un onglet temporaire "Labo" dans le menu principal qui utilise le moteur `circuitPowerCalculator.ts` existant (formule continue) et affiche ses resultats en parallele du moteur actuel (paliers terrain). Aucune modification du moteur actif. L'onglet pourra etre supprime une fois la decision prise.
 
-## Contenu de la note d'information
+## Ce qui existe deja
 
-La dialog contiendra les sections suivantes :
+Le moteur continu est complet et fonctionnel dans `circuitPowerCalculator.ts` :
+- `diversityFactor(N, cluster, config)` → `a + (1-a)/√N`
+- `nodeHourlyPower()` → puissance nette 24h avec diversity appliquee sur la somme
+- `simulateCircuit24h()` → simulation complete avec flagging surcharge/injection
+- Config dans `circuitSimulationConfig.json` (coefficients `a` par cluster A-D)
+- Types dans `circuitSimulation.ts`
 
-### 1. Parametres d'entree
-- **Noeud analyse** : point du reseau ou la tension est calculee
-- **Saison** : hiver / ete (profils horaires differents)
-- **Meteo** : soleil / gris (facteur PV : ×1.0 ou ×0.3)
-- **Cluster** : Urbain dense / Urbain residentiel / Peri-urbain / Rural (modifie facteurConso et facteurVE)
+Il suffit de l'alimenter avec les donnees du projet courant et d'afficher les resultats.
 
-### 2. Profil de base (residential)
-- Valeurs horaires 0-23h en % de la puissance contractuelle
-- Hiver : pic a 21% (h19) / Ete : pic a 16.5% (h19)
-- Profil industriel_pme : pic a 100% (h10-11, h14-16)
-- Profil PV : courbe solaire, pic a 65% hiver / 100% ete
+## Implementation
 
-### 3. Auto-foisonnement (paliers terrain)
-Oui, l'auto-foisonnement = application des paliers sur le profil de base :
+### 1. Nouveau composant `src/components/topMenu/LaboFoisonnementTab.tsx`
+
+Ce composant :
+- Lit le projet courant depuis le store (clients, liens, noeuds)
+- Construit un `CircuitConfig` a partir des clients lies au noeud selectionne :
+  - Mapping cluster : `cluster_1` → `A`, `cluster_2` → `B`, `cluster_3` → `C`, `cluster_4` → `D`
+  - Conversion des clients importes en `CircuitClient[]`
+- Appelle `simulateCircuit24h()` avec la saison/meteo selectionnee
+- Affiche cote a cote :
+
+**Panneau gauche — Resultats moteur continu (nouveau)** :
+- Graphique 24h des puissances : P_charge (bleu), P_pv (vert), P_net (rouge)
+- Flags surcharge/injection
+- Coefficient de diversite affiche : `f(N) = a + (1-a)/√N = X.XX`
+
+**Panneau droit — Comparaison avec paliers** :
+- Tableau 24h montrant pour chaque heure :
+  - Coefficient palier vs coefficient continu
+  - Profil foisonne palier vs continu
+  - Delta en %
+- Synthese : pic de charge, pic d'injection, nombre d'alertes
+
+**Parametres** (memes que le Profil 24H) :
+- Selection du noeud
+- Saison (hiver/ete)
+- Meteo (soleil/gris)
+- Cluster (avec mapping A-D affiche)
+
+### 2. Modifications existantes
+
+**`src/components/TopMenuTabs.tsx`** :
+- Ajouter un onglet "Labo" avec icone `FlaskConical` et badge "TEST"
+- Couleur distinctive (violet) pour signaler le caractere temporaire
+- Import et rendu de `LaboFoisonnementTab`
+
+**`src/components/topMenu/index.ts`** :
+- Exporter `LaboFoisonnementTab`
+
+### 3. Fichiers concernes
+
+| Fichier | Action |
+|---|---|
+| `src/components/topMenu/LaboFoisonnementTab.tsx` | **Nouveau** — onglet complet |
+| `src/components/TopMenuTabs.tsx` | Ajouter onglet "Labo" |
+| `src/components/topMenu/index.ts` | Exporter le nouveau composant |
+
+### 4. Ce qui ne change PAS
+
+- `dailyProfileCalculator.ts` — moteur actif inchange
+- `foisonnementCalculator.ts` — paliers inchanges
+- `DailyProfileTab.tsx` — onglet existant inchange
+- `circuitPowerCalculator.ts` — utilise tel quel, pas de modification
+
+### Details techniques
+
+Le composant Labo devra adapter les donnees du projet au format `CircuitConfig` :
 
 ```text
-Nombre de clients (n)    Coefficient    Exemple (profil 21%)
-─────────────────────    ───────────    ────────────────────
-n = 1                    × 1.00         → 21.0%
-n = 2 à 10               × 0.30         → 6.3%
-n = 11 à 20              × 0.15         → 3.15%
-n > 20                   × 0.08         → 1.68%
+Pour chaque client lie au noeud selectionne :
+  → CircuitClient {
+      id: client.id,
+      type: mapping(client.clientType),
+      puissanceContrat_kW: client.puissanceContractuelle_kVA * cos_phi,
+      pvPuissance_kW: client.pvInstalle_kWc (si PV)
+    }
 ```
 
-Formule : `profil_foisonne = profil_base(h) × palier(n)`
-
-Les paliers s'appliquent a la **puissance contractuelle** (pas a la puissance appelee). Le ratio d'utilisation (~0.25-0.40) est implicitement integre dans les valeurs du profil de base.
-
-### 4. Cluster (modificateur)
-Applique **apres** le foisonnement comme multiplicateur pur :
-- facteurConso : ×1.0 (urbain) a ×1.2 (rural)
-- facteurVE : ×0.5 (urbain dense) a ×2.0 (rural)
-
-### 5. Bonus VE
-- Heures 18-21 : +2.5% (soiree)
-- Heures 22-05 : +5.0% (nuit)
-- Le bonus VE est aussi foisonne par les paliers terrain
-- Puis multiplie par facteurVE du cluster
-
-### 6. Formule finale reseau
-```text
-foisonnement_residentiel(h) = 
-    profil_residential(h) × palier(n) × facteurConso
-  + bonus_VE(h) × palier(n) × facteurVE
-```
-
-### 7. Calcul client (courbe cyan)
-- Utilise le profil `client` (individuel, sans foisonnement)
-- ΔU = chute de tension dans le cable de branchement
-- V_client = V_noeud - ΔU
-
-## Implementation technique
-
-### Fichier modifie : `src/components/topMenu/DailyProfileTab.tsx`
-
-1. Importer `HelpCircle` de lucide-react et `Dialog` de radix
-2. Ajouter un state `showInfoDialog`
-3. Placer un bouton `<HelpCircle>` a cote du titre CardTitle (ligne ~311)
-4. Creer un composant `CalculationInfoDialog` avec ScrollArea contenant toutes les sections ci-dessus, formatees en texte lisible avec des tableaux ASCII et des exemples numeriques concrets
-5. Le dialog utilise les **vrais parametres actuels** du projet : nombre de clients residentiels/industriels detectes, cluster selectionne, palier de foisonnement applique
-
-### Nouveau composant interne : `CalculationInfoDialog`
-
-- Props : `open`, `onOpenChange`, `nResidentialClients`, `selectedCluster`, `currentPalier`
-- Affiche les valeurs dynamiques du projet en cours
-- Sections avec separateurs visuels et titres en gras
+Le `circuitSimulationConfig.json` est charge directement via import JSON. Les profils horaires proviennent du meme `hourlyProfiles.json` utilise par le moteur actif, convertis au format `SeasonProfiles`.
 

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useNetworkStore } from '@/store/networkStore';
-import { FlaskConical, MapPin, Sun, Cloud, AlertTriangle, TrendingUp, TrendingDown, Zap } from 'lucide-react';
+import { FlaskConical, MapPin, Sun, Cloud, AlertTriangle, TrendingUp, TrendingDown, Zap, Ruler } from 'lucide-react';
 import { clusterProfiles, getClusterById, DEFAULT_CLUSTER_ID } from '@/data/clusterProfiles';
 import {
   simulateCircuit24h,
@@ -30,12 +30,124 @@ import type {
   SeasonProfiles,
 } from '@/types/circuitSimulation';
 import type { HourlyVoltageResult, DailySimulationOptions } from '@/types/dailyProfile';
+import type { Node as NetworkNode, Cable, CalculationResult } from '@/types/network';
 import circuitSimulationConfigData from '@/data/circuitSimulationConfig.json';
 import hourlyProfilesData from '@/data/hourlyProfiles.json';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';
 import { ScrollArea } from '@/components/ui/scroll-area';
+
+// ─── Types pour les chemins réseau ──────────────────────────────────────────────
+interface BranchPoint {
+  nodeId: string;
+  nodeName: string;
+  distance_m: number;
+}
+
+interface BranchPath {
+  branchId: string;
+  label: string;
+  points: BranchPoint[];
+}
+
+// ─── BFS pour construire les chemins depuis la source ───────────────────────────
+function buildNetworkPaths(nodes: NetworkNode[], cables: Cable[]): BranchPath[] {
+  const source = nodes.find(n => n.isSource);
+  if (!source) return [];
+
+  // BFS pour construire l'arbre
+  const children = new Map<string, { nodeId: string; cableLength: number }[]>();
+  const visited = new Set<string>();
+  const queue: string[] = [source.id];
+  visited.add(source.id);
+  const distanceMap = new Map<string, number>();
+  distanceMap.set(source.id, 0);
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+    const currentDist = distanceMap.get(currentId) || 0;
+
+    const connectedCables = cables.filter(
+      c => c.nodeAId === currentId || c.nodeBId === currentId
+    );
+
+    for (const cable of connectedCables) {
+      const nextId = cable.nodeAId === currentId ? cable.nodeBId : cable.nodeAId;
+      if (visited.has(nextId)) continue;
+      visited.add(nextId);
+
+      if (!children.has(currentId)) children.set(currentId, []);
+      children.get(currentId)!.push({ nodeId: nextId, cableLength: cable.length_m || 0 });
+
+      distanceMap.set(nextId, currentDist + (cable.length_m || 0));
+      queue.push(nextId);
+    }
+  }
+
+  // Trouver les feuilles (nœuds sans enfants)
+  const leaves: string[] = [];
+  for (const nodeId of visited) {
+    if (!children.has(nodeId) || children.get(nodeId)!.length === 0) {
+      leaves.push(nodeId);
+    }
+  }
+
+  // Remonter de chaque feuille vers la source pour construire les branches
+  const parentMap = new Map<string, string>();
+  const buildParent = (nodeId: string) => {
+    for (const [parent, childs] of children) {
+      for (const child of childs) {
+        if (child.nodeId === nodeId) return parent;
+      }
+    }
+    return null;
+  };
+  for (const nodeId of visited) {
+    const p = buildParent(nodeId);
+    if (p) parentMap.set(nodeId, p);
+  }
+
+  const branches: BranchPath[] = [];
+  const nodeNameMap = new Map(nodes.map(n => [n.id, n.name || n.id.slice(0, 6)]));
+
+  for (let i = 0; i < leaves.length; i++) {
+    const leaf = leaves[i];
+    // Remonter jusqu'à la source
+    const path: BranchPoint[] = [];
+    let current: string | undefined = leaf;
+    while (current) {
+      path.unshift({
+        nodeId: current,
+        nodeName: nodeNameMap.get(current) || current.slice(0, 6),
+        distance_m: distanceMap.get(current) || 0,
+      });
+      current = parentMap.get(current);
+    }
+
+    const leafName = nodeNameMap.get(leaf) || leaf.slice(0, 6);
+    branches.push({
+      branchId: `branch_${i}`,
+      label: path.length > 2
+        ? `${nodeNameMap.get(path[1]?.nodeId) || ''}→${leafName}`
+        : leafName,
+      points: path,
+    });
+  }
+
+  return branches;
+}
+
+// Couleurs pour les branches
+const BRANCH_COLORS = [
+  'hsl(217, 91%, 60%)',    // blue
+  'hsl(142, 76%, 36%)',    // green
+  'hsl(25, 95%, 53%)',     // orange
+  'hsl(330, 81%, 60%)',    // pink
+  'hsl(48, 96%, 53%)',     // yellow
+  'hsl(270, 70%, 60%)',    // purple
+  'hsl(190, 90%, 50%)',    // cyan
+];
 
 // ─── Mapping cluster existant → circuit ────────────────────────────────────────
 const CLUSTER_MAP: Record<string, CircuitCluster> = {

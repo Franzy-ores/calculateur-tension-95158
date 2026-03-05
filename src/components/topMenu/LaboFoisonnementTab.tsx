@@ -704,9 +704,25 @@ export const LaboFoisonnementTab = () => {
                     <YAxis
                       domain={[Math.floor(Math.min(200, voltageDistanceData.minV - 5)), Math.ceil(Math.max(240, voltageDistanceData.minV + 10))]}
                       tick={{ fontSize: 10 }} unit=" V" />
-                    <Tooltip contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
-                      formatter={(value: number, name: string) => [`${value.toFixed(1)} V`, name]}
-                      labelFormatter={(v) => `${v} m`} />
+                    <Tooltip
+                      contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                      content={({ active, payload }) => {
+                        if (!active || !payload?.length) return null;
+                        const point = payload[0]?.payload;
+                        return (
+                          <div className="rounded-md border bg-card px-3 py-2 text-xs shadow-md">
+                            <div className="font-medium mb-1">{point?.nodeName || '—'}</div>
+                            <div className="text-muted-foreground">{point?.distance_m?.toFixed(1)} m</div>
+                            {payload.map((entry: any, i: number) => (
+                              <div key={i} className="flex items-center gap-2 mt-0.5">
+                                <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: entry.stroke || entry.color }} />
+                                <span>{entry.name}: <span className="font-mono font-medium">{entry.value?.toFixed(1)} V</span></span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }}
+                    />
                     <Legend wrapperStyle={{ fontSize: 10 }} />
                     <ReferenceArea y1={218.5} y2={241.5} fill="hsl(var(--muted))" fillOpacity={0.2} />
                     <ReferenceLine y={207} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
@@ -747,9 +763,25 @@ export const LaboFoisonnementTab = () => {
                     <YAxis
                       domain={[Math.floor(Math.min(225, voltageDistanceData.maxV - 5)), Math.ceil(Math.max(245, voltageDistanceData.maxV + 5))]}
                       tick={{ fontSize: 10 }} unit=" V" />
-                    <Tooltip contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
-                      formatter={(value: number, name: string) => [`${value.toFixed(1)} V`, name]}
-                      labelFormatter={(v) => `${v} m`} />
+                    <Tooltip
+                      contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                      content={({ active, payload }) => {
+                        if (!active || !payload?.length) return null;
+                        const point = payload[0]?.payload;
+                        return (
+                          <div className="rounded-md border bg-card px-3 py-2 text-xs shadow-md">
+                            <div className="font-medium mb-1">{point?.nodeName || '—'}</div>
+                            <div className="text-muted-foreground">{point?.distance_m?.toFixed(1)} m</div>
+                            {payload.map((entry: any, i: number) => (
+                              <div key={i} className="flex items-center gap-2 mt-0.5">
+                                <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: entry.stroke || entry.color }} />
+                                <span>{entry.name}: <span className="font-mono font-medium">{entry.value?.toFixed(1)} V</span></span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }}
+                    />
                     <Legend wrapperStyle={{ fontSize: 10 }} />
                     <ReferenceArea y1={218.5} y2={241.5} fill="hsl(var(--muted))" fillOpacity={0.2} />
                     <ReferenceLine y={207} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />

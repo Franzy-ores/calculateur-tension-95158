@@ -19,6 +19,7 @@ export class DailyProfileCalculator {
   private simulationEquipment?: SimulationEquipment;
   private isSimulationActive: boolean;
   private measuredProfile?: HourlyProfile;
+  private _rawResults: CalculationResult[] = [];
 
   constructor(
     project: Project, 

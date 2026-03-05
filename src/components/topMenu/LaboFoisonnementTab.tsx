@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useNetworkStore } from '@/store/networkStore';
-import { FlaskConical, MapPin, Sun, Cloud, AlertTriangle, TrendingUp, TrendingDown, Zap } from 'lucide-react';
+import { FlaskConical, MapPin, Sun, Cloud, AlertTriangle, TrendingUp, TrendingDown, Zap, Ruler } from 'lucide-react';
 import { clusterProfiles, getClusterById, DEFAULT_CLUSTER_ID } from '@/data/clusterProfiles';
 import {
   simulateCircuit24h,
@@ -30,12 +30,124 @@ import type {
   SeasonProfiles,
 } from '@/types/circuitSimulation';
 import type { HourlyVoltageResult, DailySimulationOptions } from '@/types/dailyProfile';
+import type { Node as NetworkNode, Cable, CalculationResult } from '@/types/network';
 import circuitSimulationConfigData from '@/data/circuitSimulationConfig.json';
 import hourlyProfilesData from '@/data/hourlyProfiles.json';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';
 import { ScrollArea } from '@/components/ui/scroll-area';
+
+// ─── Types pour les chemins réseau ──────────────────────────────────────────────
+interface BranchPoint {
+  nodeId: string;
+  nodeName: string;
+  distance_m: number;
+}
+
+interface BranchPath {
+  branchId: string;
+  label: string;
+  points: BranchPoint[];
+}
+
+// ─── BFS pour construire les chemins depuis la source ───────────────────────────
+function buildNetworkPaths(nodes: NetworkNode[], cables: Cable[]): BranchPath[] {
+  const source = nodes.find(n => n.isSource);
+  if (!source) return [];
+
+  // BFS pour construire l'arbre
+  const children = new Map<string, { nodeId: string; cableLength: number }[]>();
+  const visited = new Set<string>();
+  const queue: string[] = [source.id];
+  visited.add(source.id);
+  const distanceMap = new Map<string, number>();
+  distanceMap.set(source.id, 0);
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+    const currentDist = distanceMap.get(currentId) || 0;
+
+    const connectedCables = cables.filter(
+      c => c.nodeAId === currentId || c.nodeBId === currentId
+    );
+
+    for (const cable of connectedCables) {
+      const nextId = cable.nodeAId === currentId ? cable.nodeBId : cable.nodeAId;
+      if (visited.has(nextId)) continue;
+      visited.add(nextId);
+
+      if (!children.has(currentId)) children.set(currentId, []);
+      children.get(currentId)!.push({ nodeId: nextId, cableLength: cable.length_m || 0 });
+
+      distanceMap.set(nextId, currentDist + (cable.length_m || 0));
+      queue.push(nextId);
+    }
+  }
+
+  // Trouver les feuilles (nœuds sans enfants)
+  const leaves: string[] = [];
+  for (const nodeId of visited) {
+    if (!children.has(nodeId) || children.get(nodeId)!.length === 0) {
+      leaves.push(nodeId);
+    }
+  }
+
+  // Remonter de chaque feuille vers la source pour construire les branches
+  const parentMap = new Map<string, string>();
+  const buildParent = (nodeId: string) => {
+    for (const [parent, childs] of children) {
+      for (const child of childs) {
+        if (child.nodeId === nodeId) return parent;
+      }
+    }
+    return null;
+  };
+  for (const nodeId of visited) {
+    const p = buildParent(nodeId);
+    if (p) parentMap.set(nodeId, p);
+  }
+
+  const branches: BranchPath[] = [];
+  const nodeNameMap = new Map(nodes.map(n => [n.id, n.name || n.id.slice(0, 6)]));
+
+  for (let i = 0; i < leaves.length; i++) {
+    const leaf = leaves[i];
+    // Remonter jusqu'à la source
+    const path: BranchPoint[] = [];
+    let current: string | undefined = leaf;
+    while (current) {
+      path.unshift({
+        nodeId: current,
+        nodeName: nodeNameMap.get(current) || current.slice(0, 6),
+        distance_m: distanceMap.get(current) || 0,
+      });
+      current = parentMap.get(current);
+    }
+
+    const leafName = nodeNameMap.get(leaf) || leaf.slice(0, 6);
+    branches.push({
+      branchId: `branch_${i}`,
+      label: path.length > 2
+        ? `${nodeNameMap.get(path[1]?.nodeId) || ''}→${leafName}`
+        : leafName,
+      points: path,
+    });
+  }
+
+  return branches;
+}
+
+// Couleurs pour les branches
+const BRANCH_COLORS = [
+  'hsl(217, 91%, 60%)',    // blue
+  'hsl(142, 76%, 36%)',    // green
+  'hsl(25, 95%, 53%)',     // orange
+  'hsl(330, 81%, 60%)',    // pink
+  'hsl(48, 96%, 53%)',     // yellow
+  'hsl(270, 70%, 60%)',    // purple
+  'hsl(190, 90%, 50%)',    // cyan
+];
 
 // ─── Mapping cluster existant → circuit ────────────────────────────────────────
 const CLUSTER_MAP: Record<string, CircuitCluster> = {
@@ -146,9 +258,9 @@ export const LaboFoisonnementTab = () => {
   const continuCoeff = nResidential > 0 ? diversityFactor(nResidential, circuitCluster, circuitConfig) : 0;
   const palierCoeff = nResidential > 0 ? getFoisonnementPalier(nResidential) : 0;
 
-  const { voltagePalier, voltageContinu } = useMemo(() => {
+  const { voltagePalier, voltageContinu, rawPalier, rawContinu } = useMemo(() => {
     if (!currentProject || !selectedNodeId || nResidential === 0) {
-      return { voltagePalier: [] as HourlyVoltageResult[], voltageContinu: [] as HourlyVoltageResult[] };
+      return { voltagePalier: [] as HourlyVoltageResult[], voltageContinu: [] as HourlyVoltageResult[], rawPalier: [] as CalculationResult[], rawContinu: [] as CalculationResult[] };
     }
 
     const baseOptions: DailySimulationOptions = {
@@ -172,6 +284,7 @@ export const LaboFoisonnementTab = () => {
       isSimulationActive
     );
     const resPalier = calcPalier.calculateDailyVoltages();
+    const rawP = calcPalier.getLastRawResults();
 
     // Run 2: Continu (customDiversityCoeff)
     const calcContinu = new DailyProfileCalculator(
@@ -186,8 +299,9 @@ export const LaboFoisonnementTab = () => {
       isSimulationActive
     );
     const resContinu = calcContinu.calculateDailyVoltages();
+    const rawC = calcContinu.getLastRawResults();
 
-    return { voltagePalier: resPalier, voltageContinu: resContinu };
+    return { voltagePalier: resPalier, voltageContinu: resContinu, rawPalier: rawP, rawContinu: rawC };
   }, [currentProject, selectedNodeId, season, weather, selectedClusterId, nResidential, continuCoeff, dailyProfileOptions, simulationEquipment, isSimulationActive]);
 
   // Comparison data: palier vs continu for each hour (power + voltage)
@@ -231,6 +345,68 @@ export const LaboFoisonnementTab = () => {
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
   const clusterInfo = getClusterById(selectedClusterId);
   const aCoeff = circuitConfig.diversityFactors[circuitCluster];
+
+  // ─── Voltage-Distance data ─────────────────────────────────────────────────────
+  const networkPaths = useMemo(() => {
+    if (!currentProject) return [];
+    return buildNetworkPaths(currentProject.nodes, currentProject.cables);
+  }, [currentProject]);
+
+  const voltageDistanceData = useMemo(() => {
+    if (networkPaths.length === 0 || rawPalier.length === 0) return null;
+
+    // Pour chaque nœud, trouver l'heure avec Vmin global et Vmax global
+    const allNodeIds = new Set<string>();
+    networkPaths.forEach(b => b.points.forEach(p => allNodeIds.add(p.nodeId)));
+
+    // Extract avg voltage per node per hour from raw results
+    const getNodeVoltage = (results: CalculationResult[], nodeId: string, hour: number): number => {
+      const r = results[hour];
+      if (!r?.nodeMetricsPerPhase) return 0;
+      const nm = r.nodeMetricsPerPhase.find(m => m.nodeId === nodeId);
+      if (!nm) return 0;
+      return (nm.voltagesPerPhase.A + nm.voltagesPerPhase.B + nm.voltagesPerPhase.C) / 3;
+    };
+
+    // Find global Vmin hour and Vmax hour (across all non-source nodes)
+    let globalMinV = Infinity, globalMinHour = 0;
+    let globalMaxV = -Infinity, globalMaxHour = 0;
+
+    for (let h = 0; h < 24; h++) {
+      for (const nodeId of allNodeIds) {
+        // Use palier results for finding min/max hours
+        const v = getNodeVoltage(rawPalier, nodeId, h);
+        if (v <= 0) continue;
+        if (v < globalMinV) { globalMinV = v; globalMinHour = h; }
+        if (v > globalMaxV) { globalMaxV = v; globalMaxHour = h; }
+      }
+    }
+
+    // Build chart data for Vmin hour and Vmax hour
+    const buildBranchData = (hour: number) => {
+      return networkPaths.map((branch, idx) => ({
+        ...branch,
+        palierPoints: branch.points.map(p => ({
+          ...p,
+          voltage: getNodeVoltage(rawPalier, p.nodeId, hour),
+        })),
+        continuPoints: branch.points.map(p => ({
+          ...p,
+          voltage: getNodeVoltage(rawContinu, p.nodeId, hour),
+        })),
+        color: BRANCH_COLORS[idx % BRANCH_COLORS.length],
+      }));
+    };
+
+    return {
+      minHour: globalMinHour,
+      maxHour: globalMaxHour,
+      minV: globalMinV,
+      maxV: globalMaxV,
+      minBranches: buildBranchData(globalMinHour),
+      maxBranches: buildBranchData(globalMaxHour),
+    };
+  }, [networkPaths, rawPalier, rawContinu]);
 
   // Compute voltage Y-axis domain
   const voltageRange = useMemo(() => {
@@ -503,6 +679,97 @@ export const LaboFoisonnementTab = () => {
               </ResponsiveContainer>
             </CardContent>
           </Card>
+        )}
+
+        {/* ─── Graphiques Tension vs Distance ─────────────────────────────── */}
+        {voltageDistanceData && voltageDistanceData.minBranches.length > 0 && (
+          <>
+            {/* Vmin — Pire cas prélèvement */}
+            <Card className="bg-card/50 backdrop-blur border-violet-500/30">
+              <CardHeader className="pb-2 pt-3 px-4">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Ruler className="h-4 w-4 text-blue-500" />
+                  Tension vs Distance — Vmin journée
+                  <Badge variant="outline" className="text-[10px] border-blue-500/50 text-blue-500">
+                    {voltageDistanceData.minHour}h • {voltageDistanceData.minV.toFixed(1)}V
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart>
+                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                    <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 10 }}
+                      label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 10 }} />
+                    <YAxis
+                      domain={[Math.floor(Math.min(200, voltageDistanceData.minV - 5)), Math.ceil(Math.max(240, voltageDistanceData.minV + 10))]}
+                      tick={{ fontSize: 10 }} unit=" V" />
+                    <Tooltip contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                      formatter={(value: number, name: string) => [`${value.toFixed(1)} V`, name]}
+                      labelFormatter={(v) => `${v} m`} />
+                    <Legend wrapperStyle={{ fontSize: 10 }} />
+                    <ReferenceArea y1={218.5} y2={241.5} fill="hsl(var(--muted))" fillOpacity={0.2} />
+                    <ReferenceLine y={207} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
+                    <ReferenceLine y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
+                    <ReferenceLine y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} />
+                    {voltageDistanceData.minBranches.map((branch) => (
+                      <Line key={`min-pal-${branch.branchId}`} data={branch.palierPoints.filter(p => p.voltage > 0)}
+                        type="monotone" dataKey="voltage" name={`${branch.label} (pal.)`}
+                        stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                    ))}
+                    {voltageDistanceData.minBranches.map((branch) => (
+                      <Line key={`min-cont-${branch.branchId}`} data={branch.continuPoints.filter(p => p.voltage > 0)}
+                        type="monotone" dataKey="voltage" name={`${branch.label} (cont.)`}
+                        stroke={branch.color} strokeWidth={1.5} strokeDasharray="6 3" dot={{ r: 2 }} connectNulls />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            {/* Vmax — Pire cas injection PV */}
+            <Card className="bg-card/50 backdrop-blur border-violet-500/30">
+              <CardHeader className="pb-2 pt-3 px-4">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Ruler className="h-4 w-4 text-emerald-500" />
+                  Tension vs Distance — Vmax journée
+                  <Badge variant="outline" className="text-[10px] border-emerald-500/50 text-emerald-500">
+                    {voltageDistanceData.maxHour}h • {voltageDistanceData.maxV.toFixed(1)}V
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart>
+                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                    <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 10 }}
+                      label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 10 }} />
+                    <YAxis
+                      domain={[Math.floor(Math.min(225, voltageDistanceData.maxV - 5)), Math.ceil(Math.max(245, voltageDistanceData.maxV + 5))]}
+                      tick={{ fontSize: 10 }} unit=" V" />
+                    <Tooltip contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                      formatter={(value: number, name: string) => [`${value.toFixed(1)} V`, name]}
+                      labelFormatter={(v) => `${v} m`} />
+                    <Legend wrapperStyle={{ fontSize: 10 }} />
+                    <ReferenceArea y1={218.5} y2={241.5} fill="hsl(var(--muted))" fillOpacity={0.2} />
+                    <ReferenceLine y={207} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
+                    <ReferenceLine y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
+                    <ReferenceLine y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} />
+                    {voltageDistanceData.maxBranches.map((branch) => (
+                      <Line key={`max-pal-${branch.branchId}`} data={branch.palierPoints.filter(p => p.voltage > 0)}
+                        type="monotone" dataKey="voltage" name={`${branch.label} (pal.)`}
+                        stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                    ))}
+                    {voltageDistanceData.maxBranches.map((branch) => (
+                      <Line key={`max-cont-${branch.branchId}`} data={branch.continuPoints.filter(p => p.voltage > 0)}
+                        type="monotone" dataKey="voltage" name={`${branch.label} (cont.)`}
+                        stroke={branch.color} strokeWidth={1.5} strokeDasharray="6 3" dot={{ r: 2 }} connectNulls />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </>
         )}
 
         {/* Tableau comparatif étendu */}

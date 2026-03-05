@@ -19,6 +19,7 @@ export class DailyProfileCalculator {
   private simulationEquipment?: SimulationEquipment;
   private isSimulationActive: boolean;
   private measuredProfile?: HourlyProfile;
+  private _rawResults: CalculationResult[] = [];
 
   constructor(
     project: Project, 
@@ -46,6 +47,7 @@ export class DailyProfileCalculator {
    * - EQUI8: Peut être recalculé librement à chaque heure (temps réel, réponse rapide)
    */
   calculateDailyVoltages(): HourlyVoltageResult[] {
+    this._rawResults = [];
     const results: HourlyVoltageResult[] = [];
     // Toujours 230V car on calcule en phase-neutre (seuils ±5% et ±10% basés sur 230V)
     const nominalVoltage = 230;
@@ -78,6 +80,14 @@ export class DailyProfileCalculator {
     }
 
     return results;
+  }
+
+  /**
+   * Retourne les CalculationResult bruts de la dernière exécution de calculateDailyVoltages()
+   * Contient nodeMetricsPerPhase avec les tensions de TOUS les nœuds pour chaque heure
+   */
+  getLastRawResults(): CalculationResult[] {
+    return this._rawResults;
   }
 
   /**
@@ -317,6 +327,9 @@ export class DailyProfileCalculator {
           this.project.clientLinks
         );
       }
+      
+      // Stocker le résultat brut pour accès via getLastRawResults()
+      this._rawResults.push(result);
       
       const hourlyResult = this.extractNodeVoltages(
         hour, 

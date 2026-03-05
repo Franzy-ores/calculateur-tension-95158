@@ -346,6 +346,68 @@ export const LaboFoisonnementTab = () => {
   const clusterInfo = getClusterById(selectedClusterId);
   const aCoeff = circuitConfig.diversityFactors[circuitCluster];
 
+  // ─── Voltage-Distance data ─────────────────────────────────────────────────────
+  const networkPaths = useMemo(() => {
+    if (!currentProject) return [];
+    return buildNetworkPaths(currentProject.nodes, currentProject.cables);
+  }, [currentProject]);
+
+  const voltageDistanceData = useMemo(() => {
+    if (networkPaths.length === 0 || rawPalier.length === 0) return null;
+
+    // Pour chaque nœud, trouver l'heure avec Vmin global et Vmax global
+    const allNodeIds = new Set<string>();
+    networkPaths.forEach(b => b.points.forEach(p => allNodeIds.add(p.nodeId)));
+
+    // Extract avg voltage per node per hour from raw results
+    const getNodeVoltage = (results: CalculationResult[], nodeId: string, hour: number): number => {
+      const r = results[hour];
+      if (!r?.nodeMetricsPerPhase) return 0;
+      const nm = r.nodeMetricsPerPhase.find(m => m.nodeId === nodeId);
+      if (!nm) return 0;
+      return (nm.voltagesPerPhase.A + nm.voltagesPerPhase.B + nm.voltagesPerPhase.C) / 3;
+    };
+
+    // Find global Vmin hour and Vmax hour (across all non-source nodes)
+    let globalMinV = Infinity, globalMinHour = 0;
+    let globalMaxV = -Infinity, globalMaxHour = 0;
+
+    for (let h = 0; h < 24; h++) {
+      for (const nodeId of allNodeIds) {
+        // Use palier results for finding min/max hours
+        const v = getNodeVoltage(rawPalier, nodeId, h);
+        if (v <= 0) continue;
+        if (v < globalMinV) { globalMinV = v; globalMinHour = h; }
+        if (v > globalMaxV) { globalMaxV = v; globalMaxHour = h; }
+      }
+    }
+
+    // Build chart data for Vmin hour and Vmax hour
+    const buildBranchData = (hour: number) => {
+      return networkPaths.map((branch, idx) => ({
+        ...branch,
+        palierPoints: branch.points.map(p => ({
+          ...p,
+          voltage: getNodeVoltage(rawPalier, p.nodeId, hour),
+        })),
+        continuPoints: branch.points.map(p => ({
+          ...p,
+          voltage: getNodeVoltage(rawContinu, p.nodeId, hour),
+        })),
+        color: BRANCH_COLORS[idx % BRANCH_COLORS.length],
+      }));
+    };
+
+    return {
+      minHour: globalMinHour,
+      maxHour: globalMaxHour,
+      minV: globalMinV,
+      maxV: globalMaxV,
+      minBranches: buildBranchData(globalMinHour),
+      maxBranches: buildBranchData(globalMaxHour),
+    };
+  }, [networkPaths, rawPalier, rawContinu]);
+
   // Compute voltage Y-axis domain
   const voltageRange = useMemo(() => {
     if (comparisonData.length === 0) return { min: 200, max: 250 };

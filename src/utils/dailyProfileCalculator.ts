@@ -83,6 +83,14 @@ export class DailyProfileCalculator {
   }
 
   /**
+   * Retourne les CalculationResult bruts de la dernière exécution de calculateDailyVoltages()
+   * Contient nodeMetricsPerPhase avec les tensions de TOUS les nœuds pour chaque heure
+   */
+  getLastRawResults(): CalculationResult[] {
+    return this._rawResults;
+  }
+
+  /**
    * Compte les clients industriels dans le projet
    */
   private countIndustrialClients(): number {

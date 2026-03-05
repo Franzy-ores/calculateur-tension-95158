@@ -47,6 +47,7 @@ export class DailyProfileCalculator {
    * - EQUI8: Peut être recalculé librement à chaque heure (temps réel, réponse rapide)
    */
   calculateDailyVoltages(): HourlyVoltageResult[] {
+    this._rawResults = [];
     const results: HourlyVoltageResult[] = [];
     // Toujours 230V car on calcule en phase-neutre (seuils ±5% et ±10% basés sur 230V)
     const nominalVoltage = 230;
@@ -318,6 +319,9 @@ export class DailyProfileCalculator {
           this.project.clientLinks
         );
       }
+      
+      // Stocker le résultat brut pour accès via getLastRawResults()
+      this._rawResults.push(result);
       
       const hourlyResult = this.extractNodeVoltages(
         hour, 

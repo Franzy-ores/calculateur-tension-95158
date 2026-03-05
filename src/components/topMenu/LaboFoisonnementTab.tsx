@@ -258,9 +258,9 @@ export const LaboFoisonnementTab = () => {
   const continuCoeff = nResidential > 0 ? diversityFactor(nResidential, circuitCluster, circuitConfig) : 0;
   const palierCoeff = nResidential > 0 ? getFoisonnementPalier(nResidential) : 0;
 
-  const { voltagePalier, voltageContinu } = useMemo(() => {
+  const { voltagePalier, voltageContinu, rawPalier, rawContinu } = useMemo(() => {
     if (!currentProject || !selectedNodeId || nResidential === 0) {
-      return { voltagePalier: [] as HourlyVoltageResult[], voltageContinu: [] as HourlyVoltageResult[] };
+      return { voltagePalier: [] as HourlyVoltageResult[], voltageContinu: [] as HourlyVoltageResult[], rawPalier: [] as CalculationResult[], rawContinu: [] as CalculationResult[] };
     }
 
     const baseOptions: DailySimulationOptions = {
@@ -284,6 +284,7 @@ export const LaboFoisonnementTab = () => {
       isSimulationActive
     );
     const resPalier = calcPalier.calculateDailyVoltages();
+    const rawP = calcPalier.getLastRawResults();
 
     // Run 2: Continu (customDiversityCoeff)
     const calcContinu = new DailyProfileCalculator(
@@ -298,8 +299,9 @@ export const LaboFoisonnementTab = () => {
       isSimulationActive
     );
     const resContinu = calcContinu.calculateDailyVoltages();
+    const rawC = calcContinu.getLastRawResults();
 
-    return { voltagePalier: resPalier, voltageContinu: resContinu };
+    return { voltagePalier: resPalier, voltageContinu: resContinu, rawPalier: rawP, rawContinu: rawC };
   }, [currentProject, selectedNodeId, season, weather, selectedClusterId, nResidential, continuCoeff, dailyProfileOptions, simulationEquipment, isSimulationActive]);
 
   // Comparison data: palier vs continu for each hour (power + voltage)

@@ -681,6 +681,97 @@ export const LaboFoisonnementTab = () => {
           </Card>
         )}
 
+        {/* ─── Graphiques Tension vs Distance ─────────────────────────────── */}
+        {voltageDistanceData && voltageDistanceData.minBranches.length > 0 && (
+          <>
+            {/* Vmin — Pire cas prélèvement */}
+            <Card className="bg-card/50 backdrop-blur border-violet-500/30">
+              <CardHeader className="pb-2 pt-3 px-4">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Ruler className="h-4 w-4 text-blue-500" />
+                  Tension vs Distance — Vmin journée
+                  <Badge variant="outline" className="text-[10px] border-blue-500/50 text-blue-500">
+                    {voltageDistanceData.minHour}h • {voltageDistanceData.minV.toFixed(1)}V
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart>
+                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                    <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 10 }}
+                      label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 10 }} />
+                    <YAxis
+                      domain={[Math.floor(Math.min(200, voltageDistanceData.minV - 5)), Math.ceil(Math.max(240, voltageDistanceData.minV + 10))]}
+                      tick={{ fontSize: 10 }} unit=" V" />
+                    <Tooltip contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                      formatter={(value: number, name: string) => [`${value.toFixed(1)} V`, name]}
+                      labelFormatter={(v) => `${v} m`} />
+                    <Legend wrapperStyle={{ fontSize: 10 }} />
+                    <ReferenceArea y1={218.5} y2={241.5} fill="hsl(var(--muted))" fillOpacity={0.2} />
+                    <ReferenceLine y={207} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
+                    <ReferenceLine y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
+                    <ReferenceLine y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} />
+                    {voltageDistanceData.minBranches.map((branch) => (
+                      <Line key={`min-pal-${branch.branchId}`} data={branch.palierPoints.filter(p => p.voltage > 0)}
+                        type="monotone" dataKey="voltage" name={`${branch.label} (pal.)`}
+                        stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                    ))}
+                    {voltageDistanceData.minBranches.map((branch) => (
+                      <Line key={`min-cont-${branch.branchId}`} data={branch.continuPoints.filter(p => p.voltage > 0)}
+                        type="monotone" dataKey="voltage" name={`${branch.label} (cont.)`}
+                        stroke={branch.color} strokeWidth={1.5} strokeDasharray="6 3" dot={{ r: 2 }} connectNulls />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            {/* Vmax — Pire cas injection PV */}
+            <Card className="bg-card/50 backdrop-blur border-violet-500/30">
+              <CardHeader className="pb-2 pt-3 px-4">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Ruler className="h-4 w-4 text-emerald-500" />
+                  Tension vs Distance — Vmax journée
+                  <Badge variant="outline" className="text-[10px] border-emerald-500/50 text-emerald-500">
+                    {voltageDistanceData.maxHour}h • {voltageDistanceData.maxV.toFixed(1)}V
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart>
+                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                    <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 10 }}
+                      label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 10 }} />
+                    <YAxis
+                      domain={[Math.floor(Math.min(225, voltageDistanceData.maxV - 5)), Math.ceil(Math.max(245, voltageDistanceData.maxV + 5))]}
+                      tick={{ fontSize: 10 }} unit=" V" />
+                    <Tooltip contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                      formatter={(value: number, name: string) => [`${value.toFixed(1)} V`, name]}
+                      labelFormatter={(v) => `${v} m`} />
+                    <Legend wrapperStyle={{ fontSize: 10 }} />
+                    <ReferenceArea y1={218.5} y2={241.5} fill="hsl(var(--muted))" fillOpacity={0.2} />
+                    <ReferenceLine y={207} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
+                    <ReferenceLine y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
+                    <ReferenceLine y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} />
+                    {voltageDistanceData.maxBranches.map((branch) => (
+                      <Line key={`max-pal-${branch.branchId}`} data={branch.palierPoints.filter(p => p.voltage > 0)}
+                        type="monotone" dataKey="voltage" name={`${branch.label} (pal.)`}
+                        stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                    ))}
+                    {voltageDistanceData.maxBranches.map((branch) => (
+                      <Line key={`max-cont-${branch.branchId}`} data={branch.continuPoints.filter(p => p.voltage > 0)}
+                        type="monotone" dataKey="voltage" name={`${branch.label} (cont.)`}
+                        stroke={branch.color} strokeWidth={1.5} strokeDasharray="6 3" dot={{ r: 2 }} connectNulls />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </>
+        )}
+
         {/* Tableau comparatif étendu */}
         {comparisonData.length > 0 && (
           <Card className="bg-card/50 backdrop-blur border-violet-500/30">

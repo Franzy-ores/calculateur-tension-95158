@@ -573,18 +573,26 @@ export const LaboFoisonnementTab = () => {
                 <Zap className="h-3 w-3 text-violet-500" /> Synthèse tensions
               </div>
               {(() => {
-                const vContinus = voltage24hData.map(d => d.V_continu).filter(v => v > 0);
-                const minC = vContinus.length > 0 ? Math.min(...vContinus) : 0;
-                const maxC = vContinus.length > 0 ? Math.max(...vContinus) : 0;
+                const allPhaseV = voltage24hData.flatMap(d => [d.V_A, d.V_B, d.V_C]).filter(v => v > 0);
+                const minV = allPhaseV.length > 0 ? Math.min(...allPhaseV) : 0;
+                const maxV = allPhaseV.length > 0 ? Math.max(...allPhaseV) : 0;
+                const vA = voltage24hData.map(d => d.V_A).filter(v => v > 0);
+                const vB = voltage24hData.map(d => d.V_B).filter(v => v > 0);
+                const vC = voltage24hData.map(d => d.V_C).filter(v => v > 0);
                 return (
                   <>
                     <div className="flex justify-between">
-                      <span className="text-violet-500">V min</span>
-                      <span className={`font-mono ${minC < 207 ? 'text-destructive' : minC < 218.5 ? 'text-orange-500' : ''}`}>{minC.toFixed(1)} V</span>
+                      <span className="text-violet-500">V min (3φ)</span>
+                      <span className={`font-mono ${minV < 207 ? 'text-destructive' : minV < 218.5 ? 'text-orange-500' : ''}`}>{minV.toFixed(1)} V</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-violet-500">V max</span>
-                      <span className="font-mono">{maxC.toFixed(1)} V</span>
+                      <span className="text-violet-500">V max (3φ)</span>
+                      <span className="font-mono">{maxV.toFixed(1)} V</span>
+                    </div>
+                    <div className="border-t border-border/30 pt-1 mt-1 space-y-0.5">
+                      <div className="flex justify-between"><span style={{ color: 'hsl(0, 75%, 55%)' }}>A</span><span className="font-mono">{vA.length > 0 ? Math.min(...vA).toFixed(1) : '—'} … {vA.length > 0 ? Math.max(...vA).toFixed(1) : '—'} V</span></div>
+                      <div className="flex justify-between"><span style={{ color: 'hsl(142, 76%, 36%)' }}>B</span><span className="font-mono">{vB.length > 0 ? Math.min(...vB).toFixed(1) : '—'} … {vB.length > 0 ? Math.max(...vB).toFixed(1) : '—'} V</span></div>
+                      <div className="flex justify-between"><span style={{ color: 'hsl(217, 91%, 60%)' }}>C</span><span className="font-mono">{vC.length > 0 ? Math.min(...vC).toFixed(1) : '—'} … {vC.length > 0 ? Math.max(...vC).toFixed(1) : '—'} V</span></div>
                     </div>
                   </>
                 );

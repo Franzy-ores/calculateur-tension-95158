@@ -295,6 +295,9 @@ export const LaboFoisonnementTab = () => {
     return voltageContinu.map((h) => ({
       hour: h.hour,
       label: `${h.hour}h`,
+      V_A: +h.voltageA_V.toFixed(2),
+      V_B: +h.voltageB_V.toFixed(2),
+      V_C: +h.voltageC_V.toFixed(2),
       V_continu: +h.voltageAvg_V.toFixed(2),
       foisonnement: +h.chargesResidentialFoisonnement.toFixed(2),
     }));
@@ -312,6 +315,15 @@ export const LaboFoisonnementTab = () => {
     const nm = r.nodeMetricsPerPhase.find(m => m.nodeId === nodeId);
     if (!nm) return 0;
     return (nm.voltagesPerPhase.A + nm.voltagesPerPhase.B + nm.voltagesPerPhase.C) / 3;
+  };
+
+  const getNodeVoltagePerPhase = (results: CalculationResult[], nodeId: string, hour: number): { A: number; B: number; C: number; avg: number } => {
+    const r = results[hour];
+    if (!r?.nodeMetricsPerPhase) return { A: 0, B: 0, C: 0, avg: 0 };
+    const nm = r.nodeMetricsPerPhase.find(m => m.nodeId === nodeId);
+    if (!nm) return { A: 0, B: 0, C: 0, avg: 0 };
+    const { A, B, C } = nm.voltagesPerPhase;
+    return { A, B, C, avg: (A + B + C) / 3 };
   };
 
   const voltageDistanceData = useMemo(() => {
@@ -343,10 +355,16 @@ export const LaboFoisonnementTab = () => {
     const buildBranchData = (rawResults: CalculationResult[], hour: number) => {
       return networkPaths.map((branch, idx) => ({
         ...branch,
-        points: branch.points.map(p => ({
-          ...p,
-          voltage: getNodeVoltage(rawResults, p.nodeId, hour),
-        })),
+        points: branch.points.map(p => {
+          const perPhase = getNodeVoltagePerPhase(rawResults, p.nodeId, hour);
+          return {
+            ...p,
+            voltage: perPhase.avg,
+            voltage_A: perPhase.A,
+            voltage_B: perPhase.B,
+            voltage_C: perPhase.C,
+          };
+        }),
         color: BRANCH_COLORS[idx % BRANCH_COLORS.length],
       }));
     };
@@ -361,10 +379,10 @@ export const LaboFoisonnementTab = () => {
     };
   }, [networkPaths, rawConsoPure, rawProdPure]);
 
-  // Voltage range for 24h chart
+  // Voltage range for 24h chart (considers all phases)
   const voltageRange = useMemo(() => {
     if (voltage24hData.length === 0) return { min: 200, max: 250 };
-    const allV = voltage24hData.map(d => d.V_continu).filter(v => v > 0);
+    const allV = voltage24hData.flatMap(d => [d.V_A, d.V_B, d.V_C, d.V_continu]).filter(v => v > 0);
     if (allV.length === 0) return { min: 200, max: 250 };
     return { min: Math.floor(Math.min(...allV) - 3), max: Math.ceil(Math.max(...allV) + 3) };
   }, [voltage24hData]);
@@ -555,18 +573,26 @@ export const LaboFoisonnementTab = () => {
                 <Zap className="h-3 w-3 text-violet-500" /> Synthèse tensions
               </div>
               {(() => {
-                const vContinus = voltage24hData.map(d => d.V_continu).filter(v => v > 0);
-                const minC = vContinus.length > 0 ? Math.min(...vContinus) : 0;
-                const maxC = vContinus.length > 0 ? Math.max(...vContinus) : 0;
+                const allPhaseV = voltage24hData.flatMap(d => [d.V_A, d.V_B, d.V_C]).filter(v => v > 0);
+                const minV = allPhaseV.length > 0 ? Math.min(...allPhaseV) : 0;
+                const maxV = allPhaseV.length > 0 ? Math.max(...allPhaseV) : 0;
+                const vA = voltage24hData.map(d => d.V_A).filter(v => v > 0);
+                const vB = voltage24hData.map(d => d.V_B).filter(v => v > 0);
+                const vC = voltage24hData.map(d => d.V_C).filter(v => v > 0);
                 return (
                   <>
                     <div className="flex justify-between">
-                      <span className="text-violet-500">V min</span>
-                      <span className={`font-mono ${minC < 207 ? 'text-destructive' : minC < 218.5 ? 'text-orange-500' : ''}`}>{minC.toFixed(1)} V</span>
+                      <span className="text-violet-500">V min (3φ)</span>
+                      <span className={`font-mono ${minV < 207 ? 'text-destructive' : minV < 218.5 ? 'text-orange-500' : ''}`}>{minV.toFixed(1)} V</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-violet-500">V max</span>
-                      <span className="font-mono">{maxC.toFixed(1)} V</span>
+                      <span className="text-violet-500">V max (3φ)</span>
+                      <span className="font-mono">{maxV.toFixed(1)} V</span>
+                    </div>
+                    <div className="border-t border-border/30 pt-1 mt-1 space-y-0.5">
+                      <div className="flex justify-between"><span style={{ color: 'hsl(0, 75%, 55%)' }}>A</span><span className="font-mono">{vA.length > 0 ? Math.min(...vA).toFixed(1) : '—'} … {vA.length > 0 ? Math.max(...vA).toFixed(1) : '—'} V</span></div>
+                      <div className="flex justify-between"><span style={{ color: 'hsl(142, 76%, 36%)' }}>B</span><span className="font-mono">{vB.length > 0 ? Math.min(...vB).toFixed(1) : '—'} … {vB.length > 0 ? Math.max(...vB).toFixed(1) : '—'} V</span></div>
+                      <div className="flex justify-between"><span style={{ color: 'hsl(217, 91%, 60%)' }}>C</span><span className="font-mono">{vC.length > 0 ? Math.min(...vC).toFixed(1) : '—'} … {vC.length > 0 ? Math.max(...vC).toFixed(1) : '—'} V</span></div>
                     </div>
                   </>
                 );
@@ -649,7 +675,10 @@ export const LaboFoisonnementTab = () => {
                   <ReferenceLine y={218.5} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.5} />
                   <ReferenceLine y={241.5} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.5} />
                   <ReferenceLine y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} label={{ value: '230V', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
-                  <Line type="monotone" dataKey="V_continu" name="V continu" stroke="hsl(270, 70%, 60%)" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="V_A" name="Phase A" stroke="hsl(0, 75%, 55%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                  <Line type="monotone" dataKey="V_B" name="Phase B" stroke="hsl(142, 76%, 36%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                  <Line type="monotone" dataKey="V_C" name="Phase C" stroke="hsl(217, 91%, 60%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                  <Line type="monotone" dataKey="V_continu" name="V moyen" stroke="hsl(270, 70%, 60%)" strokeWidth={2.5} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>
@@ -688,12 +717,14 @@ export const LaboFoisonnementTab = () => {
                           <div className="rounded-md border bg-card px-3 py-2 text-xs shadow-md">
                             <div className="font-medium mb-1">{point?.nodeName || '—'}</div>
                             <div className="text-muted-foreground">{point?.distance_m?.toFixed(1)} m</div>
-                            {payload.map((entry: any, i: number) => (
-                              <div key={i} className="flex items-center gap-2 mt-0.5">
-                                <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: entry.stroke || entry.color }} />
-                                <span>{entry.name}: <span className="font-mono font-medium">{entry.value?.toFixed(1)} V</span></span>
+                            {point?.voltage_A > 0 && (
+                              <div className="space-y-0.5 mt-1">
+                                <div className="flex gap-2"><span style={{ color: 'hsl(0, 75%, 55%)' }}>A:</span><span className="font-mono">{point.voltage_A.toFixed(1)} V</span></div>
+                                <div className="flex gap-2"><span style={{ color: 'hsl(142, 76%, 36%)' }}>B:</span><span className="font-mono">{point.voltage_B.toFixed(1)} V</span></div>
+                                <div className="flex gap-2"><span style={{ color: 'hsl(217, 91%, 60%)' }}>C:</span><span className="font-mono">{point.voltage_C.toFixed(1)} V</span></div>
+                                <div className="flex gap-2 border-t border-border/30 pt-0.5"><span className="text-muted-foreground">Moy:</span><span className="font-mono font-medium">{point.voltage.toFixed(1)} V</span></div>
                               </div>
-                            ))}
+                            )}
                           </div>
                         );
                       }}
@@ -742,12 +773,14 @@ export const LaboFoisonnementTab = () => {
                           <div className="rounded-md border bg-card px-3 py-2 text-xs shadow-md">
                             <div className="font-medium mb-1">{point?.nodeName || '—'}</div>
                             <div className="text-muted-foreground">{point?.distance_m?.toFixed(1)} m</div>
-                            {payload.map((entry: any, i: number) => (
-                              <div key={i} className="flex items-center gap-2 mt-0.5">
-                                <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: entry.stroke || entry.color }} />
-                                <span>{entry.name}: <span className="font-mono font-medium">{entry.value?.toFixed(1)} V</span></span>
+                            {point?.voltage_A > 0 && (
+                              <div className="space-y-0.5 mt-1">
+                                <div className="flex gap-2"><span style={{ color: 'hsl(0, 75%, 55%)' }}>A:</span><span className="font-mono">{point.voltage_A.toFixed(1)} V</span></div>
+                                <div className="flex gap-2"><span style={{ color: 'hsl(142, 76%, 36%)' }}>B:</span><span className="font-mono">{point.voltage_B.toFixed(1)} V</span></div>
+                                <div className="flex gap-2"><span style={{ color: 'hsl(217, 91%, 60%)' }}>C:</span><span className="font-mono">{point.voltage_C.toFixed(1)} V</span></div>
+                                <div className="flex gap-2 border-t border-border/30 pt-0.5"><span className="text-muted-foreground">Moy:</span><span className="font-mono font-medium">{point.voltage.toFixed(1)} V</span></div>
                               </div>
-                            ))}
+                            )}
                           </div>
                         );
                       }}
@@ -787,12 +820,16 @@ export const LaboFoisonnementTab = () => {
                       <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">P charge</th>
                       <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">P PV</th>
                       <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">P net</th>
-                      <th className="text-right py-1.5 px-2 text-violet-500 font-medium">V (V)</th>
+                      <th className="text-right py-1.5 px-2 font-medium" style={{ color: 'hsl(0, 75%, 55%)' }}>V_A</th>
+                      <th className="text-right py-1.5 px-2 font-medium" style={{ color: 'hsl(142, 76%, 36%)' }}>V_B</th>
+                      <th className="text-right py-1.5 px-2 font-medium" style={{ color: 'hsl(217, 91%, 60%)' }}>V_C</th>
+                      <th className="text-right py-1.5 px-2 text-violet-500 font-medium">V moy</th>
                     </tr>
                   </thead>
                   <tbody>
                     {powerData.map((row, i) => {
                       const vData = voltage24hData[i];
+                      const minPhase = vData ? Math.min(vData.V_A, vData.V_B, vData.V_C) : 0;
                       return (
                         <tr key={row.hour} className="border-b border-border/20">
                           <td className="py-1 px-2 font-mono">{row.label}</td>
@@ -800,7 +837,16 @@ export const LaboFoisonnementTab = () => {
                           <td className="py-1 px-2 text-right font-mono">{row.P_charge}</td>
                           <td className="py-1 px-2 text-right font-mono">{row.P_pv}</td>
                           <td className={`py-1 px-2 text-right font-mono ${row.P_net < 0 ? 'text-emerald-500' : ''}`}>{row.P_net}</td>
-                          <td className={`py-1 px-2 text-right font-mono text-violet-500 ${vData && vData.V_continu < 218.5 ? 'text-orange-500' : ''}`}>
+                          <td className={`py-1 px-2 text-right font-mono ${vData && vData.V_A < 218.5 ? 'text-orange-500' : ''}`}>
+                            {vData && vData.V_A > 0 ? vData.V_A.toFixed(1) : '—'}
+                          </td>
+                          <td className={`py-1 px-2 text-right font-mono ${vData && vData.V_B < 218.5 ? 'text-orange-500' : ''}`}>
+                            {vData && vData.V_B > 0 ? vData.V_B.toFixed(1) : '—'}
+                          </td>
+                          <td className={`py-1 px-2 text-right font-mono ${vData && vData.V_C < 218.5 ? 'text-orange-500' : ''}`}>
+                            {vData && vData.V_C > 0 ? vData.V_C.toFixed(1) : '—'}
+                          </td>
+                          <td className={`py-1 px-2 text-right font-mono text-violet-500 ${vData && minPhase < 218.5 ? 'text-orange-500' : ''}`}>
                             {vData && vData.V_continu > 0 ? vData.V_continu.toFixed(1) : '—'}
                           </td>
                         </tr>

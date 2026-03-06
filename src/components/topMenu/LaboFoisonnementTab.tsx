@@ -355,17 +355,31 @@ export const LaboFoisonnementTab = () => {
       }
     }
 
+    const getCableNeutralCurrent = (results: CalculationResult[], hour: number, nodeA: string, nodeB: string): number => {
+      const r = results[hour];
+      if (!r?.cables) return 0;
+      const cable = r.cables.find(c =>
+        (c.nodeAId === nodeA && c.nodeBId === nodeB) ||
+        (c.nodeAId === nodeB && c.nodeBId === nodeA)
+      );
+      return cable?.currentsPerPhase_A?.N ?? 0;
+    };
+
     const buildBranchData = (rawResults: CalculationResult[], hour: number) => {
       return networkPaths.map((branch, idx) => ({
         ...branch,
-        points: branch.points.map(p => {
+        points: branch.points.map((p, pi) => {
           const perPhase = getNodeVoltagePerPhase(rawResults, p.nodeId, hour);
+          const I_neutral = pi > 0
+            ? getCableNeutralCurrent(rawResults, hour, branch.points[pi - 1].nodeId, p.nodeId)
+            : 0;
           return {
             ...p,
             voltage: perPhase.avg,
             voltage_A: perPhase.A,
             voltage_B: perPhase.B,
             voltage_C: perPhase.C,
+            I_neutral: +I_neutral.toFixed(2),
           };
         }),
         color: BRANCH_COLORS[idx % BRANCH_COLORS.length],

@@ -379,10 +379,10 @@ export const LaboFoisonnementTab = () => {
     };
   }, [networkPaths, rawConsoPure, rawProdPure]);
 
-  // Voltage range for 24h chart
+  // Voltage range for 24h chart (considers all phases)
   const voltageRange = useMemo(() => {
     if (voltage24hData.length === 0) return { min: 200, max: 250 };
-    const allV = voltage24hData.map(d => d.V_continu).filter(v => v > 0);
+    const allV = voltage24hData.flatMap(d => [d.V_A, d.V_B, d.V_C, d.V_continu]).filter(v => v > 0);
     if (allV.length === 0) return { min: 200, max: 250 };
     return { min: Math.floor(Math.min(...allV) - 3), max: Math.ceil(Math.max(...allV) + 3) };
   }, [voltage24hData]);

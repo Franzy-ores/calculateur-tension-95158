@@ -160,6 +160,15 @@ export const LaboFoisonnementTab = () => {
   const [showPerPhaseDistance, setShowPerPhaseDistance] = useState(false);
   const [showNeutralCurrent, setShowNeutralCurrent] = useState(false);
 
+  // Simulation equipment counters
+  const srg2Count = simulationEquipment.srg2Devices?.filter(s => s.enabled).length || 0;
+  const compensatorCount = simulationEquipment.neutralCompensators.filter(c => c.enabled).length;
+  const hasCableReplacement = simulationEquipment.cableReplacement?.enabled;
+  const totalEquipment = srg2Count + compensatorCount + (hasCableReplacement ? 1 : 0);
+  const hasAnyEquipment = totalEquipment > 0 ||
+    (simulationEquipment.srg2Devices?.length || 0) > 0 ||
+    simulationEquipment.neutralCompensators.length > 0;
+
   const nodes = useMemo(() => {
     if (!currentProject) return [];
     return currentProject.nodes.filter(n => !n.isSource);

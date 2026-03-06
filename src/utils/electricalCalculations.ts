@@ -1613,8 +1613,29 @@ export class ElectricalCalculator {
               }
             }
             
-            // Récupérer l'impédance du conducteur neutre (R0, X0)
+            // ── Fuite vers la terre au nœud enfant v (prise de terre poteau) ──
             const distalNode = nodeById.get(v)!;
+            const Rt = distalNode?.rt_terre_ohm ?? 25; // 25 Ω par défaut (NF C 11-201)
+
+            if (Rt > 0) {
+              // Tension du neutre au nœud parent = potentiel neutre par rapport à la terre
+              const V_neutre_parent = Vn_parent;
+
+              // Courant de fuite : I_fuite = V_neutre / Rt (admittance shunt neutre → terre)
+              const I_fuite = div(V_neutre_parent, C(Rt, 0));
+
+              // Réduire le courant neutre propagé dans le câble
+              IN_phasor = sub(IN_phasor, I_fuite);
+
+              console.log(
+                `🌍 Terre nœud ${v}: Rt=${Rt}Ω, ` +
+                `|I_fuite|=${abs(I_fuite).toFixed(2)}A, ` +
+                `|I_N| après fuite=${abs(IN_phasor).toFixed(2)}A`
+              );
+            }
+            // ─────────────────────────────────────────────────────────────────────
+
+            // Récupérer l'impédance du conducteur neutre (R0, X0)
             const ct = cableTypeById.get(cab.typeId);
             if (!ct) continue;
             const length_m = this.calculateLengthMeters(cab.coordinates || []);

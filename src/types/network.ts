@@ -223,6 +223,7 @@ export interface Node {
   customProps?: Record<string, any>;
   // IDs des compensateurs EQUI8 installés sur ce nœud
   equi8_ids?: string[];
+  rt_terre_ohm?: number; // Résistance de prise de terre au poteau (Ω). Défaut : 25 Ω. 0 = pas de mise à la terre.
 }
 
 export interface Cable {

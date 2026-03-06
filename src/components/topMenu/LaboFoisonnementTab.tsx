@@ -156,6 +156,7 @@ export const LaboFoisonnementTab = () => {
   const [season, setSeason] = useState<'winter' | 'summer'>('winter');
   const [weather, setWeather] = useState<'sunny' | 'gray'>('sunny');
   const [showPerPhaseDistance, setShowPerPhaseDistance] = useState(false);
+  const [showNeutralCurrent, setShowNeutralCurrent] = useState(false);
 
   const nodes = useMemo(() => {
     if (!currentProject) return [];

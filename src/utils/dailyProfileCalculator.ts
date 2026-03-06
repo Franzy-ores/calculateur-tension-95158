@@ -4,7 +4,6 @@ import { SRG2Config, SRG2SwitchState } from '@/types/srg2';
 import { ElectricalCalculator } from './electricalCalculations';
 import { SimulationCalculator } from './simulationCalculator';
 import defaultProfiles from '@/data/hourlyProfiles.json';
-import { getClusterById, DEFAULT_CLUSTER_ID } from '@/data/clusterProfiles';
 import { calculateAdaptiveFoisonnement } from './foisonnementCalculator';
 
 /**
@@ -188,12 +187,10 @@ export class DailyProfileCalculator {
     const weatherFactor = this.profiles.weatherFactors[this.options.weather];
     const hourStr = hour.toString();
 
-    // Cluster de circuit : modificateurs sur les profils de base
-    // 🔧 FIX GRD -- Les facteurs cluster sont appliqués APRÈS le foisonnement Velander
-    // pour éviter que le cluster modifie le plancher de diversité
-    const cluster = getClusterById(this.options.selectedClusterId || DEFAULT_CLUSTER_ID);
-    const facteurConso = this.options.customFacteurConso ?? cluster?.facteurConso ?? 1.0;
-    const facteurVE = this.options.customFacteurVE ?? cluster?.facteurVE ?? 1.0;
+    // 🔧 Clusters et foisonnement adaptatif désactivés dans le Profil 24H
+    // Le profil P90 est déjà calibré sur la mesure réelle — pas de correction supplémentaire
+    const facteurConso = 1.0;
+    const facteurVE = 1.0;
 
     // Nombre de clients résidentiels connectés (pour foisonnement adaptatif)
     const nResidentialClients = this.countResidentialClients();
@@ -239,14 +236,8 @@ export class DailyProfileCalculator {
       if (baseEvBonus > 0) {
         evFoisonne = baseEvBonus * this.options.customDiversityCoeff;
       }
-    } else if (this.options.adaptiveFoisonnement !== false && nResidentialClients > 1) {
-      // Velander sur le profil résidentiel brut
-      baseFoisonne = calculateAdaptiveFoisonnement(nResidentialClients, baseResidentialProfile);
-      // Velander sur le bonus EV brut (si non nul)
-      if (baseEvBonus > 0) {
-        evFoisonne = calculateAdaptiveFoisonnement(nResidentialClients, baseEvBonus);
-      }
     }
+    // Foisonnement adaptatif (Velander) désactivé — le profil P90 brut est utilisé directement
     
     // 🔧 FIX GRD -- Cluster appliqué comme multiplicateur PUR après Velander
     // Le plancher de diversité reste basé sur le profil physique

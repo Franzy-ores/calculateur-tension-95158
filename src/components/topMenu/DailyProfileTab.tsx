@@ -17,8 +17,7 @@ import { DailyProfileChart } from '@/components/DailyProfileChart';
 import { ProfileVisualEditor } from '@/components/ProfileVisualEditor';
 import { MeasuredProfileImporter } from '@/components/MeasuredProfileImporter';
 import { HourlyVoltageResult, ClientHourlyVoltageResult } from '@/types/dailyProfile';
-import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent, Home, Zap, FlaskConical, Moon, Upload, FileBarChart, X, Download, MapPin, User, Cable, Building2, TreePine, Wheat, Eye, EyeOff, RotateCcw, HelpCircle } from 'lucide-react';
-import { clusterProfiles, getClusterById, DEFAULT_CLUSTER_ID } from '@/data/clusterProfiles';
+import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent, Home, Zap, FlaskConical, Moon, Upload, FileBarChart, X, Download, MapPin, User, Cable, Eye, EyeOff, HelpCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { HourlyProfile, MeasuredProfileMetadata } from '@/types/dailyProfile';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -354,111 +353,7 @@ export const DailyProfileTab = () => {
           </div>
 
 
-          {/* Cluster de circuit */}
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Cluster de circuit</Label>
-            <div className="grid grid-cols-2 gap-1.5">
-              {clusterProfiles.map(cluster => (
-                <Button
-                  key={cluster.id}
-                  size="sm"
-                  variant={(dailyProfileOptions.selectedClusterId || DEFAULT_CLUSTER_ID) === cluster.id ? 'default' : 'outline'}
-                  onClick={() => setDailyProfileOptions({ 
-                    selectedClusterId: cluster.id,
-                    // Reset custom overrides when switching cluster
-                    customFacteurConso: undefined,
-                    customFacteurVE: undefined,
-                  })}
-                  className="text-xs h-auto py-1.5 px-2 flex flex-col items-start gap-0.5"
-                  title={cluster.description}
-                >
-                  <span className="flex items-center gap-1">
-                    <span>{cluster.icon}</span>
-                    <span className="font-medium">{cluster.name}</span>
-                  </span>
-                  <span className="text-[9px] text-muted-foreground opacity-70 font-normal">
-                    VE ×{cluster.facteurVE}
-                  </span>
-                </Button>
-              ))}
-            </div>
-            
-            {/* Éditeur de facteurs cluster */}
-            {(() => {
-              const activeCluster = getClusterById(dailyProfileOptions.selectedClusterId || DEFAULT_CLUSTER_ID);
-              if (!activeCluster) return null;
-              const currentConso = dailyProfileOptions.customFacteurConso ?? activeCluster.facteurConso;
-              const currentVE = dailyProfileOptions.customFacteurVE ?? activeCluster.facteurVE;
-              const isCustomized = dailyProfileOptions.customFacteurConso !== undefined || dailyProfileOptions.customFacteurVE !== undefined;
-              
-              return (
-                <div className="space-y-2 pt-1 border-t border-border/50">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-muted-foreground font-medium">Facteurs du cluster</span>
-                    {isCustomized && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-5 px-1.5 text-[10px] text-muted-foreground"
-                        onClick={() => setDailyProfileOptions({
-                          customFacteurConso: undefined,
-                          customFacteurVE: undefined,
-                        })}
-                      >
-                        <RotateCcw className="h-3 w-3 mr-1" />
-                        Reset
-                      </Button>
-                    )}
-                  </div>
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-muted-foreground w-16">Conso ×</span>
-                      <Slider
-                        value={[currentConso * 10]}
-                        onValueChange={([v]) => setDailyProfileOptions({ customFacteurConso: v / 10 })}
-                        min={5}
-                        max={20}
-                        step={1}
-                        className="flex-1"
-                      />
-                      <span className="text-[10px] font-mono w-6 text-right">{currentConso.toFixed(1)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-muted-foreground w-16">VE ×</span>
-                      <Slider
-                        value={[currentVE * 10]}
-                        onValueChange={([v]) => setDailyProfileOptions({ customFacteurVE: v / 10 })}
-                        min={0}
-                        max={30}
-                        step={1}
-                        className="flex-1"
-                      />
-                      <span className="text-[10px] font-mono w-6 text-right">{currentVE.toFixed(1)}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-
-          {/* Foisonnement adaptatif */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs flex items-center gap-1.5">
-                <Percent className="h-3.5 w-3.5 text-muted-foreground" />
-                Foisonnement adaptatif
-              </Label>
-              <Switch
-                checked={dailyProfileOptions.adaptiveFoisonnement !== false}
-                onCheckedChange={(checked) => setDailyProfileOptions({ adaptiveFoisonnement: checked })}
-              />
-            </div>
-            {dailyProfileOptions.adaptiveFoisonnement !== false && (
-              <p className="text-[10px] text-muted-foreground/70 italic pl-1">
-                Le foisonnement horaire est modulé selon le nombre de clients résidentiels connectés (formule Velander)
-              </p>
-            )}
-          </div>
+          {/* Note: Clusters et foisonnement adaptatif désactivés — le profil P90 est déjà calibré */}
 
           {/* Mode simulation */}
           <div className="space-y-2 border-t border-border pt-3">
@@ -1107,16 +1002,15 @@ export const DailyProfileTab = () => {
             if (c.clientType === 'industriel') nInd++; else nRes++;
           }
         });
-        const cluster = getClusterById(dailyProfileOptions.selectedClusterId || DEFAULT_CLUSTER_ID);
         return (
           <CalculationInfoDialog
             open={showInfoDialog}
             onOpenChange={setShowInfoDialog}
             nResidentialClients={nRes}
             nIndustrialClients={nInd}
-            selectedClusterName={cluster?.name || 'Urbain résidentiel'}
-            facteurConso={dailyProfileOptions.customFacteurConso ?? cluster?.facteurConso ?? 1.0}
-            facteurVE={dailyProfileOptions.customFacteurVE ?? cluster?.facteurVE ?? 1.0}
+            selectedClusterName={'— désactivé —'}
+            facteurConso={1.0}
+            facteurVE={1.0}
           />
         );
       })()}

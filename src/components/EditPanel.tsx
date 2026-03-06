@@ -67,7 +67,8 @@ export const EditPanel = () => {
           productions: [...(selectedNode.productions || [])],
           tensionCible: selectedNode.tensionCible || '',
           transformerConfig: selectedNode.isSource ? currentProject?.transformerConfig : undefined,
-          manualLoadType: selectedNode.manualLoadType || 'POLY'
+          manualLoadType: selectedNode.manualLoadType || 'POLY',
+          rt_terre_ohm: selectedNode.rt_terre_ohm ?? 25
         });
       } else if (editTarget === 'cable' && selectedCable) {
         setFormData({
@@ -264,6 +265,39 @@ export const EditPanel = () => {
                   et le modèle de charge ({currentProject?.loadModel || 'polyphase_equilibre'}).
                 </p>
               </div>
+
+              {/* Résistance de terre (visible uniquement en 400V et nœud non-source) */}
+              {currentProject?.voltageSystem === 'TÉTRAPHASÉ_400V' && !selectedNode?.isSource && (
+                <div className="space-y-2">
+                  <Label htmlFor="rt-terre" className="flex items-center gap-1">
+                    Résistance de terre (Ω)
+                    <span className="text-xs text-muted-foreground ml-1" title="Résistance de la prise de terre à ce poteau. 25 Ω = valeur réglementaire courante (NF C 11-201). Sol humide/argileux : 5–15 Ω. Sol sec/rocheux : 30–100 Ω. Mettre 0 pour désactiver la mise à la terre sur ce nœud.">
+                      ℹ️
+                    </span>
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="rt-terre"
+                      type="number"
+                      min={0}
+                      max={200}
+                      step={1}
+                      value={formData.rt_terre_ohm ?? 25}
+                      onChange={(e) => setFormData({ ...formData, rt_terre_ohm: parseFloat(e.target.value) || 0 })}
+                      onBlur={() => {
+                        if (selectedNode) {
+                          updateNode(selectedNode.id, { rt_terre_ohm: formData.rt_terre_ohm ?? 25 });
+                        }
+                      }}
+                      className="flex-1"
+                    />
+                    <span className="text-sm text-muted-foreground font-medium">Ω</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Prise de terre poteau. 0 = pas de mise à la terre.
+                  </p>
+                </div>
+              )}
 
               {/* Clients importés liés - Charges */}
               {linkedClients.length > 0 && (

@@ -1,37 +1,35 @@
 
 
-## Plan: Modélisation des prises de terre répétées du neutre (réseaux aériens 400V)
+# Diagnostic : hourlyProfiles.json non reactif dans le Labo
 
-### Objectif
-Modéliser la fuite du courant neutre vers la terre à chaque poteau via une résistance Rt, réduisant progressivement IN le long du réseau et améliorant la précision du calcul de tension phase-neutre en régime déséquilibré.
+## Probleme identifie
 
-### Modifications
+Le fichier `hourlyProfiles.json` **est bien utilise** par le `DailyProfileCalculator` (import statique ligne 6 de `dailyProfileCalculator.ts`). Cependant, le Labo ne reagit pas aux modifications pour deux raisons :
 
-**1. Type Node (`src/types/network.ts`, ~ligne 226)**
-- Ajouter `rt_terre_ohm?: number` à l'interface `Node`, avant la fermeture `}`.
+1. **Import indirect** : Les profils sont importes dans `dailyProfileCalculator.ts`, pas dans `LaboFoisonnementTab.tsx`. Le composant Labo passe `undefined` comme `customProfiles` (ligne 242), laissant le calculator utiliser son import interne.
 
-**2. Valeur par défaut à la création (`src/store/networkStore.ts`, ~ligne 852)**
-- Dans `addNode`, ajouter `rt_terre_ohm: 25` au `newNode`.
+2. **useMemo aveugle** : Le `useMemo` (ligne 272) qui lance les 3 runs a pour dependances `[currentProject, selectedNodeId, season, weather, ...]` — les profils JSON n'y figurent pas. Meme si Vite HMR recharge le module, le memo ne se re-execute pas car aucune de ses dependances reactives n'a change.
 
-**3. Moteur de calcul (`src/utils/electricalCalculations.ts`, ~lignes 1598-1640)**
-- Après le bloc EQUI8 (ligne ~1614) et avant le calcul de `Z_neutral`, insérer la logique de fuite terre :
-  - Lire `Rt = childNode.rt_terre_ohm ?? 25`
-  - Si `Rt > 0`, calculer `I_fuite = V_neutre_parent / Rt` (complexe)
-  - Soustraire `I_fuite` de `IN_phasor`
-  - Log console pour debug
-- Le `distalNode` (childNode) est déjà récupéré ligne 1617 ; on déplacera ou dupliquera cette lecture avant le bloc fuite.
+En resume : vous modifiez le JSON, Vite le recharge, mais le `useMemo` du Labo ne sait pas qu'il doit recalculer.
 
-**4. Interface utilisateur (`src/components/EditPanel.tsx`)**
-- Dans le `useEffect` d'initialisation du formData (ligne ~64), ajouter `rt_terre_ohm: selectedNode.rt_terre_ohm ?? 25`.
-- Après le bloc "Type de connexion" (~ligne 266), ajouter un champ numérique conditionnel :
-  - Visible uniquement si `currentProject?.voltageSystem === 'TÉTRAPHASÉ_400V'` et nœud non-source
-  - Label : "Résistance de terre (Ω)"
-  - Input numérique, min=0, max=200, suffixe "Ω"
-  - Tooltip explicatif (NF C 11-201, valeurs sols)
+## Correction
 
-### Fichiers modifiés
-- `src/types/network.ts` — 1 ligne ajoutée
-- `src/store/networkStore.ts` — 1 ligne ajoutée
-- `src/utils/electricalCalculations.ts` — ~15 lignes insérées
-- `src/components/EditPanel.tsx` — ~30 lignes ajoutées (champ UI + init formData)
+### `LaboFoisonnementTab.tsx`
+
+1. **Importer directement** `hourlyProfiles.json` dans le composant Labo
+2. **Passer** cet import comme `customProfiles` aux 3 constructeurs `DailyProfileCalculator` (au lieu de `undefined`)
+3. **Ajouter** l'objet profiles aux dependances du `useMemo` principal
+
+```text
+Avant:  new DailyProfileCalculator(currentProject, baseOptions, undefined, ...)
+Apres:  new DailyProfileCalculator(currentProject, baseOptions, profilesData, ...)
+```
+
+Cela rend le Labo reactif a toute modification du fichier JSON.
+
+### Fichier modifie
+
+| Fichier | Modification |
+|---|---|
+| `src/components/topMenu/LaboFoisonnementTab.tsx` | +1 import hourlyProfiles.json, passer comme customProfiles aux 3 runs, ajouter aux deps useMemo |
 

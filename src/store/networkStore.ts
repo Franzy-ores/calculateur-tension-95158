@@ -865,7 +865,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
         label: 'PV 1', 
         S_kVA: currentProject.defaultProductionKVA || 5
       }] : [],
-      isSource
+      isSource,
+      rt_terre_ohm: 25
     };
 
     const updatedNodes = [...currentProject.nodes, newNode];

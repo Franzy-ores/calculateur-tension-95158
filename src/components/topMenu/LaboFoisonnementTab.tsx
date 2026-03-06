@@ -716,6 +716,16 @@ export const LaboFoisonnementTab = () => {
                 Afficher tensions par phase (A, B, C) en pointillés
               </Label>
             </div>
+            <div className="flex items-center gap-2 px-1">
+              <Checkbox
+                id="showNeutralCurrent"
+                checked={showNeutralCurrent}
+                onCheckedChange={(checked) => setShowNeutralCurrent(checked === true)}
+              />
+              <Label htmlFor="showNeutralCurrent" className="text-xs text-muted-foreground cursor-pointer">
+                Afficher courant de neutre I<sub>N</sub> (axe droit, A)
+              </Label>
+            </div>
 
             {/* Vmin — Pire cas charge (sans production) */}
             <Card className="bg-card/50 backdrop-blur border-violet-500/30">

@@ -19,6 +19,7 @@ import { DailyProfileCalculator } from '@/utils/dailyProfileCalculator';
 import type { HourlyVoltageResult, DailySimulationOptions } from '@/types/dailyProfile';
 import type { Node as NetworkNode, Cable, CalculationResult } from '@/types/network';
 import circuitSimulationConfigData from '@/data/circuitSimulationConfig.json';
+import profilesData from '@/data/hourlyProfiles.json';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';
@@ -239,7 +240,7 @@ export const LaboFoisonnementTab = () => {
 
     // Run 1: Complet (conso + prod) → puissance 24h + tension 24h
     const calcComplet = new DailyProfileCalculator(
-      currentProject, baseOptions, undefined,
+      currentProject, baseOptions, profilesData as any,
       simulationEquipment, isSimulationActive
     );
     const resComplet = calcComplet.calculateDailyVoltages();
@@ -249,7 +250,7 @@ export const LaboFoisonnementTab = () => {
     const calcConso = new DailyProfileCalculator(
       currentProject,
       { ...baseOptions, zeroProduction: true },
-      undefined, simulationEquipment, isSimulationActive
+      profilesData as any, simulationEquipment, isSimulationActive
     );
     calcConso.calculateDailyVoltages();
     const rawConso = calcConso.getLastRawResults();
@@ -258,7 +259,7 @@ export const LaboFoisonnementTab = () => {
     const calcProd = new DailyProfileCalculator(
       currentProject,
       { ...baseOptions, zeroConsumption: true },
-      undefined, simulationEquipment, isSimulationActive
+      profilesData as any, simulationEquipment, isSimulationActive
     );
     calcProd.calculateDailyVoltages();
     const rawProd = calcProd.getLastRawResults();
@@ -269,7 +270,7 @@ export const LaboFoisonnementTab = () => {
       rawConsoPure: rawConso,
       rawProdPure: rawProd,
     };
-  }, [currentProject, selectedNodeId, season, weather, selectedClusterId, continuCoeff, dailyProfileOptions, simulationEquipment, isSimulationActive, nResidentialGlobal]);
+  }, [currentProject, selectedNodeId, season, weather, selectedClusterId, continuCoeff, dailyProfileOptions, simulationEquipment, isSimulationActive, nResidentialGlobal, profilesData]);
 
   // ─── Power chart data from engine results ────────────────────────────────────
   const powerData = useMemo(() => {

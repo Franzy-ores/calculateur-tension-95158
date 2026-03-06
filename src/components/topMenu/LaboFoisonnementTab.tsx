@@ -295,6 +295,9 @@ export const LaboFoisonnementTab = () => {
     return voltageContinu.map((h) => ({
       hour: h.hour,
       label: `${h.hour}h`,
+      V_A: +h.voltageA_V.toFixed(2),
+      V_B: +h.voltageB_V.toFixed(2),
+      V_C: +h.voltageC_V.toFixed(2),
       V_continu: +h.voltageAvg_V.toFixed(2),
       foisonnement: +h.chargesResidentialFoisonnement.toFixed(2),
     }));
@@ -312,6 +315,15 @@ export const LaboFoisonnementTab = () => {
     const nm = r.nodeMetricsPerPhase.find(m => m.nodeId === nodeId);
     if (!nm) return 0;
     return (nm.voltagesPerPhase.A + nm.voltagesPerPhase.B + nm.voltagesPerPhase.C) / 3;
+  };
+
+  const getNodeVoltagePerPhase = (results: CalculationResult[], nodeId: string, hour: number): { A: number; B: number; C: number; avg: number } => {
+    const r = results[hour];
+    if (!r?.nodeMetricsPerPhase) return { A: 0, B: 0, C: 0, avg: 0 };
+    const nm = r.nodeMetricsPerPhase.find(m => m.nodeId === nodeId);
+    if (!nm) return { A: 0, B: 0, C: 0, avg: 0 };
+    const { A, B, C } = nm.voltagesPerPhase;
+    return { A, B, C, avg: (A + B + C) / 3 };
   };
 
   const voltageDistanceData = useMemo(() => {

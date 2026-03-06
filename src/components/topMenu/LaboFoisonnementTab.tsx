@@ -828,9 +828,13 @@ export const LaboFoisonnementTab = () => {
                     <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
                     <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 10 }}
                       label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 10 }} />
-                    <YAxis
+                    <YAxis yAxisId="left"
                       domain={[Math.floor(Math.min(225, voltageDistanceData.maxV - 5)), Math.ceil(Math.max(245, voltageDistanceData.maxV + 5))]}
                       tick={{ fontSize: 10 }} unit=" V" />
+                    {showNeutralCurrent && (
+                      <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} unit=" A"
+                        label={{ value: 'I neutre (A)', angle: 90, position: 'insideRight', offset: 10, fontSize: 10 }} />
+                    )}
                     <Tooltip
                       contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
                       content={({ active, payload }) => {
@@ -848,32 +852,43 @@ export const LaboFoisonnementTab = () => {
                                 <div className="flex gap-2 border-t border-border/30 pt-0.5"><span className="text-muted-foreground">Moy:</span><span className="font-mono font-medium">{point.voltage.toFixed(1)} V</span></div>
                               </div>
                             )}
+                            {showNeutralCurrent && point?.I_neutral > 0 && (
+                              <div className="flex gap-2 border-t border-border/30 pt-0.5 mt-0.5">
+                                <span style={{ color: 'hsl(35, 95%, 55%)' }}>I<sub>N</sub>:</span>
+                                <span className="font-mono font-medium">{point.I_neutral.toFixed(1)} A</span>
+                              </div>
+                            )}
                           </div>
                         );
                       }}
                     />
                     <Legend wrapperStyle={{ fontSize: 10 }} />
-                    <ReferenceArea y1={218.5} y2={241.5} fill="hsl(var(--muted))" fillOpacity={0.2} />
-                    <ReferenceLine y={207} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
-                    <ReferenceLine y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
-                    <ReferenceLine y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} />
+                    <ReferenceArea yAxisId="left" y1={218.5} y2={241.5} fill="hsl(var(--muted))" fillOpacity={0.2} />
+                    <ReferenceLine yAxisId="left" y={207} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
+                    <ReferenceLine yAxisId="left" y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
+                    <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} />
                     {voltageDistanceData.maxBranches.map((branch) => (
-                      <Line key={`max-${branch.branchId}`} data={branch.points.filter(p => p.voltage > 0)}
+                      <Line key={`max-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
                         type="monotone" dataKey="voltage" name={branch.label}
                         stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
                     ))}
                     {showPerPhaseDistance && voltageDistanceData.maxBranches.map((branch) => (
                       <>
-                        <Line key={`max-A-${branch.branchId}`} data={branch.points.filter(p => p.voltage_A > 0)}
+                        <Line key={`max-A-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_A > 0)}
                           type="monotone" dataKey="voltage_A" name={`${branch.label} A`}
                           stroke="hsl(0, 75%, 55%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
-                        <Line key={`max-B-${branch.branchId}`} data={branch.points.filter(p => p.voltage_B > 0)}
+                        <Line key={`max-B-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_B > 0)}
                           type="monotone" dataKey="voltage_B" name={`${branch.label} B`}
                           stroke="hsl(142, 76%, 36%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
-                        <Line key={`max-C-${branch.branchId}`} data={branch.points.filter(p => p.voltage_C > 0)}
+                        <Line key={`max-C-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_C > 0)}
                           type="monotone" dataKey="voltage_C" name={`${branch.label} C`}
                           stroke="hsl(217, 91%, 60%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
                       </>
+                    ))}
+                    {showNeutralCurrent && voltageDistanceData.maxBranches.map((branch) => (
+                      <Line key={`max-IN-${branch.branchId}`} yAxisId="right" data={branch.points}
+                        type="monotone" dataKey="I_neutral" name={`I_N ${branch.label}`}
+                        stroke="hsl(35, 95%, 55%)" strokeWidth={1.5} dot={{ r: 2 }} strokeDasharray="6 3" />
                     ))}
                   </LineChart>
                 </ResponsiveContainer>

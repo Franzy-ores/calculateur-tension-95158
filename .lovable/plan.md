@@ -1,52 +1,69 @@
 
 
-# Parametres manuels pour la formule continue + N reseau global
+# Refonte Labo : Foisonnement continu comme moteur unique
 
-## Constat actuel
+## Constat
 
-- Le coefficient `a` est fixe par cluster depuis `circuitSimulationConfig.json` (A=0.15, B=0.13, C=0.11, D=0.18)
-- `N` = nombre de clients residentiels lies **au noeud selectionne** uniquement (lignes 212-221)
-- Aucun reglage manuel possible dans l'onglet Labo
+Actuellement le Labo utilise deux moteurs separement :
+- `circuitPowerCalculator` pour le graphique de puissance (moteur simplifie, pas de reseau)
+- `DailyProfileCalculator` pour les tensions (moteur electrique complet)
+
+L'utilisateur veut un flux unique et coherent : la formule continue `f(N) = a + (1-a)/√N` determine le foisonnement heure par heure, et ce foisonnement alimente tout — puissances, tensions 24h, et graphiques tension-distance.
+
+## Architecture cible
+
+Un seul moteur : `DailyProfileCalculator` avec `customDiversityCoeff` (continu).
+
+Trois runs :
+1. **Run principal** : simulation complete (conso + prod) → graphique puissance 24h + graphique tension 24h
+2. **Run "conso pure"** : `zeroProduction: true` → trouver l'heure de Vmin → graphique tension-distance (pire cas charge)
+3. **Run "prod pure"** : nouvelle option `zeroConsumption: true` → trouver l'heure de Vmax → graphique tension-distance (pire cas injection)
 
 ## Modifications
 
-### 1. N global reseau (pas par noeud)
+### 1. `src/types/dailyProfile.ts` — Ajouter `zeroConsumption`
 
-Remplacer le calcul de `nResidential` pour compter **tous** les clients residentiels importes dans le projet, pas seulement ceux lies au noeud selectionne :
-
-```text
-Avant:  nResidential = clients lies au noeud selectionne
-Apres:  nResidentialGlobal = tous les clients residentiels du projet
+```typescript
+/** Force le foisonnement résidentiel et industriel à 0% (production seule) */
+zeroConsumption?: boolean;
 ```
 
-Le `customDiversityCoeff` passe au `DailyProfileCalculator` utilisera ce N global.
+### 2. `src/utils/dailyProfileCalculator.ts` — Respecter `zeroConsumption`
 
-### 2. Sliders manuels dans le panneau parametres
+Dans `calculateHourlyVoltage`, quand `zeroConsumption: true` :
+- `residentialFoisonnementHoraire = 0`
+- `industrialFoisonnementHoraire = 0`
+- `evFoisonne = 0`
+- Seul le profil PV est actif
 
-Ajouter dans la section "Formule continue" du panneau gauche :
+### 3. `src/components/topMenu/LaboFoisonnementTab.tsx` — Refonte
 
-- **Slider `a`** : coefficient asymptotique, range 0.05 — 0.50, pas 0.01, valeur par defaut = valeur du cluster selectionne
-- **Slider `N`** : nombre de clients, range 1 — 200, pas 1, valeur par defaut = N global calcule automatiquement
-- **Bouton "Reset"** pour revenir aux valeurs auto (cluster + N global)
-- Affichage en temps reel du coefficient resultant `f(N) = a + (1-a)/√N = X.XXXX`
+**Supprimer** l'utilisation de `circuitPowerCalculator` (plus de `simulateCircuit24h`).
 
-Les sliders mettent a jour des `useState` locaux. Quand l'utilisateur modifie, le coefficient continu est recalcule a la volee et les simulations se relancent.
+**Trois simulations** via `DailyProfileCalculator` :
+- Run complet (conso + prod) → `rawResults` pour puissances et tensions 24h
+- Run conso pure (`zeroProduction: true`) → `rawResults` pour voltage-distance Vmin
+- Run prod pure (`zeroConsumption: true`) → `rawResults` pour voltage-distance Vmax
 
-### 3. Impact sur les calculs
+**Graphique puissance 24h** (nouveau) :
+- Donnees extraites des `HourlyVoltageResult` du run complet : `chargesResidentialPower_kVA`, `chargesIndustrialPower_kVA`, `productionsPower_kVA`
+- P_charge = residentiel + industriel, P_pv = productions, P_net = P_charge - P_pv
+- Recharts LineChart avec 3 courbes
 
-Le `continuCoeff` actuellement calcule via `diversityFactor(nResidential, circuitCluster, circuitConfig)` sera remplace par un calcul direct utilisant les valeurs des sliders :
+**Graphique tension 24h** : inchange (deja base sur DailyProfileCalculator)
 
-```text
-continuCoeff = customA + (1 - customA) / √(customN)
-```
+**Graphiques tension-distance** :
+- Vmin : utilise le run "conso pure" au lieu du run complet
+- Vmax : utilise le run "prod pure" au lieu du run complet
+- Titres mis a jour : "Pire cas charge (sans production)" / "Pire cas injection (sans consommation)"
 
-Cela affecte automatiquement les graphiques de tension 24h et les graphiques tension-distance car ils dependent de `continuCoeff`.
+**Tableau comparatif** : adapte pour utiliser les donnees du DailyProfileCalculator au lieu de circuitPowerCalculator
 
-### Fichier modifie
+## Fichiers modifies
 
 | Fichier | Modification |
 |---|---|
-| `src/components/topMenu/LaboFoisonnementTab.tsx` | N global, 2 sliders (a, N), bouton reset, recalcul dynamique |
-
-Aucun autre fichier modifie — la formule est calculee localement dans le composant.
+| `src/types/dailyProfile.ts` | +1 champ `zeroConsumption` |
+| `src/utils/dailyProfileCalculator.ts` | +5 lignes : branche `zeroConsumption` |
+| `src/components/topMenu/LaboFoisonnementTab.tsx` | Refonte : 3 runs DailyProfileCalculator, supprimer circuitPowerCalculator, graphique puissance derive du moteur electrique |
 

@@ -17,8 +17,7 @@ import { DailyProfileChart } from '@/components/DailyProfileChart';
 import { ProfileVisualEditor } from '@/components/ProfileVisualEditor';
 import { MeasuredProfileImporter } from '@/components/MeasuredProfileImporter';
 import { HourlyVoltageResult, ClientHourlyVoltageResult } from '@/types/dailyProfile';
-import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Home, Zap, FlaskConical, Moon, Upload, FileBarChart, X, Download, MapPin, User, Cable, Eye, EyeOff, HelpCircle } from 'lucide-react';
-import { toast } from 'sonner';
+import { Clock, Sun, Cloud, Car, Factory, Edit3, AlertTriangle, Percent, Home, Zap, FlaskConical, Moon, Upload, FileBarChart, X, Download, MapPin, User, Cable, Eye, EyeOff, HelpCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { HourlyProfile, MeasuredProfileMetadata } from '@/types/dailyProfile';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -1003,16 +1002,15 @@ export const DailyProfileTab = () => {
             if (c.clientType === 'industriel') nInd++; else nRes++;
           }
         });
-        const cluster = getClusterById(dailyProfileOptions.selectedClusterId || DEFAULT_CLUSTER_ID);
         return (
           <CalculationInfoDialog
             open={showInfoDialog}
             onOpenChange={setShowInfoDialog}
             nResidentialClients={nRes}
             nIndustrialClients={nInd}
-            selectedClusterName={cluster?.name || 'Urbain résidentiel'}
-            facteurConso={dailyProfileOptions.customFacteurConso ?? cluster?.facteurConso ?? 1.0}
-            facteurVE={dailyProfileOptions.customFacteurVE ?? cluster?.facteurVE ?? 1.0}
+            selectedClusterName={'— désactivé —'}
+            facteurConso={1.0}
+            facteurVE={1.0}
           />
         );
       })()}

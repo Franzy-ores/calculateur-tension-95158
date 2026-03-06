@@ -773,12 +773,14 @@ export const LaboFoisonnementTab = () => {
                           <div className="rounded-md border bg-card px-3 py-2 text-xs shadow-md">
                             <div className="font-medium mb-1">{point?.nodeName || '—'}</div>
                             <div className="text-muted-foreground">{point?.distance_m?.toFixed(1)} m</div>
-                            {payload.map((entry: any, i: number) => (
-                              <div key={i} className="flex items-center gap-2 mt-0.5">
-                                <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: entry.stroke || entry.color }} />
-                                <span>{entry.name}: <span className="font-mono font-medium">{entry.value?.toFixed(1)} V</span></span>
+                            {point?.voltage_A > 0 && (
+                              <div className="space-y-0.5 mt-1">
+                                <div className="flex gap-2"><span style={{ color: 'hsl(0, 75%, 55%)' }}>A:</span><span className="font-mono">{point.voltage_A.toFixed(1)} V</span></div>
+                                <div className="flex gap-2"><span style={{ color: 'hsl(142, 76%, 36%)' }}>B:</span><span className="font-mono">{point.voltage_B.toFixed(1)} V</span></div>
+                                <div className="flex gap-2"><span style={{ color: 'hsl(217, 91%, 60%)' }}>C:</span><span className="font-mono">{point.voltage_C.toFixed(1)} V</span></div>
+                                <div className="flex gap-2 border-t border-border/30 pt-0.5"><span className="text-muted-foreground">Moy:</span><span className="font-mono font-medium">{point.voltage.toFixed(1)} V</span></div>
                               </div>
-                            ))}
+                            )}
                           </div>
                         );
                       }}

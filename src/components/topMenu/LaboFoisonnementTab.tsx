@@ -816,12 +816,16 @@ export const LaboFoisonnementTab = () => {
                       <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">P charge</th>
                       <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">P PV</th>
                       <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">P net</th>
-                      <th className="text-right py-1.5 px-2 text-violet-500 font-medium">V (V)</th>
+                      <th className="text-right py-1.5 px-2 font-medium" style={{ color: 'hsl(0, 75%, 55%)' }}>V_A</th>
+                      <th className="text-right py-1.5 px-2 font-medium" style={{ color: 'hsl(142, 76%, 36%)' }}>V_B</th>
+                      <th className="text-right py-1.5 px-2 font-medium" style={{ color: 'hsl(217, 91%, 60%)' }}>V_C</th>
+                      <th className="text-right py-1.5 px-2 text-violet-500 font-medium">V moy</th>
                     </tr>
                   </thead>
                   <tbody>
                     {powerData.map((row, i) => {
                       const vData = voltage24hData[i];
+                      const minPhase = vData ? Math.min(vData.V_A, vData.V_B, vData.V_C) : 0;
                       return (
                         <tr key={row.hour} className="border-b border-border/20">
                           <td className="py-1 px-2 font-mono">{row.label}</td>
@@ -829,7 +833,16 @@ export const LaboFoisonnementTab = () => {
                           <td className="py-1 px-2 text-right font-mono">{row.P_charge}</td>
                           <td className="py-1 px-2 text-right font-mono">{row.P_pv}</td>
                           <td className={`py-1 px-2 text-right font-mono ${row.P_net < 0 ? 'text-emerald-500' : ''}`}>{row.P_net}</td>
-                          <td className={`py-1 px-2 text-right font-mono text-violet-500 ${vData && vData.V_continu < 218.5 ? 'text-orange-500' : ''}`}>
+                          <td className={`py-1 px-2 text-right font-mono ${vData && vData.V_A < 218.5 ? 'text-orange-500' : ''}`}>
+                            {vData && vData.V_A > 0 ? vData.V_A.toFixed(1) : '—'}
+                          </td>
+                          <td className={`py-1 px-2 text-right font-mono ${vData && vData.V_B < 218.5 ? 'text-orange-500' : ''}`}>
+                            {vData && vData.V_B > 0 ? vData.V_B.toFixed(1) : '—'}
+                          </td>
+                          <td className={`py-1 px-2 text-right font-mono ${vData && vData.V_C < 218.5 ? 'text-orange-500' : ''}`}>
+                            {vData && vData.V_C > 0 ? vData.V_C.toFixed(1) : '—'}
+                          </td>
+                          <td className={`py-1 px-2 text-right font-mono text-violet-500 ${vData && minPhase < 218.5 ? 'text-orange-500' : ''}`}>
                             {vData && vData.V_continu > 0 ? vData.V_continu.toFixed(1) : '—'}
                           </td>
                         </tr>

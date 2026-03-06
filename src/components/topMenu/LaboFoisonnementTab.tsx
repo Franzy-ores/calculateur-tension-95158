@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -151,12 +152,22 @@ export const LaboFoisonnementTab = () => {
     nodeSelectionMode,
     simulationEquipment,
     isSimulationActive,
+    toggleSimulationActive,
   } = useNetworkStore();
 
   const [season, setSeason] = useState<'winter' | 'summer'>('winter');
   const [weather, setWeather] = useState<'sunny' | 'gray'>('sunny');
   const [showPerPhaseDistance, setShowPerPhaseDistance] = useState(false);
   const [showNeutralCurrent, setShowNeutralCurrent] = useState(false);
+
+  // Simulation equipment counters
+  const srg2Count = simulationEquipment.srg2Devices?.filter(s => s.enabled).length || 0;
+  const compensatorCount = simulationEquipment.neutralCompensators.filter(c => c.enabled).length;
+  const hasCableReplacement = simulationEquipment.cableReplacement?.enabled;
+  const totalEquipment = srg2Count + compensatorCount + (hasCableReplacement ? 1 : 0);
+  const hasAnyEquipment = totalEquipment > 0 ||
+    (simulationEquipment.srg2Devices?.length || 0) > 0 ||
+    simulationEquipment.neutralCompensators.length > 0;
 
   const nodes = useMemo(() => {
     if (!currentProject) return [];
@@ -477,6 +488,37 @@ export const LaboFoisonnementTab = () => {
               </Button>
             </div>
           </div>
+
+          {/* Mode simulation */}
+          {hasAnyEquipment && (
+            <div className="space-y-2 border-t border-border/50 pt-3">
+              <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                <FlaskConical className="h-3 w-3" /> Mode simulation
+              </Label>
+              <div className="flex items-center justify-between">
+                <span className="text-xs">Activer</span>
+                <Switch
+                  checked={isSimulationActive}
+                  onCheckedChange={toggleSimulationActive}
+                  disabled={!hasAnyEquipment}
+                  className="data-[state=checked]:bg-success"
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Badge
+                  variant={isSimulationActive ? 'success' : 'outline'}
+                  className="text-[10px]"
+                >
+                  {isSimulationActive ? '✓ Active' : '✗ Inactive'}
+                </Badge>
+                {totalEquipment > 0 && (
+                  <Badge variant="secondary" className="text-[10px]">
+                    {totalEquipment} éq.
+                  </Badge>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Cluster */}
           <div className="space-y-2">

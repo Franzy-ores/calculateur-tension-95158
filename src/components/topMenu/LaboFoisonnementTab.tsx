@@ -355,10 +355,16 @@ export const LaboFoisonnementTab = () => {
     const buildBranchData = (rawResults: CalculationResult[], hour: number) => {
       return networkPaths.map((branch, idx) => ({
         ...branch,
-        points: branch.points.map(p => ({
-          ...p,
-          voltage: getNodeVoltage(rawResults, p.nodeId, hour),
-        })),
+        points: branch.points.map(p => {
+          const perPhase = getNodeVoltagePerPhase(rawResults, p.nodeId, hour);
+          return {
+            ...p,
+            voltage: perPhase.avg,
+            voltage_A: perPhase.A,
+            voltage_B: perPhase.B,
+            voltage_C: perPhase.C,
+          };
+        }),
         color: BRANCH_COLORS[idx % BRANCH_COLORS.length],
       }));
     };

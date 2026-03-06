@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -154,6 +155,7 @@ export const LaboFoisonnementTab = () => {
 
   const [season, setSeason] = useState<'winter' | 'summer'>('winter');
   const [weather, setWeather] = useState<'sunny' | 'gray'>('sunny');
+  const [showPerPhaseDistance, setShowPerPhaseDistance] = useState(false);
 
   const nodes = useMemo(() => {
     if (!currentProject) return [];
@@ -688,6 +690,18 @@ export const LaboFoisonnementTab = () => {
         {/* ─── Graphiques Tension vs Distance ─────────────────────────────── */}
         {voltageDistanceData && voltageDistanceData.minBranches.length > 0 && (
           <>
+            {/* Toggle per-phase display */}
+            <div className="flex items-center gap-2 px-1">
+              <Checkbox
+                id="showPerPhaseDistance"
+                checked={showPerPhaseDistance}
+                onCheckedChange={(checked) => setShowPerPhaseDistance(checked === true)}
+              />
+              <Label htmlFor="showPerPhaseDistance" className="text-xs text-muted-foreground cursor-pointer">
+                Afficher tensions par phase (A, B, C) en pointillés
+              </Label>
+            </div>
+
             {/* Vmin — Pire cas charge (sans production) */}
             <Card className="bg-card/50 backdrop-blur border-violet-500/30">
               <CardHeader className="pb-2 pt-3 px-4">
@@ -738,6 +752,19 @@ export const LaboFoisonnementTab = () => {
                       <Line key={`min-${branch.branchId}`} data={branch.points.filter(p => p.voltage > 0)}
                         type="monotone" dataKey="voltage" name={branch.label}
                         stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                    ))}
+                    {showPerPhaseDistance && voltageDistanceData.minBranches.map((branch) => (
+                      <>
+                        <Line key={`min-A-${branch.branchId}`} data={branch.points.filter(p => p.voltage_A > 0)}
+                          type="monotone" dataKey="voltage_A" name={`${branch.label} A`}
+                          stroke="hsl(0, 75%, 55%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
+                        <Line key={`min-B-${branch.branchId}`} data={branch.points.filter(p => p.voltage_B > 0)}
+                          type="monotone" dataKey="voltage_B" name={`${branch.label} B`}
+                          stroke="hsl(142, 76%, 36%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
+                        <Line key={`min-C-${branch.branchId}`} data={branch.points.filter(p => p.voltage_C > 0)}
+                          type="monotone" dataKey="voltage_C" name={`${branch.label} C`}
+                          stroke="hsl(217, 91%, 60%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
+                      </>
                     ))}
                   </LineChart>
                 </ResponsiveContainer>
@@ -794,6 +821,19 @@ export const LaboFoisonnementTab = () => {
                       <Line key={`max-${branch.branchId}`} data={branch.points.filter(p => p.voltage > 0)}
                         type="monotone" dataKey="voltage" name={branch.label}
                         stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                    ))}
+                    {showPerPhaseDistance && voltageDistanceData.maxBranches.map((branch) => (
+                      <>
+                        <Line key={`max-A-${branch.branchId}`} data={branch.points.filter(p => p.voltage_A > 0)}
+                          type="monotone" dataKey="voltage_A" name={`${branch.label} A`}
+                          stroke="hsl(0, 75%, 55%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
+                        <Line key={`max-B-${branch.branchId}`} data={branch.points.filter(p => p.voltage_B > 0)}
+                          type="monotone" dataKey="voltage_B" name={`${branch.label} B`}
+                          stroke="hsl(142, 76%, 36%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
+                        <Line key={`max-C-${branch.branchId}`} data={branch.points.filter(p => p.voltage_C > 0)}
+                          type="monotone" dataKey="voltage_C" name={`${branch.label} C`}
+                          stroke="hsl(217, 91%, 60%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
+                      </>
                     ))}
                   </LineChart>
                 </ResponsiveContainer>

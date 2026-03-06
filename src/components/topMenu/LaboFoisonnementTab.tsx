@@ -14,7 +14,7 @@ import {
 import { useNetworkStore } from '@/store/networkStore';
 import { FlaskConical, MapPin, Sun, Cloud, AlertTriangle, TrendingUp, TrendingDown, Zap, Ruler } from 'lucide-react';
 import { clusterProfiles, getClusterById, DEFAULT_CLUSTER_ID } from '@/data/clusterProfiles';
-import { getFoisonnementPalier } from '@/utils/foisonnementCalculator';
+import { getFoisonnementPalier, calculateNormalizedDiversity } from '@/utils/foisonnementCalculator';
 import { DailyProfileCalculator } from '@/utils/dailyProfileCalculator';
 import type { HourlyVoltageResult, DailySimulationOptions } from '@/types/dailyProfile';
 import type { Node as NetworkNode, Cable, CalculationResult } from '@/types/network';
@@ -477,7 +477,7 @@ export const LaboFoisonnementTab = () => {
               )}
             </div>
             <div className="font-mono text-muted-foreground">
-              f(N) = a + (1−a)/√N
+              K(N) = [a + (1−a)/√N] / F<sub>ref</sub>
             </div>
 
             {/* Slider a */}

@@ -489,6 +489,37 @@ export const LaboFoisonnementTab = () => {
             </div>
           </div>
 
+          {/* Mode simulation */}
+          {hasAnyEquipment && (
+            <div className="space-y-2 border-t border-border/50 pt-3">
+              <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                <FlaskConical className="h-3 w-3" /> Mode simulation
+              </Label>
+              <div className="flex items-center justify-between">
+                <span className="text-xs">Activer</span>
+                <Switch
+                  checked={isSimulationActive}
+                  onCheckedChange={toggleSimulationActive}
+                  disabled={!hasAnyEquipment}
+                  className="data-[state=checked]:bg-success"
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Badge
+                  variant={isSimulationActive ? 'success' : 'outline'}
+                  className="text-[10px]"
+                >
+                  {isSimulationActive ? '✓ Active' : '✗ Inactive'}
+                </Badge>
+                {totalEquipment > 0 && (
+                  <Badge variant="secondary" className="text-[10px]">
+                    {totalEquipment} éq.
+                  </Badge>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Cluster */}
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Cluster</Label>

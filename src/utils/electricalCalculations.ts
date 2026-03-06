@@ -987,23 +987,46 @@ export class ElectricalCalculator {
           if (n.autoPhaseDistribution.charges.foisonneAvecCurseurs && 
               n.autoPhaseDistribution.productions.foisonneAvecCurseurs) {
             
-            const totalCharges = n.autoPhaseDistribution.charges.foisonneAvecCurseurs.A + 
+            const totalChargesFoisonne = n.autoPhaseDistribution.charges.foisonneAvecCurseurs.A + 
                                 n.autoPhaseDistribution.charges.foisonneAvecCurseurs.B + 
                                 n.autoPhaseDistribution.charges.foisonneAvecCurseurs.C;
-            const totalProds = n.autoPhaseDistribution.productions.foisonneAvecCurseurs.A + 
+            const totalProdsFoisonne = n.autoPhaseDistribution.productions.foisonneAvecCurseurs.A + 
                               n.autoPhaseDistribution.productions.foisonneAvecCurseurs.B + 
                               n.autoPhaseDistribution.productions.foisonneAvecCurseurs.C;
             
-            if (totalCharges > 0.001) {
-              pA_charges = n.autoPhaseDistribution.charges.foisonneAvecCurseurs.A / totalCharges;
-              pB_charges = n.autoPhaseDistribution.charges.foisonneAvecCurseurs.B / totalCharges;
-              pC_charges = n.autoPhaseDistribution.charges.foisonneAvecCurseurs.C / totalCharges;
+            if (totalChargesFoisonne > 0.001) {
+              pA_charges = n.autoPhaseDistribution.charges.foisonneAvecCurseurs.A / totalChargesFoisonne;
+              pB_charges = n.autoPhaseDistribution.charges.foisonneAvecCurseurs.B / totalChargesFoisonne;
+              pC_charges = n.autoPhaseDistribution.charges.foisonneAvecCurseurs.C / totalChargesFoisonne;
+            } else {
+              // 🔧 FIX: Quand foisonnement=0%, les valeurs foisonnées sont nulles
+              // → Fallback sur les ratios physiques bruts (.total) pour conserver le déséquilibre
+              const totalChargesBrut = n.autoPhaseDistribution.charges.total.A + 
+                                      n.autoPhaseDistribution.charges.total.B + 
+                                      n.autoPhaseDistribution.charges.total.C;
+              if (totalChargesBrut > 0.001) {
+                pA_charges = n.autoPhaseDistribution.charges.total.A / totalChargesBrut;
+                pB_charges = n.autoPhaseDistribution.charges.total.B / totalChargesBrut;
+                pC_charges = n.autoPhaseDistribution.charges.total.C / totalChargesBrut;
+                console.log(`📊 Nœud ${n.name || n.id}: foisonneAvecCurseurs=0 → fallback charges.total pour ratios`);
+              }
             }
             
-            if (totalProds > 0.001) {
-              pA_productions = n.autoPhaseDistribution.productions.foisonneAvecCurseurs.A / totalProds;
-              pB_productions = n.autoPhaseDistribution.productions.foisonneAvecCurseurs.B / totalProds;
-              pC_productions = n.autoPhaseDistribution.productions.foisonneAvecCurseurs.C / totalProds;
+            if (totalProdsFoisonne > 0.001) {
+              pA_productions = n.autoPhaseDistribution.productions.foisonneAvecCurseurs.A / totalProdsFoisonne;
+              pB_productions = n.autoPhaseDistribution.productions.foisonneAvecCurseurs.B / totalProdsFoisonne;
+              pC_productions = n.autoPhaseDistribution.productions.foisonneAvecCurseurs.C / totalProdsFoisonne;
+            } else {
+              // 🔧 FIX: Même fallback pour les productions
+              const totalProdsBrut = n.autoPhaseDistribution.productions.total.A + 
+                                    n.autoPhaseDistribution.productions.total.B + 
+                                    n.autoPhaseDistribution.productions.total.C;
+              if (totalProdsBrut > 0.001) {
+                pA_productions = n.autoPhaseDistribution.productions.total.A / totalProdsBrut;
+                pB_productions = n.autoPhaseDistribution.productions.total.B / totalProdsBrut;
+                pC_productions = n.autoPhaseDistribution.productions.total.C / totalProdsBrut;
+                console.log(`📊 Nœud ${n.name || n.id}: foisonneAvecCurseurs=0 → fallback productions.total pour ratios`);
+              }
             }
             
             console.log(`📊 Nœud ${n.name || n.id}: utilise foisonneAvecCurseurs (foisonnement + curseurs)`);

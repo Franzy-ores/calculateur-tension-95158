@@ -1525,7 +1525,7 @@ export class ElectricalCalculator {
       // Pour les réseaux 400V phase-neutre, le courant neutre crée une chute de tension supplémentaire
       // qui doit être ajoutée aux tensions phase-neutre calculées
       // ✅ EQUI8 : Déclaré ici (hors du bloc is400V) pour être accessible dans les résultats câbles
-      const equi8UpstreamReduction = new Map<string, number>();
+      const equi8UpstreamReduction = new Map<string, Complex>();
       if (is400V) {
         // ✅ EQUI8 CME: Identifier les nœuds avec injection de courant
         // Le courant injecté sur le neutre réduit directement le courant neutre dans les câbles amont
@@ -1556,16 +1556,22 @@ export class ElectricalCalculator {
         for (const [equi8NodeId, I_comp] of equi8CompensationByNode.entries()) {
           let currentNodeId = equi8NodeId;
           
+          // Récupérer le phaseur I_neutral de l'injection EQUI8 (mode CME)
+          const injection = equi8CurrentInjections?.get(equi8NodeId);
+          const I_neutral_phasor: Complex = injection
+            ? C(injection.I_neutral.re, injection.I_neutral.im)
+            : C(I_comp, 0); // fallback legacy : courant réel si pas de phaseur
+          
           // Remonter vers la source
           while (parent.get(currentNodeId)) {
             const parentNodeId = parent.get(currentNodeId)!;
             const cable = parentCableOfChild.get(currentNodeId);
             
             if (cable) {
-              // Accumuler la réduction sur ce câble
-              const existingReduction = equi8UpstreamReduction.get(cable.id) || 0;
-              equi8UpstreamReduction.set(cable.id, existingReduction + I_comp);
-              console.log(`🔌 EQUI8 réduction I_N sur câble ${cable.id}: +${I_comp.toFixed(1)}A (total: ${(existingReduction + I_comp).toFixed(1)}A)`);
+              // Accumuler la réduction phaseur sur ce câble
+              const existingReduction = equi8UpstreamReduction.get(cable.id) || C(0, 0);
+              equi8UpstreamReduction.set(cable.id, add(existingReduction, I_neutral_phasor));
+              console.log(`🔌 EQUI8 réduction I_N sur câble ${cable.id}: +${abs(I_neutral_phasor).toFixed(1)}A phaseur (total: ${abs(add(existingReduction, I_neutral_phasor)).toFixed(1)}A)`);
             }
             
             currentNodeId = parentNodeId;
@@ -1597,40 +1603,32 @@ export class ElectricalCalculator {
             const IC = phaseC.I_branch_phase.get(cab.id) || C(0, 0);
             let IN_phasor = add(add(IA, IB), IC); // Somme vectorielle complexe
             
-            // ✅ EQUI8 : Soustraire le courant de compensation des câbles en amont
-            const equi8Reduction = equi8UpstreamReduction.get(cab.id);
-            if (equi8Reduction && equi8Reduction > 0) {
-              // L'EQUI8 injecte un courant qui réduit le déséquilibre
-              // On soustrait la magnitude de compensation du courant neutre
+            // ✅ EQUI8 : Soustraction phaseur complexe (cohérente avec IN_phasor)
+            const equi8ReductionPhasor = equi8UpstreamReduction.get(cab.id);
+            if (equi8ReductionPhasor && abs(equi8ReductionPhasor) > 0.01) {
               const IN_mag_before = abs(IN_phasor);
-              const IN_mag_after = Math.max(0, IN_mag_before - equi8Reduction);
+              IN_phasor = sub(IN_phasor, equi8ReductionPhasor);
               
-              // Conserver l'angle du courant neutre, réduire la magnitude
-              if (IN_mag_before > 0.01) {
-                const IN_angle = arg(IN_phasor);
-                IN_phasor = fromPolar(IN_mag_after, IN_angle);
-                console.log(`🔌 EQUI8 câble ${cab.id}: I_N ${IN_mag_before.toFixed(1)}A → ${IN_mag_after.toFixed(1)}A (réduction ${equi8Reduction.toFixed(1)}A)`);
+              // Sécurité : si la soustraction inverse le courant, ramener à zéro
+              // (ne peut pas injecter du courant neutre vers l'amont)
+              if (abs(IN_phasor) > IN_mag_before + 0.01) {
+                IN_phasor = C(0, 0);
               }
+              
+              console.log(
+                `🔌 EQUI8 câble ${cab.id}: I_N phaseur ${IN_mag_before.toFixed(1)}A → ${abs(IN_phasor).toFixed(1)}A`
+              );
             }
-            
-            // ── Fuite vers la terre au nœud enfant v (prise de terre poteau) ──
+
+            // ── Fuite vers la terre au nœud enfant v (APRÈS correction EQUI8) ──
             const distalNode = nodeById.get(v)!;
             const Rt = distalNode?.rt_terre_ohm ?? 25; // 25 Ω par défaut (NF C 11-201)
-
             if (Rt > 0) {
-              // Tension du neutre au nœud parent = potentiel neutre par rapport à la terre
-              const V_neutre_parent = Vn_parent;
-
-              // Courant de fuite : I_fuite = V_neutre / Rt (admittance shunt neutre → terre)
-              const I_fuite = div(V_neutre_parent, C(Rt, 0));
-
-              // Réduire le courant neutre propagé dans le câble
+              const I_fuite = div(Vn_parent, C(Rt, 0));
               IN_phasor = sub(IN_phasor, I_fuite);
-
               console.log(
-                `🌍 Terre nœud ${v}: Rt=${Rt}Ω, ` +
-                `|I_fuite|=${abs(I_fuite).toFixed(2)}A, ` +
-                `|I_N| après fuite=${abs(IN_phasor).toFixed(2)}A`
+                `🌍 Terre nœud ${v}: Rt=${Rt}Ω, |I_fuite|=${abs(I_fuite).toFixed(2)}A, ` +
+                `|I_N| final=${abs(IN_phasor).toFixed(2)}A`
               );
             }
             // ─────────────────────────────────────────────────────────────────────
@@ -1765,14 +1763,19 @@ export class ElectricalCalculator {
         globalLosses += losses_kW;
 
         // Courant de neutre (si 400V L-N)
-        // ✅ EQUI8 : Appliquer la réduction du courant neutre pour les câbles en amont
-        let IN_mag = is400V ? abs(add(add(IA, IB), IC)) : 0;
-        const equi8Reduction = equi8UpstreamReduction.get(cab.id);
-        if (equi8Reduction && equi8Reduction > 0) {
-          const IN_before = IN_mag;
-          IN_mag = Math.max(0, IN_mag - equi8Reduction);
-          console.log(`🔌 EQUI8 résultat câble ${cab.id}: I_N ${IN_before.toFixed(1)}A → ${IN_mag.toFixed(1)}A`);
+        // ✅ EQUI8 : Appliquer la réduction phaseur du courant neutre pour les câbles en amont
+        let IN_phasor_result = is400V ? add(add(IA, IB), IC) : C(0, 0);
+        const equi8ReductionResult = equi8UpstreamReduction.get(cab.id);
+        if (equi8ReductionResult && abs(equi8ReductionResult) > 0.01) {
+          const IN_before = abs(IN_phasor_result);
+          IN_phasor_result = sub(IN_phasor_result, equi8ReductionResult);
+          // Sécurité : éviter inversion
+          if (abs(IN_phasor_result) > IN_before + 0.01) {
+            IN_phasor_result = C(0, 0);
+          }
+          console.log(`🔌 EQUI8 résultat câble ${cab.id}: I_N ${IN_before.toFixed(1)}A → ${abs(IN_phasor_result).toFixed(1)}A`);
         }
+        let IN_mag = abs(IN_phasor_result);
 
         calculatedCables.push({
           ...cab,

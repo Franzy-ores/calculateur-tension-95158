@@ -1,8 +1,10 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Slider } from '@/components/ui/slider';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -203,6 +205,12 @@ export const LaboFoisonnementTab = () => {
     }
   }, [nodes, selectedNodeId, setDailyProfileOptions]);
 
+  // N global : tous les clients résidentiels du projet
+  const nResidentialGlobal = useMemo(() => {
+    if (!currentProject) return 0;
+    return (currentProject.clientsImportes || []).filter(c => c.clientType !== 'industriel').length;
+  }, [currentProject]);
+
   // Build CircuitConfig from project data
   const { circuit, nResidential } = useMemo(() => {
     if (!currentProject || !selectedNodeId) return { circuit: null, nResidential: 0 };
@@ -248,14 +256,29 @@ export const LaboFoisonnementTab = () => {
     return { circuit: cfg, nResidential: nRes };
   }, [currentProject, selectedNodeId, circuitCluster]);
 
-  // Run power simulation (moteur continu)
-  const result: CircuitSimulationResult | null = useMemo(() => {
-    if (!circuit || circuit.clients.length === 0) return null;
-    return simulateCircuit24h(circuit, season, weather, profiles, weatherFactors, circuitConfig);
-  }, [circuit, season, weather]);
+  // ─── Sliders manuels pour la formule continue ────────────────────────────────
+  const defaultA = circuitConfig.diversityFactors[circuitCluster];
+  const defaultN = nResidentialGlobal > 0 ? nResidentialGlobal : 1;
 
-  // ─── Voltage simulations: Palier vs Continu ──────────────────────────────────
-  const continuCoeff = nResidential > 0 ? diversityFactor(nResidential, circuitCluster, circuitConfig) : 0;
+  const [customA, setCustomA] = useState<number>(defaultA);
+  const [customN, setCustomN] = useState<number>(defaultN);
+  const [isManualOverride, setIsManualOverride] = useState(false);
+
+  // Sync defaults when cluster or project changes (only if not manually overridden)
+  useEffect(() => {
+    if (!isManualOverride) {
+      setCustomA(defaultA);
+      setCustomN(defaultN);
+    }
+  }, [defaultA, defaultN, isManualOverride]);
+
+  const handleResetFormula = useCallback(() => {
+    setCustomA(defaultA);
+    setCustomN(defaultN);
+    setIsManualOverride(false);
+  }, [defaultA, defaultN]);
+
+  const continuCoeff = customN > 0 ? customA + (1 - customA) / Math.sqrt(customN) : 0;
   const palierCoeff = nResidential > 0 ? getFoisonnementPalier(nResidential) : 0;
 
   const { voltagePalier, voltageContinu, rawPalier, rawContinu } = useMemo(() => {
@@ -303,6 +326,12 @@ export const LaboFoisonnementTab = () => {
 
     return { voltagePalier: resPalier, voltageContinu: resContinu, rawPalier: rawP, rawContinu: rawC };
   }, [currentProject, selectedNodeId, season, weather, selectedClusterId, nResidential, continuCoeff, dailyProfileOptions, simulationEquipment, isSimulationActive]);
+
+  // Run power simulation (moteur continu)
+  const result: CircuitSimulationResult | null = useMemo(() => {
+    if (!circuit || circuit.clients.length === 0) return null;
+    return simulateCircuit24h(circuit, season, weather, profiles, weatherFactors, circuitConfig);
+  }, [circuit, season, weather]);
 
   // Comparison data: palier vs continu for each hour (power + voltage)
   const comparisonData = useMemo(() => {
@@ -504,26 +533,71 @@ export const LaboFoisonnementTab = () => {
             </div>
           </div>
 
-          {/* Formule */}
-          <div className="bg-muted/50 rounded-md p-3 space-y-2 text-xs">
-            <div className="font-medium text-foreground">Formule continue</div>
+          {/* Formule continue — sliders manuels */}
+          <div className="bg-muted/50 rounded-md p-3 space-y-3 text-xs">
+            <div className="flex items-center justify-between">
+              <div className="font-medium text-foreground">Formule continue</div>
+              {isManualOverride && (
+                <Button variant="ghost" size="sm" className="h-5 text-[10px] px-1.5" onClick={handleResetFormula}>
+                  Reset
+                </Button>
+              )}
+            </div>
             <div className="font-mono text-muted-foreground">
               f(N) = a + (1−a)/√N
             </div>
-            {nResidential > 0 && (
-              <>
-                <div className="text-muted-foreground">
-                  N = {nResidential} résidentiels, a = {aCoeff}
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-violet-500 font-medium">Continu: {continuCoeff.toFixed(4)}</span>
-                  <span className="text-muted-foreground">Palier: {palierCoeff.toFixed(2)}</span>
-                </div>
+
+            {/* Slider a */}
+            <div className="space-y-1">
+              <div className="flex justify-between items-center">
+                <Label className="text-[10px] text-muted-foreground">Coeff. a</Label>
+                <span className="font-mono text-[10px] text-foreground">{customA.toFixed(2)}</span>
+              </div>
+              <Slider
+                min={0.05} max={0.50} step={0.01}
+                value={[customA]}
+                onValueChange={([v]) => { setCustomA(v); setIsManualOverride(true); }}
+              />
+              <div className="flex justify-between text-[9px] text-muted-foreground">
+                <span>0.05</span>
+                <span className="text-muted-foreground/60">défaut: {defaultA}</span>
+                <span>0.50</span>
+              </div>
+            </div>
+
+            {/* Slider N */}
+            <div className="space-y-1">
+              <div className="flex justify-between items-center">
+                <Label className="text-[10px] text-muted-foreground">N clients résid.</Label>
+                <span className="font-mono text-[10px] text-foreground">{customN}</span>
+              </div>
+              <Slider
+                min={1} max={200} step={1}
+                value={[customN]}
+                onValueChange={([v]) => { setCustomN(v); setIsManualOverride(true); }}
+              />
+              <div className="flex justify-between text-[9px] text-muted-foreground">
+                <span>1</span>
+                <span className="text-muted-foreground/60">réseau: {nResidentialGlobal}</span>
+                <span>200</span>
+              </div>
+            </div>
+
+            {/* Résultat */}
+            <div className="border-t border-border pt-2 space-y-1">
+              <div className="flex justify-between">
+                <span className="text-violet-500 font-medium">Continu: {continuCoeff.toFixed(4)}</span>
+                <span className="text-muted-foreground">Palier: {palierCoeff.toFixed(2)}</span>
+              </div>
+              {palierCoeff > 0 && (
                 <div className={`font-medium ${continuCoeff > palierCoeff ? 'text-orange-500' : 'text-emerald-500'}`}>
                   Δ = {((continuCoeff - palierCoeff) / palierCoeff * 100).toFixed(0)}%
                 </div>
-              </>
-            )}
+              )}
+              {isManualOverride && (
+                <Badge variant="outline" className="text-[9px] border-orange-500/50 text-orange-500">Manuel</Badge>
+              )}
+            </div>
           </div>
 
           {/* Summary */}

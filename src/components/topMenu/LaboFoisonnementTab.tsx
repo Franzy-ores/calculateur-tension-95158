@@ -208,7 +208,7 @@ export const LaboFoisonnementTab = () => {
     setIsManualOverride(false);
   }, [defaultA, defaultN]);
 
-  const continuCoeff = customN > 0 ? customA + (1 - customA) / Math.sqrt(customN) : 0;
+  const continuCoeff = customN > 0 ? calculateNormalizedDiversity(customN, customA) : 0;
   const palierCoeff = nResidential > 0 ? getFoisonnementPalier(nResidential) : 0;
 
   // ─── 3 Runs DailyProfileCalculator ───────────────────────────────────────────

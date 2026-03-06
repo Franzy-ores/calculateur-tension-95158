@@ -4,7 +4,6 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -15,26 +14,11 @@ import {
 import { useNetworkStore } from '@/store/networkStore';
 import { FlaskConical, MapPin, Sun, Cloud, AlertTriangle, TrendingUp, TrendingDown, Zap, Ruler } from 'lucide-react';
 import { clusterProfiles, getClusterById, DEFAULT_CLUSTER_ID } from '@/data/clusterProfiles';
-import {
-  simulateCircuit24h,
-  diversityFactor,
-} from '@/utils/circuitPowerCalculator';
 import { getFoisonnementPalier } from '@/utils/foisonnementCalculator';
 import { DailyProfileCalculator } from '@/utils/dailyProfileCalculator';
-import type {
-  CircuitConfig,
-  CircuitClient,
-  CircuitCluster,
-  CircuitSeason,
-  CircuitWeather,
-  CircuitSimulationConfig,
-  CircuitSimulationResult,
-  SeasonProfiles,
-} from '@/types/circuitSimulation';
 import type { HourlyVoltageResult, DailySimulationOptions } from '@/types/dailyProfile';
 import type { Node as NetworkNode, Cable, CalculationResult } from '@/types/network';
 import circuitSimulationConfigData from '@/data/circuitSimulationConfig.json';
-import hourlyProfilesData from '@/data/hourlyProfiles.json';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';
@@ -58,7 +42,6 @@ function buildNetworkPaths(nodes: NetworkNode[], cables: Cable[]): BranchPath[] 
   const source = nodes.find(n => n.isSource);
   if (!source) return [];
 
-  // BFS pour construire l'arbre
   const children = new Map<string, { nodeId: string; cableLength: number }[]>();
   const visited = new Set<string>();
   const queue: string[] = [source.id];
@@ -87,7 +70,6 @@ function buildNetworkPaths(nodes: NetworkNode[], cables: Cable[]): BranchPath[] 
     }
   }
 
-  // Trouver les feuilles (nœuds sans enfants)
   const leaves: string[] = [];
   for (const nodeId of visited) {
     if (!children.has(nodeId) || children.get(nodeId)!.length === 0) {
@@ -95,7 +77,6 @@ function buildNetworkPaths(nodes: NetworkNode[], cables: Cable[]): BranchPath[] 
     }
   }
 
-  // Remonter de chaque feuille vers la source pour construire les branches
   const parentMap = new Map<string, string>();
   const buildParent = (nodeId: string) => {
     for (const [parent, childs] of children) {
@@ -115,7 +96,6 @@ function buildNetworkPaths(nodes: NetworkNode[], cables: Cable[]): BranchPath[] 
 
   for (let i = 0; i < leaves.length; i++) {
     const leaf = leaves[i];
-    // Remonter jusqu'à la source
     const path: BranchPoint[] = [];
     let current: string | undefined = leaf;
     while (current) {
@@ -142,38 +122,23 @@ function buildNetworkPaths(nodes: NetworkNode[], cables: Cable[]): BranchPath[] 
 
 // Couleurs pour les branches
 const BRANCH_COLORS = [
-  'hsl(217, 91%, 60%)',    // blue
-  'hsl(142, 76%, 36%)',    // green
-  'hsl(25, 95%, 53%)',     // orange
-  'hsl(330, 81%, 60%)',    // pink
-  'hsl(48, 96%, 53%)',     // yellow
-  'hsl(270, 70%, 60%)',    // purple
-  'hsl(190, 90%, 50%)',    // cyan
+  'hsl(217, 91%, 60%)',
+  'hsl(142, 76%, 36%)',
+  'hsl(25, 95%, 53%)',
+  'hsl(330, 81%, 60%)',
+  'hsl(48, 96%, 53%)',
+  'hsl(270, 70%, 60%)',
+  'hsl(190, 90%, 50%)',
 ];
 
 // ─── Mapping cluster existant → circuit ────────────────────────────────────────
+type CircuitCluster = 'A' | 'B' | 'C' | 'D';
 const CLUSTER_MAP: Record<string, CircuitCluster> = {
   cluster_1: 'A',
   cluster_2: 'B',
   cluster_3: 'C',
   cluster_4: 'D',
 };
-
-// ─── Config typée ──────────────────────────────────────────────────────────────
-const circuitConfig: CircuitSimulationConfig = {
-  version: circuitSimulationConfigData.version,
-  diversityFactors: circuitSimulationConfigData.diversityFactors as any,
-  clusterDeltas: circuitSimulationConfigData.clusterDeltas as any,
-  thresholds: circuitSimulationConfigData.thresholds,
-};
-
-// ─── Profils typés ─────────────────────────────────────────────────────────────
-const profiles: { winter: SeasonProfiles; summer: SeasonProfiles } = {
-  winter: hourlyProfilesData.profiles.winter as SeasonProfiles,
-  summer: hourlyProfilesData.profiles.summer as SeasonProfiles,
-};
-
-const weatherFactors = hourlyProfilesData.weatherFactors as { sunny: number; gray: number };
 
 export const LaboFoisonnementTab = () => {
   const {
@@ -186,8 +151,8 @@ export const LaboFoisonnementTab = () => {
     isSimulationActive,
   } = useNetworkStore();
 
-  const [season, setSeason] = useState<CircuitSeason>('winter');
-  const [weather, setWeather] = useState<CircuitWeather>('sunny');
+  const [season, setSeason] = useState<'winter' | 'summer'>('winter');
+  const [weather, setWeather] = useState<'sunny' | 'gray'>('sunny');
 
   const nodes = useMemo(() => {
     if (!currentProject) return [];
@@ -211,60 +176,24 @@ export const LaboFoisonnementTab = () => {
     return (currentProject.clientsImportes || []).filter(c => c.clientType !== 'industriel').length;
   }, [currentProject]);
 
-  // Build CircuitConfig from project data
-  const { circuit, nResidential } = useMemo(() => {
-    if (!currentProject || !selectedNodeId) return { circuit: null, nResidential: 0 };
-
+  // nResidential for palier coeff display (linked to selected node)
+  const nResidential = useMemo(() => {
+    if (!currentProject || !selectedNodeId) return 0;
     const links = currentProject.clientLinks || [];
     const clients = currentProject.clientsImportes || [];
     const linkedClientIds = links.filter(l => l.nodeId === selectedNodeId).map(l => l.clientId);
-    const linkedClients = clients.filter(c => linkedClientIds.includes(c.id));
-
-    const cosPhi = currentProject.cosPhiCharges ?? currentProject.cosPhi ?? 0.95;
-
-    let nRes = 0;
-    const circuitClients: CircuitClient[] = linkedClients.map(c => {
-      const isIndustrial = c.clientType === 'industriel';
-      if (!isIndustrial) nRes++;
-      
-      const cc: CircuitClient = {
-        id: c.id,
-        type: isIndustrial ? 'industrial_pme' : 'residential',
-        puissanceContrat_kW: c.puissanceContractuelle_kVA * cosPhi,
-      };
-
-      return cc;
-    });
-
-    // Add PV clients separately
-    linkedClients.forEach(c => {
-      if (c.puissancePV_kVA > 0) {
-        circuitClients.push({
-          id: `${c.id}_pv`,
-          type: 'pv',
-          puissanceContrat_kW: 0,
-          pvPuissance_kW: c.puissancePV_kVA,
-        });
-      }
-    });
-
-    const cfg: CircuitConfig = {
-      id: selectedNodeId,
-      cluster: circuitCluster,
-      clients: circuitClients,
-    };
-    return { circuit: cfg, nResidential: nRes };
-  }, [currentProject, selectedNodeId, circuitCluster]);
+    return clients.filter(c => linkedClientIds.includes(c.id) && c.clientType !== 'industriel').length;
+  }, [currentProject, selectedNodeId]);
 
   // ─── Sliders manuels pour la formule continue ────────────────────────────────
-  const defaultA = circuitConfig.diversityFactors[circuitCluster];
+  const diversityFactors = circuitSimulationConfigData.diversityFactors as unknown as Record<string, number>;
+  const defaultA = diversityFactors[circuitCluster] ?? 0.13;
   const defaultN = nResidentialGlobal > 0 ? nResidentialGlobal : 1;
 
   const [customA, setCustomA] = useState<number>(defaultA);
   const [customN, setCustomN] = useState<number>(defaultN);
   const [isManualOverride, setIsManualOverride] = useState(false);
 
-  // Sync defaults when cluster or project changes (only if not manually overridden)
   useEffect(() => {
     if (!isManualOverride) {
       setCustomA(defaultA);
@@ -281,99 +210,94 @@ export const LaboFoisonnementTab = () => {
   const continuCoeff = customN > 0 ? customA + (1 - customA) / Math.sqrt(customN) : 0;
   const palierCoeff = nResidential > 0 ? getFoisonnementPalier(nResidential) : 0;
 
-  const { voltagePalier, voltageContinu, rawPalier, rawContinu } = useMemo(() => {
-    if (!currentProject || !selectedNodeId || nResidential === 0) {
-      return { voltagePalier: [] as HourlyVoltageResult[], voltageContinu: [] as HourlyVoltageResult[], rawPalier: [] as CalculationResult[], rawContinu: [] as CalculationResult[] };
-    }
+  // ─── 3 Runs DailyProfileCalculator ───────────────────────────────────────────
+  const {
+    voltageContinu,
+    rawContinu,
+    rawConsoPure,
+    rawProdPure,
+  } = useMemo(() => {
+    const empty = {
+      voltageContinu: [] as HourlyVoltageResult[],
+      rawContinu: [] as CalculationResult[],
+      rawConsoPure: [] as CalculationResult[],
+      rawProdPure: [] as CalculationResult[],
+    };
+    if (!currentProject || !selectedNodeId || nResidentialGlobal === 0) return empty;
 
     const baseOptions: DailySimulationOptions = {
-      season: season as 'winter' | 'summer',
-      weather: weather as 'sunny' | 'gray',
+      season,
+      weather,
       enableEV: dailyProfileOptions.enableEV ?? true,
       evBonusEvening: dailyProfileOptions.evBonusEvening ?? 2.5,
       evBonusNight: dailyProfileOptions.evBonusNight ?? 5,
       selectedNodeId,
       selectedClusterId,
-      zeroProduction: dailyProfileOptions.zeroProduction ?? false,
-      adaptiveFoisonnement: true,
+      adaptiveFoisonnement: false,
+      customDiversityCoeff: continuCoeff,
     };
 
-    // Run 1: Palier (standard)
-    const calcPalier = new DailyProfileCalculator(
-      currentProject,
-      baseOptions,
-      undefined,
-      simulationEquipment,
-      isSimulationActive
+    // Run 1: Complet (conso + prod) → puissance 24h + tension 24h
+    const calcComplet = new DailyProfileCalculator(
+      currentProject, baseOptions, undefined,
+      simulationEquipment, isSimulationActive
     );
-    const resPalier = calcPalier.calculateDailyVoltages();
-    const rawP = calcPalier.getLastRawResults();
+    const resComplet = calcComplet.calculateDailyVoltages();
+    const rawC = calcComplet.getLastRawResults();
 
-    // Run 2: Continu (customDiversityCoeff)
-    const calcContinu = new DailyProfileCalculator(
+    // Run 2: Conso pure (zeroProduction) → Vmin distance
+    const calcConso = new DailyProfileCalculator(
       currentProject,
-      {
-        ...baseOptions,
-        adaptiveFoisonnement: false,
-        customDiversityCoeff: continuCoeff,
-      },
-      undefined,
-      simulationEquipment,
-      isSimulationActive
+      { ...baseOptions, zeroProduction: true },
+      undefined, simulationEquipment, isSimulationActive
     );
-    const resContinu = calcContinu.calculateDailyVoltages();
-    const rawC = calcContinu.getLastRawResults();
+    calcConso.calculateDailyVoltages();
+    const rawConso = calcConso.getLastRawResults();
 
-    return { voltagePalier: resPalier, voltageContinu: resContinu, rawPalier: rawP, rawContinu: rawC };
-  }, [currentProject, selectedNodeId, season, weather, selectedClusterId, nResidential, continuCoeff, dailyProfileOptions, simulationEquipment, isSimulationActive]);
+    // Run 3: Prod pure (zeroConsumption) → Vmax distance
+    const calcProd = new DailyProfileCalculator(
+      currentProject,
+      { ...baseOptions, zeroConsumption: true },
+      undefined, simulationEquipment, isSimulationActive
+    );
+    calcProd.calculateDailyVoltages();
+    const rawProd = calcProd.getLastRawResults();
 
-  // Run power simulation (moteur continu)
-  const result: CircuitSimulationResult | null = useMemo(() => {
-    if (!circuit || circuit.clients.length === 0) return null;
-    return simulateCircuit24h(circuit, season, weather, profiles, weatherFactors, circuitConfig);
-  }, [circuit, season, weather]);
+    return {
+      voltageContinu: resComplet,
+      rawContinu: rawC,
+      rawConsoPure: rawConso,
+      rawProdPure: rawProd,
+    };
+  }, [currentProject, selectedNodeId, season, weather, selectedClusterId, continuCoeff, dailyProfileOptions, simulationEquipment, isSimulationActive, nResidentialGlobal]);
 
-  // Comparison data: palier vs continu for each hour (power + voltage)
-  const comparisonData = useMemo(() => {
-    if (!result || nResidential === 0) return [];
-
-    const seasonProfiles = profiles[season];
-
-    return result.hourly.map((h, i) => {
-      const baseProfile = seasonProfiles.residential[h.hour.toString()] ?? 0;
-      const palierProfile = baseProfile * palierCoeff;
-      const continuProfile = baseProfile * continuCoeff;
-      const delta = palierProfile > 0 ? ((continuProfile - palierProfile) / palierProfile * 100) : 0;
-
-      const vPalier = voltagePalier[i]?.voltageAvg_V ?? 0;
-      const vContinu = voltageContinu[i]?.voltageAvg_V ?? 0;
-      const deltaV = vPalier > 0 ? (vContinu - vPalier) : 0;
-
+  // ─── Power chart data from engine results ────────────────────────────────────
+  const powerData = useMemo(() => {
+    if (voltageContinu.length === 0) return [];
+    return voltageContinu.map((h) => {
+      const pCharge = h.chargesResidentialPower_kVA + h.chargesIndustrialPower_kVA;
+      const pPV = h.productionsPower_kVA;
       return {
         hour: h.hour,
         label: `${h.hour}h`,
-        P_charge: +h.P_charge_kW.toFixed(2),
-        P_pv: +h.P_pv_kW.toFixed(2),
-        P_net: +h.P_net_kW.toFixed(2),
-        flagged: h.flagged,
-        flagType: h.flagType,
-        palierCoeff: +palierCoeff.toFixed(4),
-        continuCoeff: +continuCoeff.toFixed(4),
-        baseProfile: +baseProfile.toFixed(1),
-        palierProfile: +palierProfile.toFixed(2),
-        continuProfile: +continuProfile.toFixed(2),
-        delta: +delta.toFixed(1),
-        // Voltages
-        V_palier: +vPalier.toFixed(2),
-        V_continu: +vContinu.toFixed(2),
-        deltaV: +deltaV.toFixed(2),
+        P_charge: +pCharge.toFixed(2),
+        P_pv: +pPV.toFixed(2),
+        P_net: +(pCharge - pPV).toFixed(2),
+        foisonnement: h.chargesResidentialFoisonnement,
       };
     });
-  }, [result, nResidential, circuitCluster, season, voltagePalier, voltageContinu, palierCoeff, continuCoeff]);
+  }, [voltageContinu]);
 
-  const selectedNode = nodes.find(n => n.id === selectedNodeId);
-  const clusterInfo = getClusterById(selectedClusterId);
-  const aCoeff = circuitConfig.diversityFactors[circuitCluster];
+  // ─── Voltage 24h chart data ──────────────────────────────────────────────────
+  const voltage24hData = useMemo(() => {
+    if (voltageContinu.length === 0) return [];
+    return voltageContinu.map((h) => ({
+      hour: h.hour,
+      label: `${h.hour}h`,
+      V_continu: +h.voltageAvg_V.toFixed(2),
+      foisonnement: +h.chargesResidentialFoisonnement.toFixed(2),
+    }));
+  }, [voltageContinu]);
 
   // ─── Voltage-Distance data ─────────────────────────────────────────────────────
   const networkPaths = useMemo(() => {
@@ -381,47 +305,46 @@ export const LaboFoisonnementTab = () => {
     return buildNetworkPaths(currentProject.nodes, currentProject.cables);
   }, [currentProject]);
 
-  const voltageDistanceData = useMemo(() => {
-    if (networkPaths.length === 0 || rawPalier.length === 0) return null;
+  const getNodeVoltage = (results: CalculationResult[], nodeId: string, hour: number): number => {
+    const r = results[hour];
+    if (!r?.nodeMetricsPerPhase) return 0;
+    const nm = r.nodeMetricsPerPhase.find(m => m.nodeId === nodeId);
+    if (!nm) return 0;
+    return (nm.voltagesPerPhase.A + nm.voltagesPerPhase.B + nm.voltagesPerPhase.C) / 3;
+  };
 
-    // Pour chaque nœud, trouver l'heure avec Vmin global et Vmax global
+  const voltageDistanceData = useMemo(() => {
+    if (networkPaths.length === 0 || rawConsoPure.length === 0 || rawProdPure.length === 0) return null;
+
     const allNodeIds = new Set<string>();
     networkPaths.forEach(b => b.points.forEach(p => allNodeIds.add(p.nodeId)));
 
-    // Extract avg voltage per node per hour from raw results
-    const getNodeVoltage = (results: CalculationResult[], nodeId: string, hour: number): number => {
-      const r = results[hour];
-      if (!r?.nodeMetricsPerPhase) return 0;
-      const nm = r.nodeMetricsPerPhase.find(m => m.nodeId === nodeId);
-      if (!nm) return 0;
-      return (nm.voltagesPerPhase.A + nm.voltagesPerPhase.B + nm.voltagesPerPhase.C) / 3;
-    };
-
-    // Find global Vmin hour and Vmax hour (across all non-source nodes)
+    // Vmin from conso pure run
     let globalMinV = Infinity, globalMinHour = 0;
-    let globalMaxV = -Infinity, globalMaxHour = 0;
-
     for (let h = 0; h < 24; h++) {
       for (const nodeId of allNodeIds) {
-        // Use palier results for finding min/max hours
-        const v = getNodeVoltage(rawPalier, nodeId, h);
+        const v = getNodeVoltage(rawConsoPure, nodeId, h);
         if (v <= 0) continue;
         if (v < globalMinV) { globalMinV = v; globalMinHour = h; }
+      }
+    }
+
+    // Vmax from prod pure run
+    let globalMaxV = -Infinity, globalMaxHour = 0;
+    for (let h = 0; h < 24; h++) {
+      for (const nodeId of allNodeIds) {
+        const v = getNodeVoltage(rawProdPure, nodeId, h);
+        if (v <= 0) continue;
         if (v > globalMaxV) { globalMaxV = v; globalMaxHour = h; }
       }
     }
 
-    // Build chart data for Vmin hour and Vmax hour
-    const buildBranchData = (hour: number) => {
+    const buildBranchData = (rawResults: CalculationResult[], hour: number) => {
       return networkPaths.map((branch, idx) => ({
         ...branch,
-        palierPoints: branch.points.map(p => ({
+        points: branch.points.map(p => ({
           ...p,
-          voltage: getNodeVoltage(rawPalier, p.nodeId, hour),
-        })),
-        continuPoints: branch.points.map(p => ({
-          ...p,
-          voltage: getNodeVoltage(rawContinu, p.nodeId, hour),
+          voltage: getNodeVoltage(rawResults, p.nodeId, hour),
         })),
         color: BRANCH_COLORS[idx % BRANCH_COLORS.length],
       }));
@@ -432,20 +355,29 @@ export const LaboFoisonnementTab = () => {
       maxHour: globalMaxHour,
       minV: globalMinV,
       maxV: globalMaxV,
-      minBranches: buildBranchData(globalMinHour),
-      maxBranches: buildBranchData(globalMaxHour),
+      minBranches: buildBranchData(rawConsoPure, globalMinHour),
+      maxBranches: buildBranchData(rawProdPure, globalMaxHour),
     };
-  }, [networkPaths, rawPalier, rawContinu]);
+  }, [networkPaths, rawConsoPure, rawProdPure]);
 
-  // Compute voltage Y-axis domain
+  // Voltage range for 24h chart
   const voltageRange = useMemo(() => {
-    if (comparisonData.length === 0) return { min: 200, max: 250 };
-    const allV = comparisonData.flatMap(d => [d.V_palier, d.V_continu]).filter(v => v > 0);
+    if (voltage24hData.length === 0) return { min: 200, max: 250 };
+    const allV = voltage24hData.map(d => d.V_continu).filter(v => v > 0);
     if (allV.length === 0) return { min: 200, max: 250 };
-    const min = Math.min(...allV);
-    const max = Math.max(...allV);
-    return { min: Math.floor(min - 3), max: Math.ceil(max + 3) };
-  }, [comparisonData]);
+    return { min: Math.floor(Math.min(...allV) - 3), max: Math.ceil(Math.max(...allV) + 3) };
+  }, [voltage24hData]);
+
+  const selectedNode = nodes.find(n => n.id === selectedNodeId);
+  const clusterInfo = getClusterById(selectedClusterId);
+
+  // Peak summary from power data
+  const peakSummary = useMemo(() => {
+    if (powerData.length === 0) return null;
+    const peakLoad = Math.max(...powerData.map(d => d.P_charge));
+    const peakInjection = Math.min(...powerData.map(d => d.P_net));
+    return { peakLoad, peakInjection };
+  }, [powerData]);
 
   if (!currentProject) {
     return <div className="p-4 text-center text-muted-foreground">Aucun projet chargé</div>;
@@ -526,7 +458,7 @@ export const LaboFoisonnementTab = () => {
                     <span>{cp.icon}</span> {cp.name}
                   </span>
                   <span className="text-[9px] text-muted-foreground opacity-70">
-                    → {CLUSTER_MAP[cp.id]} (a={circuitConfig.diversityFactors[CLUSTER_MAP[cp.id]]})
+                    → {CLUSTER_MAP[cp.id]} (a={diversityFactors[CLUSTER_MAP[cp.id]]})
                   </span>
                 </Button>
               ))}
@@ -600,63 +532,39 @@ export const LaboFoisonnementTab = () => {
             </div>
           </div>
 
-          {/* Summary */}
-          {result && (
+          {/* Summary puissances */}
+          {peakSummary && (
             <div className="bg-muted/50 rounded-md p-3 space-y-1.5 text-xs">
               <div className="font-medium text-foreground">Synthèse puissances</div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Pic charge</span>
-                <span className="font-mono">{result.peakLoad_kW.toFixed(1)} kW</span>
+                <span className="font-mono">{peakSummary.peakLoad.toFixed(1)} kVA</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground flex items-center gap-1"><TrendingDown className="h-3 w-3" /> Pic injection</span>
-                <span className="font-mono">{result.peakInjection_kW.toFixed(1)} kW</span>
+                <span className="text-muted-foreground flex items-center gap-1"><TrendingDown className="h-3 w-3" /> Pic net min</span>
+                <span className="font-mono">{peakSummary.peakInjection.toFixed(1)} kVA</span>
               </div>
-              {result.nEvents_high > 0 && (
-                <div className="flex items-center gap-1 text-destructive">
-                  <AlertTriangle className="h-3 w-3" /> {result.nEvents_high} h surcharge (&gt;{circuitConfig.thresholds.overload_kW} kW)
-                </div>
-              )}
-              {result.nEvents_low > 0 && (
-                <div className="flex items-center gap-1 text-emerald-500">
-                  <AlertTriangle className="h-3 w-3" /> {result.nEvents_low} h injection (&lt;{circuitConfig.thresholds.injection_kW} kW)
-                </div>
-              )}
-              {result.nEvents_high === 0 && result.nEvents_low === 0 && (
-                <div className="text-muted-foreground">Aucune alerte</div>
-              )}
             </div>
           )}
 
           {/* Voltage summary */}
-          {comparisonData.length > 0 && comparisonData.some(d => d.V_palier > 0) && (
+          {voltage24hData.length > 0 && voltage24hData.some(d => d.V_continu > 0) && (
             <div className="bg-muted/50 rounded-md p-3 space-y-1.5 text-xs">
               <div className="font-medium text-foreground flex items-center gap-1">
                 <Zap className="h-3 w-3 text-violet-500" /> Synthèse tensions
               </div>
               {(() => {
-                const vPaliers = comparisonData.map(d => d.V_palier).filter(v => v > 0);
-                const vContinus = comparisonData.map(d => d.V_continu).filter(v => v > 0);
-                const minP = vPaliers.length > 0 ? Math.min(...vPaliers) : 0;
+                const vContinus = voltage24hData.map(d => d.V_continu).filter(v => v > 0);
                 const minC = vContinus.length > 0 ? Math.min(...vContinus) : 0;
-                const maxP = vPaliers.length > 0 ? Math.max(...vPaliers) : 0;
                 const maxC = vContinus.length > 0 ? Math.max(...vContinus) : 0;
                 return (
                   <>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">V min palier</span>
-                      <span className={`font-mono ${minP < 207 ? 'text-destructive' : minP < 218.5 ? 'text-orange-500' : ''}`}>{minP.toFixed(1)} V</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-violet-500">V min continu</span>
+                      <span className="text-violet-500">V min</span>
                       <span className={`font-mono ${minC < 207 ? 'text-destructive' : minC < 218.5 ? 'text-orange-500' : ''}`}>{minC.toFixed(1)} V</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">V max palier</span>
-                      <span className="font-mono">{maxP.toFixed(1)} V</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-violet-500">V max continu</span>
+                      <span className="text-violet-500">V max</span>
                       <span className="font-mono">{maxC.toFixed(1)} V</span>
                     </div>
                   </>
@@ -667,10 +575,10 @@ export const LaboFoisonnementTab = () => {
         </CardContent>
       </Card>
 
-      {/* Col 2-3: Graphiques + Tableau */}
+      {/* Col 2-3: Graphiques */}
       <div className="lg:col-span-2 space-y-4">
         {/* Graphique Puissances 24h */}
-        {comparisonData.length > 0 ? (
+        {powerData.length > 0 ? (
           <Card className="bg-card/50 backdrop-blur border-violet-500/30">
             <CardHeader className="pb-2 pt-3 px-4">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -682,18 +590,16 @@ export const LaboFoisonnementTab = () => {
             </CardHeader>
             <CardContent className="px-4 pb-4">
               <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={comparisonData}>
+                <LineChart data={powerData}>
                   <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
                   <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} unit=" kW" />
+                  <YAxis tick={{ fontSize: 10 }} unit=" kVA" />
                   <Tooltip
                     contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
-                    formatter={(value: number, name: string) => [`${value.toFixed(2)} kW`, name]}
+                    formatter={(value: number, name: string) => [`${value.toFixed(2)} kVA`, name]}
                   />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <ReferenceLine y={circuitConfig.thresholds.overload_kW} stroke="hsl(var(--destructive))" strokeDasharray="5 5" label={{ value: 'Surcharge', fontSize: 9, fill: 'hsl(var(--destructive))' }} />
-                  <ReferenceLine y={circuitConfig.thresholds.injection_kW} stroke="hsl(142, 76%, 36%)" strokeDasharray="5 5" label={{ value: 'Injection', fontSize: 9, fill: 'hsl(142, 76%, 36%)' }} />
-                  <Line type="monotone" dataKey="P_charge" name="P charge" stroke="hsl(217, 91%, 60%)" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="P_charge" name="P charge (rés.+ind.)" stroke="hsl(217, 91%, 60%)" strokeWidth={2} dot={false} />
                   <Line type="monotone" dataKey="P_pv" name="P PV" stroke="hsl(142, 76%, 36%)" strokeWidth={2} dot={false} />
                   <Line type="monotone" dataKey="P_net" name="P net" stroke="hsl(var(--destructive))" strokeWidth={2.5} dot={false} />
                 </LineChart>
@@ -704,31 +610,31 @@ export const LaboFoisonnementTab = () => {
           <Card className="bg-card/50 backdrop-blur border-violet-500/30">
             <CardContent className="py-12 text-center text-muted-foreground text-sm">
               {!selectedNodeId ? 'Sélectionnez un nœud pour lancer la simulation' :
-                'Aucun client lié à ce nœud. Liez des clients dans l\'onglet Raccordements.'}
+                'Aucun client lié au réseau. Importez des clients et liez-les aux nœuds.'}
             </CardContent>
           </Card>
         )}
 
-        {/* Graphique Tensions 24h — Palier vs Continu */}
-        {comparisonData.length > 0 && comparisonData.some(d => d.V_palier > 0) && (
+        {/* Graphique Tensions 24h */}
+        {voltage24hData.length > 0 && voltage24hData.some(d => d.V_continu > 0) && (
           <Card className="bg-card/50 backdrop-blur border-violet-500/30">
             <CardHeader className="pb-2 pt-3 px-4">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Zap className="h-4 w-4 text-violet-500" />
-                Tension nodale 24h — Palier vs Continu
+                Tension nodale 24h — Continu f(N) = {continuCoeff.toFixed(4)}
                 <Badge variant="outline" className="text-[10px] border-violet-500/50 text-violet-500">
-                  ΔV = {comparisonData.reduce((max, d) => Math.max(max, Math.abs(d.deltaV)), 0).toFixed(1)} V max
+                  coeff={continuCoeff.toFixed(4)}
                 </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4">
               <ResponsiveContainer width="100%" height={280}>
-                <LineChart data={comparisonData}>
+                <LineChart data={voltage24hData}>
                   <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
                   <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                  <YAxis 
-                    domain={[voltageRange.min, voltageRange.max]} 
-                    tick={{ fontSize: 10 }} 
+                  <YAxis
+                    domain={[voltageRange.min, voltageRange.max]}
+                    tick={{ fontSize: 10 }}
                     unit=" V"
                   />
                   <Tooltip
@@ -736,19 +642,13 @@ export const LaboFoisonnementTab = () => {
                     formatter={(value: number, name: string) => [`${value.toFixed(1)} V`, name]}
                   />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  {/* Zone ±5% (218.5V — 241.5V) */}
                   <ReferenceArea y1={218.5} y2={241.5} fill="hsl(var(--muted))" fillOpacity={0.3} />
-                  {/* Seuils ±10% */}
                   <ReferenceLine y={207} stroke="hsl(var(--destructive))" strokeDasharray="5 5" label={{ value: '-10%', fontSize: 9, fill: 'hsl(var(--destructive))' }} />
                   <ReferenceLine y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" label={{ value: '+10%', fontSize: 9, fill: 'hsl(var(--destructive))' }} />
-                  {/* Seuils ±5% */}
                   <ReferenceLine y={218.5} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.5} />
                   <ReferenceLine y={241.5} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.5} />
-                  {/* Nominale */}
                   <ReferenceLine y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} label={{ value: '230V', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
-                  {/* Courbes */}
-                  <Line type="monotone" dataKey="V_palier" name="V palier" stroke="hsl(217, 91%, 60%)" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="V_continu" name="V continu" stroke="hsl(270, 70%, 60%)" strokeWidth={2} strokeDasharray="6 3" dot={false} />
+                  <Line type="monotone" dataKey="V_continu" name="V continu" stroke="hsl(270, 70%, 60%)" strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>
@@ -758,12 +658,12 @@ export const LaboFoisonnementTab = () => {
         {/* ─── Graphiques Tension vs Distance ─────────────────────────────── */}
         {voltageDistanceData && voltageDistanceData.minBranches.length > 0 && (
           <>
-            {/* Vmin — Pire cas prélèvement */}
+            {/* Vmin — Pire cas charge (sans production) */}
             <Card className="bg-card/50 backdrop-blur border-violet-500/30">
               <CardHeader className="pb-2 pt-3 px-4">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
                   <Ruler className="h-4 w-4 text-blue-500" />
-                  Tension vs Distance — Vmin journée
+                  Tension vs Distance — Pire cas charge (sans production)
                   <Badge variant="outline" className="text-[10px] border-blue-500/50 text-blue-500">
                     {voltageDistanceData.minHour}h • {voltageDistanceData.minV.toFixed(1)}V
                   </Badge>
@@ -803,26 +703,21 @@ export const LaboFoisonnementTab = () => {
                     <ReferenceLine y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
                     <ReferenceLine y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} />
                     {voltageDistanceData.minBranches.map((branch) => (
-                      <Line key={`min-pal-${branch.branchId}`} data={branch.palierPoints.filter(p => p.voltage > 0)}
-                        type="monotone" dataKey="voltage" name={`${branch.label} (pal.)`}
+                      <Line key={`min-${branch.branchId}`} data={branch.points.filter(p => p.voltage > 0)}
+                        type="monotone" dataKey="voltage" name={branch.label}
                         stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                    ))}
-                    {voltageDistanceData.minBranches.map((branch) => (
-                      <Line key={`min-cont-${branch.branchId}`} data={branch.continuPoints.filter(p => p.voltage > 0)}
-                        type="monotone" dataKey="voltage" name={`${branch.label} (cont.)`}
-                        stroke={branch.color} strokeWidth={1.5} strokeDasharray="6 3" dot={{ r: 2 }} connectNulls />
                     ))}
                   </LineChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
 
-            {/* Vmax — Pire cas injection PV */}
+            {/* Vmax — Pire cas injection (sans consommation) */}
             <Card className="bg-card/50 backdrop-blur border-violet-500/30">
               <CardHeader className="pb-2 pt-3 px-4">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
                   <Ruler className="h-4 w-4 text-emerald-500" />
-                  Tension vs Distance — Vmax journée
+                  Tension vs Distance — Pire cas injection (sans consommation)
                   <Badge variant="outline" className="text-[10px] border-emerald-500/50 text-emerald-500">
                     {voltageDistanceData.maxHour}h • {voltageDistanceData.maxV.toFixed(1)}V
                   </Badge>
@@ -862,14 +757,9 @@ export const LaboFoisonnementTab = () => {
                     <ReferenceLine y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
                     <ReferenceLine y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} />
                     {voltageDistanceData.maxBranches.map((branch) => (
-                      <Line key={`max-pal-${branch.branchId}`} data={branch.palierPoints.filter(p => p.voltage > 0)}
-                        type="monotone" dataKey="voltage" name={`${branch.label} (pal.)`}
+                      <Line key={`max-${branch.branchId}`} data={branch.points.filter(p => p.voltage > 0)}
+                        type="monotone" dataKey="voltage" name={branch.label}
                         stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                    ))}
-                    {voltageDistanceData.maxBranches.map((branch) => (
-                      <Line key={`max-cont-${branch.branchId}`} data={branch.continuPoints.filter(p => p.voltage > 0)}
-                        type="monotone" dataKey="voltage" name={`${branch.label} (cont.)`}
-                        stroke={branch.color} strokeWidth={1.5} strokeDasharray="6 3" dot={{ r: 2 }} connectNulls />
                     ))}
                   </LineChart>
                 </ResponsiveContainer>
@@ -878,12 +768,12 @@ export const LaboFoisonnementTab = () => {
           </>
         )}
 
-        {/* Tableau comparatif étendu */}
-        {comparisonData.length > 0 && (
+        {/* Tableau horaire */}
+        {powerData.length > 0 && (
           <Card className="bg-card/50 backdrop-blur border-violet-500/30">
             <CardHeader className="pb-2 pt-3 px-4">
               <CardTitle className="text-sm font-medium">
-                Comparaison : Palier ({palierCoeff.toFixed(2)}) vs Continu ({continuCoeff.toFixed(4)})
+                Détail horaire — Continu (coeff={continuCoeff.toFixed(4)})
               </CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4">
@@ -892,43 +782,29 @@ export const LaboFoisonnementTab = () => {
                   <thead>
                     <tr className="border-b border-border/50">
                       <th className="text-left py-1.5 px-2 text-muted-foreground font-medium">Heure</th>
-                      <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">Base %</th>
-                      <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">Palier %</th>
-                      <th className="text-right py-1.5 px-2 text-violet-500 font-medium">Continu %</th>
-                      <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">Δ %</th>
+                      <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">Fois. %</th>
+                      <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">P charge</th>
+                      <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">P PV</th>
                       <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">P net</th>
-                      <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">V pal.</th>
-                      <th className="text-right py-1.5 px-2 text-violet-500 font-medium">V cont.</th>
-                      <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">ΔV</th>
-                      <th className="text-center py-1.5 px-2 text-muted-foreground font-medium">Flag</th>
+                      <th className="text-right py-1.5 px-2 text-violet-500 font-medium">V (V)</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {comparisonData.map(row => (
-                      <tr
-                        key={row.hour}
-                        className={`border-b border-border/20 ${row.flagged ? (row.flagType === 'overload' ? 'bg-destructive/10' : 'bg-emerald-500/10') : ''}`}
-                      >
-                        <td className="py-1 px-2 font-mono">{row.label}</td>
-                        <td className="py-1 px-2 text-right font-mono">{row.baseProfile}</td>
-                        <td className="py-1 px-2 text-right font-mono">{row.palierProfile}</td>
-                        <td className="py-1 px-2 text-right font-mono text-violet-500">{row.continuProfile}</td>
-                        <td className={`py-1 px-2 text-right font-mono ${row.delta > 0 ? 'text-orange-500' : 'text-emerald-500'}`}>
-                          {row.delta > 0 ? '+' : ''}{row.delta}%
-                        </td>
-                        <td className="py-1 px-2 text-right font-mono">{row.P_net}</td>
-                        <td className="py-1 px-2 text-right font-mono">{row.V_palier > 0 ? row.V_palier.toFixed(1) : '—'}</td>
-                        <td className="py-1 px-2 text-right font-mono text-violet-500">{row.V_continu > 0 ? row.V_continu.toFixed(1) : '—'}</td>
-                        <td className={`py-1 px-2 text-right font-mono ${Math.abs(row.deltaV) > 1 ? 'text-orange-500' : ''}`}>
-                          {row.V_palier > 0 ? `${row.deltaV > 0 ? '+' : ''}${row.deltaV.toFixed(1)}` : '—'}
-                        </td>
-                        <td className="py-1 px-2 text-center">
-                          {row.flagged && (
-                            <AlertTriangle className={`h-3 w-3 inline ${row.flagType === 'overload' ? 'text-destructive' : 'text-emerald-500'}`} />
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                    {powerData.map((row, i) => {
+                      const vData = voltage24hData[i];
+                      return (
+                        <tr key={row.hour} className="border-b border-border/20">
+                          <td className="py-1 px-2 font-mono">{row.label}</td>
+                          <td className="py-1 px-2 text-right font-mono">{row.foisonnement.toFixed(1)}</td>
+                          <td className="py-1 px-2 text-right font-mono">{row.P_charge}</td>
+                          <td className="py-1 px-2 text-right font-mono">{row.P_pv}</td>
+                          <td className={`py-1 px-2 text-right font-mono ${row.P_net < 0 ? 'text-emerald-500' : ''}`}>{row.P_net}</td>
+                          <td className={`py-1 px-2 text-right font-mono text-violet-500 ${vData && vData.V_continu < 218.5 ? 'text-orange-500' : ''}`}>
+                            {vData && vData.V_continu > 0 ? vData.V_continu.toFixed(1) : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </ScrollArea>

@@ -229,7 +229,11 @@ export class DailyProfileCalculator {
     let baseFoisonne = baseResidentialProfile;
     let evFoisonne = baseEvBonus;
     
-    if (this.options.customDiversityCoeff !== undefined && nResidentialClients > 1) {
+    // zeroConsumption : production seule, pas de charges
+    if (this.options.zeroConsumption) {
+      baseFoisonne = 0;
+      evFoisonne = 0;
+    } else if (this.options.customDiversityCoeff !== undefined && nResidentialClients > 1) {
       // Override par coefficient de diversité continu f(N) = a + (1-a)/√N
       baseFoisonne = baseResidentialProfile * this.options.customDiversityCoeff;
       if (baseEvBonus > 0) {
@@ -246,9 +250,9 @@ export class DailyProfileCalculator {
     
     // 🔧 FIX GRD -- Cluster appliqué comme multiplicateur PUR après Velander
     // Le plancher de diversité reste basé sur le profil physique
-    const residentialFoisonnementHoraire = baseFoisonne * facteurConso + evFoisonne * facteurVE;
+    const residentialFoisonnementHoraire = this.options.zeroConsumption ? 0 : baseFoisonne * facteurConso + evFoisonne * facteurVE;
     
-    const industrialFoisonnementHoraire = industrialProfile;
+    const industrialFoisonnementHoraire = this.options.zeroConsumption ? 0 : industrialProfile;
 
     // Foisonnement productions = profil PV × facteur météo (ou 0% si zeroProduction activé)
     const productionsFoisonnement = this.options.zeroProduction 

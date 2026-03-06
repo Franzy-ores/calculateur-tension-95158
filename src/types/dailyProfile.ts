@@ -67,6 +67,8 @@ export interface DailySimulationOptions {
   selectedNodeId: string;
   /** Force le profil de production à 0% pour toutes les heures */
   zeroProduction?: boolean;
+  /** Force le foisonnement résidentiel et industriel à 0% (production seule) */
+  zeroConsumption?: boolean;
   /** Utiliser le profil mesuré importé au lieu des profils théoriques */
   useMeasuredProfile?: boolean;
   /** Cluster de circuit sélectionné ('cluster_1' .. 'cluster_4') */

@@ -4,7 +4,6 @@ import { SRG2Config, SRG2SwitchState } from '@/types/srg2';
 import { ElectricalCalculator } from './electricalCalculations';
 import { SimulationCalculator } from './simulationCalculator';
 import defaultProfiles from '@/data/hourlyProfiles.json';
-import { getClusterById, DEFAULT_CLUSTER_ID } from '@/data/clusterProfiles';
 import { calculateAdaptiveFoisonnement } from './foisonnementCalculator';
 
 /**

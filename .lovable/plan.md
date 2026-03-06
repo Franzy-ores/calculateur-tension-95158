@@ -1,84 +1,52 @@
 
 
-# Ajouter les tensions 24h dans l'onglet Labo
+# Parametres manuels pour la formule continue + N reseau global
 
 ## Constat actuel
 
-L'onglet Labo affiche uniquement les **puissances** (P_charge, P_pv, P_net) issues du moteur continu `circuitPowerCalculator.ts`. Mais ce moteur ne calcule pas de tensions — il n'a pas de modele de reseau (impedances cables, topologie). Seul `DailyProfileCalculator` sait calculer les tensions car il utilise le moteur electrique complet (`ElectricalCalculator`).
+- Le coefficient `a` est fixe par cluster depuis `circuitSimulationConfig.json` (A=0.15, B=0.13, C=0.11, D=0.18)
+- `N` = nombre de clients residentiels lies **au noeud selectionne** uniquement (lignes 212-221)
+- Aucun reglage manuel possible dans l'onglet Labo
 
-## Approche
+## Modifications
 
-Utiliser `DailyProfileCalculator` deux fois dans le Labo :
+### 1. N global reseau (pas par noeud)
 
-1. **Run "Palier"** : calcul normal avec `adaptiveFoisonnement: true` (paliers terrain existants)
-2. **Run "Continu"** : calcul avec une option supplementaire `customDiversityCoeff` qui remplace les paliers par le coefficient continu `f(N) = a + (1-a)/√N`
-
-Cela donne deux courbes de tension 24h superposees sur le meme graphique, avec le meme moteur electrique et le meme reseau.
-
-## Modification minimale du moteur
-
-### `src/types/dailyProfile.ts` — Ajouter une option
-
-```typescript
-export interface DailySimulationOptions {
-  // ... existant ...
-  /** Override du coefficient de diversite (remplace les paliers terrain) */
-  customDiversityCoeff?: number;
-}
-```
-
-### `src/utils/dailyProfileCalculator.ts` — Respecter l'override
-
-Dans `calculateHourlyVoltage`, lignes 218-229, ajouter une branche :
+Remplacer le calcul de `nResidential` pour compter **tous** les clients residentiels importes dans le projet, pas seulement ceux lies au noeud selectionne :
 
 ```text
-Si customDiversityCoeff est defini :
-  baseFoisonne = baseResidentialProfile × customDiversityCoeff
-  evFoisonne = baseEvBonus × customDiversityCoeff
-Sinon si adaptiveFoisonnement :
-  ... paliers existants (inchange) ...
+Avant:  nResidential = clients lies au noeud selectionne
+Apres:  nResidentialGlobal = tous les clients residentiels du projet
 ```
 
-C'est un ajout de 4 lignes dans une branche `else if`, pas de modification du code existant.
+Le `customDiversityCoeff` passe au `DailyProfileCalculator` utilisera ce N global.
 
-## Modifications de l'onglet Labo
+### 2. Sliders manuels dans le panneau parametres
 
-### `src/components/topMenu/LaboFoisonnementTab.tsx`
+Ajouter dans la section "Formule continue" du panneau gauche :
 
-Ajouter sous le graphique des puissances un **graphique des tensions** :
+- **Slider `a`** : coefficient asymptotique, range 0.05 — 0.50, pas 0.01, valeur par defaut = valeur du cluster selectionne
+- **Slider `N`** : nombre de clients, range 1 — 200, pas 1, valeur par defaut = N global calcule automatiquement
+- **Bouton "Reset"** pour revenir aux valeurs auto (cluster + N global)
+- Affichage en temps reel du coefficient resultant `f(N) = a + (1-a)/√N = X.XXXX`
 
-- Importer `DailyProfileCalculator` et `HourlyVoltageResult`
-- Executer deux simulations :
-  - Palier : `new DailyProfileCalculator(project, options)` (normal)
-  - Continu : `new DailyProfileCalculator(project, { ...options, customDiversityCoeff: continuCoeff, adaptiveFoisonnement: false })` 
-- Graphique recharts avec :
-  - Courbe bleue pleine : tension moyenne palier (Vavg palier)
-  - Courbe violet pointillee : tension moyenne continu (Vavg continu)
-  - Bande horizontale grise : zone ±5% (218.5V — 241.5V)
-  - Lignes rouges : seuils ±10% (207V — 253V)
-- Tableau comparatif etendu avec colonnes supplementaires : V_palier, V_continu, ΔV
+Les sliders mettent a jour des `useState` locaux. Quand l'utilisateur modifie, le coefficient continu est recalcule a la volee et les simulations se relancent.
 
-## Fichiers modifies
+### 3. Impact sur les calculs
+
+Le `continuCoeff` actuellement calcule via `diversityFactor(nResidential, circuitCluster, circuitConfig)` sera remplace par un calcul direct utilisant les valeurs des sliders :
+
+```text
+continuCoeff = customA + (1 - customA) / √(customN)
+```
+
+Cela affecte automatiquement les graphiques de tension 24h et les graphiques tension-distance car ils dependent de `continuCoeff`.
+
+### Fichier modifie
 
 | Fichier | Modification |
 |---|---|
-| `src/types/dailyProfile.ts` | +1 champ optionnel `customDiversityCoeff` |
-| `src/utils/dailyProfileCalculator.ts` | +4 lignes : branche `customDiversityCoeff` avant les paliers |
-| `src/components/topMenu/LaboFoisonnementTab.tsx` | Ajout graphique tensions + double simulation |
+| `src/components/topMenu/LaboFoisonnementTab.tsx` | N global, 2 sliders (a, N), bouton reset, recalcul dynamique |
 
-## Ce qui ne change PAS
-
-- `foisonnementCalculator.ts` — inchange
-- `DailyProfileTab.tsx` — inchange, ne passe jamais `customDiversityCoeff`
-- `circuitPowerCalculator.ts` — toujours utilise pour les puissances dans le Labo
-- Tous les resultats existants du Profil 24H restent identiques (le nouveau champ est optionnel et non utilise par defaut)
-
-## Details techniques
-
-Le coefficient continu est calcule une seule fois par run :
-```text
-continuCoeff = diversityFactor(nResidential, circuitCluster, circuitConfig)
-```
-
-Puis passe en option au `DailyProfileCalculator`. Le moteur l'applique comme multiplicateur pur sur le profil de base, exactement comme les paliers mais avec une valeur continue.
+Aucun autre fichier modifie — la formule est calculee localement dans le composant.
 

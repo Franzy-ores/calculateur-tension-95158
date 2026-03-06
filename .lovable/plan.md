@@ -1,69 +1,35 @@
 
 
-# Refonte Labo : Foisonnement continu comme moteur unique
+# Diagnostic : hourlyProfiles.json non reactif dans le Labo
 
-## Constat
+## Probleme identifie
 
-Actuellement le Labo utilise deux moteurs separement :
-- `circuitPowerCalculator` pour le graphique de puissance (moteur simplifie, pas de reseau)
-- `DailyProfileCalculator` pour les tensions (moteur electrique complet)
+Le fichier `hourlyProfiles.json` **est bien utilise** par le `DailyProfileCalculator` (import statique ligne 6 de `dailyProfileCalculator.ts`). Cependant, le Labo ne reagit pas aux modifications pour deux raisons :
 
-L'utilisateur veut un flux unique et coherent : la formule continue `f(N) = a + (1-a)/√N` determine le foisonnement heure par heure, et ce foisonnement alimente tout — puissances, tensions 24h, et graphiques tension-distance.
+1. **Import indirect** : Les profils sont importes dans `dailyProfileCalculator.ts`, pas dans `LaboFoisonnementTab.tsx`. Le composant Labo passe `undefined` comme `customProfiles` (ligne 242), laissant le calculator utiliser son import interne.
 
-## Architecture cible
+2. **useMemo aveugle** : Le `useMemo` (ligne 272) qui lance les 3 runs a pour dependances `[currentProject, selectedNodeId, season, weather, ...]` — les profils JSON n'y figurent pas. Meme si Vite HMR recharge le module, le memo ne se re-execute pas car aucune de ses dependances reactives n'a change.
 
-Un seul moteur : `DailyProfileCalculator` avec `customDiversityCoeff` (continu).
+En resume : vous modifiez le JSON, Vite le recharge, mais le `useMemo` du Labo ne sait pas qu'il doit recalculer.
 
-Trois runs :
-1. **Run principal** : simulation complete (conso + prod) → graphique puissance 24h + graphique tension 24h
-2. **Run "conso pure"** : `zeroProduction: true` → trouver l'heure de Vmin → graphique tension-distance (pire cas charge)
-3. **Run "prod pure"** : nouvelle option `zeroConsumption: true` → trouver l'heure de Vmax → graphique tension-distance (pire cas injection)
+## Correction
 
-## Modifications
+### `LaboFoisonnementTab.tsx`
 
-### 1. `src/types/dailyProfile.ts` — Ajouter `zeroConsumption`
+1. **Importer directement** `hourlyProfiles.json` dans le composant Labo
+2. **Passer** cet import comme `customProfiles` aux 3 constructeurs `DailyProfileCalculator` (au lieu de `undefined`)
+3. **Ajouter** l'objet profiles aux dependances du `useMemo` principal
 
-```typescript
-/** Force le foisonnement résidentiel et industriel à 0% (production seule) */
-zeroConsumption?: boolean;
+```text
+Avant:  new DailyProfileCalculator(currentProject, baseOptions, undefined, ...)
+Apres:  new DailyProfileCalculator(currentProject, baseOptions, profilesData, ...)
 ```
 
-### 2. `src/utils/dailyProfileCalculator.ts` — Respecter `zeroConsumption`
+Cela rend le Labo reactif a toute modification du fichier JSON.
 
-Dans `calculateHourlyVoltage`, quand `zeroConsumption: true` :
-- `residentialFoisonnementHoraire = 0`
-- `industrialFoisonnementHoraire = 0`
-- `evFoisonne = 0`
-- Seul le profil PV est actif
-
-### 3. `src/components/topMenu/LaboFoisonnementTab.tsx` — Refonte
-
-**Supprimer** l'utilisation de `circuitPowerCalculator` (plus de `simulateCircuit24h`).
-
-**Trois simulations** via `DailyProfileCalculator` :
-- Run complet (conso + prod) → `rawResults` pour puissances et tensions 24h
-- Run conso pure (`zeroProduction: true`) → `rawResults` pour voltage-distance Vmin
-- Run prod pure (`zeroConsumption: true`) → `rawResults` pour voltage-distance Vmax
-
-**Graphique puissance 24h** (nouveau) :
-- Donnees extraites des `HourlyVoltageResult` du run complet : `chargesResidentialPower_kVA`, `chargesIndustrialPower_kVA`, `productionsPower_kVA`
-- P_charge = residentiel + industriel, P_pv = productions, P_net = P_charge - P_pv
-- Recharts LineChart avec 3 courbes
-
-**Graphique tension 24h** : inchange (deja base sur DailyProfileCalculator)
-
-**Graphiques tension-distance** :
-- Vmin : utilise le run "conso pure" au lieu du run complet
-- Vmax : utilise le run "prod pure" au lieu du run complet
-- Titres mis a jour : "Pire cas charge (sans production)" / "Pire cas injection (sans consommation)"
-
-**Tableau comparatif** : adapte pour utiliser les donnees du DailyProfileCalculator au lieu de circuitPowerCalculator
-
-## Fichiers modifies
+### Fichier modifie
 
 | Fichier | Modification |
 |---|---|
-| `src/types/dailyProfile.ts` | +1 champ `zeroConsumption` |
-| `src/utils/dailyProfileCalculator.ts` | +5 lignes : branche `zeroConsumption` |
-| `src/components/topMenu/LaboFoisonnementTab.tsx` | Refonte : 3 runs DailyProfileCalculator, supprimer circuitPowerCalculator, graphique puissance derive du moteur electrique |
+| `src/components/topMenu/LaboFoisonnementTab.tsx` | +1 import hourlyProfiles.json, passer comme customProfiles aux 3 runs, ajouter aux deps useMemo |
 

@@ -136,6 +136,9 @@ const BRANCH_COLORS = [
   'hsl(190, 90%, 50%)',
 ];
 
+// Couleur pour les courbes simulées (SRG2/EQUI8)
+const SIM_COLOR = 'hsl(270, 70%, 60%)';
+
 // ─── Mapping cluster existant → circuit ────────────────────────────────────────
 type CircuitCluster = 'A' | 'B' | 'C' | 'D';
 const CLUSTER_MAP: Record<string, CircuitCluster> = {

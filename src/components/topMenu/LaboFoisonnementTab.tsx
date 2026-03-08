@@ -440,12 +440,14 @@ export const LaboFoisonnementTab = () => {
 
     const nodeMap = new Map(currentProject.nodes.map(n => [n.id, n]));
     const clientMap = new Map(clients.map(c => [c.id, c]));
-    const cosPhi = 0.9;
-    const sinPhi = Math.sqrt(1 - cosPhi * cosPhi);
+    const cosPhiCharges = currentProject.cosPhiCharges || 0.95;
+    const sinPhiCharges = Math.sqrt(1 - cosPhiCharges * cosPhiCharges);
+    const cosPhiProd = currentProject.cosPhiProductions || 1.0;
+    const sinPhiProd = Math.sqrt(1 - cosPhiProd * cosPhiProd);
     const R_per_m = branchementCable.R_ohm_per_km / 1000;
     const X_per_m = branchementCable.X_ohm_per_km / 1000;
 
-    const buildClientPoints = (branches: typeof voltageDistanceData.minBranches): ClientPoint[] => {
+    const buildClientPoints = (branches: typeof voltageDistanceData.minBranches, mode: 'charge' | 'injection'): ClientPoint[] => {
       const points: ClientPoint[] = [];
       for (const branch of branches) {
         for (const bp of branch.points) {
@@ -459,15 +461,31 @@ export const LaboFoisonnementTab = () => {
               ? calculateGeodeticDistance(node.lat, node.lng, client.lat, client.lng)
               : 15;
             const V_nom = client.couplage === 'MONO' ? 230 : 400;
-            const I_client = (client.puissanceContractuelle_kVA * 1000) / (V_nom * (client.couplage === 'MONO' ? 1 : Math.sqrt(3)));
-            const deltaV = (R_per_m * cosPhi + X_per_m * sinPhi) * I_client * dist_m;
             const nodeV = bp.voltage || 230;
-            const clientV = Math.max(0, nodeV - deltaV);
+            let clientV: number;
+
+            if (mode === 'injection') {
+              // Injection PV : pas de conso, production à 100%
+              const pvKVA = client.puissancePV_kVA || 0;
+              if (pvKVA > 0) {
+                const I_pv = (pvKVA * 1000) / (V_nom * (client.couplage === 'MONO' ? 1 : Math.sqrt(3)));
+                const deltaV_pv = (R_per_m * cosPhiProd + X_per_m * sinPhiProd) * I_pv * dist_m;
+                clientV = nodeV + deltaV_pv;
+              } else {
+                clientV = nodeV;
+              }
+            } else {
+              // Charge : conso à 100%, pas de PV
+              const I_charge = (client.puissanceContractuelle_kVA * 1000) / (V_nom * (client.couplage === 'MONO' ? 1 : Math.sqrt(3)));
+              const deltaV = (R_per_m * cosPhiCharges + X_per_m * sinPhiCharges) * I_charge * dist_m;
+              clientV = Math.max(0, nodeV - deltaV);
+            }
+
             points.push({
               distance_m: +(bp.distance_m + dist_m).toFixed(1),
               voltage: +clientV.toFixed(1),
               clientName: client.nomCircuit || client.identifiantCircuit || client.id.slice(0, 8),
-              power_kVA: client.puissanceContractuelle_kVA,
+              power_kVA: mode === 'injection' ? (client.puissancePV_kVA || 0) : client.puissanceContractuelle_kVA,
               couplage: client.couplage,
               nodeDistance_m: bp.distance_m,
               branchLength_m: +dist_m.toFixed(1),
@@ -481,12 +499,19 @@ export const LaboFoisonnementTab = () => {
     };
 
     return {
-      minClientPoints: buildClientPoints(voltageDistanceData.minBranches),
-      maxClientPoints: buildClientPoints(voltageDistanceData.maxBranches),
+      minClientPoints: buildClientPoints(voltageDistanceData.minBranches, 'charge'),
+      maxClientPoints: buildClientPoints(voltageDistanceData.maxBranches, 'injection'),
     };
   }, [voltageDistanceData, currentProject, branchementCable]);
 
-  const getClientColor = (voltage: number) => {
+  const getClientColor = (voltage: number, mode: 'charge' | 'injection' = 'charge') => {
+    if (mode === 'injection') {
+      // Surtension EN50160
+      if (voltage > 253) return 'hsl(0, 75%, 55%)';
+      if (voltage > 241.5) return 'hsl(35, 95%, 55%)';
+      return 'hsl(142, 76%, 36%)';
+    }
+    // Sous-tension EN50160
     if (voltage < 207) return 'hsl(0, 75%, 55%)';
     if (voltage < 218.5) return 'hsl(35, 95%, 55%)';
     return 'hsl(142, 76%, 36%)';
@@ -1187,7 +1212,7 @@ export const LaboFoisonnementTab = () => {
                                 <div className="mt-1 space-y-0.5">
                                   <div className="flex gap-2"><span className="text-muted-foreground">Nœud:</span><span className="font-mono">{point.nodeVoltage} V @ {point.nodeDistance_m} m</span></div>
                                   <div className="flex gap-2"><span className="text-muted-foreground">Brcht:</span><span className="font-mono">{point.branchLength_m} m</span></div>
-                                  <div className="flex gap-2 border-t border-border/30 pt-0.5 font-medium" style={{ color: getClientColor(point.voltage) }}>
+                                  <div className="flex gap-2 border-t border-border/30 pt-0.5 font-medium" style={{ color: getClientColor(point.voltage, 'injection') }}>
                                     <span>Livraison:</span><span className="font-mono">{point.voltage} V</span>
                                   </div>
                                 </div>
@@ -1228,7 +1253,7 @@ export const LaboFoisonnementTab = () => {
                             return (
                               <circle
                                 cx={cx} cy={cy} r={5}
-                                fill={getClientColor(payload.voltage)}
+                                fill={getClientColor(payload.voltage, 'injection')}
                                 stroke="hsl(var(--background))"
                                 strokeWidth={1.5}
                               />

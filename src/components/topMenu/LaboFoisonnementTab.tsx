@@ -155,6 +155,8 @@ export const LaboFoisonnementTab = () => {
     simulationEquipment,
     isSimulationActive,
     toggleSimulationActive,
+    selectedBranchementCableId,
+    setSelectedBranchementCableId,
   } = useNetworkStore();
 
   const [season, setSeason] = useState<'winter' | 'summer'>('winter');

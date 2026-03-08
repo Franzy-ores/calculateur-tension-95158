@@ -165,6 +165,7 @@ export const LaboFoisonnementTab = () => {
   const [showPerPhaseDistance, setShowPerPhaseDistance] = useState(false);
   const [showNeutralCurrent, setShowNeutralCurrent] = useState(false);
   const [showClientPoints, setShowClientPoints] = useState(false);
+  const [clockHour, setClockHour] = useState(12);
 
   // Simulation equipment counters
   const srg2Count = simulationEquipment.srg2Devices?.filter(s => s.enabled).length || 0;

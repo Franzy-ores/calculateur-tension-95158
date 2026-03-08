@@ -163,6 +163,7 @@ export const LaboFoisonnementTab = () => {
   const [weather, setWeather] = useState<'sunny' | 'gray'>('sunny');
   const [showPerPhaseDistance, setShowPerPhaseDistance] = useState(false);
   const [showNeutralCurrent, setShowNeutralCurrent] = useState(false);
+  const [showClientPoints, setShowClientPoints] = useState(false);
 
   // Simulation equipment counters
   const srg2Count = simulationEquipment.srg2Devices?.filter(s => s.enabled).length || 0;

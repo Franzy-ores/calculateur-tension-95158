@@ -391,7 +391,7 @@ export class ElectricalCalculator {
     I_source_net_phases?: { A: Complex; B: Complex; C: Complex } // Pour I_N en mode déséquilibré
   ): VirtualBusbar {
     const { U_base: U_nom_source, isThreePhase: isSourceThree } = this.getVoltage(source.connectionType);
-    const U_ref_line = source.tensionCible ?? transformerConfig.nominalVoltage_V ?? U_nom_source;
+    const U_ref_line = source.tensionCible ?? transformerConfig.sourceVoltage ?? transformerConfig.nominalVoltage_V ?? U_nom_source;
 
     // Tension slack de référence (phasor)
     const Vslack = C(U_ref_line / (isSourceThree ? Math.sqrt(3) : 1), 0);

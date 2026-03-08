@@ -1212,7 +1212,7 @@ export const LaboFoisonnementTab = () => {
                                 <div className="mt-1 space-y-0.5">
                                   <div className="flex gap-2"><span className="text-muted-foreground">Nœud:</span><span className="font-mono">{point.nodeVoltage} V @ {point.nodeDistance_m} m</span></div>
                                   <div className="flex gap-2"><span className="text-muted-foreground">Brcht:</span><span className="font-mono">{point.branchLength_m} m</span></div>
-                                  <div className="flex gap-2 border-t border-border/30 pt-0.5 font-medium" style={{ color: getClientColor(point.voltage) }}>
+                                  <div className="flex gap-2 border-t border-border/30 pt-0.5 font-medium" style={{ color: getClientColor(point.voltage, 'injection') }}>
                                     <span>Livraison:</span><span className="font-mono">{point.voltage} V</span>
                                   </div>
                                 </div>

@@ -853,8 +853,21 @@ export const LaboFoisonnementTab = () => {
                 Afficher courant de neutre I<sub>N</sub> (axe droit, A)
               </Label>
             </div>
+            {clientPointsData && (
+              <div className="flex items-center gap-2 px-1">
+                <Checkbox
+                  id="showClientPoints"
+                  checked={showClientPoints}
+                  onCheckedChange={(checked) => setShowClientPoints(checked === true)}
+                />
+                <Label htmlFor="showClientPoints" className="text-xs text-muted-foreground cursor-pointer">
+                  <Users className="h-3 w-3 inline mr-1" />
+                  Afficher raccordements clients (plein écran)
+                </Label>
+              </div>
+            )}
 
-            {/* Vmin — Pire cas charge (sans production) */}
+
             <Card className="bg-card/50 backdrop-blur border-violet-500/30">
               <CardHeader className="pb-2 pt-3 px-4">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">

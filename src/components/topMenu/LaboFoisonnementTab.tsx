@@ -1179,6 +1179,12 @@ export const LaboFoisonnementTab = () => {
                         type="monotone" dataKey="I_neutral" name={`I_N ${branch.label}`}
                         stroke="hsl(35, 95%, 55%)" strokeWidth={1.5} dot={{ r: 2 }} strokeDasharray="6 3" />
                     ))}
+                    {/* Simulated overlay (SRG2/EQUI8) */}
+                    {voltageDistanceData.maxBranchesSim?.map((branch) => (
+                      <Line key={`max-sim-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
+                        type="monotone" dataKey="voltage" name={`${branch.label} (régulé)`}
+                        stroke={SIM_COLOR} strokeWidth={2} dot={{ r: 2, strokeDasharray: '' }} strokeDasharray="5 3" connectNulls />
+                    ))}
                   </LineChart>
                 </ResponsiveContainer>
               </CardContent>

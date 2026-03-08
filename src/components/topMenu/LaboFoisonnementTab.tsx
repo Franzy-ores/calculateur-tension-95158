@@ -418,7 +418,7 @@ export const LaboFoisonnementTab = () => {
       minBranches: buildBranchData(rawConsoPure, globalMinHour),
       maxBranches: buildBranchData(rawProdPure, globalMaxHour),
     };
-  }, [networkPaths, rawConsoPure, rawProdPure]);
+  }, [networkPaths, rawConsoPure, rawProdPure, powerData]);
 
   // ─── Client raccordement points for voltage-distance charts ──────────────────
   const effectiveBranchementCableId = selectedBranchementCableId || 'exvb-4x16-cu';

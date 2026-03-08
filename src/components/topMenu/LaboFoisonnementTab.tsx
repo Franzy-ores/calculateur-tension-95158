@@ -476,7 +476,7 @@ export const LaboFoisonnementTab = () => {
               }
             } else {
               // Charge : conso à 100%, pas de PV
-              const I_charge = (client.puissanceContractuelle_kVA * 1000) / (V_nom * (client.couplage === 'MONO' ? 1 : Math.sqrt(3)));
+              const I_charge = (client.puissanceContractuelle_kVA * 0.80 * 1000) / (V_nom * (client.couplage === 'MONO' ? 1 : Math.sqrt(3)));
               const deltaV = (R_per_m * cosPhiCharges + X_per_m * sinPhiCharges) * I_charge * dist_m;
               clientV = Math.max(0, nodeV - deltaV);
             }

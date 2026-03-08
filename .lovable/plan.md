@@ -1,63 +1,35 @@
 
 
-## Plan: Tension client par phase au lieu de la moyenne
+# Diagnostic : hourlyProfiles.json non reactif dans le Labo
 
-### Problème
-Actuellement, `buildClientPoints` utilise `bp.voltage` (tension moyenne) pour calculer la tension au point de livraison du client. Sur un réseau déséquilibré, un client MONO sur la phase la plus chargée peut dépasser la norme alors que la moyenne reste conforme — le dépassement est masqué.
+## Probleme identifie
 
-### Solution
-Utiliser la tension de la phase spécifique du client (`voltage_A`, `voltage_B`, `voltage_C`) au lieu de la moyenne.
+Le fichier `hourlyProfiles.json` **est bien utilise** par le `DailyProfileCalculator` (import statique ligne 6 de `dailyProfileCalculator.ts`). Cependant, le Labo ne reagit pas aux modifications pour deux raisons :
 
-### Modification — `src/components/topMenu/LaboFoisonnementTab.tsx`, fonction `buildClientPoints`
+1. **Import indirect** : Les profils sont importes dans `dailyProfileCalculator.ts`, pas dans `LaboFoisonnementTab.tsx`. Le composant Labo passe `undefined` comme `customProfiles` (ligne 242), laissant le calculator utiliser son import interne.
 
-**1. Déterminer la phase du client**
+2. **useMemo aveugle** : Le `useMemo` (ligne 272) qui lance les 3 runs a pour dependances `[currentProject, selectedNodeId, season, weather, ...]` — les profils JSON n'y figurent pas. Meme si Vite HMR recharge le module, le memo ne se re-execute pas car aucune de ses dependances reactives n'a change.
 
-Pour chaque client, résoudre sa phase à partir de `phaseCoupling` et `assignedPhase` :
-- Réseau 400V étoile : `phaseCoupling` = `'A'|'B'|'C'` → phase directe
-- Réseau 230V triangle : `phaseCoupling` = `'A-B'|'B-C'|'A-C'` → prendre la phase la plus basse (pire cas charge) ou la plus haute (pire cas injection), ou la moyenne des deux phases
-- Fallback sur `assignedPhase`, puis `'A'` par défaut
-- Clients TRI/TETRA : garder la moyenne (`bp.voltage`)
+En resume : vous modifiez le JSON, Vite le recharge, mais le `useMemo` du Labo ne sait pas qu'il doit recalculer.
 
-**2. Sélectionner la tension nodale correspondante**
+## Correction
 
-```ts
-// Résoudre la tension du nœud selon la phase du client
-function getNodeVoltageForClient(bp, client, voltageSystem) {
-  if (client.couplage === 'TRI' || client.couplage === 'TETRA') {
-    return bp.voltage; // moyenne pour poly
-  }
-  const coupling = client.phaseCoupling || client.assignedPhase;
-  if (voltageSystem === 'TRIPHASÉ_230V') {
-    // Triangle : tension phase-phase, prendre min des 2 phases (charge) ou max (injection)
-    // Pour simplifier : utiliser la map coupling → voltages
-    const phaseMap = { 'A-B': [bp.voltage_A, bp.voltage_B], 'B-C': [bp.voltage_B, bp.voltage_C], 'A-C': [bp.voltage_A, bp.voltage_C] };
-    const pair = phaseMap[coupling];
-    if (pair) return mode === 'charge' ? Math.min(...pair) : Math.max(...pair);
-  }
-  // 400V étoile : phase simple
-  const singleMap = { A: bp.voltage_A, B: bp.voltage_B, C: bp.voltage_C };
-  return singleMap[coupling] || bp.voltage;
-}
+### `LaboFoisonnementTab.tsx`
+
+1. **Importer directement** `hourlyProfiles.json` dans le composant Labo
+2. **Passer** cet import comme `customProfiles` aux 3 constructeurs `DailyProfileCalculator` (au lieu de `undefined`)
+3. **Ajouter** l'objet profiles aux dependances du `useMemo` principal
+
+```text
+Avant:  new DailyProfileCalculator(currentProject, baseOptions, undefined, ...)
+Apres:  new DailyProfileCalculator(currentProject, baseOptions, profilesData, ...)
 ```
 
-**3. Remplacer `const nodeV = bp.voltage || 230`**
+Cela rend le Labo reactif a toute modification du fichier JSON.
 
-Par :
-```ts
-const nodeV = getNodeVoltageForClient(bp, client, currentProject.voltageSystem) || 230;
-```
+### Fichier modifie
 
-**4. Enrichir le point client avec la phase**
-
-Ajouter `phase: coupling` au point pour l'afficher dans le tooltip.
-
-**5. Tooltip enrichi**
-
-Ajouter l'indication de la phase utilisée dans le tooltip du dialog plein écran (ex: "Phase: L1" ou "Couplage: L1-L2").
-
-### Interface `ClientPoint`
-Ajouter un champ optionnel `phase?: string`.
-
-### Fichier modifié
-- `src/components/topMenu/LaboFoisonnementTab.tsx` — ~20 lignes modifiées/ajoutées
+| Fichier | Modification |
+|---|---|
+| `src/components/topMenu/LaboFoisonnementTab.tsx` | +1 import hourlyProfiles.json, passer comme customProfiles aux 3 runs, ajouter aux deps useMemo |
 

@@ -429,6 +429,7 @@ export const LaboFoisonnementTab = () => {
     branchLength_m: number;
     nodeVoltage: number;
     isClient: true;
+    phase?: string;
   }
 
   const clientPointsData = useMemo(() => {
@@ -447,6 +448,43 @@ export const LaboFoisonnementTab = () => {
     const R_per_m = branchementCable.R_ohm_per_km / 1000;
     const X_per_m = branchementCable.X_ohm_per_km / 1000;
 
+    // Résoudre la tension nodale selon la phase du client MONO
+    const getNodeVoltageForClient = (bp: any, client: any, mode: 'charge' | 'injection'): number => {
+      if (client.couplage === 'TRI' || client.couplage === 'TETRA') {
+        return bp.voltage; // moyenne pour polyphasé
+      }
+      const coupling = client.phaseCoupling || client.assignedPhase;
+      if (!coupling || !bp.voltage_A) return bp.voltage; // pas de données par phase
+
+      const voltageSystem = currentProject!.voltageSystem;
+      if (voltageSystem === 'TRIPHASÉ_230V') {
+        // Triangle : tension entre deux phases, prendre le pire cas
+        const phaseMap: Record<string, [number, number]> = {
+          'A-B': [bp.voltage_A, bp.voltage_B],
+          'B-C': [bp.voltage_B, bp.voltage_C],
+          'A-C': [bp.voltage_A, bp.voltage_C],
+        };
+        const pair = phaseMap[coupling];
+        if (pair) return mode === 'charge' ? Math.min(...pair) : Math.max(...pair);
+      }
+      // 400V étoile : phase simple
+      const singleMap: Record<string, number> = { A: bp.voltage_A, B: bp.voltage_B, C: bp.voltage_C };
+      return singleMap[coupling] || bp.voltage;
+    };
+
+    const getPhaseLabel = (client: any): string | undefined => {
+      if (client.couplage === 'TRI' || client.couplage === 'TETRA') return undefined;
+      const coupling = client.phaseCoupling || client.assignedPhase;
+      if (!coupling) return undefined;
+      const voltageSystem = currentProject!.voltageSystem;
+      if (voltageSystem === 'TRIPHASÉ_230V') {
+        const labelMap: Record<string, string> = { 'A-B': 'L1-L2', 'B-C': 'L2-L3', 'A-C': 'L3-L1' };
+        return labelMap[coupling] || coupling;
+      }
+      const labelMap: Record<string, string> = { A: 'L1', B: 'L2', C: 'L3' };
+      return labelMap[coupling] || coupling;
+    };
+
     const buildClientPoints = (branches: typeof voltageDistanceData.minBranches, mode: 'charge' | 'injection'): ClientPoint[] => {
       const points: ClientPoint[] = [];
       for (const branch of branches) {
@@ -461,7 +499,7 @@ export const LaboFoisonnementTab = () => {
               ? calculateGeodeticDistance(node.lat, node.lng, client.lat, client.lng)
               : 15;
             const V_nom = client.couplage === 'MONO' ? 230 : 400;
-            const nodeV = bp.voltage || 230;
+            const nodeV = getNodeVoltageForClient(bp, client, mode) || 230;
             let clientV: number;
 
             if (mode === 'injection') {
@@ -475,7 +513,7 @@ export const LaboFoisonnementTab = () => {
                 clientV = nodeV;
               }
             } else {
-              // Charge : conso à 100%, pas de PV
+              // Charge : conso à 80% du contractuel, pas de PV
               const I_charge = (client.puissanceContractuelle_kVA * 0.80 * 1000) / (V_nom * (client.couplage === 'MONO' ? 1 : Math.sqrt(3)));
               const deltaV = (R_per_m * cosPhiCharges + X_per_m * sinPhiCharges) * I_charge * dist_m;
               clientV = Math.max(0, nodeV - deltaV);
@@ -491,6 +529,7 @@ export const LaboFoisonnementTab = () => {
               branchLength_m: +dist_m.toFixed(1),
               nodeVoltage: +nodeV.toFixed(1),
               isClient: true,
+              phase: getPhaseLabel(client),
             });
           }
         }
@@ -1121,7 +1160,7 @@ export const LaboFoisonnementTab = () => {
                             return (
                               <div className="rounded-md border bg-card px-3 py-2 text-xs shadow-md">
                                 <div className="font-medium mb-1">🏠 {point.clientName}</div>
-                                <div className="text-muted-foreground">{point.couplage} — {point.power_kVA} kVA</div>
+                                <div className="text-muted-foreground">{point.couplage} — {point.power_kVA} kVA{point.phase ? ` — ${point.phase}` : ''}</div>
                                 <div className="mt-1 space-y-0.5">
                                   <div className="flex gap-2"><span className="text-muted-foreground">Nœud:</span><span className="font-mono">{point.nodeVoltage} V @ {point.nodeDistance_m} m</span></div>
                                   <div className="flex gap-2"><span className="text-muted-foreground">Brcht:</span><span className="font-mono">{point.branchLength_m} m</span></div>
@@ -1208,7 +1247,7 @@ export const LaboFoisonnementTab = () => {
                             return (
                               <div className="rounded-md border bg-card px-3 py-2 text-xs shadow-md">
                                 <div className="font-medium mb-1">🏠 {point.clientName}</div>
-                                <div className="text-muted-foreground">{point.couplage} — {point.power_kVA} kVA</div>
+                                <div className="text-muted-foreground">{point.couplage} — {point.power_kVA} kVA{point.phase ? ` — ${point.phase}` : ''}</div>
                                 <div className="mt-1 space-y-0.5">
                                   <div className="flex gap-2"><span className="text-muted-foreground">Nœud:</span><span className="font-mono">{point.nodeVoltage} V @ {point.nodeDistance_m} m</span></div>
                                   <div className="flex gap-2"><span className="text-muted-foreground">Brcht:</span><span className="font-mono">{point.branchLength_m} m</span></div>

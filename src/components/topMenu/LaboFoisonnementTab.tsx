@@ -429,6 +429,7 @@ export const LaboFoisonnementTab = () => {
     branchLength_m: number;
     nodeVoltage: number;
     isClient: true;
+    phase?: string;
   }
 
   const clientPointsData = useMemo(() => {

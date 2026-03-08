@@ -438,6 +438,22 @@ export const LaboFoisonnementTab = () => {
       }));
     };
 
+    // Check if simulated data has diverged (any voltage > 350V or < 1V)
+    const isSimDivergent = (rawResults: CalculationResult[], hour: number): boolean => {
+      if (rawResults.length === 0) return true;
+      const r = rawResults[hour];
+      if (!r?.nodeMetricsPerPhase) return true;
+      return r.nodeMetricsPerPhase.some(m => {
+        const { A, B, C } = m.voltagesPerPhase;
+        return [A, B, C].some(v => v > 350 || (v > 0 && v < 1));
+      });
+    };
+
+    const minBranchesSim = (rawConsoSim.length > 0 && !isSimDivergent(rawConsoSim, globalMinHour))
+      ? buildBranchData(rawConsoSim, globalMinHour) : null;
+    const maxBranchesSim = (rawProdSim.length > 0 && !isSimDivergent(rawProdSim, globalMaxHour))
+      ? buildBranchData(rawProdSim, globalMaxHour) : null;
+
     return {
       minHour: globalMinHour,
       maxHour: globalMaxHour,
@@ -445,8 +461,12 @@ export const LaboFoisonnementTab = () => {
       maxV: globalMaxV,
       minBranches: buildBranchData(rawConsoPure, globalMinHour),
       maxBranches: buildBranchData(rawProdPure, globalMaxHour),
+      minBranchesSim,
+      maxBranchesSim,
+      simDivergentMin: rawConsoSim.length > 0 && isSimDivergent(rawConsoSim, globalMinHour),
+      simDivergentMax: rawProdSim.length > 0 && isSimDivergent(rawProdSim, globalMaxHour),
     };
-  }, [networkPaths, rawConsoPure, rawProdPure, powerData]);
+  }, [networkPaths, rawConsoPure, rawProdPure, rawConsoSim, rawProdSim, powerData]);
 
   // ─── Client raccordement points for voltage-distance charts ──────────────────
   const effectiveBranchementCableId = selectedBranchementCableId || 'exvb-4x16-cu';

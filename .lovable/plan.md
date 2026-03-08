@@ -1,35 +1,35 @@
 
 
-# Diagnostic : hourlyProfiles.json non reactif dans le Labo
+## Plan: Calculer la tension client en mode injection (PV)
 
-## Probleme identifie
+### Problème
+Actuellement, `buildClientPoints` applique toujours une chute de tension basée sur la consommation (`nodeV - deltaV`). Pour le scénario "Vmax injection", si le client a de la production PV, le courant circule du client vers le réseau, ce qui **augmente** la tension au point de livraison (`clientV = nodeV + deltaV_pv`).
 
-Le fichier `hourlyProfiles.json` **est bien utilise** par le `DailyProfileCalculator` (import statique ligne 6 de `dailyProfileCalculator.ts`). Cependant, le Labo ne reagit pas aux modifications pour deux raisons :
+### Correction dans `LaboFoisonnementTab.tsx` — fonction `buildClientPoints`
 
-1. **Import indirect** : Les profils sont importes dans `dailyProfileCalculator.ts`, pas dans `LaboFoisonnementTab.tsx`. Le composant Labo passe `undefined` comme `customProfiles` (ligne 242), laissant le calculator utiliser son import interne.
+Ajouter un paramètre `mode: 'charge' | 'injection'` à `buildClientPoints` :
 
-2. **useMemo aveugle** : Le `useMemo` (ligne 272) qui lance les 3 runs a pour dependances `[currentProject, selectedNodeId, season, weather, ...]` — les profils JSON n'y figurent pas. Meme si Vite HMR recharge le module, le memo ne se re-execute pas car aucune de ses dependances reactives n'a change.
+- **Mode `'charge'`** (minBranches — pire cas charge) :
+  - Consommation à 100% de la puissance contractuelle, PV = 0
+  - `deltaV = (R·cosφ + X·sinφ) · I_charge · L` (positif → chute)
+  - `clientV = nodeV - deltaV`
 
-En resume : vous modifiez le JSON, Vite le recharge, mais le `useMemo` du Labo ne sait pas qu'il doit recalculer.
+- **Mode `'injection'`** (maxBranches — pire cas injection) :
+  - Consommation = 0, PV à 100% de `puissancePV_kVA`
+  - `deltaV_pv = (R·cosφ_pv + X·sinφ_pv) · I_pv · L` (positif → hausse)
+  - `clientV = nodeV + deltaV_pv`
+  - Si le client n'a pas de PV (`puissancePV_kVA === 0`), afficher la tension du noeud directement (pas de delta)
+  - `cosφ_pv` = cos phi productions du projet (typiquement 1.0)
 
-## Correction
-
-### `LaboFoisonnementTab.tsx`
-
-1. **Importer directement** `hourlyProfiles.json` dans le composant Labo
-2. **Passer** cet import comme `customProfiles` aux 3 constructeurs `DailyProfileCalculator` (au lieu de `undefined`)
-3. **Ajouter** l'objet profiles aux dependances du `useMemo` principal
-
-```text
-Avant:  new DailyProfileCalculator(currentProject, baseOptions, undefined, ...)
-Apres:  new DailyProfileCalculator(currentProject, baseOptions, profilesData, ...)
+Appeler :
+```ts
+minClientPoints: buildClientPoints(voltageDistanceData.minBranches, 'charge'),
+maxClientPoints: buildClientPoints(voltageDistanceData.maxBranches, 'injection'),
 ```
 
-Cela rend le Labo reactif a toute modification du fichier JSON.
+### Ajustement couleur EN50160 pour injection
+Pour le mode injection, la non-conformité est une **surtension** : rouge si > 253V (110%), orange si > 241.5V (105%).
 
-### Fichier modifie
-
-| Fichier | Modification |
-|---|---|
-| `src/components/topMenu/LaboFoisonnementTab.tsx` | +1 import hourlyProfiles.json, passer comme customProfiles aux 3 runs, ajouter aux deps useMemo |
+### Fichier modifié
+- `src/components/topMenu/LaboFoisonnementTab.tsx` — ~15 lignes modifiées dans `buildClientPoints`
 

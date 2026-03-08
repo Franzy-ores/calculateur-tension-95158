@@ -102,29 +102,28 @@ export function determineSRG2SwitchState(
   srg2Config: SRG2Config,
   previousState?: SRG2SwitchState
 ): { state: SRG2SwitchState; coefficient: number } {
-  const { seuilLO2_V, seuilLO1_V, seuilBO1_V, seuilBO2_V, hysteresis_V } = srg2Config;
+  const { seuilLO2_V, seuilLO1_V, seuilBO1_V, seuilBO2_V } = srg2Config;
   const { coefficientLO2, coefficientLO1, coefficientBO1, coefficientBO2 } = srg2Config;
-  
-  // Appliquer l'hystérésis basée sur l'état précédent
-  const hyst = hysteresis_V || 2;
-  
-  // Logique à seuils avec hystérésis
+  const hyst = srg2Config.hysteresis_V || 2;
+
   // Surtension (abaissement requis)
-  if (Vmeasured >= seuilLO2_V + (previousState === 'LO2' ? -hyst : 0)) {
+  // Hystérésis : pour QUITTER l'état, la tension doit redescendre de hyst sous le seuil
+  if (Vmeasured >= seuilLO2_V - (previousState === 'LO2' ? hyst : 0)) {
     return { state: 'LO2', coefficient: coefficientLO2 };
   }
-  if (Vmeasured >= seuilLO1_V + (previousState === 'LO1' ? -hyst : 0)) {
+  if (Vmeasured >= seuilLO1_V - (previousState === 'LO1' ? hyst : 0)) {
     return { state: 'LO1', coefficient: coefficientLO1 };
   }
-  
+
   // Sous-tension (augmentation requise)
-  if (Vmeasured <= seuilBO2_V - (previousState === 'BO2' ? -hyst : 0)) {
+  // Hystérésis : pour QUITTER l'état, la tension doit remonter de hyst au-dessus du seuil
+  if (Vmeasured <= seuilBO2_V + (previousState === 'BO2' ? hyst : 0)) {
     return { state: 'BO2', coefficient: coefficientBO2 };
   }
-  if (Vmeasured <= seuilBO1_V - (previousState === 'BO1' ? -hyst : 0)) {
+  if (Vmeasured <= seuilBO1_V + (previousState === 'BO1' ? hyst : 0)) {
     return { state: 'BO1', coefficient: coefficientBO1 };
   }
-  
+
   // Dans la plage normale → bypass
   return { state: 'BYP', coefficient: 0 };
 }

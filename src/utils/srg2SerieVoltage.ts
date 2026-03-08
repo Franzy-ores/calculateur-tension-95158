@@ -76,13 +76,21 @@ export function computeSRG2SerieVoltage(
   // Conserver l'angle de la tension mesurée (injection en phase)
   const angleRad = arg(VnodeMeasured);
   
-  const Vserie = fromPolar(VserieMag, angleRad);
+  // Rayon toujours positif, direction par déphasage de π si négatif
+  const Vserie = fromPolar(Math.abs(VserieMag), angleRad + (VserieMag < 0 ? Math.PI : 0));
   
   if (Math.abs(VserieMag) > 0.1) {
     console.log(`🔧 SRG2 computeSerieVoltage: ` +
       `V_mesuré=${Vmag.toFixed(1)}V, cible=${targetVoltage}V, ` +
       `erreur=${error_V.toFixed(1)}V, step=${(stepClamped*100).toFixed(1)}%, ` +
       `V_série=${VserieMag.toFixed(1)}V`);
+  }
+  
+  // Garde-fou : Vserie ne peut jamais dépasser ±10% de Vnominal
+  const MAX_VSERIE = 0.10 * Vnominal;
+  if (abs(Vserie) > MAX_VSERIE) {
+    console.error(`❌ SRG2: V_série aberrante (${abs(Vserie).toFixed(1)}V), reset à 0`);
+    return C(0, 0);
   }
   
   return Vserie;

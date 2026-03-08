@@ -412,7 +412,87 @@ export const LaboFoisonnementTab = () => {
     };
   }, [networkPaths, rawConsoPure, rawProdPure]);
 
-  // Voltage range for 24h chart (considers all phases)
+  // ─── Client raccordement points for voltage-distance charts ──────────────────
+  const effectiveBranchementCableId = selectedBranchementCableId || 'exvb-4x16-cu';
+  const branchementCable = useMemo(
+    () => getBranchementCableById(effectiveBranchementCableId) || branchementCableTypes[0],
+    [effectiveBranchementCableId]
+  );
+
+  interface ClientPoint {
+    distance_m: number;
+    voltage: number;
+    clientName: string;
+    power_kVA: number;
+    couplage: string;
+    nodeDistance_m: number;
+    branchLength_m: number;
+    nodeVoltage: number;
+    isClient: true;
+  }
+
+  const clientPointsData = useMemo(() => {
+    if (!voltageDistanceData || !currentProject || !branchementCable) return null;
+
+    const clients = currentProject.clientsImportes || [];
+    const links = currentProject.clientLinks || [];
+    if (clients.length === 0 || links.length === 0) return null;
+
+    const nodeMap = new Map(currentProject.nodes.map(n => [n.id, n]));
+    const clientMap = new Map(clients.map(c => [c.id, c]));
+    const cosPhi = 0.9;
+    const sinPhi = Math.sqrt(1 - cosPhi * cosPhi);
+    const R_per_m = branchementCable.R_ohm_per_km / 1000;
+    const X_per_m = branchementCable.X_ohm_per_km / 1000;
+
+    const buildClientPoints = (branches: typeof voltageDistanceData.minBranches): ClientPoint[] => {
+      const points: ClientPoint[] = [];
+      for (const branch of branches) {
+        for (const bp of branch.points) {
+          const node = nodeMap.get(bp.nodeId);
+          if (!node) continue;
+          const nodeLinks = links.filter(l => l.nodeId === bp.nodeId);
+          for (const link of nodeLinks) {
+            const client = clientMap.get(link.clientId);
+            if (!client) continue;
+            const dist_m = (client.lat && client.lng && node.lat && node.lng)
+              ? calculateGeodeticDistance(node.lat, node.lng, client.lat, client.lng)
+              : 15;
+            const V_nom = client.couplage === 'MONO' ? 230 : 400;
+            const I_client = (client.puissanceContractuelle_kVA * 1000) / (V_nom * (client.couplage === 'MONO' ? 1 : Math.sqrt(3)));
+            const deltaV = (R_per_m * cosPhi + X_per_m * sinPhi) * I_client * dist_m;
+            const nodeV = bp.voltage || 230;
+            const clientV = Math.max(0, nodeV - deltaV);
+            points.push({
+              distance_m: +(bp.distance_m + dist_m).toFixed(1),
+              voltage: +clientV.toFixed(1),
+              clientName: client.nomCircuit || client.identifiantCircuit || client.id.slice(0, 8),
+              power_kVA: client.puissanceContractuelle_kVA,
+              couplage: client.couplage,
+              nodeDistance_m: bp.distance_m,
+              branchLength_m: +dist_m.toFixed(1),
+              nodeVoltage: +nodeV.toFixed(1),
+              isClient: true,
+            });
+          }
+        }
+      }
+      return points;
+    };
+
+    return {
+      minClientPoints: buildClientPoints(voltageDistanceData.minBranches),
+      maxClientPoints: buildClientPoints(voltageDistanceData.maxBranches),
+    };
+  }, [voltageDistanceData, currentProject, branchementCable]);
+
+  const getClientColor = (voltage: number) => {
+    if (voltage < 207) return 'hsl(0, 75%, 55%)';
+    if (voltage < 218.5) return 'hsl(35, 95%, 55%)';
+    return 'hsl(142, 76%, 36%)';
+  };
+
+
   const voltageRange = useMemo(() => {
     if (voltage24hData.length === 0) return { min: 200, max: 250 };
     const allV = voltage24hData.flatMap(d => [d.V_A, d.V_B, d.V_C, d.V_continu]).filter(v => v > 0);

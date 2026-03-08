@@ -504,7 +504,14 @@ export const LaboFoisonnementTab = () => {
     };
   }, [voltageDistanceData, currentProject, branchementCable]);
 
-  const getClientColor = (voltage: number) => {
+  const getClientColor = (voltage: number, mode: 'charge' | 'injection' = 'charge') => {
+    if (mode === 'injection') {
+      // Surtension EN50160
+      if (voltage > 253) return 'hsl(0, 75%, 55%)';
+      if (voltage > 241.5) return 'hsl(35, 95%, 55%)';
+      return 'hsl(142, 76%, 36%)';
+    }
+    // Sous-tension EN50160
     if (voltage < 207) return 'hsl(0, 75%, 55%)';
     if (voltage < 218.5) return 'hsl(35, 95%, 55%)';
     return 'hsl(142, 76%, 36%)';

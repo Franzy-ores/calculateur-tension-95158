@@ -236,12 +236,16 @@ export const LaboFoisonnementTab = () => {
     rawContinu,
     rawConsoPure,
     rawProdPure,
+    rawConsoSim,
+    rawProdSim,
   } = useMemo(() => {
     const empty = {
       voltageContinu: [] as HourlyVoltageResult[],
       rawContinu: [] as CalculationResult[],
       rawConsoPure: [] as CalculationResult[],
       rawProdPure: [] as CalculationResult[],
+      rawConsoSim: [] as CalculationResult[],
+      rawProdSim: [] as CalculationResult[],
     };
     if (!currentProject || !selectedNodeId || nResidentialGlobal === 0) return empty;
 
@@ -283,11 +287,35 @@ export const LaboFoisonnementTab = () => {
     calcProd.calculateDailyVoltages();
     const rawProd = calcProd.getLastRawResults();
 
+    // Run 4 & 5: Enveloppes AVEC simulation (si active)
+    let rawConsoSimResult: CalculationResult[] = [];
+    let rawProdSimResult: CalculationResult[] = [];
+
+    if (isSimulationActive) {
+      const calcConsoSim = new DailyProfileCalculator(
+        currentProject,
+        { ...baseOptions, zeroProduction: true },
+        profilesData as any, simulationEquipment, true
+      );
+      calcConsoSim.calculateDailyVoltages();
+      rawConsoSimResult = calcConsoSim.getLastRawResults();
+
+      const calcProdSim = new DailyProfileCalculator(
+        currentProject,
+        { ...baseOptions, zeroConsumption: true },
+        profilesData as any, simulationEquipment, true
+      );
+      calcProdSim.calculateDailyVoltages();
+      rawProdSimResult = calcProdSim.getLastRawResults();
+    }
+
     return {
       voltageContinu: resComplet,
       rawContinu: rawC,
       rawConsoPure: rawConso,
       rawProdPure: rawProd,
+      rawConsoSim: rawConsoSimResult,
+      rawProdSim: rawProdSimResult,
     };
   }, [currentProject, selectedNodeId, season, weather, selectedClusterId, continuCoeff, dailyProfileOptions, simulationEquipment, isSimulationActive, nResidentialGlobal, profilesData]);
 

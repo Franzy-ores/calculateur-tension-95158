@@ -136,9 +136,6 @@ const BRANCH_COLORS = [
   'hsl(190, 90%, 50%)',
 ];
 
-// Couleur pour les courbes simulées (SRG2/EQUI8)
-const SIM_COLOR = 'hsl(270, 70%, 60%)';
-
 // ─── Mapping cluster existant → circuit ────────────────────────────────────────
 type CircuitCluster = 'A' | 'B' | 'C' | 'D';
 const CLUSTER_MAP: Record<string, CircuitCluster> = {
@@ -239,16 +236,12 @@ export const LaboFoisonnementTab = () => {
     rawContinu,
     rawConsoPure,
     rawProdPure,
-    rawConsoSim,
-    rawProdSim,
   } = useMemo(() => {
     const empty = {
       voltageContinu: [] as HourlyVoltageResult[],
       rawContinu: [] as CalculationResult[],
       rawConsoPure: [] as CalculationResult[],
       rawProdPure: [] as CalculationResult[],
-      rawConsoSim: [] as CalculationResult[],
-      rawProdSim: [] as CalculationResult[],
     };
     if (!currentProject || !selectedNodeId || nResidentialGlobal === 0) return empty;
 
@@ -272,53 +265,29 @@ export const LaboFoisonnementTab = () => {
     const resComplet = calcComplet.calculateDailyVoltages();
     const rawC = calcComplet.getLastRawResults();
 
-    // Run 2: Conso pure (zeroProduction) → Vmin distance — JAMAIS de SRG2
+    // Run 2: Conso pure (zeroProduction) → Vmin distance
     const calcConso = new DailyProfileCalculator(
       currentProject,
       { ...baseOptions, zeroProduction: true },
-      profilesData as any, simulationEquipment, false
+      profilesData as any, simulationEquipment, isSimulationActive
     );
     calcConso.calculateDailyVoltages();
     const rawConso = calcConso.getLastRawResults();
 
-    // Run 3: Prod pure (zeroConsumption) → Vmax distance — JAMAIS de SRG2
+    // Run 3: Prod pure (zeroConsumption) → Vmax distance
     const calcProd = new DailyProfileCalculator(
       currentProject,
       { ...baseOptions, zeroConsumption: true },
-      profilesData as any, simulationEquipment, false
+      profilesData as any, simulationEquipment, isSimulationActive
     );
     calcProd.calculateDailyVoltages();
     const rawProd = calcProd.getLastRawResults();
-
-    // Run 4 & 5: Enveloppes AVEC simulation (si active)
-    let rawConsoSimResult: CalculationResult[] = [];
-    let rawProdSimResult: CalculationResult[] = [];
-
-    if (isSimulationActive) {
-      const calcConsoSim = new DailyProfileCalculator(
-        currentProject,
-        { ...baseOptions, zeroProduction: true },
-        profilesData as any, simulationEquipment, true
-      );
-      calcConsoSim.calculateDailyVoltages();
-      rawConsoSimResult = calcConsoSim.getLastRawResults();
-
-      const calcProdSim = new DailyProfileCalculator(
-        currentProject,
-        { ...baseOptions, zeroConsumption: true },
-        profilesData as any, simulationEquipment, true
-      );
-      calcProdSim.calculateDailyVoltages();
-      rawProdSimResult = calcProdSim.getLastRawResults();
-    }
 
     return {
       voltageContinu: resComplet,
       rawContinu: rawC,
       rawConsoPure: rawConso,
       rawProdPure: rawProd,
-      rawConsoSim: rawConsoSimResult,
-      rawProdSim: rawProdSimResult,
     };
   }, [currentProject, selectedNodeId, season, weather, selectedClusterId, continuCoeff, dailyProfileOptions, simulationEquipment, isSimulationActive, nResidentialGlobal, profilesData]);
 
@@ -377,38 +346,30 @@ export const LaboFoisonnementTab = () => {
   };
 
   const voltageDistanceData = useMemo(() => {
-    if (networkPaths.length === 0 || rawConsoPure.length === 0 || rawProdPure.length === 0 || powerData.length === 0) return null;
+    if (networkPaths.length === 0 || rawConsoPure.length === 0 || rawProdPure.length === 0) return null;
 
     const allNodeIds = new Set<string>();
     networkPaths.forEach(b => b.points.forEach(p => allNodeIds.add(p.nodeId)));
 
-    // Heure pire cas charge = pic foisonnement résidentiel (indépendant de la topologie)
-    const peakConsoIndex = powerData.reduce((maxIdx, d, idx) =>
-      d.foisonnement > powerData[maxIdx].foisonnement ? idx : maxIdx, 0
-    );
-    const globalMinHour = powerData[peakConsoIndex]?.hour ?? 0;
-
-    // Tension mini à cette heure (badge affichage uniquement)
-    let globalMinV = Infinity;
-    for (const nodeId of allNodeIds) {
-      const v = getNodeVoltage(rawConsoPure, nodeId, globalMinHour);
-      if (v > 0 && v < globalMinV) globalMinV = v;
+    // Vmin from conso pure run
+    let globalMinV = Infinity, globalMinHour = 0;
+    for (let h = 0; h < 24; h++) {
+      for (const nodeId of allNodeIds) {
+        const v = getNodeVoltage(rawConsoPure, nodeId, h);
+        if (v <= 0) continue;
+        if (v < globalMinV) { globalMinV = v; globalMinHour = h; }
+      }
     }
-    if (!isFinite(globalMinV)) globalMinV = 220;
 
-    // Heure pire cas injection = pic production PV
-    const peakProdIndex = powerData.reduce((maxIdx, d, idx) =>
-      d.P_pv > powerData[maxIdx].P_pv ? idx : maxIdx, 0
-    );
-    const globalMaxHour = powerData[peakProdIndex]?.hour ?? 12;
-
-    // Tension maxi à cette heure (badge affichage uniquement)
-    let globalMaxV = -Infinity;
-    for (const nodeId of allNodeIds) {
-      const v = getNodeVoltage(rawProdPure, nodeId, globalMaxHour);
-      if (v > 0 && v > globalMaxV) globalMaxV = v;
+    // Vmax from prod pure run
+    let globalMaxV = -Infinity, globalMaxHour = 0;
+    for (let h = 0; h < 24; h++) {
+      for (const nodeId of allNodeIds) {
+        const v = getNodeVoltage(rawProdPure, nodeId, h);
+        if (v <= 0) continue;
+        if (v > globalMaxV) { globalMaxV = v; globalMaxHour = h; }
+      }
     }
-    if (!isFinite(globalMaxV) || globalMaxV > 350) globalMaxV = 240;
 
     const getCableNeutralCurrent = (results: CalculationResult[], hour: number, nodeA: string, nodeB: string): number => {
       const r = results[hour];
@@ -441,22 +402,6 @@ export const LaboFoisonnementTab = () => {
       }));
     };
 
-    // Check if simulated data has diverged (any voltage > 350V or < 1V)
-    const isSimDivergent = (rawResults: CalculationResult[], hour: number): boolean => {
-      if (rawResults.length === 0) return true;
-      const r = rawResults[hour];
-      if (!r?.nodeMetricsPerPhase) return true;
-      return r.nodeMetricsPerPhase.some(m => {
-        const { A, B, C } = m.voltagesPerPhase;
-        return [A, B, C].some(v => v > 350 || (v > 0 && v < 1));
-      });
-    };
-
-    const minBranchesSim = (rawConsoSim.length > 0 && !isSimDivergent(rawConsoSim, globalMinHour))
-      ? buildBranchData(rawConsoSim, globalMinHour) : null;
-    const maxBranchesSim = (rawProdSim.length > 0 && !isSimDivergent(rawProdSim, globalMaxHour))
-      ? buildBranchData(rawProdSim, globalMaxHour) : null;
-
     return {
       minHour: globalMinHour,
       maxHour: globalMaxHour,
@@ -464,12 +409,8 @@ export const LaboFoisonnementTab = () => {
       maxV: globalMaxV,
       minBranches: buildBranchData(rawConsoPure, globalMinHour),
       maxBranches: buildBranchData(rawProdPure, globalMaxHour),
-      minBranchesSim,
-      maxBranchesSim,
-      simDivergentMin: rawConsoSim.length > 0 && isSimDivergent(rawConsoSim, globalMinHour),
-      simDivergentMax: rawProdSim.length > 0 && isSimDivergent(rawProdSim, globalMaxHour),
     };
-  }, [networkPaths, rawConsoPure, rawProdPure, rawConsoSim, rawProdSim, powerData]);
+  }, [networkPaths, rawConsoPure, rawProdPure]);
 
   // ─── Client raccordement points for voltage-distance charts ──────────────────
   const effectiveBranchementCableId = selectedBranchementCableId || 'exvb-4x16-cu';
@@ -999,16 +940,6 @@ export const LaboFoisonnementTab = () => {
                   <Badge variant="outline" className="text-[10px] border-blue-500/50 text-blue-500">
                     {voltageDistanceData.minHour}h • {voltageDistanceData.minV.toFixed(1)}V
                   </Badge>
-                  {isSimulationActive && voltageDistanceData.minBranchesSim && (
-                    <Badge variant="outline" className="text-[10px] border-violet-500/50 text-violet-500">
-                      + SRG2/EQUI8
-                    </Badge>
-                  )}
-                  {voltageDistanceData.simDivergentMin && (
-                    <Badge variant="destructive" className="text-[10px]">
-                      <AlertTriangle className="h-3 w-3 mr-1" /> Simulation divergente
-                    </Badge>
-                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-4">
@@ -1079,12 +1010,6 @@ export const LaboFoisonnementTab = () => {
                         type="monotone" dataKey="I_neutral" name={`I_N ${branch.label}`}
                         stroke="hsl(35, 95%, 55%)" strokeWidth={1.5} dot={{ r: 2 }} strokeDasharray="6 3" />
                     ))}
-                    {/* Simulated overlay (SRG2/EQUI8) */}
-                    {voltageDistanceData.minBranchesSim?.map((branch) => (
-                      <Line key={`min-sim-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
-                        type="monotone" dataKey="voltage" name={`${branch.label} (régulé)`}
-                        stroke={SIM_COLOR} strokeWidth={2} dot={{ r: 2, strokeDasharray: '' }} strokeDasharray="5 3" connectNulls />
-                    ))}
                   </LineChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -1099,16 +1024,6 @@ export const LaboFoisonnementTab = () => {
                   <Badge variant="outline" className="text-[10px] border-emerald-500/50 text-emerald-500">
                     {voltageDistanceData.maxHour}h • {voltageDistanceData.maxV.toFixed(1)}V
                   </Badge>
-                  {isSimulationActive && voltageDistanceData.maxBranchesSim && (
-                    <Badge variant="outline" className="text-[10px] border-violet-500/50 text-violet-500">
-                      + SRG2/EQUI8
-                    </Badge>
-                  )}
-                  {voltageDistanceData.simDivergentMax && (
-                    <Badge variant="destructive" className="text-[10px]">
-                      <AlertTriangle className="h-3 w-3 mr-1" /> Simulation divergente
-                    </Badge>
-                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-4">
@@ -1178,12 +1093,6 @@ export const LaboFoisonnementTab = () => {
                       <Line key={`max-IN-${branch.branchId}`} yAxisId="right" data={branch.points}
                         type="monotone" dataKey="I_neutral" name={`I_N ${branch.label}`}
                         stroke="hsl(35, 95%, 55%)" strokeWidth={1.5} dot={{ r: 2 }} strokeDasharray="6 3" />
-                    ))}
-                    {/* Simulated overlay (SRG2/EQUI8) */}
-                    {voltageDistanceData.maxBranchesSim?.map((branch) => (
-                      <Line key={`max-sim-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
-                        type="monotone" dataKey="voltage" name={`${branch.label} (régulé)`}
-                        stroke={SIM_COLOR} strokeWidth={2} dot={{ r: 2, strokeDasharray: '' }} strokeDasharray="5 3" connectNulls />
                     ))}
                   </LineChart>
                 </ResponsiveContainer>
@@ -1280,12 +1189,6 @@ export const LaboFoisonnementTab = () => {
                           type="monotone" dataKey="voltage" name={branch.label}
                           stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
                       ))}
-                      {/* Simulated overlay (SRG2/EQUI8) — fullscreen charge */}
-                      {voltageDistanceData?.minBranchesSim?.map((branch) => (
-                        <Line key={`fs-min-sim-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
-                          type="monotone" dataKey="voltage" name={`${branch.label} (régulé)`}
-                          stroke={SIM_COLOR} strokeWidth={2} dot={{ r: 2, strokeDasharray: '' }} strokeDasharray="5 3" connectNulls />
-                      ))}
                       {/* Client points — dots only */}
                       {clientPointsData?.minClientPoints && clientPointsData.minClientPoints.length > 0 && (
                         <Line
@@ -1372,12 +1275,6 @@ export const LaboFoisonnementTab = () => {
                         <Line key={`fs-max-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
                           type="monotone" dataKey="voltage" name={branch.label}
                           stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                      ))}
-                      {/* Simulated overlay (SRG2/EQUI8) — fullscreen injection */}
-                      {voltageDistanceData?.maxBranchesSim?.map((branch) => (
-                        <Line key={`fs-max-sim-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
-                          type="monotone" dataKey="voltage" name={`${branch.label} (régulé)`}
-                          stroke={SIM_COLOR} strokeWidth={2} dot={{ r: 2, strokeDasharray: '' }} strokeDasharray="5 3" connectNulls />
                       ))}
                       {clientPointsData?.maxClientPoints && clientPointsData.maxClientPoints.length > 0 && (
                         <Line

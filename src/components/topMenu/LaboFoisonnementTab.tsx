@@ -1042,7 +1042,7 @@ export const LaboFoisonnementTab = () => {
                       label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 10 }} />
                     <YAxis yAxisId="left"
                       domain={[Math.floor(Math.min(225, voltageDistanceData.maxV - 5)), Math.ceil(Math.max(245, voltageDistanceData.maxV + 5))]}
-                      tick={{ fontSize: 10 }} unit=" V" />
+                      tick={{ fontSize: 10 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
                     {showNeutralCurrent && (
                       <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} unit=" A"
                         label={{ value: 'I neutre (A)', angle: 90, position: 'insideRight', offset: 10, fontSize: 10 }} />

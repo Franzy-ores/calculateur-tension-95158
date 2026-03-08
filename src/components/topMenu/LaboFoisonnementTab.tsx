@@ -15,7 +15,8 @@ import {
 } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useNetworkStore } from '@/store/networkStore';
-import { FlaskConical, MapPin, Sun, Cloud, AlertTriangle, TrendingUp, TrendingDown, Zap, Ruler, Users } from 'lucide-react';
+import { FlaskConical, MapPin, Sun, Cloud, AlertTriangle, TrendingUp, TrendingDown, Zap, Ruler, Users, Clock } from 'lucide-react';
+import { ClockDial } from '@/components/ClockDial';
 import { clusterProfiles, getClusterById, DEFAULT_CLUSTER_ID } from '@/data/clusterProfiles';
 import { getFoisonnementPalier, calculateNormalizedDiversity } from '@/utils/foisonnementCalculator';
 import { DailyProfileCalculator } from '@/utils/dailyProfileCalculator';
@@ -164,6 +165,7 @@ export const LaboFoisonnementTab = () => {
   const [showPerPhaseDistance, setShowPerPhaseDistance] = useState(false);
   const [showNeutralCurrent, setShowNeutralCurrent] = useState(false);
   const [showClientPoints, setShowClientPoints] = useState(false);
+  const [clockHour, setClockHour] = useState(12);
 
   // Simulation equipment counters
   const srg2Count = simulationEquipment.srg2Devices?.filter(s => s.enabled).length || 0;
@@ -1106,6 +1108,144 @@ export const LaboFoisonnementTab = () => {
                 </ResponsiveContainer>
               </CardContent>
             </Card>
+
+            {/* ─── Graphe Tension vs Distance — Profil horaire ────────────── */}
+            {rawContinu.length > 0 && networkPaths.length > 0 && (() => {
+              // Build branch data for the selected clock hour using rawContinu (combined conso+prod)
+              const getCableNeutralCurrentHourly = (results: CalculationResult[], hour: number, nodeA: string, nodeB: string): number => {
+                const r = results[hour];
+                if (!r?.cables) return 0;
+                const cable = r.cables.find(c =>
+                  (c.nodeAId === nodeA && c.nodeBId === nodeB) ||
+                  (c.nodeAId === nodeB && c.nodeBId === nodeA)
+                );
+                return cable?.currentsPerPhase_A?.N ?? 0;
+              };
+
+              const hourlyBranches = networkPaths.map((branch, idx) => ({
+                ...branch,
+                points: branch.points.map((p, pi) => {
+                  const perPhase = getNodeVoltagePerPhase(rawContinu, p.nodeId, clockHour);
+                  const I_neutral = pi > 0
+                    ? getCableNeutralCurrentHourly(rawContinu, clockHour, branch.points[pi - 1].nodeId, p.nodeId)
+                    : 0;
+                  return {
+                    ...p,
+                    voltage: perPhase.avg,
+                    voltage_A: perPhase.A,
+                    voltage_B: perPhase.B,
+                    voltage_C: perPhase.C,
+                    I_neutral: +I_neutral.toFixed(2),
+                  };
+                }),
+                color: BRANCH_COLORS[idx % BRANCH_COLORS.length],
+              }));
+
+              // Dynamic Y domain
+              const allVoltages = hourlyBranches.flatMap(b => b.points.flatMap(p => [p.voltage, p.voltage_A, p.voltage_B, p.voltage_C])).filter(v => v > 0);
+              const minV = allVoltages.length > 0 ? Math.min(...allVoltages) : 220;
+              const maxV = allVoltages.length > 0 ? Math.max(...allVoltages) : 240;
+
+              // Get foisonnement coefficient at this hour
+              const hourFois = voltageContinu[clockHour]?.chargesResidentialFoisonnement;
+
+              return (
+                <Card className="bg-card/50 backdrop-blur border-amber-500/30">
+                  <CardHeader className="pb-2 pt-3 px-4">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-amber-500" />
+                      Tension vs Distance — Profil horaire (continu)
+                      <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-500">
+                        {clockHour}h
+                      </Badge>
+                      {hourFois !== undefined && (
+                        <Badge variant="secondary" className="text-[10px]">
+                          fois. {hourFois.toFixed(1)}%
+                        </Badge>
+                      )}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4">
+                    <div className="flex items-start gap-4">
+                      <div className="shrink-0 flex flex-col items-center pt-4">
+                        <ClockDial hour={clockHour} onChange={setClockHour} size={130} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <ResponsiveContainer width="100%" height={300}>
+                          <LineChart>
+                            <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                            <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 10 }}
+                              label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 10 }} />
+                            <YAxis yAxisId="left"
+                              domain={[Math.floor(Math.min(200, minV - 5)), Math.ceil(Math.max(250, maxV + 5))]}
+                              tick={{ fontSize: 10 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
+                            {showNeutralCurrent && (
+                              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} unit=" A"
+                                label={{ value: 'I neutre (A)', angle: 90, position: 'insideRight', offset: 10, fontSize: 10 }} />
+                            )}
+                            <Tooltip
+                              contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                              content={({ active, payload }) => {
+                                if (!active || !payload?.length) return null;
+                                const point = payload[0]?.payload;
+                                return (
+                                  <div className="rounded-md border bg-card px-3 py-2 text-xs shadow-md">
+                                    <div className="font-medium mb-1">{point?.nodeName || '—'}</div>
+                                    <div className="text-muted-foreground">{point?.distance_m?.toFixed(1)} m</div>
+                                    {point?.voltage_A > 0 && (
+                                      <div className="space-y-0.5 mt-1">
+                                        <div className="flex gap-2"><span style={{ color: 'hsl(0, 75%, 55%)' }}>A:</span><span className="font-mono">{point.voltage_A.toFixed(1)} V</span></div>
+                                        <div className="flex gap-2"><span style={{ color: 'hsl(142, 76%, 36%)' }}>B:</span><span className="font-mono">{point.voltage_B.toFixed(1)} V</span></div>
+                                        <div className="flex gap-2"><span style={{ color: 'hsl(217, 91%, 60%)' }}>C:</span><span className="font-mono">{point.voltage_C.toFixed(1)} V</span></div>
+                                        <div className="flex gap-2 border-t border-border/30 pt-0.5"><span className="text-muted-foreground">Moy:</span><span className="font-mono font-medium">{point.voltage.toFixed(1)} V</span></div>
+                                      </div>
+                                    )}
+                                    {showNeutralCurrent && point?.I_neutral > 0 && (
+                                      <div className="flex gap-2 border-t border-border/30 pt-0.5 mt-0.5">
+                                        <span style={{ color: 'hsl(35, 95%, 55%)' }}>I<sub>N</sub>:</span>
+                                        <span className="font-mono font-medium">{point.I_neutral.toFixed(1)} A</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              }}
+                            />
+                            <Legend wrapperStyle={{ fontSize: 10 }} />
+                            <ReferenceArea yAxisId="left" y1={218.5} y2={241.5} fill="hsl(var(--muted))" fillOpacity={0.2} />
+                            <ReferenceLine yAxisId="left" y={207} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
+                            <ReferenceLine yAxisId="left" y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
+                            <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} />
+                            {hourlyBranches.map((branch) => (
+                              <Line key={`hourly-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
+                                type="monotone" dataKey="voltage" name={branch.label}
+                                stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                            ))}
+                            {showPerPhaseDistance && hourlyBranches.map((branch) => (
+                              <>
+                                <Line key={`hourly-A-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_A > 0)}
+                                  type="monotone" dataKey="voltage_A" name={`${branch.label} A`}
+                                  stroke="hsl(0, 75%, 55%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
+                                <Line key={`hourly-B-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_B > 0)}
+                                  type="monotone" dataKey="voltage_B" name={`${branch.label} B`}
+                                  stroke="hsl(142, 76%, 36%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
+                                <Line key={`hourly-C-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_C > 0)}
+                                  type="monotone" dataKey="voltage_C" name={`${branch.label} C`}
+                                  stroke="hsl(217, 91%, 60%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
+                              </>
+                            ))}
+                            {showNeutralCurrent && hourlyBranches.map((branch) => (
+                              <Line key={`hourly-IN-${branch.branchId}`} yAxisId="right" data={branch.points}
+                                type="monotone" dataKey="I_neutral" name={`I_N ${branch.label}`}
+                                stroke="hsl(35, 95%, 55%)" strokeWidth={1.5} dot={{ r: 2 }} strokeDasharray="6 3" />
+                            ))}
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
 
             {/* ─── Dialog plein écran : raccordements clients ─────────────── */}
             <Dialog open={showClientPoints} onOpenChange={setShowClientPoints}>

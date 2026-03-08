@@ -1,31 +1,35 @@
 
 
-## Plan: Arrondir les tensions à 1 décimale sur l'axe Y
+# Diagnostic : hourlyProfiles.json non reactif dans le Labo
 
-### Problème
-Les ticks de l'axe Y affichent des valeurs brutes non arrondies (ex: `244.8200062052674V`).
+## Probleme identifie
 
-### Correction — `src/components/topMenu/LaboFoisonnementTab.tsx`
+Le fichier `hourlyProfiles.json` **est bien utilise** par le `DailyProfileCalculator` (import statique ligne 6 de `dailyProfileCalculator.ts`). Cependant, le Labo ne reagit pas aux modifications pour deux raisons :
 
-Ajouter `tickFormatter={(v: number) => v.toFixed(1)}` sur tous les `<YAxis>` des graphes tension-distance (charge et injection), dans les vues inline et fullscreen.
+1. **Import indirect** : Les profils sont importes dans `dailyProfileCalculator.ts`, pas dans `LaboFoisonnementTab.tsx`. Le composant Labo passe `undefined` comme `customProfiles` (ligne 242), laissant le calculator utiliser son import interne.
 
-**Lignes concernées** (4 occurrences YAxis tension) :
-- Ligne ~960 (charge inline)
-- Ligne ~1043 (injection inline)  
-- Ligne ~1157 (charge fullscreen)
-- Ligne ~1244 (injection fullscreen)
+2. **useMemo aveugle** : Le `useMemo` (ligne 272) qui lance les 3 runs a pour dependances `[currentProject, selectedNodeId, season, weather, ...]` — les profils JSON n'y figurent pas. Meme si Vite HMR recharge le module, le memo ne se re-execute pas car aucune de ses dependances reactives n'a change.
 
-Exemple de modification :
-```tsx
-<YAxis yAxisId="left"
-  domain={[...]}
-  tick={{ fontSize: 10 }}
-  tickFormatter={(v: number) => v.toFixed(1)}
-  unit=" V" />
+En resume : vous modifiez le JSON, Vite le recharge, mais le `useMemo` du Labo ne sait pas qu'il doit recalculer.
+
+## Correction
+
+### `LaboFoisonnementTab.tsx`
+
+1. **Importer directement** `hourlyProfiles.json` dans le composant Labo
+2. **Passer** cet import comme `customProfiles` aux 3 constructeurs `DailyProfileCalculator` (au lieu de `undefined`)
+3. **Ajouter** l'objet profiles aux dependances du `useMemo` principal
+
+```text
+Avant:  new DailyProfileCalculator(currentProject, baseOptions, undefined, ...)
+Apres:  new DailyProfileCalculator(currentProject, baseOptions, profilesData, ...)
 ```
 
-### Fichier modifié
+Cela rend le Labo reactif a toute modification du fichier JSON.
+
+### Fichier modifie
+
 | Fichier | Modification |
 |---|---|
-| `LaboFoisonnementTab.tsx` | +1 prop `tickFormatter` sur 4 `<YAxis>` |
+| `src/components/topMenu/LaboFoisonnementTab.tsx` | +1 import hourlyProfiles.json, passer comme customProfiles aux 3 runs, ajouter aux deps useMemo |
 

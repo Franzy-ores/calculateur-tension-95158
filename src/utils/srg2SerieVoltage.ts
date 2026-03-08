@@ -76,21 +76,13 @@ export function computeSRG2SerieVoltage(
   // Conserver l'angle de la tension mesurée (injection en phase)
   const angleRad = arg(VnodeMeasured);
   
-  // Rayon toujours positif, direction par déphasage de π si négatif
-  const Vserie = fromPolar(Math.abs(VserieMag), angleRad + (VserieMag < 0 ? Math.PI : 0));
+  const Vserie = fromPolar(VserieMag, angleRad);
   
   if (Math.abs(VserieMag) > 0.1) {
     console.log(`🔧 SRG2 computeSerieVoltage: ` +
       `V_mesuré=${Vmag.toFixed(1)}V, cible=${targetVoltage}V, ` +
       `erreur=${error_V.toFixed(1)}V, step=${(stepClamped*100).toFixed(1)}%, ` +
       `V_série=${VserieMag.toFixed(1)}V`);
-  }
-  
-  // Garde-fou : Vserie ne peut jamais dépasser ±10% de Vnominal
-  const MAX_VSERIE = 0.10 * Vnominal;
-  if (abs(Vserie) > MAX_VSERIE) {
-    console.error(`❌ SRG2: V_série aberrante (${abs(Vserie).toFixed(1)}V), reset à 0`);
-    return C(0, 0);
   }
   
   return Vserie;
@@ -110,28 +102,29 @@ export function determineSRG2SwitchState(
   srg2Config: SRG2Config,
   previousState?: SRG2SwitchState
 ): { state: SRG2SwitchState; coefficient: number } {
-  const { seuilLO2_V, seuilLO1_V, seuilBO1_V, seuilBO2_V } = srg2Config;
+  const { seuilLO2_V, seuilLO1_V, seuilBO1_V, seuilBO2_V, hysteresis_V } = srg2Config;
   const { coefficientLO2, coefficientLO1, coefficientBO1, coefficientBO2 } = srg2Config;
-  const hyst = srg2Config.hysteresis_V || 2;
-
+  
+  // Appliquer l'hystérésis basée sur l'état précédent
+  const hyst = hysteresis_V || 2;
+  
+  // Logique à seuils avec hystérésis
   // Surtension (abaissement requis)
-  // Hystérésis : pour QUITTER l'état, la tension doit redescendre de hyst sous le seuil
-  if (Vmeasured >= seuilLO2_V - (previousState === 'LO2' ? hyst : 0)) {
+  if (Vmeasured >= seuilLO2_V + (previousState === 'LO2' ? -hyst : 0)) {
     return { state: 'LO2', coefficient: coefficientLO2 };
   }
-  if (Vmeasured >= seuilLO1_V - (previousState === 'LO1' ? hyst : 0)) {
+  if (Vmeasured >= seuilLO1_V + (previousState === 'LO1' ? -hyst : 0)) {
     return { state: 'LO1', coefficient: coefficientLO1 };
   }
-
+  
   // Sous-tension (augmentation requise)
-  // Hystérésis : pour QUITTER l'état, la tension doit remonter de hyst au-dessus du seuil
-  if (Vmeasured <= seuilBO2_V + (previousState === 'BO2' ? hyst : 0)) {
+  if (Vmeasured <= seuilBO2_V - (previousState === 'BO2' ? -hyst : 0)) {
     return { state: 'BO2', coefficient: coefficientBO2 };
   }
-  if (Vmeasured <= seuilBO1_V + (previousState === 'BO1' ? hyst : 0)) {
+  if (Vmeasured <= seuilBO1_V - (previousState === 'BO1' ? -hyst : 0)) {
     return { state: 'BO1', coefficient: coefficientBO1 };
   }
-
+  
   // Dans la plage normale → bypass
   return { state: 'BYP', coefficient: 0 };
 }
@@ -173,12 +166,12 @@ export function computeSRG2SerieVoltagesAllPhases(
     // Créer le phasor de tension mesurée
     const Vmeasured = fromPolar(Vmag, angleRad);
     
-    // Commutateur à prises fixes : appliquer exactement le coefficient d'échelon
-    // coefficient est en % (ex: -7, -3.5, 0, +3.5, +7)
-    const VserieMag = (coefficient / 100) * Vnom; // Magnitude signée, ex: -7% × 230 = -16.1V
-    // Construire le phaseur aligné sur l'angle de la phase (injection en phase)
-    const Vserie = fromPolar(Math.abs(VserieMag), angleRad + (VserieMag < 0 ? Math.PI : 0));
-    const Vout = Vmag + VserieMag; // Tension de sortie = entrée + échelon signé
+    // Calculer la tension série (utilise le coefficient réel, pas le max)
+    const stepPercent = Math.abs(coefficient);
+    const Vserie = computeSRG2SerieVoltage(Vmeasured, target, stepPercent, Vnom);
+    
+    // Calculer la tension de sortie
+    const Vout = Vmag + abs(Vserie) * Math.sign(coefficient);
     
     return { Vserie, state, coeff: coefficient, Vout };
   };

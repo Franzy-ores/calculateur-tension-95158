@@ -1397,13 +1397,6 @@ export class ElectricalCalculator {
                 }
               }
               
-              // Sécurité numérique : tension phase-neutre bornée à [1V, 350V]
-              const Vv_mag = abs(Vv);
-              if (!isFinite(Vv_mag) || Vv_mag > 350 || Vv_mag < 1) {
-                console.error(`❌ Tension aberrante sur nœud ${v}: ${Vv_mag.toFixed(1)}V → reset à Vslack`);
-                Vv = Vslack_phase_ph;
-              }
-              
               // ✅ EQUI8 NOUVEAU MODÈLE: 
               // L'EQUI8 modifie les courants (via I_inj_node_phase), JAMAIS les tensions directement.
               // Les tensions résultent naturellement du BFS avec les courants modifiés.

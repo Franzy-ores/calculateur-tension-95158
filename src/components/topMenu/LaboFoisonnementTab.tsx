@@ -265,20 +265,20 @@ export const LaboFoisonnementTab = () => {
     const resComplet = calcComplet.calculateDailyVoltages();
     const rawC = calcComplet.getLastRawResults();
 
-    // Run 2: Conso pure (zeroProduction) → Vmin distance
+    // Run 2: Conso pure (zeroProduction) → Vmin distance — JAMAIS de SRG2
     const calcConso = new DailyProfileCalculator(
       currentProject,
       { ...baseOptions, zeroProduction: true },
-      profilesData as any, simulationEquipment, isSimulationActive
+      profilesData as any, simulationEquipment, false
     );
     calcConso.calculateDailyVoltages();
     const rawConso = calcConso.getLastRawResults();
 
-    // Run 3: Prod pure (zeroConsumption) → Vmax distance
+    // Run 3: Prod pure (zeroConsumption) → Vmax distance — JAMAIS de SRG2
     const calcProd = new DailyProfileCalculator(
       currentProject,
       { ...baseOptions, zeroConsumption: true },
-      profilesData as any, simulationEquipment, isSimulationActive
+      profilesData as any, simulationEquipment, false
     );
     calcProd.calculateDailyVoltages();
     const rawProd = calcProd.getLastRawResults();
@@ -346,30 +346,38 @@ export const LaboFoisonnementTab = () => {
   };
 
   const voltageDistanceData = useMemo(() => {
-    if (networkPaths.length === 0 || rawConsoPure.length === 0 || rawProdPure.length === 0) return null;
+    if (networkPaths.length === 0 || rawConsoPure.length === 0 || rawProdPure.length === 0 || powerData.length === 0) return null;
 
     const allNodeIds = new Set<string>();
     networkPaths.forEach(b => b.points.forEach(p => allNodeIds.add(p.nodeId)));
 
-    // Vmin from conso pure run
-    let globalMinV = Infinity, globalMinHour = 0;
-    for (let h = 0; h < 24; h++) {
-      for (const nodeId of allNodeIds) {
-        const v = getNodeVoltage(rawConsoPure, nodeId, h);
-        if (v <= 0) continue;
-        if (v < globalMinV) { globalMinV = v; globalMinHour = h; }
-      }
-    }
+    // Heure pire cas charge = pic foisonnement résidentiel (indépendant de la topologie)
+    const peakConsoIndex = powerData.reduce((maxIdx, d, idx) =>
+      d.foisonnement > powerData[maxIdx].foisonnement ? idx : maxIdx, 0
+    );
+    const globalMinHour = powerData[peakConsoIndex]?.hour ?? 0;
 
-    // Vmax from prod pure run
-    let globalMaxV = -Infinity, globalMaxHour = 0;
-    for (let h = 0; h < 24; h++) {
-      for (const nodeId of allNodeIds) {
-        const v = getNodeVoltage(rawProdPure, nodeId, h);
-        if (v <= 0) continue;
-        if (v > globalMaxV) { globalMaxV = v; globalMaxHour = h; }
-      }
+    // Tension mini à cette heure (badge affichage uniquement)
+    let globalMinV = Infinity;
+    for (const nodeId of allNodeIds) {
+      const v = getNodeVoltage(rawConsoPure, nodeId, globalMinHour);
+      if (v > 0 && v < globalMinV) globalMinV = v;
     }
+    if (!isFinite(globalMinV)) globalMinV = 220;
+
+    // Heure pire cas injection = pic production PV
+    const peakProdIndex = powerData.reduce((maxIdx, d, idx) =>
+      d.P_pv > powerData[maxIdx].P_pv ? idx : maxIdx, 0
+    );
+    const globalMaxHour = powerData[peakProdIndex]?.hour ?? 12;
+
+    // Tension maxi à cette heure (badge affichage uniquement)
+    let globalMaxV = -Infinity;
+    for (const nodeId of allNodeIds) {
+      const v = getNodeVoltage(rawProdPure, nodeId, globalMaxHour);
+      if (v > 0 && v > globalMaxV) globalMaxV = v;
+    }
+    if (!isFinite(globalMaxV) || globalMaxV > 350) globalMaxV = 240;
 
     const getCableNeutralCurrent = (results: CalculationResult[], hour: number, nodeA: string, nodeB: string): number => {
       const r = results[hour];
@@ -410,7 +418,7 @@ export const LaboFoisonnementTab = () => {
       minBranches: buildBranchData(rawConsoPure, globalMinHour),
       maxBranches: buildBranchData(rawProdPure, globalMaxHour),
     };
-  }, [networkPaths, rawConsoPure, rawProdPure]);
+  }, [networkPaths, rawConsoPure, rawProdPure, powerData]);
 
   // ─── Client raccordement points for voltage-distance charts ──────────────────
   const effectiveBranchementCableId = selectedBranchementCableId || 'exvb-4x16-cu';

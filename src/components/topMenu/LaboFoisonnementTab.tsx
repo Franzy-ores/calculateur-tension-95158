@@ -999,6 +999,16 @@ export const LaboFoisonnementTab = () => {
                   <Badge variant="outline" className="text-[10px] border-blue-500/50 text-blue-500">
                     {voltageDistanceData.minHour}h • {voltageDistanceData.minV.toFixed(1)}V
                   </Badge>
+                  {isSimulationActive && voltageDistanceData.minBranchesSim && (
+                    <Badge variant="outline" className="text-[10px] border-violet-500/50 text-violet-500">
+                      + SRG2/EQUI8
+                    </Badge>
+                  )}
+                  {voltageDistanceData.simDivergentMin && (
+                    <Badge variant="destructive" className="text-[10px]">
+                      <AlertTriangle className="h-3 w-3 mr-1" /> Simulation divergente
+                    </Badge>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-4">

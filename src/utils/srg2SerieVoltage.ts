@@ -173,12 +173,12 @@ export function computeSRG2SerieVoltagesAllPhases(
     // Créer le phasor de tension mesurée
     const Vmeasured = fromPolar(Vmag, angleRad);
     
-    // Calculer la tension série (utilise le coefficient réel, pas le max)
-    const stepPercent = Math.abs(coefficient);
-    const Vserie = computeSRG2SerieVoltage(Vmeasured, target, stepPercent, Vnom);
-    
-    // Calculer la tension de sortie
-    const Vout = Vmag + abs(Vserie) * Math.sign(coefficient);
+    // Commutateur à prises fixes : appliquer exactement le coefficient d'échelon
+    // coefficient est en % (ex: -7, -3.5, 0, +3.5, +7)
+    const VserieMag = (coefficient / 100) * Vnom; // Magnitude signée, ex: -7% × 230 = -16.1V
+    // Construire le phaseur aligné sur l'angle de la phase (injection en phase)
+    const Vserie = fromPolar(Math.abs(VserieMag), angleRad + (VserieMag < 0 ? Math.PI : 0));
+    const Vout = Vmag + VserieMag; // Tension de sortie = entrée + échelon signé
     
     return { Vserie, state, coeff: coefficient, Vout };
   };

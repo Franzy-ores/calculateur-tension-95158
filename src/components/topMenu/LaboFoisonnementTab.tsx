@@ -1160,7 +1160,7 @@ export const LaboFoisonnementTab = () => {
                             return (
                               <div className="rounded-md border bg-card px-3 py-2 text-xs shadow-md">
                                 <div className="font-medium mb-1">🏠 {point.clientName}</div>
-                                <div className="text-muted-foreground">{point.couplage} — {point.power_kVA} kVA</div>
+                                <div className="text-muted-foreground">{point.couplage} — {point.power_kVA} kVA{point.phase ? ` — ${point.phase}` : ''}</div>
                                 <div className="mt-1 space-y-0.5">
                                   <div className="flex gap-2"><span className="text-muted-foreground">Nœud:</span><span className="font-mono">{point.nodeVoltage} V @ {point.nodeDistance_m} m</span></div>
                                   <div className="flex gap-2"><span className="text-muted-foreground">Brcht:</span><span className="font-mono">{point.branchLength_m} m</span></div>

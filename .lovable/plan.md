@@ -1,35 +1,77 @@
 
 
-# Diagnostic : hourlyProfiles.json non reactif dans le Labo
+## Plan: Corriger 3 bugs SRG2 + garde-fou BFS
 
-## Probleme identifie
+### Fichiers modifiés
 
-Le fichier `hourlyProfiles.json` **est bien utilise** par le `DailyProfileCalculator` (import statique ligne 6 de `dailyProfileCalculator.ts`). Cependant, le Labo ne reagit pas aux modifications pour deux raisons :
+1. **`src/utils/srg2SerieVoltage.ts`** — 2 fonctions corrigées
+2. **`src/utils/electricalCalculations.ts`** — 1 garde-fou ajouté
 
-1. **Import indirect** : Les profils sont importes dans `dailyProfileCalculator.ts`, pas dans `LaboFoisonnementTab.tsx`. Le composant Labo passe `undefined` comme `customProfiles` (ligne 242), laissant le calculator utiliser son import interne.
+---
 
-2. **useMemo aveugle** : Le `useMemo` (ligne 272) qui lance les 3 runs a pour dependances `[currentProject, selectedNodeId, season, weather, ...]` — les profils JSON n'y figurent pas. Meme si Vite HMR recharge le module, le memo ne se re-execute pas car aucune de ses dependances reactives n'a change.
+### Bug 1 — `calculateForPhase` dans `computeSRG2SerieVoltagesAllPhases` (lignes 168-175)
 
-En resume : vous modifiez le JSON, Vite le recharge, mais le `useMemo` du Labo ne sait pas qu'il doit recalculer.
+Remplacer le régulateur continu par un commutateur à prises fixes :
 
-## Correction
+```ts
+// AVANT (lignes 168-175)
+const stepPercent = Math.abs(coefficient);
+const Vserie = computeSRG2SerieVoltage(Vmeasured, target, stepPercent, Vnom);
+const Vout = Vmag + abs(Vserie) * Math.sign(coefficient);
 
-### `LaboFoisonnementTab.tsx`
-
-1. **Importer directement** `hourlyProfiles.json` dans le composant Labo
-2. **Passer** cet import comme `customProfiles` aux 3 constructeurs `DailyProfileCalculator` (au lieu de `undefined`)
-3. **Ajouter** l'objet profiles aux dependances du `useMemo` principal
-
-```text
-Avant:  new DailyProfileCalculator(currentProject, baseOptions, undefined, ...)
-Apres:  new DailyProfileCalculator(currentProject, baseOptions, profilesData, ...)
+// APRÈS
+const VserieMag = (coefficient / 100) * Vnom;
+const Vserie = fromPolar(Math.abs(VserieMag), angleRad + (VserieMag < 0 ? Math.PI : 0));
+const Vout = Vmag + VserieMag;
 ```
 
-Cela rend le Labo reactif a toute modification du fichier JSON.
+Le coefficient est directement appliqué (-7, -3.5, 0, +3.5, +7%) sans calcul d'erreur proportionnelle. `fromPolar` reçoit toujours un rayon positif, la direction étant gérée par le déphasage de π.
 
-### Fichier modifie
+---
 
-| Fichier | Modification |
-|---|---|
-| `src/components/topMenu/LaboFoisonnementTab.tsx` | +1 import hourlyProfiles.json, passer comme customProfiles aux 3 runs, ajouter aux deps useMemo |
+### Bug 2 — `fromPolar` avec rayon négatif dans `computeSRG2SerieVoltage` (ligne 79)
+
+```ts
+// AVANT (ligne 79)
+const Vserie = fromPolar(VserieMag, angleRad);
+
+// APRÈS
+const Vserie = fromPolar(Math.abs(VserieMag), angleRad + (VserieMag < 0 ? Math.PI : 0));
+```
+
+---
+
+### Bug 3 — Garde-fou dans `computeSRG2SerieVoltage` (avant le return, ligne 88)
+
+Ajouter avant `return Vserie` :
+
+```ts
+const MAX_VSERIE = 0.10 * Vnominal;
+if (abs(Vserie) > MAX_VSERIE) {
+  console.error(`❌ SRG2: V_série aberrante (${abs(Vserie).toFixed(1)}V), reset à 0`);
+  return C(0, 0);
+}
+```
+
+---
+
+### Garde-fou BFS — `electricalCalculations.ts` (après ligne 1393, `Vv = add(Vv, Vserie)`)
+
+Ajouter après la ligne `Vv = add(Vv, Vserie)` (et aussi après la ligne 1405 `V_node_phase.set(v, Vv)` pour couvrir le cas sans SRG2) :
+
+```ts
+const Vv_mag = abs(Vv);
+if (!isFinite(Vv_mag) || Vv_mag > 350 || Vv_mag < 1) {
+  console.error(`❌ Tension aberrante sur nœud ${v}: ${Vv_mag.toFixed(1)}V → reset à Vslack`);
+  Vv = Vslack_phase_ph;
+}
+```
+
+Placé juste avant `V_node_phase.set(v, Vv)` (ligne 1405) pour intercepter toute valeur aberrante quelle qu'en soit la source.
+
+---
+
+### Fonctions NON modifiées
+- `determineSRG2SwitchState` — déjà corrigée précédemment
+- `isSRG2Stabilized`, `createDefaultSRG2Config`, `logSRG2Metrics` — inchangées
 

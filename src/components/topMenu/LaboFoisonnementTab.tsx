@@ -13,8 +13,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useNetworkStore } from '@/store/networkStore';
-import { FlaskConical, MapPin, Sun, Cloud, AlertTriangle, TrendingUp, TrendingDown, Zap, Ruler } from 'lucide-react';
+import { FlaskConical, MapPin, Sun, Cloud, AlertTriangle, TrendingUp, TrendingDown, Zap, Ruler, Users } from 'lucide-react';
 import { clusterProfiles, getClusterById, DEFAULT_CLUSTER_ID } from '@/data/clusterProfiles';
 import { getFoisonnementPalier, calculateNormalizedDiversity } from '@/utils/foisonnementCalculator';
 import { DailyProfileCalculator } from '@/utils/dailyProfileCalculator';
@@ -26,6 +27,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { branchementCableTypes, getBranchementCableById, calculateGeodeticDistance } from '@/data/branchementCableTypes';
 
 // ─── Types pour les chemins réseau ──────────────────────────────────────────────
 interface BranchPoint {
@@ -153,12 +155,15 @@ export const LaboFoisonnementTab = () => {
     simulationEquipment,
     isSimulationActive,
     toggleSimulationActive,
+    selectedBranchementCableId,
+    setSelectedBranchementCableId,
   } = useNetworkStore();
 
   const [season, setSeason] = useState<'winter' | 'summer'>('winter');
   const [weather, setWeather] = useState<'sunny' | 'gray'>('sunny');
   const [showPerPhaseDistance, setShowPerPhaseDistance] = useState(false);
   const [showNeutralCurrent, setShowNeutralCurrent] = useState(false);
+  const [showClientPoints, setShowClientPoints] = useState(false);
 
   // Simulation equipment counters
   const srg2Count = simulationEquipment.srg2Devices?.filter(s => s.enabled).length || 0;
@@ -407,7 +412,87 @@ export const LaboFoisonnementTab = () => {
     };
   }, [networkPaths, rawConsoPure, rawProdPure]);
 
-  // Voltage range for 24h chart (considers all phases)
+  // ─── Client raccordement points for voltage-distance charts ──────────────────
+  const effectiveBranchementCableId = selectedBranchementCableId || 'exvb-4x16-cu';
+  const branchementCable = useMemo(
+    () => getBranchementCableById(effectiveBranchementCableId) || branchementCableTypes[0],
+    [effectiveBranchementCableId]
+  );
+
+  interface ClientPoint {
+    distance_m: number;
+    voltage: number;
+    clientName: string;
+    power_kVA: number;
+    couplage: string;
+    nodeDistance_m: number;
+    branchLength_m: number;
+    nodeVoltage: number;
+    isClient: true;
+  }
+
+  const clientPointsData = useMemo(() => {
+    if (!voltageDistanceData || !currentProject || !branchementCable) return null;
+
+    const clients = currentProject.clientsImportes || [];
+    const links = currentProject.clientLinks || [];
+    if (clients.length === 0 || links.length === 0) return null;
+
+    const nodeMap = new Map(currentProject.nodes.map(n => [n.id, n]));
+    const clientMap = new Map(clients.map(c => [c.id, c]));
+    const cosPhi = 0.9;
+    const sinPhi = Math.sqrt(1 - cosPhi * cosPhi);
+    const R_per_m = branchementCable.R_ohm_per_km / 1000;
+    const X_per_m = branchementCable.X_ohm_per_km / 1000;
+
+    const buildClientPoints = (branches: typeof voltageDistanceData.minBranches): ClientPoint[] => {
+      const points: ClientPoint[] = [];
+      for (const branch of branches) {
+        for (const bp of branch.points) {
+          const node = nodeMap.get(bp.nodeId);
+          if (!node) continue;
+          const nodeLinks = links.filter(l => l.nodeId === bp.nodeId);
+          for (const link of nodeLinks) {
+            const client = clientMap.get(link.clientId);
+            if (!client) continue;
+            const dist_m = (client.lat && client.lng && node.lat && node.lng)
+              ? calculateGeodeticDistance(node.lat, node.lng, client.lat, client.lng)
+              : 15;
+            const V_nom = client.couplage === 'MONO' ? 230 : 400;
+            const I_client = (client.puissanceContractuelle_kVA * 1000) / (V_nom * (client.couplage === 'MONO' ? 1 : Math.sqrt(3)));
+            const deltaV = (R_per_m * cosPhi + X_per_m * sinPhi) * I_client * dist_m;
+            const nodeV = bp.voltage || 230;
+            const clientV = Math.max(0, nodeV - deltaV);
+            points.push({
+              distance_m: +(bp.distance_m + dist_m).toFixed(1),
+              voltage: +clientV.toFixed(1),
+              clientName: client.nomCircuit || client.identifiantCircuit || client.id.slice(0, 8),
+              power_kVA: client.puissanceContractuelle_kVA,
+              couplage: client.couplage,
+              nodeDistance_m: bp.distance_m,
+              branchLength_m: +dist_m.toFixed(1),
+              nodeVoltage: +nodeV.toFixed(1),
+              isClient: true,
+            });
+          }
+        }
+      }
+      return points;
+    };
+
+    return {
+      minClientPoints: buildClientPoints(voltageDistanceData.minBranches),
+      maxClientPoints: buildClientPoints(voltageDistanceData.maxBranches),
+    };
+  }, [voltageDistanceData, currentProject, branchementCable]);
+
+  const getClientColor = (voltage: number) => {
+    if (voltage < 207) return 'hsl(0, 75%, 55%)';
+    if (voltage < 218.5) return 'hsl(35, 95%, 55%)';
+    return 'hsl(142, 76%, 36%)';
+  };
+
+
   const voltageRange = useMemo(() => {
     if (voltage24hData.length === 0) return { min: 200, max: 250 };
     const allV = voltage24hData.flatMap(d => [d.V_A, d.V_B, d.V_C, d.V_continu]).filter(v => v > 0);
@@ -768,8 +853,21 @@ export const LaboFoisonnementTab = () => {
                 Afficher courant de neutre I<sub>N</sub> (axe droit, A)
               </Label>
             </div>
+            {clientPointsData && (
+              <div className="flex items-center gap-2 px-1">
+                <Checkbox
+                  id="showClientPoints"
+                  checked={showClientPoints}
+                  onCheckedChange={(checked) => setShowClientPoints(checked === true)}
+                />
+                <Label htmlFor="showClientPoints" className="text-xs text-muted-foreground cursor-pointer">
+                  <Users className="h-3 w-3 inline mr-1" />
+                  Afficher raccordements clients (plein écran)
+                </Label>
+              </div>
+            )}
 
-            {/* Vmin — Pire cas charge (sans production) */}
+
             <Card className="bg-card/50 backdrop-blur border-violet-500/30">
               <CardHeader className="pb-2 pt-3 px-4">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -936,6 +1034,216 @@ export const LaboFoisonnementTab = () => {
                 </ResponsiveContainer>
               </CardContent>
             </Card>
+
+            {/* ─── Dialog plein écran : raccordements clients ─────────────── */}
+            <Dialog open={showClientPoints} onOpenChange={setShowClientPoints}>
+              <DialogContent className="max-w-[95vw] max-h-[95vh] w-full h-full overflow-auto">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-sm">
+                    <Users className="h-4 w-4 text-violet-500" />
+                    Tension vs Distance — Raccordements clients
+                    <Badge variant="outline" className="text-[10px]">
+                      {branchementCable?.label}
+                    </Badge>
+                  </DialogTitle>
+                </DialogHeader>
+
+                {/* Sélecteur câble branchement */}
+                <div className="flex items-center gap-3 mb-2">
+                  <Label className="text-xs text-muted-foreground whitespace-nowrap">Câble branchement :</Label>
+                  <Select value={effectiveBranchementCableId} onValueChange={(v) => setSelectedBranchementCableId(v)}>
+                    <SelectTrigger className="h-8 text-xs w-64">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {branchementCableTypes.map(c => (
+                        <SelectItem key={c.id} value={c.id} className="text-xs">
+                          {c.label} — R={c.R_ohm_per_km} Ω/km, {c.maxCurrent_A}A
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="flex gap-3 text-[10px] text-muted-foreground">
+                    <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full" style={{ background: 'hsl(142, 76%, 36%)' }} /> OK</span>
+                    <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full" style={{ background: 'hsl(35, 95%, 55%)' }} /> &lt;218.5V</span>
+                    <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full" style={{ background: 'hsl(0, 75%, 55%)' }} /> &lt;207V</span>
+                  </div>
+                </div>
+
+                {/* Graphique Vmin charge + clients */}
+                <div className="space-y-1">
+                  <div className="text-xs font-medium flex items-center gap-2">
+                    <Ruler className="h-3.5 w-3.5 text-blue-500" />
+                    Pire cas charge — {voltageDistanceData?.minHour}h
+                  </div>
+                  <ResponsiveContainer width="100%" height={380}>
+                    <LineChart>
+                      <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                      <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 10 }}
+                        label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 10 }} />
+                      <YAxis yAxisId="left"
+                        domain={[
+                          Math.floor(Math.min(200, (voltageDistanceData?.minV ?? 220) - 5)),
+                          Math.ceil(Math.max(240, (voltageDistanceData?.minV ?? 230) + 10))
+                        ]}
+                        tick={{ fontSize: 10 }} unit=" V" />
+                      <Tooltip
+                        contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                        content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null;
+                          const point = payload[0]?.payload;
+                          if (point?.isClient) {
+                            return (
+                              <div className="rounded-md border bg-card px-3 py-2 text-xs shadow-md">
+                                <div className="font-medium mb-1">🏠 {point.clientName}</div>
+                                <div className="text-muted-foreground">{point.couplage} — {point.power_kVA} kVA</div>
+                                <div className="mt-1 space-y-0.5">
+                                  <div className="flex gap-2"><span className="text-muted-foreground">Nœud:</span><span className="font-mono">{point.nodeVoltage} V @ {point.nodeDistance_m} m</span></div>
+                                  <div className="flex gap-2"><span className="text-muted-foreground">Brcht:</span><span className="font-mono">{point.branchLength_m} m</span></div>
+                                  <div className="flex gap-2 border-t border-border/30 pt-0.5 font-medium" style={{ color: getClientColor(point.voltage) }}>
+                                    <span>Livraison:</span><span className="font-mono">{point.voltage} V</span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return (
+                            <div className="rounded-md border bg-card px-3 py-2 text-xs shadow-md">
+                              <div className="font-medium mb-1">{point?.nodeName || '—'}</div>
+                              <div className="text-muted-foreground">{point?.distance_m?.toFixed(1)} m — {point?.voltage?.toFixed(1)} V</div>
+                            </div>
+                          );
+                        }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: 10 }} />
+                      <ReferenceArea yAxisId="left" y1={218.5} y2={241.5} fill="hsl(var(--muted))" fillOpacity={0.2} />
+                      <ReferenceLine yAxisId="left" y={207} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
+                      <ReferenceLine yAxisId="left" y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
+                      <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} />
+                      {voltageDistanceData?.minBranches.map((branch) => (
+                        <Line key={`fs-min-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
+                          type="monotone" dataKey="voltage" name={branch.label}
+                          stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                      ))}
+                      {/* Client points — dots only */}
+                      {clientPointsData?.minClientPoints && clientPointsData.minClientPoints.length > 0 && (
+                        <Line
+                          key="fs-min-clients"
+                          yAxisId="left"
+                          data={clientPointsData.minClientPoints}
+                          type="monotone"
+                          dataKey="voltage"
+                          name="Clients"
+                          stroke="none"
+                          strokeWidth={0}
+                          dot={(props: any) => {
+                            const { cx, cy, payload } = props;
+                            if (!cx || !cy) return null;
+                            return (
+                              <circle
+                                cx={cx} cy={cy} r={5}
+                                fill={getClientColor(payload.voltage)}
+                                stroke="hsl(var(--background))"
+                                strokeWidth={1.5}
+                              />
+                            );
+                          }}
+                          legendType="diamond"
+                          connectNulls={false}
+                          isAnimationActive={false}
+                        />
+                      )}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Graphique Vmax injection + clients */}
+                <div className="space-y-1 mt-4">
+                  <div className="text-xs font-medium flex items-center gap-2">
+                    <Ruler className="h-3.5 w-3.5 text-emerald-500" />
+                    Pire cas injection — {voltageDistanceData?.maxHour}h
+                  </div>
+                  <ResponsiveContainer width="100%" height={380}>
+                    <LineChart>
+                      <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                      <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 10 }}
+                        label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 10 }} />
+                      <YAxis yAxisId="left"
+                        domain={[
+                          Math.floor(Math.min(225, (voltageDistanceData?.maxV ?? 230) - 5)),
+                          Math.ceil(Math.max(245, (voltageDistanceData?.maxV ?? 235) + 5))
+                        ]}
+                        tick={{ fontSize: 10 }} unit=" V" />
+                      <Tooltip
+                        contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                        content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null;
+                          const point = payload[0]?.payload;
+                          if (point?.isClient) {
+                            return (
+                              <div className="rounded-md border bg-card px-3 py-2 text-xs shadow-md">
+                                <div className="font-medium mb-1">🏠 {point.clientName}</div>
+                                <div className="text-muted-foreground">{point.couplage} — {point.power_kVA} kVA</div>
+                                <div className="mt-1 space-y-0.5">
+                                  <div className="flex gap-2"><span className="text-muted-foreground">Nœud:</span><span className="font-mono">{point.nodeVoltage} V @ {point.nodeDistance_m} m</span></div>
+                                  <div className="flex gap-2"><span className="text-muted-foreground">Brcht:</span><span className="font-mono">{point.branchLength_m} m</span></div>
+                                  <div className="flex gap-2 border-t border-border/30 pt-0.5 font-medium" style={{ color: getClientColor(point.voltage) }}>
+                                    <span>Livraison:</span><span className="font-mono">{point.voltage} V</span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return (
+                            <div className="rounded-md border bg-card px-3 py-2 text-xs shadow-md">
+                              <div className="font-medium mb-1">{point?.nodeName || '—'}</div>
+                              <div className="text-muted-foreground">{point?.distance_m?.toFixed(1)} m — {point?.voltage?.toFixed(1)} V</div>
+                            </div>
+                          );
+                        }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: 10 }} />
+                      <ReferenceArea yAxisId="left" y1={218.5} y2={241.5} fill="hsl(var(--muted))" fillOpacity={0.2} />
+                      <ReferenceLine yAxisId="left" y={207} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
+                      <ReferenceLine yAxisId="left" y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
+                      <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} />
+                      {voltageDistanceData?.maxBranches.map((branch) => (
+                        <Line key={`fs-max-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
+                          type="monotone" dataKey="voltage" name={branch.label}
+                          stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                      ))}
+                      {clientPointsData?.maxClientPoints && clientPointsData.maxClientPoints.length > 0 && (
+                        <Line
+                          key="fs-max-clients"
+                          yAxisId="left"
+                          data={clientPointsData.maxClientPoints}
+                          type="monotone"
+                          dataKey="voltage"
+                          name="Clients"
+                          stroke="none"
+                          strokeWidth={0}
+                          dot={(props: any) => {
+                            const { cx, cy, payload } = props;
+                            if (!cx || !cy) return null;
+                            return (
+                              <circle
+                                cx={cx} cy={cy} r={5}
+                                fill={getClientColor(payload.voltage)}
+                                stroke="hsl(var(--background))"
+                                strokeWidth={1.5}
+                              />
+                            );
+                          }}
+                          legendType="diamond"
+                          connectNulls={false}
+                          isAnimationActive={false}
+                        />
+                      )}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </DialogContent>
+            </Dialog>
           </>
         )}
 

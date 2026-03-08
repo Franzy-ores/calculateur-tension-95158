@@ -265,20 +265,20 @@ export const LaboFoisonnementTab = () => {
     const resComplet = calcComplet.calculateDailyVoltages();
     const rawC = calcComplet.getLastRawResults();
 
-    // Run 2: Conso pure (zeroProduction) → Vmin distance
+    // Run 2: Conso pure (zeroProduction) → Vmin distance — JAMAIS de SRG2
     const calcConso = new DailyProfileCalculator(
       currentProject,
       { ...baseOptions, zeroProduction: true },
-      profilesData as any, simulationEquipment, isSimulationActive
+      profilesData as any, simulationEquipment, false
     );
     calcConso.calculateDailyVoltages();
     const rawConso = calcConso.getLastRawResults();
 
-    // Run 3: Prod pure (zeroConsumption) → Vmax distance
+    // Run 3: Prod pure (zeroConsumption) → Vmax distance — JAMAIS de SRG2
     const calcProd = new DailyProfileCalculator(
       currentProject,
       { ...baseOptions, zeroConsumption: true },
-      profilesData as any, simulationEquipment, isSimulationActive
+      profilesData as any, simulationEquipment, false
     );
     calcProd.calculateDailyVoltages();
     const rawProd = calcProd.getLastRawResults();

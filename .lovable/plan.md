@@ -1,22 +1,35 @@
 
 
-## Plan: Limiter la consommation client à 80% du contractuel en mode charge
+# Diagnostic : hourlyProfiles.json non reactif dans le Labo
 
-### Modification unique dans `buildClientPoints` (ligne 479)
+## Probleme identifie
 
-Le courant de charge du client doit être calculé à **80% de la puissance contractuelle** (et non 100%), car c'est le niveau de charge réaliste au point de livraison. Le réseau reste calculé selon la courbe de foisonnement — seul le calcul de la tension au bout du câble de branchement est concerné.
+Le fichier `hourlyProfiles.json` **est bien utilise** par le `DailyProfileCalculator` (import statique ligne 6 de `dailyProfileCalculator.ts`). Cependant, le Labo ne reagit pas aux modifications pour deux raisons :
 
-**Ligne 479 — remplacer :**
-```ts
-const I_charge = (client.puissanceContractuelle_kVA * 1000) / (V_nom * ...);
+1. **Import indirect** : Les profils sont importes dans `dailyProfileCalculator.ts`, pas dans `LaboFoisonnementTab.tsx`. Le composant Labo passe `undefined` comme `customProfiles` (ligne 242), laissant le calculator utiliser son import interne.
+
+2. **useMemo aveugle** : Le `useMemo` (ligne 272) qui lance les 3 runs a pour dependances `[currentProject, selectedNodeId, season, weather, ...]` — les profils JSON n'y figurent pas. Meme si Vite HMR recharge le module, le memo ne se re-execute pas car aucune de ses dependances reactives n'a change.
+
+En resume : vous modifiez le JSON, Vite le recharge, mais le `useMemo` du Labo ne sait pas qu'il doit recalculer.
+
+## Correction
+
+### `LaboFoisonnementTab.tsx`
+
+1. **Importer directement** `hourlyProfiles.json` dans le composant Labo
+2. **Passer** cet import comme `customProfiles` aux 3 constructeurs `DailyProfileCalculator` (au lieu de `undefined`)
+3. **Ajouter** l'objet profiles aux dependances du `useMemo` principal
+
+```text
+Avant:  new DailyProfileCalculator(currentProject, baseOptions, undefined, ...)
+Apres:  new DailyProfileCalculator(currentProject, baseOptions, profilesData, ...)
 ```
-**Par :**
-```ts
-const I_charge = (client.puissanceContractuelle_kVA * 0.80 * 1000) / (V_nom * ...);
-```
 
-Rien d'autre ne change : le mode injection reste à 0% conso / 100% PV, et le réseau garde son foisonnement.
+Cela rend le Labo reactif a toute modification du fichier JSON.
 
-### Fichier modifié
-- `src/components/topMenu/LaboFoisonnementTab.tsx` — 1 ligne modifiée (ligne 479)
+### Fichier modifie
+
+| Fichier | Modification |
+|---|---|
+| `src/components/topMenu/LaboFoisonnementTab.tsx` | +1 import hourlyProfiles.json, passer comme customProfiles aux 3 runs, ajouter aux deps useMemo |
 

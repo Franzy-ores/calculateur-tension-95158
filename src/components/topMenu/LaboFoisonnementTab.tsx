@@ -1373,6 +1373,12 @@ export const LaboFoisonnementTab = () => {
                           type="monotone" dataKey="voltage" name={branch.label}
                           stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
                       ))}
+                      {/* Simulated overlay (SRG2/EQUI8) — fullscreen injection */}
+                      {voltageDistanceData?.maxBranchesSim?.map((branch) => (
+                        <Line key={`fs-max-sim-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
+                          type="monotone" dataKey="voltage" name={`${branch.label} (régulé)`}
+                          stroke={SIM_COLOR} strokeWidth={2} dot={{ r: 2, strokeDasharray: '' }} strokeDasharray="5 3" connectNulls />
+                      ))}
                       {clientPointsData?.maxClientPoints && clientPointsData.maxClientPoints.length > 0 && (
                         <Line
                           key="fs-max-clients"

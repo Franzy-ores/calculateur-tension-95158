@@ -346,7 +346,7 @@ export const LaboFoisonnementTab = () => {
   };
 
   const voltageDistanceData = useMemo(() => {
-    if (networkPaths.length === 0 || rawConsoPure.length === 0 || rawProdPure.length === 0) return null;
+    if (networkPaths.length === 0 || rawConsoPure.length === 0 || rawProdPure.length === 0 || powerData.length === 0) return null;
 
     const allNodeIds = new Set<string>();
     networkPaths.forEach(b => b.points.forEach(p => allNodeIds.add(p.nodeId)));

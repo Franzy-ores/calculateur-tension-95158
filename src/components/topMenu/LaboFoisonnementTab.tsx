@@ -1253,7 +1253,7 @@ export const LaboFoisonnementTab = () => {
                             return (
                               <circle
                                 cx={cx} cy={cy} r={5}
-                                fill={getClientColor(payload.voltage)}
+                                fill={getClientColor(payload.voltage, 'injection')}
                                 stroke="hsl(var(--background))"
                                 strokeWidth={1.5}
                               />

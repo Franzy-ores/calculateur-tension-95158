@@ -1158,7 +1158,7 @@ export const LaboFoisonnementTab = () => {
                           Math.floor(Math.min(200, (voltageDistanceData?.minV ?? 220) - 5)),
                           Math.ceil(Math.max(240, (voltageDistanceData?.minV ?? 230) + 10))
                         ]}
-                        tick={{ fontSize: 10 }} unit=" V" />
+                        tick={{ fontSize: 10 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
                       <Tooltip
                         contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
                         content={({ active, payload }) => {

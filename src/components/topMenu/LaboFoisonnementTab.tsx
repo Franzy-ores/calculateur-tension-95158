@@ -653,7 +653,14 @@ export const LaboFoisonnementTab = () => {
             </div>
           </div>
 
-          {/* Mode simulation */}
+          {/* Bouton éditeur de profils */}
+          <div className="space-y-2 border-t border-border/50 pt-3">
+            <Button size="sm" variant="outline" className="w-full gap-1" onClick={() => setEditorOpen(true)}>
+              <Settings className="h-3.5 w-3.5" /> Modifier les profils
+            </Button>
+          </div>
+
+
           {hasAnyEquipment && (
             <div className="space-y-2 border-t border-border/50 pt-3">
               <Label className="text-xs text-muted-foreground flex items-center gap-1">

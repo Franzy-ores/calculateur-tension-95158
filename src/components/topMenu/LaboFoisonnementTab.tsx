@@ -24,7 +24,7 @@ import { DailyProfileCalculator } from '@/utils/dailyProfileCalculator';
 import type { HourlyVoltageResult, DailySimulationOptions } from '@/types/dailyProfile';
 import type { Node as NetworkNode, Cable, CalculationResult } from '@/types/network';
 import circuitSimulationConfigData from '@/data/circuitSimulationConfig.json';
-import profilesData from '@/data/hourlyProfiles.json';
+
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';

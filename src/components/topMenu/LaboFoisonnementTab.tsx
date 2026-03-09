@@ -159,7 +159,11 @@ export const LaboFoisonnementTab = () => {
     toggleSimulationActive,
     selectedBranchementCableId,
     setSelectedBranchementCableId,
+    dailyProfileCustomProfiles,
+    setDailyProfileCustomProfiles,
   } = useNetworkStore();
+
+  const [editorOpen, setEditorOpen] = useState(false);
 
   const [season, setSeason] = useState<'winter' | 'summer'>('winter');
   const [weather, setWeather] = useState<'sunny' | 'gray'>('sunny');

@@ -595,6 +595,7 @@ export const LaboFoisonnementTab = () => {
   }
 
   return (
+    <>
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 p-4">
       {/* Col 1: Paramètres */}
       <Card className="bg-card/50 backdrop-blur border-violet-500/30">

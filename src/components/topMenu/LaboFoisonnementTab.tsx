@@ -15,8 +15,9 @@ import {
 } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useNetworkStore } from '@/store/networkStore';
-import { FlaskConical, MapPin, Sun, Cloud, AlertTriangle, TrendingUp, TrendingDown, Zap, Ruler, Users, Clock } from 'lucide-react';
+import { FlaskConical, MapPin, Sun, Cloud, AlertTriangle, TrendingUp, TrendingDown, Zap, Ruler, Users, Clock, Settings } from 'lucide-react';
 import { ClockDial } from '@/components/ClockDial';
+import { ProfileVisualEditor } from '@/components/ProfileVisualEditor';
 import { clusterProfiles, getClusterById, DEFAULT_CLUSTER_ID } from '@/data/clusterProfiles';
 import { getFoisonnementPalier, calculateNormalizedDiversity } from '@/utils/foisonnementCalculator';
 import { DailyProfileCalculator } from '@/utils/dailyProfileCalculator';

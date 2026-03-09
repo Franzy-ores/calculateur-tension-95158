@@ -285,7 +285,7 @@ export const LaboFoisonnementTab = () => {
     const calcProd = new DailyProfileCalculator(
       currentProject,
       { ...baseOptions, zeroConsumption: true },
-      profilesData as any, simulationEquipment, isSimulationActive
+      dailyProfileCustomProfiles as any, simulationEquipment, isSimulationActive
     );
     calcProd.calculateDailyVoltages();
     const rawProd = calcProd.getLastRawResults();

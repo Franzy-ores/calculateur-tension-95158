@@ -1529,5 +1529,13 @@ export const LaboFoisonnementTab = () => {
         )}
       </div>
     </div>
+
+      <ProfileVisualEditor
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        profiles={dailyProfileCustomProfiles}
+        onSave={setDailyProfileCustomProfiles}
+      />
+    </div>
   );
 };

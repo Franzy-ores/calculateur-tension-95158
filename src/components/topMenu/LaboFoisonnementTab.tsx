@@ -296,7 +296,7 @@ export const LaboFoisonnementTab = () => {
       rawConsoPure: rawConso,
       rawProdPure: rawProd,
     };
-  }, [currentProject, selectedNodeId, season, weather, selectedClusterId, continuCoeff, dailyProfileOptions, simulationEquipment, isSimulationActive, nResidentialGlobal, profilesData]);
+  }, [currentProject, selectedNodeId, season, weather, selectedClusterId, continuCoeff, dailyProfileOptions, simulationEquipment, isSimulationActive, nResidentialGlobal, dailyProfileCustomProfiles]);
 
   // ─── Power chart data from engine results ────────────────────────────────────
   const powerData = useMemo(() => {

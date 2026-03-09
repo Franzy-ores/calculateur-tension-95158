@@ -266,7 +266,7 @@ export const LaboFoisonnementTab = () => {
 
     // Run 1: Complet (conso + prod) → puissance 24h + tension 24h
     const calcComplet = new DailyProfileCalculator(
-      currentProject, baseOptions, profilesData as any,
+      currentProject, baseOptions, dailyProfileCustomProfiles as any,
       simulationEquipment, isSimulationActive
     );
     const resComplet = calcComplet.calculateDailyVoltages();

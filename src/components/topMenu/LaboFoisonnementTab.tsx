@@ -15,15 +15,16 @@ import {
 } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useNetworkStore } from '@/store/networkStore';
-import { FlaskConical, MapPin, Sun, Cloud, AlertTriangle, TrendingUp, TrendingDown, Zap, Ruler, Users, Clock } from 'lucide-react';
+import { FlaskConical, MapPin, Sun, Cloud, AlertTriangle, TrendingUp, TrendingDown, Zap, Ruler, Users, Clock, Settings } from 'lucide-react';
 import { ClockDial } from '@/components/ClockDial';
+import { ProfileVisualEditor } from '@/components/ProfileVisualEditor';
 import { clusterProfiles, getClusterById, DEFAULT_CLUSTER_ID } from '@/data/clusterProfiles';
 import { getFoisonnementPalier, calculateNormalizedDiversity } from '@/utils/foisonnementCalculator';
 import { DailyProfileCalculator } from '@/utils/dailyProfileCalculator';
 import type { HourlyVoltageResult, DailySimulationOptions } from '@/types/dailyProfile';
 import type { Node as NetworkNode, Cable, CalculationResult } from '@/types/network';
 import circuitSimulationConfigData from '@/data/circuitSimulationConfig.json';
-import profilesData from '@/data/hourlyProfiles.json';
+
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ReferenceArea,
 } from 'recharts';
@@ -158,7 +159,11 @@ export const LaboFoisonnementTab = () => {
     toggleSimulationActive,
     selectedBranchementCableId,
     setSelectedBranchementCableId,
+    dailyProfileCustomProfiles,
+    setDailyProfileCustomProfiles,
   } = useNetworkStore();
+
+  const [editorOpen, setEditorOpen] = useState(false);
 
   const [season, setSeason] = useState<'winter' | 'summer'>('winter');
   const [weather, setWeather] = useState<'sunny' | 'gray'>('sunny');
@@ -261,7 +266,7 @@ export const LaboFoisonnementTab = () => {
 
     // Run 1: Complet (conso + prod) → puissance 24h + tension 24h
     const calcComplet = new DailyProfileCalculator(
-      currentProject, baseOptions, profilesData as any,
+      currentProject, baseOptions, dailyProfileCustomProfiles as any,
       simulationEquipment, isSimulationActive
     );
     const resComplet = calcComplet.calculateDailyVoltages();
@@ -271,7 +276,7 @@ export const LaboFoisonnementTab = () => {
     const calcConso = new DailyProfileCalculator(
       currentProject,
       { ...baseOptions, zeroProduction: true },
-      profilesData as any, simulationEquipment, isSimulationActive
+      dailyProfileCustomProfiles as any, simulationEquipment, isSimulationActive
     );
     calcConso.calculateDailyVoltages();
     const rawConso = calcConso.getLastRawResults();
@@ -280,7 +285,7 @@ export const LaboFoisonnementTab = () => {
     const calcProd = new DailyProfileCalculator(
       currentProject,
       { ...baseOptions, zeroConsumption: true },
-      profilesData as any, simulationEquipment, isSimulationActive
+      dailyProfileCustomProfiles as any, simulationEquipment, isSimulationActive
     );
     calcProd.calculateDailyVoltages();
     const rawProd = calcProd.getLastRawResults();
@@ -291,7 +296,7 @@ export const LaboFoisonnementTab = () => {
       rawConsoPure: rawConso,
       rawProdPure: rawProd,
     };
-  }, [currentProject, selectedNodeId, season, weather, selectedClusterId, continuCoeff, dailyProfileOptions, simulationEquipment, isSimulationActive, nResidentialGlobal, profilesData]);
+  }, [currentProject, selectedNodeId, season, weather, selectedClusterId, continuCoeff, dailyProfileOptions, simulationEquipment, isSimulationActive, nResidentialGlobal, dailyProfileCustomProfiles]);
 
   // ─── Power chart data from engine results ────────────────────────────────────
   const powerData = useMemo(() => {
@@ -590,6 +595,7 @@ export const LaboFoisonnementTab = () => {
   }
 
   return (
+    <>
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 p-4">
       {/* Col 1: Paramètres */}
       <Card className="bg-card/50 backdrop-blur border-violet-500/30">
@@ -648,7 +654,14 @@ export const LaboFoisonnementTab = () => {
             </div>
           </div>
 
-          {/* Mode simulation */}
+          {/* Bouton éditeur de profils */}
+          <div className="space-y-2 border-t border-border/50 pt-3">
+            <Button size="sm" variant="outline" className="w-full gap-1" onClick={() => setEditorOpen(true)}>
+              <Settings className="h-3.5 w-3.5" /> Modifier les profils
+            </Button>
+          </div>
+
+
           {hasAnyEquipment && (
             <div className="space-y-2 border-t border-border/50 pt-3">
               <Label className="text-xs text-muted-foreground flex items-center gap-1">
@@ -1517,5 +1530,13 @@ export const LaboFoisonnementTab = () => {
         )}
       </div>
     </div>
+
+    <ProfileVisualEditor
+      open={editorOpen}
+      onOpenChange={setEditorOpen}
+      profiles={dailyProfileCustomProfiles}
+      onSave={setDailyProfileCustomProfiles}
+    />
+    </>
   );
 };

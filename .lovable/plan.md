@@ -1,27 +1,35 @@
 
 
-## Plan: Connecter les profils du store + ajouter bouton éditeur dans le Labo
+# Diagnostic : hourlyProfiles.json non reactif dans le Labo
 
-### Problème
-Le Labo utilise `profilesData` (import statique JSON) au lieu de `dailyProfileCustomProfiles` du store Zustand. Les modifications faites via l'éditeur de profils ne sont donc pas reflétées.
+## Probleme identifie
 
-### Modifications — `src/components/topMenu/LaboFoisonnementTab.tsx`
+Le fichier `hourlyProfiles.json` **est bien utilise** par le `DailyProfileCalculator` (import statique ligne 6 de `dailyProfileCalculator.ts`). Cependant, le Labo ne reagit pas aux modifications pour deux raisons :
 
-**1. Remplacer l'import statique par le store**
-- Supprimer `import profilesData from '@/data/hourlyProfiles.json'`
-- Extraire `dailyProfileCustomProfiles` et `setDailyProfileCustomProfiles` depuis `useNetworkStore()`
-- Passer `dailyProfileCustomProfiles` aux 3 constructeurs `DailyProfileCalculator` (lignes 264, 274, 283) au lieu de `profilesData as any`
-- Remplacer `profilesData` par `dailyProfileCustomProfiles` dans les deps du `useMemo` (ligne 294)
+1. **Import indirect** : Les profils sont importes dans `dailyProfileCalculator.ts`, pas dans `LaboFoisonnementTab.tsx`. Le composant Labo passe `undefined` comme `customProfiles` (ligne 242), laissant le calculator utiliser son import interne.
 
-**2. Ajouter le bouton éditeur de profils + dialog**
-- Importer `ProfileVisualEditor` et l'icône `Settings`
-- Ajouter un state `editorOpen`
-- Placer un bouton "Modifier les profils" dans la zone de contrôle (près des sélecteurs saison/météo)
-- Rendre le composant `<ProfileVisualEditor>` avec `dailyProfileCustomProfiles` / `setDailyProfileCustomProfiles`
+2. **useMemo aveugle** : Le `useMemo` (ligne 272) qui lance les 3 runs a pour dependances `[currentProject, selectedNodeId, season, weather, ...]` — les profils JSON n'y figurent pas. Meme si Vite HMR recharge le module, le memo ne se re-execute pas car aucune de ses dependances reactives n'a change.
 
-### Fichiers modifiés
+En resume : vous modifiez le JSON, Vite le recharge, mais le `useMemo` du Labo ne sait pas qu'il doit recalculer.
 
-| Fichier | Action |
+## Correction
+
+### `LaboFoisonnementTab.tsx`
+
+1. **Importer directement** `hourlyProfiles.json` dans le composant Labo
+2. **Passer** cet import comme `customProfiles` aux 3 constructeurs `DailyProfileCalculator` (au lieu de `undefined`)
+3. **Ajouter** l'objet profiles aux dependances du `useMemo` principal
+
+```text
+Avant:  new DailyProfileCalculator(currentProject, baseOptions, undefined, ...)
+Apres:  new DailyProfileCalculator(currentProject, baseOptions, profilesData, ...)
+```
+
+Cela rend le Labo reactif a toute modification du fichier JSON.
+
+### Fichier modifie
+
+| Fichier | Modification |
 |---|---|
-| `src/components/topMenu/LaboFoisonnementTab.tsx` | Remplacer profilesData par store + ajouter bouton éditeur |
+| `src/components/topMenu/LaboFoisonnementTab.tsx` | +1 import hourlyProfiles.json, passer comme customProfiles aux 3 runs, ajouter aux deps useMemo |
 

@@ -1178,7 +1178,7 @@ export const LaboFoisonnementTab = () => {
                       <Clock className="h-4 w-4 text-amber-500" />
                       Tension vs Distance — Profil horaire (continu)
                       <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-500">
-                        {clockHour}h
+                        {clockHour}h • Busbar {busbarVoltageHourly.toFixed(1)}V
                       </Badge>
                       {hourFois !== undefined && (
                         <Badge variant="secondary" className="text-[10px]">

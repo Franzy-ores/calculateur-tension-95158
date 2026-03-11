@@ -1013,7 +1013,9 @@ export const LaboFoisonnementTab = () => {
                     <ReferenceArea yAxisId="left" y1={218.5} y2={241.5} fill="hsl(var(--muted))" fillOpacity={0.2} />
                     <ReferenceLine yAxisId="left" y={207} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
                     <ReferenceLine yAxisId="left" y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
-                    <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} />
+                    <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} label={{ value: '230V', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
+                    <ReferenceLine yAxisId="left" y={voltageDistanceData.busbarVoltageCharge} stroke="hsl(280, 70%, 50%)" strokeDasharray="6 3" strokeWidth={1.5}
+                      label={{ value: `Busbar ${voltageDistanceData.busbarVoltageCharge.toFixed(1)}V`, fontSize: 9, fill: 'hsl(280, 70%, 50%)' }} />
                     {voltageDistanceData.minBranches.map((branch) => (
                       <Line key={`min-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
                         type="monotone" dataKey="voltage" name={branch.label}

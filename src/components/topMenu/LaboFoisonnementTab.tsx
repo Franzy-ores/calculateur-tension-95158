@@ -1013,9 +1013,10 @@ export const LaboFoisonnementTab = () => {
                       }}
                     />
                     <Legend wrapperStyle={{ fontSize: 10 }} />
-                    <ReferenceArea yAxisId="left" y1={218.5} y2={241.5} fill="hsl(var(--muted))" fillOpacity={0.2} />
-                    <ReferenceLine yAxisId="left" y={207} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
-                    <ReferenceLine yAxisId="left" y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
+                    <ReferenceLine yAxisId="left" y={211.6} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />
+                    <ReferenceLine yAxisId="left" y={248.4} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />
+                    <ReferenceLine yAxisId="left" y={207} stroke="hsl(0, 72%, 51%)" strokeWidth={1.5} />
+                    <ReferenceLine yAxisId="left" y={253} stroke="hsl(0, 72%, 51%)" strokeWidth={1.5} />
                     <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} label={{ value: '230V', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
                     <ReferenceLine yAxisId="left" y={voltageDistanceData.busbarVoltageCharge} stroke="hsl(280, 70%, 50%)" strokeDasharray="6 3" strokeWidth={1.5}
                       label={{ value: `Busbar ${voltageDistanceData.busbarVoltageCharge.toFixed(1)}V`, fontSize: 9, fill: 'hsl(280, 70%, 50%)' }} />

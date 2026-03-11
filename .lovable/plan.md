@@ -1,35 +1,52 @@
 
 
-# Diagnostic : hourlyProfiles.json non reactif dans le Labo
+## Plan: Échelle Y fixe et lignes de référence normalisées pour les graphes Tension vs Distance
 
-## Probleme identifie
+### Situation actuelle
 
-Le fichier `hourlyProfiles.json` **est bien utilise** par le `DailyProfileCalculator` (import statique ligne 6 de `dailyProfileCalculator.ts`). Cependant, le Labo ne reagit pas aux modifications pour deux raisons :
+Les 3 graphes Tension vs Distance (pire cas charge, pire cas injection, profil horaire) ont chacun un domaine Y **dynamique** qui s'adapte aux données. Les lignes de référence existantes sont :
+- `ReferenceArea` à 218.5V–241.5V (±5%, zone grisée)
+- `ReferenceLine` à 207V et 253V (±10%, rouge pointillé)
+- `ReferenceLine` à 230V (gris)
 
-1. **Import indirect** : Les profils sont importes dans `dailyProfileCalculator.ts`, pas dans `LaboFoisonnementTab.tsx`. Le composant Labo passe `undefined` comme `customProfiles` (ligne 242), laissant le calculator utiliser son import interne.
+### Modifications demandées
 
-2. **useMemo aveugle** : Le `useMemo` (ligne 272) qui lance les 3 runs a pour dependances `[currentProject, selectedNodeId, season, weather, ...]` — les profils JSON n'y figurent pas. Meme si Vite HMR recharge le module, le memo ne se re-execute pas car aucune de ses dependances reactives n'a change.
+**Axe Y fixe** : Remplacer les 3 domaines dynamiques par un domaine fixe identique, centré sur 230V. Domaine proposé : **[205, 255]** pour visualiser confortablement les seuils ±10%.
 
-En resume : vous modifiez le JSON, Vite le recharge, mais le `useMemo` du Labo ne sait pas qu'il doit recalculer.
+**Lignes de référence normalisées** (sur les 3 graphes) :
+- **±8% (211.6V / 248.4V)** : rouge pointillé (`strokeDasharray="6 4"`)
+- **±10% (207V / 253V)** : rouge continu (trait plein, `strokeWidth={1.5}`)
+- Supprimer la `ReferenceArea` 218.5–241.5 (l'ancien ±5%)
+- Conserver la ligne 230V et la ligne Busbar
 
-## Correction
+### Emplacements dans `LaboFoisonnementTab.tsx`
 
-### `LaboFoisonnementTab.tsx`
+| Graphe | Lignes YAxis domain | Lignes ReferenceArea/ReferenceLine |
+|---|---|---|
+| Pire cas charge | ~982 | ~1016–1019 |
+| Pire cas injection | ~1068 | ~1102–1105 |
+| Profil horaire | ~1205 | ~1239–1242 |
 
-1. **Importer directement** `hourlyProfiles.json` dans le composant Labo
-2. **Passer** cet import comme `customProfiles` aux 3 constructeurs `DailyProfileCalculator` (au lieu de `undefined`)
-3. **Ajouter** l'objet profiles aux dependances du `useMemo` principal
+### Détail des changements (identique sur les 3 graphes)
 
-```text
-Avant:  new DailyProfileCalculator(currentProject, baseOptions, undefined, ...)
-Apres:  new DailyProfileCalculator(currentProject, baseOptions, profilesData, ...)
+```tsx
+// YAxis : domaine fixe
+<YAxis yAxisId="left" domain={[205, 255]} ... />
+
+// Supprimer ReferenceArea y1={218.5} y2={241.5}
+
+// ±8% rouge pointillé
+<ReferenceLine yAxisId="left" y={211.6} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />
+<ReferenceLine yAxisId="left" y={248.4} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />
+
+// ±10% rouge continu
+<ReferenceLine yAxisId="left" y={207} stroke="hsl(0, 72%, 51%)" strokeWidth={1.5} />
+<ReferenceLine yAxisId="left" y={253} stroke="hsl(0, 72%, 51%)" strokeWidth={1.5} />
 ```
 
-Cela rend le Labo reactif a toute modification du fichier JSON.
-
-### Fichier modifie
+### Fichier modifié
 
 | Fichier | Modification |
 |---|---|
-| `src/components/topMenu/LaboFoisonnementTab.tsx` | +1 import hourlyProfiles.json, passer comme customProfiles aux 3 runs, ajouter aux deps useMemo |
+| `src/components/topMenu/LaboFoisonnementTab.tsx` | Domaine Y fixe [205, 255] + lignes ±8% pointillé rouge + ±10% continu rouge, sur les 3 graphes tension vs distance |
 

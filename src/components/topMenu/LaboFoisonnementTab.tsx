@@ -424,6 +424,8 @@ export const LaboFoisonnementTab = () => {
       maxV: globalMaxV,
       minBranches: buildBranchData(rawConsoPure, globalMinHour),
       maxBranches: buildBranchData(rawProdPure, globalMaxHour),
+      busbarVoltageCharge: rawConsoPure[globalMinHour]?.virtualBusbar?.voltage_V ?? 230,
+      busbarVoltageInjection: rawProdPure[globalMaxHour]?.virtualBusbar?.voltage_V ?? 230,
     };
   }, [networkPaths, rawConsoPure, rawProdPure, powerData]);
 

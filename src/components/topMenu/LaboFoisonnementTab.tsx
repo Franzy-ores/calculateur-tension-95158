@@ -328,7 +328,7 @@ export const LaboFoisonnementTab = () => {
       V_busbar: +(rawContinu[i]?.virtualBusbar?.voltage_V ?? 230).toFixed(2),
       foisonnement: +h.chargesResidentialFoisonnement.toFixed(2),
     }));
-  }, [voltageContinu]);
+  }, [voltageContinu, rawContinu]);
 
   // ─── Voltage-Distance data ─────────────────────────────────────────────────────
   const networkPaths = useMemo(() => {

@@ -1199,6 +1199,9 @@ export const LaboFoisonnementTab = () => {
                           fois. {hourFois.toFixed(1)}%
                         </Badge>
                       )}
+                      <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto" onClick={() => setFullscreenHourlyOpen(true)}>
+                        <Maximize2 className="h-3.5 w-3.5" />
+                      </Button>
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="px-4 pb-4">

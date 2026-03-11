@@ -318,13 +318,14 @@ export const LaboFoisonnementTab = () => {
   // ─── Voltage 24h chart data ──────────────────────────────────────────────────
   const voltage24hData = useMemo(() => {
     if (voltageContinu.length === 0) return [];
-    return voltageContinu.map((h) => ({
+    return voltageContinu.map((h, i) => ({
       hour: h.hour,
       label: `${h.hour}h`,
       V_A: +h.voltageA_V.toFixed(2),
       V_B: +h.voltageB_V.toFixed(2),
       V_C: +h.voltageC_V.toFixed(2),
       V_continu: +h.voltageAvg_V.toFixed(2),
+      V_busbar: +(rawContinu[i]?.virtualBusbar?.voltage_V ?? 230).toFixed(2),
       foisonnement: +h.chargesResidentialFoisonnement.toFixed(2),
     }));
   }, [voltageContinu]);

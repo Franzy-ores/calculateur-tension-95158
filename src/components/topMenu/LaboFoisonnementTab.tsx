@@ -1568,6 +1568,7 @@ export const LaboFoisonnementTab = () => {
     />
 
     {/* ─── Dialog plein écran : Pire cas charge ─────────────── */}
+    {voltageDistanceData && (
     <Dialog open={fullscreenChargeOpen} onOpenChange={setFullscreenChargeOpen}>
       <DialogContent className="max-w-[95vw] max-h-[95vh] w-full overflow-auto">
         <DialogHeader>
@@ -1626,6 +1627,7 @@ export const LaboFoisonnementTab = () => {
         </ResponsiveContainer>
       </DialogContent>
     </Dialog>
+    )}
 
     {/* ─── Dialog plein écran : Pire cas injection ─────────────── */}
     <Dialog open={fullscreenInjectionOpen} onOpenChange={setFullscreenInjectionOpen}>

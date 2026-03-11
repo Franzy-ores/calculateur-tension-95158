@@ -1,32 +1,35 @@
 
 
-## Plan: Afficher la tension busbar sur le noeud source
+# Diagnostic : hourlyProfiles.json non reactif dans le Labo
 
-### Problème
+## Probleme identifie
 
-Dans `MapView.tsx` ligne 763, le noeud source affiche `tensionCible` (tension consigne, ex: 230V) car le bloc de calcul (ligne 767) est ignoré pour les noeuds source (`!node.isSource`). La tension réelle au busbar (`virtualBusbar.voltage_V`), qui tient compte de l'impédance du transfo et des flux de puissance, n'est pas utilisée.
+Le fichier `hourlyProfiles.json` **est bien utilise** par le `DailyProfileCalculator` (import statique ligne 6 de `dailyProfileCalculator.ts`). Cependant, le Labo ne reagit pas aux modifications pour deux raisons :
 
-### Modification — `src/components/MapView.tsx`
+1. **Import indirect** : Les profils sont importes dans `dailyProfileCalculator.ts`, pas dans `LaboFoisonnementTab.tsx`. Le composant Labo passe `undefined` comme `customProfiles` (ligne 242), laissant le calculator utiliser son import interne.
 
-Après la ligne 763 (`let nodeVoltage = sourceVoltage;`), ajouter une extraction de la tension busbar calculée pour le noeud source :
+2. **useMemo aveugle** : Le `useMemo` (ligne 272) qui lance les 3 runs a pour dependances `[currentProject, selectedNodeId, season, weather, ...]` — les profils JSON n'y figurent pas. Meme si Vite HMR recharge le module, le memo ne se re-execute pas car aucune de ses dependances reactives n'a change.
 
-```ts
-let nodeVoltage = sourceVoltage;
+En resume : vous modifiez le JSON, Vite le recharge, mais le `useMemo` du Labo ne sait pas qu'il doit recalculer.
 
-// Pour le noeud source, utiliser la tension busbar calculée si disponible
-if (node.isSource) {
-  const busbarVoltage = resultsToUse[selectedScenario]?.virtualBusbar?.voltage_V;
-  if (busbarVoltage) {
-    nodeVoltage = busbarVoltage;
-  }
-}
+## Correction
+
+### `LaboFoisonnementTab.tsx`
+
+1. **Importer directement** `hourlyProfiles.json` dans le composant Labo
+2. **Passer** cet import comme `customProfiles` aux 3 constructeurs `DailyProfileCalculator` (au lieu de `undefined`)
+3. **Ajouter** l'objet profiles aux dependances du `useMemo` principal
+
+```text
+Avant:  new DailyProfileCalculator(currentProject, baseOptions, undefined, ...)
+Apres:  new DailyProfileCalculator(currentProject, baseOptions, profilesData, ...)
 ```
 
-Cela garantit que le tooltip et l'affichage de tension sur le noeud source reflètent la tension busbar réelle (qui peut monter ou descendre selon charge/production) au lieu de la tension consigne fixe.
+Cela rend le Labo reactif a toute modification du fichier JSON.
 
-### Fichier modifié
+### Fichier modifie
 
 | Fichier | Modification |
 |---|---|
-| `src/components/MapView.tsx` | Utiliser `virtualBusbar.voltage_V` pour `nodeVoltage` du noeud source |
+| `src/components/topMenu/LaboFoisonnementTab.tsx` | +1 import hourlyProfiles.json, passer comme customProfiles aux 3 runs, ajouter aux deps useMemo |
 

@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useNetworkStore } from '@/store/networkStore';
-import { FlaskConical, MapPin, Sun, Cloud, AlertTriangle, TrendingUp, TrendingDown, Zap, Ruler, Users, Clock, Settings } from 'lucide-react';
+import { FlaskConical, MapPin, Sun, Cloud, AlertTriangle, TrendingUp, TrendingDown, Zap, Ruler, Users, Clock, Settings, Maximize2 } from 'lucide-react';
 import { ClockDial } from '@/components/ClockDial';
 import { ProfileVisualEditor } from '@/components/ProfileVisualEditor';
 import { clusterProfiles, getClusterById, DEFAULT_CLUSTER_ID } from '@/data/clusterProfiles';
@@ -171,6 +171,9 @@ export const LaboFoisonnementTab = () => {
   const [showNeutralCurrent, setShowNeutralCurrent] = useState(false);
   const [showClientPoints, setShowClientPoints] = useState(false);
   const [clockHour, setClockHour] = useState(12);
+  const [fullscreenChargeOpen, setFullscreenChargeOpen] = useState(false);
+  const [fullscreenInjectionOpen, setFullscreenInjectionOpen] = useState(false);
+  const [fullscreenHourlyOpen, setFullscreenHourlyOpen] = useState(false);
 
   // Simulation equipment counters
   const srg2Count = simulationEquipment.srg2Devices?.filter(s => s.enabled).length || 0;
@@ -970,6 +973,9 @@ export const LaboFoisonnementTab = () => {
                   <Badge variant="outline" className="text-[10px] border-blue-500/50 text-blue-500">
                     {voltageDistanceData.minHour}h • Vmin {voltageDistanceData.minV.toFixed(1)}V • Busbar {voltageDistanceData.busbarVoltageCharge.toFixed(1)}V
                   </Badge>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto" onClick={() => setFullscreenChargeOpen(true)}>
+                    <Maximize2 className="h-3.5 w-3.5" />
+                  </Button>
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-4">
@@ -1057,6 +1063,9 @@ export const LaboFoisonnementTab = () => {
                   <Badge variant="outline" className="text-[10px] border-emerald-500/50 text-emerald-500">
                     {voltageDistanceData.maxHour}h • Vmax {voltageDistanceData.maxV.toFixed(1)}V • Busbar {voltageDistanceData.busbarVoltageInjection.toFixed(1)}V
                   </Badge>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto" onClick={() => setFullscreenInjectionOpen(true)}>
+                    <Maximize2 className="h-3.5 w-3.5" />
+                  </Button>
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-4">
@@ -1190,6 +1199,9 @@ export const LaboFoisonnementTab = () => {
                           fois. {hourFois.toFixed(1)}%
                         </Badge>
                       )}
+                      <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto" onClick={() => setFullscreenHourlyOpen(true)}>
+                        <Maximize2 className="h-3.5 w-3.5" />
+                      </Button>
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="px-4 pb-4">
@@ -1554,6 +1566,184 @@ export const LaboFoisonnementTab = () => {
       profiles={dailyProfileCustomProfiles}
       onSave={setDailyProfileCustomProfiles}
     />
+
+    {/* ─── Dialog plein écran : Pire cas charge ─────────────── */}
+    <Dialog open={fullscreenChargeOpen} onOpenChange={setFullscreenChargeOpen}>
+      <DialogContent className="max-w-[95vw] max-h-[95vh] w-full overflow-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-sm">
+            <Ruler className="h-4 w-4 text-blue-500" />
+            Tension vs Distance — Pire cas charge (sans production)
+            <Badge variant="outline" className="text-[10px] border-blue-500/50 text-blue-500">
+              {voltageDistanceData.minHour}h • Vmin {voltageDistanceData.minV.toFixed(1)}V • Busbar {voltageDistanceData.busbarVoltageCharge.toFixed(1)}V
+            </Badge>
+          </DialogTitle>
+        </DialogHeader>
+        <ResponsiveContainer width="100%" height={550}>
+          <LineChart>
+            <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+            <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 11 }}
+              label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 11 }} />
+            <YAxis yAxisId="left" domain={[205, 255]}
+              tick={{ fontSize: 11 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
+            {showNeutralCurrent && (
+              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} unit=" A"
+                label={{ value: 'I neutre (A)', angle: 90, position: 'insideRight', offset: 10, fontSize: 11 }} />
+            )}
+            <Tooltip contentStyle={{ fontSize: 12, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }} />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <ReferenceLine yAxisId="left" y={211.6} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />
+            <ReferenceLine yAxisId="left" y={248.4} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />
+            <ReferenceLine yAxisId="left" y={207} stroke="hsl(0, 72%, 51%)" strokeWidth={1.5} />
+            <ReferenceLine yAxisId="left" y={253} stroke="hsl(0, 72%, 51%)" strokeWidth={1.5} />
+            <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} label={{ value: '230V', fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
+            <ReferenceLine yAxisId="left" y={voltageDistanceData.busbarVoltageCharge} stroke="hsl(280, 70%, 50%)" strokeDasharray="6 3" strokeWidth={1.5}
+              label={{ value: `Busbar ${voltageDistanceData.busbarVoltageCharge.toFixed(1)}V`, fontSize: 10, fill: 'hsl(280, 70%, 50%)' }} />
+            {voltageDistanceData.minBranches.map((branch) => (
+              <Line key={`fs-min-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
+                type="monotone" dataKey="voltage" name={branch.label}
+                stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+            ))}
+            {showPerPhaseDistance && voltageDistanceData.minBranches.map((branch) => (
+              <>
+                <Line key={`fs-A-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_A > 0)}
+                  type="monotone" dataKey="voltage_A" name={`${branch.label} A`}
+                  stroke="hsl(0, 75%, 55%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
+                <Line key={`fs-B-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_B > 0)}
+                  type="monotone" dataKey="voltage_B" name={`${branch.label} B`}
+                  stroke="hsl(142, 76%, 36%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
+                <Line key={`fs-C-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_C > 0)}
+                  type="monotone" dataKey="voltage_C" name={`${branch.label} C`}
+                  stroke="hsl(217, 91%, 60%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
+              </>
+            ))}
+            {showNeutralCurrent && voltageDistanceData.minBranches.map((branch) => (
+              <Line key={`fs-IN-${branch.branchId}`} yAxisId="right" data={branch.points}
+                type="monotone" dataKey="I_neutral" name={`I_N ${branch.label}`}
+                stroke="hsl(35, 95%, 55%)" strokeWidth={1.5} dot={{ r: 2 }} strokeDasharray="6 3" />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </DialogContent>
+    </Dialog>
+
+    {/* ─── Dialog plein écran : Pire cas injection ─────────────── */}
+    <Dialog open={fullscreenInjectionOpen} onOpenChange={setFullscreenInjectionOpen}>
+      <DialogContent className="max-w-[95vw] max-h-[95vh] w-full overflow-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-sm">
+            <Ruler className="h-4 w-4 text-emerald-500" />
+            Tension vs Distance — Pire cas injection (sans consommation)
+            <Badge variant="outline" className="text-[10px] border-emerald-500/50 text-emerald-500">
+              {voltageDistanceData.maxHour}h • Vmax {voltageDistanceData.maxV.toFixed(1)}V • Busbar {voltageDistanceData.busbarVoltageInjection.toFixed(1)}V
+            </Badge>
+          </DialogTitle>
+        </DialogHeader>
+        <ResponsiveContainer width="100%" height={550}>
+          <LineChart>
+            <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+            <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 11 }}
+              label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 11 }} />
+            <YAxis yAxisId="left" domain={[205, 255]}
+              tick={{ fontSize: 11 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
+            {showNeutralCurrent && (
+              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} unit=" A"
+                label={{ value: 'I neutre (A)', angle: 90, position: 'insideRight', offset: 10, fontSize: 11 }} />
+            )}
+            <Tooltip contentStyle={{ fontSize: 12, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }} />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <ReferenceLine yAxisId="left" y={211.6} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />
+            <ReferenceLine yAxisId="left" y={248.4} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />
+            <ReferenceLine yAxisId="left" y={207} stroke="hsl(0, 72%, 51%)" strokeWidth={1.5} />
+            <ReferenceLine yAxisId="left" y={253} stroke="hsl(0, 72%, 51%)" strokeWidth={1.5} />
+            <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} label={{ value: '230V', fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
+            <ReferenceLine yAxisId="left" y={voltageDistanceData.busbarVoltageInjection} stroke="hsl(280, 70%, 50%)" strokeDasharray="6 3" strokeWidth={1.5}
+              label={{ value: `Busbar ${voltageDistanceData.busbarVoltageInjection.toFixed(1)}V`, fontSize: 10, fill: 'hsl(280, 70%, 50%)' }} />
+            {voltageDistanceData.maxBranches.map((branch) => (
+              <Line key={`fs-max-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
+                type="monotone" dataKey="voltage" name={branch.label}
+                stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+            ))}
+            {showPerPhaseDistance && voltageDistanceData.maxBranches.map((branch) => (
+              <>
+                <Line key={`fs-max-A-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_A > 0)}
+                  type="monotone" dataKey="voltage_A" name={`${branch.label} A`}
+                  stroke="hsl(0, 75%, 55%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
+                <Line key={`fs-max-B-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_B > 0)}
+                  type="monotone" dataKey="voltage_B" name={`${branch.label} B`}
+                  stroke="hsl(142, 76%, 36%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
+                <Line key={`fs-max-C-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_C > 0)}
+                  type="monotone" dataKey="voltage_C" name={`${branch.label} C`}
+                  stroke="hsl(217, 91%, 60%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
+              </>
+            ))}
+            {showNeutralCurrent && voltageDistanceData.maxBranches.map((branch) => (
+              <Line key={`fs-max-IN-${branch.branchId}`} yAxisId="right" data={branch.points}
+                type="monotone" dataKey="I_neutral" name={`I_N ${branch.label}`}
+                stroke="hsl(35, 95%, 55%)" strokeWidth={1.5} dot={{ r: 2 }} strokeDasharray="6 3" />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </DialogContent>
+    </Dialog>
+
+    {/* ─── Dialog plein écran : Profil horaire ─────────────── */}
+    <Dialog open={fullscreenHourlyOpen} onOpenChange={setFullscreenHourlyOpen}>
+      <DialogContent className="max-w-[95vw] max-h-[95vh] w-full overflow-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-sm">
+            <Clock className="h-4 w-4 text-amber-500" />
+            Tension vs Distance — Profil horaire (continu)
+            <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-500">
+              {clockHour}h
+            </Badge>
+          </DialogTitle>
+        </DialogHeader>
+        <div className="flex items-start gap-4">
+          <div className="shrink-0 flex flex-col items-center pt-4">
+            <ClockDial hour={clockHour} onChange={setClockHour} size={150} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <ResponsiveContainer width="100%" height={550}>
+              <LineChart>
+                <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 11 }}
+                  label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 11 }} />
+                <YAxis yAxisId="left" domain={[205, 255]}
+                  tick={{ fontSize: 11 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
+                {showNeutralCurrent && (
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} unit=" A"
+                    label={{ value: 'I neutre (A)', angle: 90, position: 'insideRight', offset: 10, fontSize: 11 }} />
+                )}
+                <Tooltip contentStyle={{ fontSize: 12, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <ReferenceLine yAxisId="left" y={211.6} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />
+                <ReferenceLine yAxisId="left" y={248.4} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />
+                <ReferenceLine yAxisId="left" y={207} stroke="hsl(0, 72%, 51%)" strokeWidth={1.5} />
+                <ReferenceLine yAxisId="left" y={253} stroke="hsl(0, 72%, 51%)" strokeWidth={1.5} />
+                <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} label={{ value: '230V', fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
+                {(() => {
+                  if (rawContinu.length === 0 || networkPaths.length === 0) return null;
+                  const hourlyBranchesFS = networkPaths.map((branch, idx) => ({
+                    ...branch,
+                    points: branch.points.map((p) => {
+                      const perPhase = getNodeVoltagePerPhase(rawContinu, p.nodeId, clockHour);
+                      return { ...p, voltage: perPhase.avg, voltage_A: perPhase.A, voltage_B: perPhase.B, voltage_C: perPhase.C };
+                    }),
+                    color: BRANCH_COLORS[idx % BRANCH_COLORS.length],
+                  }));
+                  return hourlyBranchesFS.map((branch) => (
+                    <Line key={`fs-hourly-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
+                      type="monotone" dataKey="voltage" name={branch.label}
+                      stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                  ));
+                })()}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
     </>
   );
 };

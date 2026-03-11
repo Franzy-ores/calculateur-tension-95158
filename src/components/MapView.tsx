@@ -764,6 +764,14 @@ export const MapView = () => {
       let isOutOfCompliance = false;
       let nominalDropPercent = 0; // Déclarer la variable pour la conformité (signée)
       
+      // Pour le noeud source, utiliser la tension busbar calculée si disponible
+      if (node.isSource) {
+        const busbarVoltage = resultsToUse[selectedScenario]?.virtualBusbar?.voltage_V;
+        if (busbarVoltage) {
+          nodeVoltage = busbarVoltage;
+        }
+      }
+      
       if (calculationResults[selectedScenario] && !node.isSource) {
         const results = resultsToUse[selectedScenario];
         const nodeData = results?.nodeVoltageDrops?.find(n => n.nodeId === node.id);

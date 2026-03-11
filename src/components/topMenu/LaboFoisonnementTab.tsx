@@ -1051,7 +1051,7 @@ export const LaboFoisonnementTab = () => {
                   <Ruler className="h-4 w-4 text-emerald-500" />
                   Tension vs Distance — Pire cas injection (sans consommation)
                   <Badge variant="outline" className="text-[10px] border-emerald-500/50 text-emerald-500">
-                    {voltageDistanceData.maxHour}h • {voltageDistanceData.maxV.toFixed(1)}V
+                    {voltageDistanceData.maxHour}h • Vmax {voltageDistanceData.maxV.toFixed(1)}V • Busbar {voltageDistanceData.busbarVoltageInjection.toFixed(1)}V
                   </Badge>
                 </CardTitle>
               </CardHeader>

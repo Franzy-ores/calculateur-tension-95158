@@ -973,6 +973,9 @@ export const LaboFoisonnementTab = () => {
                   <Badge variant="outline" className="text-[10px] border-blue-500/50 text-blue-500">
                     {voltageDistanceData.minHour}h • Vmin {voltageDistanceData.minV.toFixed(1)}V • Busbar {voltageDistanceData.busbarVoltageCharge.toFixed(1)}V
                   </Badge>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto" onClick={() => setFullscreenChargeOpen(true)}>
+                    <Maximize2 className="h-3.5 w-3.5" />
+                  </Button>
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-4">

@@ -318,16 +318,17 @@ export const LaboFoisonnementTab = () => {
   // ─── Voltage 24h chart data ──────────────────────────────────────────────────
   const voltage24hData = useMemo(() => {
     if (voltageContinu.length === 0) return [];
-    return voltageContinu.map((h) => ({
+    return voltageContinu.map((h, i) => ({
       hour: h.hour,
       label: `${h.hour}h`,
       V_A: +h.voltageA_V.toFixed(2),
       V_B: +h.voltageB_V.toFixed(2),
       V_C: +h.voltageC_V.toFixed(2),
       V_continu: +h.voltageAvg_V.toFixed(2),
+      V_busbar: +(rawContinu[i]?.virtualBusbar?.voltage_V ?? 230).toFixed(2),
       foisonnement: +h.chargesResidentialFoisonnement.toFixed(2),
     }));
-  }, [voltageContinu]);
+  }, [voltageContinu, rawContinu]);
 
   // ─── Voltage-Distance data ─────────────────────────────────────────────────────
   const networkPaths = useMemo(() => {
@@ -424,6 +425,8 @@ export const LaboFoisonnementTab = () => {
       maxV: globalMaxV,
       minBranches: buildBranchData(rawConsoPure, globalMinHour),
       maxBranches: buildBranchData(rawProdPure, globalMaxHour),
+      busbarVoltageCharge: rawConsoPure[globalMinHour]?.virtualBusbar?.voltage_V ?? 230,
+      busbarVoltageInjection: rawProdPure[globalMaxHour]?.virtualBusbar?.voltage_V ?? 230,
     };
   }, [networkPaths, rawConsoPure, rawProdPure, powerData]);
 
@@ -906,6 +909,7 @@ export const LaboFoisonnementTab = () => {
                   <ReferenceLine y={218.5} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.5} />
                   <ReferenceLine y={241.5} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.5} />
                   <ReferenceLine y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} label={{ value: '230V', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
+                  <Line type="monotone" dataKey="V_busbar" name="Busbar" stroke="hsl(280, 70%, 50%)" strokeWidth={2} dot={false} strokeDasharray="6 3" />
                   <Line type="monotone" dataKey="V_A" name="Phase A" stroke="hsl(0, 75%, 55%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
                   <Line type="monotone" dataKey="V_B" name="Phase B" stroke="hsl(142, 76%, 36%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
                   <Line type="monotone" dataKey="V_C" name="Phase C" stroke="hsl(217, 91%, 60%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
@@ -961,7 +965,7 @@ export const LaboFoisonnementTab = () => {
                   <Ruler className="h-4 w-4 text-blue-500" />
                   Tension vs Distance — Pire cas charge (sans production)
                   <Badge variant="outline" className="text-[10px] border-blue-500/50 text-blue-500">
-                    {voltageDistanceData.minHour}h • {voltageDistanceData.minV.toFixed(1)}V
+                    {voltageDistanceData.minHour}h • Vmin {voltageDistanceData.minV.toFixed(1)}V • Busbar {voltageDistanceData.busbarVoltageCharge.toFixed(1)}V
                   </Badge>
                 </CardTitle>
               </CardHeader>
@@ -1009,7 +1013,9 @@ export const LaboFoisonnementTab = () => {
                     <ReferenceArea yAxisId="left" y1={218.5} y2={241.5} fill="hsl(var(--muted))" fillOpacity={0.2} />
                     <ReferenceLine yAxisId="left" y={207} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
                     <ReferenceLine yAxisId="left" y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
-                    <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} />
+                    <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} label={{ value: '230V', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
+                    <ReferenceLine yAxisId="left" y={voltageDistanceData.busbarVoltageCharge} stroke="hsl(280, 70%, 50%)" strokeDasharray="6 3" strokeWidth={1.5}
+                      label={{ value: `Busbar ${voltageDistanceData.busbarVoltageCharge.toFixed(1)}V`, fontSize: 9, fill: 'hsl(280, 70%, 50%)' }} />
                     {voltageDistanceData.minBranches.map((branch) => (
                       <Line key={`min-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
                         type="monotone" dataKey="voltage" name={branch.label}
@@ -1045,7 +1051,7 @@ export const LaboFoisonnementTab = () => {
                   <Ruler className="h-4 w-4 text-emerald-500" />
                   Tension vs Distance — Pire cas injection (sans consommation)
                   <Badge variant="outline" className="text-[10px] border-emerald-500/50 text-emerald-500">
-                    {voltageDistanceData.maxHour}h • {voltageDistanceData.maxV.toFixed(1)}V
+                    {voltageDistanceData.maxHour}h • Vmax {voltageDistanceData.maxV.toFixed(1)}V • Busbar {voltageDistanceData.busbarVoltageInjection.toFixed(1)}V
                   </Badge>
                 </CardTitle>
               </CardHeader>
@@ -1093,7 +1099,9 @@ export const LaboFoisonnementTab = () => {
                     <ReferenceArea yAxisId="left" y1={218.5} y2={241.5} fill="hsl(var(--muted))" fillOpacity={0.2} />
                     <ReferenceLine yAxisId="left" y={207} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
                     <ReferenceLine yAxisId="left" y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
-                    <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} />
+                    <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} label={{ value: '230V', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
+                    <ReferenceLine yAxisId="left" y={voltageDistanceData.busbarVoltageInjection} stroke="hsl(280, 70%, 50%)" strokeDasharray="6 3" strokeWidth={1.5}
+                      label={{ value: `Busbar ${voltageDistanceData.busbarVoltageInjection.toFixed(1)}V`, fontSize: 9, fill: 'hsl(280, 70%, 50%)' }} />
                     {voltageDistanceData.maxBranches.map((branch) => (
                       <Line key={`max-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
                         type="monotone" dataKey="voltage" name={branch.label}
@@ -1161,6 +1169,7 @@ export const LaboFoisonnementTab = () => {
 
               // Get foisonnement coefficient at this hour
               const hourFois = voltageContinu[clockHour]?.chargesResidentialFoisonnement;
+              const busbarVoltageHourly = rawContinu[clockHour]?.virtualBusbar?.voltage_V ?? 230;
 
               return (
                 <Card className="bg-card/50 backdrop-blur border-amber-500/30">
@@ -1169,7 +1178,7 @@ export const LaboFoisonnementTab = () => {
                       <Clock className="h-4 w-4 text-amber-500" />
                       Tension vs Distance — Profil horaire (continu)
                       <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-500">
-                        {clockHour}h
+                        {clockHour}h • Busbar {busbarVoltageHourly.toFixed(1)}V
                       </Badge>
                       {hourFois !== undefined && (
                         <Badge variant="secondary" className="text-[10px]">
@@ -1227,7 +1236,9 @@ export const LaboFoisonnementTab = () => {
                             <ReferenceArea yAxisId="left" y1={218.5} y2={241.5} fill="hsl(var(--muted))" fillOpacity={0.2} />
                             <ReferenceLine yAxisId="left" y={207} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
                             <ReferenceLine yAxisId="left" y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
-                            <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} />
+                            <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} label={{ value: '230V', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
+                            <ReferenceLine yAxisId="left" y={busbarVoltageHourly} stroke="hsl(280, 70%, 50%)" strokeDasharray="6 3" strokeWidth={1.5}
+                              label={{ value: `Busbar ${busbarVoltageHourly.toFixed(1)}V`, fontSize: 9, fill: 'hsl(280, 70%, 50%)' }} />
                             {hourlyBranches.map((branch) => (
                               <Line key={`hourly-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
                                 type="monotone" dataKey="voltage" name={branch.label}

@@ -520,12 +520,15 @@ export const LaboFoisonnementTab = () => {
             const nodeV = getNodeVoltageForClient(bp, client, mode) || 230;
             let clientV: number;
 
+            // Facteur de chute de tension : 2 pour mono (aller-retour phase+neutre), √3 pour tri
+            const facteurDV = client.couplage === 'MONO' ? 2 : Math.sqrt(3);
+
             if (mode === 'injection') {
               // Injection PV : pas de conso, production à 100%
               const pvKVA = client.puissancePV_kVA || 0;
               if (pvKVA > 0) {
                 const I_pv = (pvKVA * 1000) / (V_nom * (client.couplage === 'MONO' ? 1 : Math.sqrt(3)));
-                const deltaV_pv = (R_per_m * cosPhiProd + X_per_m * sinPhiProd) * I_pv * dist_m;
+                const deltaV_pv = facteurDV * (R_per_m * cosPhiProd + X_per_m * sinPhiProd) * I_pv * dist_m;
                 clientV = nodeV + deltaV_pv;
               } else {
                 clientV = nodeV;
@@ -533,7 +536,7 @@ export const LaboFoisonnementTab = () => {
             } else {
               // Charge : conso à 80% du contractuel, pas de PV
               const I_charge = (client.puissanceContractuelle_kVA * 0.80 * 1000) / (V_nom * (client.couplage === 'MONO' ? 1 : Math.sqrt(3)));
-              const deltaV = (R_per_m * cosPhiCharges + X_per_m * sinPhiCharges) * I_charge * dist_m;
+              const deltaV = facteurDV * (R_per_m * cosPhiCharges + X_per_m * sinPhiCharges) * I_charge * dist_m;
               clientV = Math.max(0, nodeV - deltaV);
             }
 

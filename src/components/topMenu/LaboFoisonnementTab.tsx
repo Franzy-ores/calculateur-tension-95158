@@ -171,6 +171,9 @@ export const LaboFoisonnementTab = () => {
   const [showNeutralCurrent, setShowNeutralCurrent] = useState(false);
   const [showClientPoints, setShowClientPoints] = useState(false);
   const [clockHour, setClockHour] = useState(12);
+  const [fullscreenChargeOpen, setFullscreenChargeOpen] = useState(false);
+  const [fullscreenInjectionOpen, setFullscreenInjectionOpen] = useState(false);
+  const [fullscreenHourlyOpen, setFullscreenHourlyOpen] = useState(false);
 
   // Simulation equipment counters
   const srg2Count = simulationEquipment.srg2Devices?.filter(s => s.enabled).length || 0;

@@ -1169,6 +1169,7 @@ export const LaboFoisonnementTab = () => {
 
               // Get foisonnement coefficient at this hour
               const hourFois = voltageContinu[clockHour]?.chargesResidentialFoisonnement;
+              const busbarVoltageHourly = rawContinu[clockHour]?.virtualBusbar?.voltage_V ?? 230;
 
               return (
                 <Card className="bg-card/50 backdrop-blur border-amber-500/30">

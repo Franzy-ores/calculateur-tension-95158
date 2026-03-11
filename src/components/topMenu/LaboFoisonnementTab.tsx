@@ -965,7 +965,7 @@ export const LaboFoisonnementTab = () => {
                   <Ruler className="h-4 w-4 text-blue-500" />
                   Tension vs Distance — Pire cas charge (sans production)
                   <Badge variant="outline" className="text-[10px] border-blue-500/50 text-blue-500">
-                    {voltageDistanceData.minHour}h • {voltageDistanceData.minV.toFixed(1)}V
+                    {voltageDistanceData.minHour}h • Vmin {voltageDistanceData.minV.toFixed(1)}V • Busbar {voltageDistanceData.busbarVoltageCharge.toFixed(1)}V
                   </Badge>
                 </CardTitle>
               </CardHeader>

@@ -121,7 +121,7 @@ export interface HourlyVoltageResult {
 }
 
 export const defaultDailySimulationOptions: DailySimulationOptions = {
-  season: 'winter',
+  season: 'summer',
   weather: 'sunny',
   enableEV: true,
   evBonusEvening: 2.5,

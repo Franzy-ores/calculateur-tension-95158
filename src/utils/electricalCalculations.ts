@@ -1303,12 +1303,14 @@ export class ElectricalCalculator {
         addExtra((n as any).productions || [], -1);
       }
 
-      const runBFSForPhase = (angleDeg: number, S_map: Map<string, Complex>, phaseLabel: 'A'|'B'|'C') => {
+      const runBFSForPhase = (angleDeg: number, S_map: Map<string, Complex>, phaseLabel: 'A'|'B'|'C', V0_shift?: Complex) => {
         const V_node_phase = new Map<string, Complex>();
         const I_branch_phase = new Map<string, Complex>();
         const I_inj_node_phase = new Map<string, Complex>();
 
-        const Vslack_phase_ph = fromPolar(Vslack_phase, this.deg2rad(angleDeg));
+        const Vslack_phase_ph = V0_shift
+          ? sub(fromPolar(Vslack_phase, this.deg2rad(angleDeg)), V0_shift)
+          : fromPolar(Vslack_phase, this.deg2rad(angleDeg));
         for (const n of nodes) V_node_phase.set(n.id, Vslack_phase_ph);
 
         let iter2 = 0;

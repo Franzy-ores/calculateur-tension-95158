@@ -280,13 +280,15 @@ interface NodePhaseDistributionResult {
 export function calculateNodeAutoPhaseDistribution(
   node: Node,
   linkedClients: ClientImporte[],
-  manualPhaseDistributionCharges: { A: number; B: number; C: number }, // Répartition manuelle CHARGES (%)
-  manualPhaseDistributionProductions: { A: number; B: number; C: number }, // Répartition manuelle PRODUCTIONS (%)
-  networkVoltage: 'TRIPHASÉ_230V' | 'TÉTRAPHASÉ_400V' = 'TÉTRAPHASÉ_400V', // Système de tension du réseau
-  foisonnementChargesResidentiel?: number,  // Coefficient de foisonnement des charges résidentielles (%)
-  foisonnementChargesIndustriel?: number,   // Coefficient de foisonnement des charges industrielles (%)
-  foisonnementProductions?: number,  // Coefficient de foisonnement des productions (%)
-  treatSmallPolyProductionsAsMono: boolean = false  // Option pour traiter productions TRI/TETRA ≤5kVA comme MONO
+  manualPhaseDistributionCharges: { A: number; B: number; C: number },
+  manualPhaseDistributionProductions: { A: number; B: number; C: number },
+  networkVoltage: 'TRIPHASÉ_230V' | 'TÉTRAPHASÉ_400V' = 'TÉTRAPHASÉ_400V',
+  foisonnementChargesResidentiel?: number,
+  foisonnementChargesIndustriel?: number,
+  foisonnementProductions?: number,
+  manualCouplingDistributionCharges?: { 'A-B': number; 'B-C': number; 'A-C': number },
+  manualCouplingDistributionProductions?: { 'A-B': number; 'B-C': number; 'A-C': number },
+  treatSmallPolyProductionsAsMono: boolean = false
 ): NodePhaseDistributionResult {
   // Initialisation des résultats
   const result: NodePhaseDistributionResult = {

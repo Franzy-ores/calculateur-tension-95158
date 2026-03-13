@@ -1596,6 +1596,11 @@ export class ElectricalCalculator {
 
       // ===== Boucle de couplage neutre (400V uniquement) =====
       // Itère entre BFS par phase et calcul V_neutral pour converger vers l'état couplé
+      // S_*_final captures the last corrected S_maps for use in thermal passes
+      let S_A_final = S_A_map;
+      let S_B_final = S_B_map;
+      let S_C_final = S_C_map;
+
       if (is400V) {
         let V_neutral_iter = new Map<string, Complex>(
           nodes.map(n => [n.id, C(0, 0)])
@@ -1629,6 +1634,10 @@ export class ElectricalCalculator {
             const S_A_corr = this.correctSMapForNeutral(S_A_map, phaseA.V_node_phase, V_neutral_iter, nodes, source.id);
             const S_B_corr = this.correctSMapForNeutral(S_B_map, phaseB.V_node_phase, V_neutral_iter, nodes, source.id);
             const S_C_corr = this.correctSMapForNeutral(S_C_map, phaseC.V_node_phase, V_neutral_iter, nodes, source.id);
+
+            S_A_final = S_A_corr;
+            S_B_final = S_B_corr;
+            S_C_final = S_C_corr;
 
             phaseA = runBFSForPhase(0, S_A_corr, 'A');
             phaseB = runBFSForPhase(-120, S_B_corr, 'B');

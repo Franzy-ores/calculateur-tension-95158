@@ -855,7 +855,8 @@ export class ElectricalCalculator {
       const distalNode = nodeById.get(childId)!;
       const ct = cableTypeById.get(cab.typeId);
       if (!ct) throw new Error(`Cable type ${cab.typeId} introuvable`);
-      const length_m = this.calculateLengthMeters(cab.coordinates || []);
+      const length_m_raw = this.calculateLengthMeters(cab.coordinates || []);
+      const length_m = applySagCorrection(length_m_raw, cab.pose);
       const L_km = length_m / 1000;
 
       // Déterminer le type de réseau et le mode

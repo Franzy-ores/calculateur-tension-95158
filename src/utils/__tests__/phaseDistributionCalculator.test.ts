@@ -230,3 +230,4 @@ describe('phaseDistributionCalculator', () => {
       expect(result.charges.foisonneAvecCurseurs!.C).toBeCloseTo(totalFoisonne * 0.2, 1); // 2.7
     });
   });
+});

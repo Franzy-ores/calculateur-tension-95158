@@ -1656,7 +1656,8 @@ export class ElectricalCalculator {
             // Récupérer l'impédance du conducteur neutre (R0, X0)
             const ct = cableTypeById.get(cab.typeId);
             if (!ct) continue;
-            const length_m = this.calculateLengthMeters(cab.coordinates || []);
+            const length_m_raw = this.calculateLengthMeters(cab.coordinates || []);
+            const length_m = applySagCorrection(length_m_raw, cab.pose);
             const L_km = length_m / 1000;
             
             // Utiliser R0/X0 pour le conducteur neutre (forNeutral = true)

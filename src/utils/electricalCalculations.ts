@@ -2486,4 +2486,152 @@ export class ElectricalCalculator {
       throw new Error(`Nœuds manquants référencés dans les câbles: ${[...new Set(missingNodes)].join(', ')}`);
     }
   }
+
+  // ===== Méthode privée : Calcul des tensions du neutre par BFS =====
+  private computeNeutralVoltages(
+    source: Node,
+    children: Map<string, string[]>,
+    parentCableOfChild: Map<string, Cable>,
+    nodeById: Map<string, Node>,
+    cableTypeById: Map<string, CableType>,
+    phaseA: { V_node_phase: Map<string, Complex>; I_branch_phase: Map<string, Complex> },
+    phaseB: { V_node_phase: Map<string, Complex>; I_branch_phase: Map<string, Complex> },
+    phaseC: { V_node_phase: Map<string, Complex>; I_branch_phase: Map<string, Complex> },
+    U_line_base: number,
+    isUnbalanced: boolean,
+    equi8UpstreamReduction: Map<string, Complex>,
+    projectSeason?: ThermalSeason,
+    applySagCorrection?: (rawLength_m: number, pose: string) => number
+  ): Map<string, Complex> {
+    const V_neutral = new Map<string, Complex>();
+    V_neutral.set(source.id, C(0, 0)); // Le neutre à la source est à 0V (référence)
+    
+    // BFS depuis la source pour propager la tension du neutre
+    const stack3 = [source.id];
+    const visited3 = new Set<string>();
+    
+    while (stack3.length) {
+      const u = stack3.pop()!;
+      if (visited3.has(u)) continue;
+      visited3.add(u);
+      
+      const Vn_parent = V_neutral.get(u) || C(0, 0);
+      
+      for (const v of children.get(u) || []) {
+        const cab = parentCableOfChild.get(v);
+        if (!cab) continue;
+        
+        // Calcul du courant neutre sur ce segment (somme vectorielle complexe)
+        const IA = phaseA.I_branch_phase.get(cab.id) || C(0, 0);
+        const IB = phaseB.I_branch_phase.get(cab.id) || C(0, 0);
+        const IC = phaseC.I_branch_phase.get(cab.id) || C(0, 0);
+        let IN_phasor = add(add(IA, IB), IC); // Somme vectorielle complexe
+        
+        // ✅ EQUI8 : Soustraction phaseur complexe (cohérente avec IN_phasor)
+        const equi8ReductionPhasor = equi8UpstreamReduction.get(cab.id);
+        if (equi8ReductionPhasor && abs(equi8ReductionPhasor) > 0.01) {
+          const IN_mag_before = abs(IN_phasor);
+          IN_phasor = sub(IN_phasor, equi8ReductionPhasor);
+          
+          // Sécurité : si la soustraction inverse le courant, ramener à zéro
+          if (abs(IN_phasor) > IN_mag_before + 0.01) {
+            IN_phasor = C(0, 0);
+          }
+          
+          console.log(
+            `🔌 EQUI8 câble ${cab.id}: I_N phaseur ${IN_mag_before.toFixed(1)}A → ${abs(IN_phasor).toFixed(1)}A`
+          );
+        }
+
+        // ── Fuite vers la terre au nœud enfant v (APRÈS correction EQUI8) ──
+        const distalNode = nodeById.get(v)!;
+        const Rt = distalNode?.rt_terre_ohm ?? 25; // 25 Ω par défaut (NF C 11-201)
+        if (Rt > 0) {
+          const I_fuite = div(Vn_parent, C(Rt, 0));
+          IN_phasor = sub(IN_phasor, I_fuite);
+          console.log(
+            `🌍 Terre nœud ${v}: Rt=${Rt}Ω, |I_fuite|=${abs(I_fuite).toFixed(2)}A, ` +
+            `|I_N| final=${abs(IN_phasor).toFixed(2)}A`
+          );
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
+        // Récupérer l'impédance du conducteur neutre (R0, X0)
+        const ct = cableTypeById.get(cab.typeId);
+        if (!ct) continue;
+        const length_m_raw = this.calculateLengthMeters(cab.coordinates || []);
+        const length_m = applySagCorrection ? applySagCorrection(length_m_raw, cab.pose) : length_m_raw;
+        const L_km = length_m / 1000;
+        
+        // Utiliser R0/X0 pour le conducteur neutre (forNeutral = true)
+        const is400V_local = U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
+        // Courant neutre réel pour correction thermique dynamique
+        const IA_n = phaseA.I_branch_phase.get(cab.id) || C(0, 0);
+        const IB_n = phaseB.I_branch_phase.get(cab.id) || C(0, 0);
+        const IC_n = phaseC.I_branch_phase.get(cab.id) || C(0, 0);
+        const IN_real_A = abs(add(add(IA_n, IB_n), IC_n));
+        const thermalCtxNeutral = projectSeason ? {
+          season: projectSeason,
+          pose: cab.pose,
+          I_A: IN_real_A,
+          Imax_A: ct.maxCurrent_A || 0
+        } : undefined;
+        const { R: R0, X: X0 } = this.selectRX(ct, is400V_local, isUnbalanced, true, thermalCtxNeutral);
+        const Z_neutral = C(R0 * L_km, X0 * L_km);
+        
+        // Chute de tension dans le neutre (phasor)
+        const dVn = mul(Z_neutral, IN_phasor);
+        
+        // ─── Convention de signe du neutre ───────────────────────────────
+        // V_neutral(v) = V_neutral(u) + Z_n · IN
+        // Le courant neutre circule de l'enfant vers le parent (retour),
+        // donc le potentiel neutre s'ÉLÈVE au nœud enfant.
+        // ─────────────────────────────────────────────────────────────────────
+        const Vn_child = add(Vn_parent, dVn);
+        V_neutral.set(v, Vn_child);
+        
+        stack3.push(v);
+      }
+    }
+    
+    return V_neutral;
+  }
+
+  // ===== Méthode privée : Correction des S_maps pour le potentiel neutre =====
+  private correctSMapForNeutral(
+    S_map: Map<string, Complex>,
+    V_phase_map: Map<string, Complex>,
+    V_neutral_map: Map<string, Complex>,
+    nodes: Node[],
+    sourceId: string
+  ): Map<string, Complex> {
+    const corrected = new Map<string, Complex>();
+    for (const n of nodes) {
+      const S = S_map.get(n.id) || C(0, 0);
+      if (n.id === sourceId) {
+        corrected.set(n.id, S);
+        continue;
+      }
+      const Vph = V_phase_map.get(n.id);
+      const Vn = V_neutral_map.get(n.id) || C(0, 0);
+      if (!Vph) { corrected.set(n.id, S); continue; }
+      
+      // Effective voltage seen by the load: V_phase - V_neutral
+      const Veff = sub(Vph, Vn);
+      const Veff_mag = abs(Veff);
+      
+      // Guard: skip correction if effective voltage < 1V (avoid division instability)
+      if (Veff_mag < 1) { corrected.set(n.id, S); continue; }
+      
+      // S_corr = S × V_phase / (V_phase - V_neutral)
+      const Vph_mag = abs(Vph);
+      if (Vph_mag < ElectricalCalculator.MIN_VOLTAGE_SAFETY) {
+        corrected.set(n.id, S);
+        continue;
+      }
+      const scale_factor = div(Vph, Veff); // complex ratio
+      corrected.set(n.id, mul(S, scale_factor));
+    }
+    return corrected;
+  }
 }

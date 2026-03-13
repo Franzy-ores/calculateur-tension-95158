@@ -1473,6 +1473,9 @@ export class ElectricalCalculator {
       // Détection du système 400V pour le calcul du courant neutre
       const is400V = U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
 
+      // Variable to carry the converged neutral shift from the !is400V loop into thermal passes
+      let V_neutral_shift_final: Complex = C(0, 0);
+
       // ============================================================
       // VIRTUAL NEUTRAL CORRECTION — 3-wire delta networks only
       // Enforces I_A + I_B + I_C = 0 (no zero-sequence return path)

@@ -1465,127 +1465,241 @@ export class ElectricalCalculator {
         return { V_node_phase, I_branch_phase };
       };
 
-      // Déphasages corrects pour les phases A, B, C
-      let phaseA = runBFSForPhase(0, S_A_map, 'A');      // 0°
-      let phaseB = runBFSForPhase(-120, S_B_map, 'B');   // -120°
-      let phaseC = runBFSForPhase(120, S_C_map, 'C');    // +120°
+      // ============================================================
+      // COUPLED 3-PHASE BFS FOR 3-WIRE DELTA NETWORKS
+      // 
+      // Enforces I_A + I_B + I_C = 0 at every node and every branch
+      // (no neutral conductor = no zero-sequence current path).
+      //
+      // Key difference from 3 independent BFS:
+      // At each node in the backward sweep, the zero-sequence component
+      // of injection currents is removed:
+      //   I_0 = (I_A + I_B + I_C) / 3
+      //   I_x_coupled = I_x - I_0
+      // This is the physical coupling that independent BFS cannot model.
+      //
+      // Returns phaseA/B/C in the same format as runBFSForPhase
+      // so all downstream code is unchanged.
+      // ============================================================
+      const runCoupledBFSForDelta = (
+        S_A_m: Map<string, Complex>,
+        S_B_m: Map<string, Complex>,
+        S_C_m: Map<string, Complex>
+      ): {
+        phaseA: { V_node_phase: Map<string, Complex>; I_branch_phase: Map<string, Complex> };
+        phaseB: { V_node_phase: Map<string, Complex>; I_branch_phase: Map<string, Complex> };
+        phaseC: { V_node_phase: Map<string, Complex>; I_branch_phase: Map<string, Complex> };
+      } => {
+
+        // Slack phasors for each phase (nominal, no shift)
+        const Vsa = fromPolar(Vslack_phase, this.deg2rad(0));
+        const Vsb = fromPolar(Vslack_phase, this.deg2rad(-120));
+        const Vsc = fromPolar(Vslack_phase, this.deg2rad(120));
+
+        // Node voltage maps (all 3 phases together)
+        const V_A = new Map<string, Complex>();
+        const V_B = new Map<string, Complex>();
+        const V_C = new Map<string, Complex>();
+
+        // Branch current maps (all 3 phases together)
+        const I_A_branch = new Map<string, Complex>();
+        const I_B_branch = new Map<string, Complex>();
+        const I_C_branch = new Map<string, Complex>();
+
+        // Initialize all nodes at slack voltage
+        for (const n of nodes) {
+          V_A.set(n.id, Vsa);
+          V_B.set(n.id, Vsb);
+          V_C.set(n.id, Vsc);
+        }
+
+        let converged = false;
+
+        for (let iter = 0; iter < ElectricalCalculator.MAX_ITERATIONS; iter++) {
+
+          // Save previous voltages for convergence check
+          const V_A_prev = new Map(V_A);
+          const V_B_prev = new Map(V_B);
+          const V_C_prev = new Map(V_C);
+
+          I_A_branch.clear();
+          I_B_branch.clear();
+          I_C_branch.clear();
+
+          // ── BACKWARD SWEEP ────────────────────────────────────────
+          for (const u of postOrder) {
+            if (u === source.id) continue;
+
+            const Va = V_A.get(u) || Vsa;
+            const Vb = V_B.get(u) || Vsb;
+            const Vc = V_C.get(u) || Vsc;
+
+            const Sa = S_A_m.get(u) || C(0, 0);
+            const Sb = S_B_m.get(u) || C(0, 0);
+            const Sc = S_C_m.get(u) || C(0, 0);
+
+            // Raw nodal injection currents: I = conj(S / V)
+            const Va_safe = abs(Va) > ElectricalCalculator.MIN_VOLTAGE_SAFETY ? Va : Vsa;
+            const Vb_safe = abs(Vb) > ElectricalCalculator.MIN_VOLTAGE_SAFETY ? Vb : Vsb;
+            const Vc_safe = abs(Vc) > ElectricalCalculator.MIN_VOLTAGE_SAFETY ? Vc : Vsc;
+
+            let Ia_inj = conj(div(Sa, Va_safe));
+            let Ib_inj = conj(div(Sb, Vb_safe));
+            let Ic_inj = conj(div(Sc, Vc_safe));
+
+            // EQUI8 current injections (if present)
+            if (equi8CurrentInjections?.has(u)) {
+              const injection = equi8CurrentInjections.get(u)!;
+              Ia_inj = add(Ia_inj, C(injection.I_phaseA.re, injection.I_phaseA.im));
+              Ib_inj = add(Ib_inj, C(injection.I_phaseB.re, injection.I_phaseB.im));
+              Ic_inj = add(Ic_inj, C(injection.I_phaseC.re, injection.I_phaseC.im));
+            }
+
+            // ── KEY COUPLING STEP ────────────────────────────────────
+            // In a 3-wire network, I_A + I_B + I_C = 0 at every node.
+            // Remove the zero-sequence component to enforce this constraint.
+            const I_0 = scale(add(add(Ia_inj, Ib_inj), Ic_inj), 1 / 3);
+            Ia_inj = sub(Ia_inj, I_0);
+            Ib_inj = sub(Ib_inj, I_0);
+            Ic_inj = sub(Ic_inj, I_0);
+            // ─────────────────────────────────────────────────────────
+
+            // Accumulate: branch current = sum of children + this node
+            let Ia_sum = Ia_inj;
+            let Ib_sum = Ib_inj;
+            let Ic_sum = Ic_inj;
+
+            for (const v of children.get(u) || []) {
+              const cabChild = parentCableOfChild.get(v);
+              if (!cabChild) continue;
+              Ia_sum = add(Ia_sum, I_A_branch.get(cabChild.id) || C(0, 0));
+              Ib_sum = add(Ib_sum, I_B_branch.get(cabChild.id) || C(0, 0));
+              Ic_sum = add(Ic_sum, I_C_branch.get(cabChild.id) || C(0, 0));
+            }
+
+            const cab = parentCableOfChild.get(u);
+            if (cab) {
+              I_A_branch.set(cab.id, Ia_sum);
+              I_B_branch.set(cab.id, Ib_sum);
+              I_C_branch.set(cab.id, Ic_sum);
+            }
+          }
+
+          // Source node: compute net current entering from feeders + source load
+          let I_src_A = C(0, 0);
+          let I_src_B = C(0, 0);
+          let I_src_C = C(0, 0);
+
+          for (const v of children.get(source.id) || []) {
+            const cab = parentCableOfChild.get(v);
+            if (!cab) continue;
+            I_src_A = add(I_src_A, I_A_branch.get(cab.id) || C(0, 0));
+            I_src_B = add(I_src_B, I_B_branch.get(cab.id) || C(0, 0));
+            I_src_C = add(I_src_C, I_C_branch.get(cab.id) || C(0, 0));
+          }
+
+          // Source node injection (if any load/generation at source)
+          const Sa_src = S_A_m.get(source.id) || C(0, 0);
+          const Sb_src = S_B_m.get(source.id) || C(0, 0);
+          const Sc_src = S_C_m.get(source.id) || C(0, 0);
+          const Va_src_safe = abs(V_A.get(source.id) || Vsa) > ElectricalCalculator.MIN_VOLTAGE_SAFETY
+            ? (V_A.get(source.id) || Vsa) : Vsa;
+          const Vb_src_safe = abs(V_B.get(source.id) || Vsb) > ElectricalCalculator.MIN_VOLTAGE_SAFETY
+            ? (V_B.get(source.id) || Vsb) : Vsb;
+          const Vc_src_safe = abs(V_C.get(source.id) || Vsc) > ElectricalCalculator.MIN_VOLTAGE_SAFETY
+            ? (V_C.get(source.id) || Vsc) : Vsc;
+          I_src_A = add(I_src_A, conj(div(Sa_src, Va_src_safe)));
+          I_src_B = add(I_src_B, conj(div(Sb_src, Vb_src_safe)));
+          I_src_C = add(I_src_C, conj(div(Sc_src, Vc_src_safe)));
+
+          // ── FORWARD SWEEP ─────────────────────────────────────────
+          const VA_bus = Ztr_phase ? sub(Vsa, mul(Ztr_phase, I_src_A)) : Vsa;
+          const VB_bus = Ztr_phase ? sub(Vsb, mul(Ztr_phase, I_src_B)) : Vsb;
+          const VC_bus = Ztr_phase ? sub(Vsc, mul(Ztr_phase, I_src_C)) : Vsc;
+
+          V_A.set(source.id, VA_bus);
+          V_B.set(source.id, VB_bus);
+          V_C.set(source.id, VC_bus);
+
+          const stack = [source.id];
+          while (stack.length) {
+            const u = stack.pop()!;
+
+            for (const v of children.get(u) || []) {
+              const cab = parentCableOfChild.get(v);
+              if (!cab) continue;
+
+              const Z = cableZ_phase.get(cab.id) || C(0, 0);
+
+              let VA_v = sub(V_A.get(u) || Vsa, mul(Z, I_A_branch.get(cab.id) || C(0, 0)));
+              let VB_v = sub(V_B.get(u) || Vsb, mul(Z, I_B_branch.get(cab.id) || C(0, 0)));
+              let VC_v = sub(V_C.get(u) || Vsc, mul(Z, I_C_branch.get(cab.id) || C(0, 0)));
+
+              // SRG2 series voltage injection (if present on this cable)
+              if (cab.serieVoltagePerPhase) {
+                if (abs(cab.serieVoltagePerPhase.A) > 0.01) VA_v = add(VA_v, cab.serieVoltagePerPhase.A);
+                if (abs(cab.serieVoltagePerPhase.B) > 0.01) VB_v = add(VB_v, cab.serieVoltagePerPhase.B);
+                if (abs(cab.serieVoltagePerPhase.C) > 0.01) VC_v = add(VC_v, cab.serieVoltagePerPhase.C);
+              }
+
+              V_A.set(v, VA_v);
+              V_B.set(v, VB_v);
+              V_C.set(v, VC_v);
+
+              stack.push(v);
+            }
+          }
+
+          // ── CONVERGENCE CHECK ─────────────────────────────────────
+          let allConverged = true;
+          for (const n of nodes) {
+            const dA = abs(sub(V_A.get(n.id) || Vsa, V_A_prev.get(n.id) || Vsa));
+            const dB = abs(sub(V_B.get(n.id) || Vsb, V_B_prev.get(n.id) || Vsb));
+            const dC = abs(sub(V_C.get(n.id) || Vsc, V_C_prev.get(n.id) || Vsc));
+            const Vmag = abs(V_A.get(n.id) || Vsa) || 1;
+            if (Math.max(dA, dB, dC) / Vmag >= ElectricalCalculator.CONVERGENCE_TOLERANCE) {
+              allConverged = false;
+              break;
+            }
+          }
+          if (allConverged) {
+            converged = true;
+            console.log(`✅ [3-wire coupled BFS] Converged at iter ${iter + 1}`);
+            break;
+          }
+        }
+
+        if (!converged) {
+          console.warn('⚠️ [3-wire coupled BFS] Did not converge');
+        }
+
+        return {
+          phaseA: { V_node_phase: V_A, I_branch_phase: I_A_branch },
+          phaseB: { V_node_phase: V_B, I_branch_phase: I_B_branch },
+          phaseC: { V_node_phase: V_C, I_branch_phase: I_C_branch }
+        };
+      };
 
       // Détection du système 400V pour le calcul du courant neutre
       const is400V = U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
 
-
-      // ============================================================
-      // VIRTUAL NEUTRAL CORRECTION — LOT 4
-      // Numerical Jacobian Newton solver for 3-wire delta networks.
-      // Enforces I_A + I_B + I_C = 0 (no zero-sequence return path).
-      //
-      // Method: at each iteration, a perturbed BFS (V0 + ε) gives the
-      // true network Jacobian dI0/dV0 without any topology assumption.
-      // Newton step: dV0 = -I0 / (dI0/dV0)
-      // Convergence: typically 2 iterations for BT networks.
-      // ============================================================
-
-      let V_neutral_shift_final: Complex = C(0, 0);
+      // Déphasages corrects pour les phases A, B, C
+      let phaseA: { V_node_phase: Map<string, Complex>; I_branch_phase: Map<string, Complex> };
+      let phaseB: { V_node_phase: Map<string, Complex>; I_branch_phase: Map<string, Complex> };
+      let phaseC: { V_node_phase: Map<string, Complex>; I_branch_phase: Map<string, Complex> };
 
       if (!is400V) {
-        const MAX_VN_ITER = 5;
-        const VN_CONVERGENCE_A = 0.05; // 0.05A threshold on |I_0|
-        const EPSILON_V = 1.0;         // 1V perturbation for Jacobian
-        const MAX_SHIFT_V = 12.0;      // Physical cap: >12V = divergence
-
-        // Helper: compute zero-sequence current at source from BFS result
-        const computeI0 = (
-          pA: { I_branch_phase: Map<string, Complex> },
-          pB: { I_branch_phase: Map<string, Complex> },
-          pC: { I_branch_phase: Map<string, Complex> }
-        ): Complex => {
-          let IA = C(0, 0), IB = C(0, 0), IC = C(0, 0);
-          for (const v of children.get(source.id) || []) {
-            const cab = parentCableOfChild.get(v);
-            if (!cab) continue;
-            IA = add(IA, pA.I_branch_phase.get(cab.id) || C(0, 0));
-            IB = add(IB, pB.I_branch_phase.get(cab.id) || C(0, 0));
-            IC = add(IC, pC.I_branch_phase.get(cab.id) || C(0, 0));
-          }
-          // I_0 = (IA + IB + IC) / 3
-          return scale(add(add(IA, IB), IC), 1 / 3);
-        };
-
-        let V0 = C(0, 0); // Current neutral shift estimate
-
-        for (let vnIter = 0; vnIter < MAX_VN_ITER; vnIter++) {
-
-          // === Step 1: BFS at current V0 (already done on iter 0) ===
-          // phaseA/B/C already computed at start (iter 0) or end of prev iter.
-
-          const I0 = computeI0(phaseA, phaseB, phaseC);
-          const I0_mag = abs(I0);
-
-          console.log(
-            `🔺 [3-wire] VN iter ${vnIter + 1}/${MAX_VN_ITER}: ` +
-            `|I_0|=${I0_mag.toFixed(3)}A, |V0|=${abs(V0).toFixed(3)}V`
-          );
-
-          // === Step 2: Convergence check ===
-          if (I0_mag < VN_CONVERGENCE_A) {
-            console.log(`✅ [3-wire] Virtual neutral converged at iter ${vnIter + 1}`);
-            break;
-          }
-
-          // === Step 3: Perturbed BFS to compute numerical Jacobian ===
-          // Apply a real perturbation ε along I0 direction (same angle)
-          // This gives the most relevant Jacobian component.
-          const I0_angle = abs(I0) > 1e-9 ? arg(I0) : 0;
-          const V_perturb = add(V0, fromPolar(EPSILON_V, I0_angle));
-
-          const pA_eps = runBFSForPhase(0,    S_A_map, 'A', V_perturb);
-          const pB_eps = runBFSForPhase(-120, S_B_map, 'B', V_perturb);
-          const pC_eps = runBFSForPhase(120,  S_C_map, 'C', V_perturb);
-
-          const I0_eps = computeI0(pA_eps, pB_eps, pC_eps);
-
-          // Jacobian: dI0/dV0 ≈ (I0_eps - I0) / ε  [complex derivative]
-          const dI0 = sub(I0_eps, I0);
-          const dI0_mag = abs(dI0);
-
-          // Guard: if perturbation had no effect, network is degenerate
-          if (dI0_mag < 1e-9) {
-            console.warn(`⚠️ [3-wire] Jacobian near-zero at iter ${vnIter + 1}, stopping`);
-            break;
-          }
-
-          // === Step 4: Newton step ===
-          // dV0 = -I0 / (dI0/dV0) = -I0 * ε / dI0
-          const dV0 = scale(div(mul(I0, C(EPSILON_V, 0)), dI0), -1);
-          const dV0_mag = abs(dV0);
-
-          console.log(
-            `🔺 [3-wire] Newton step: |dV0|=${dV0_mag.toFixed(3)}V`
-          );
-
-          // Physical cap: if correction > 12V something is wrong
-          if (dV0_mag > MAX_SHIFT_V) {
-            console.warn(
-              `⚠️ [3-wire] Newton step too large (${dV0_mag.toFixed(1)}V > ${MAX_SHIFT_V}V), stopping`
-            );
-            break;
-          }
-
-          // === Step 5: Update V0 and re-run BFS for next iteration ===
-          V0 = add(V0, dV0);
-
-          phaseA = runBFSForPhase(0,    S_A_map, 'A', V0);
-          phaseB = runBFSForPhase(-120, S_B_map, 'B', V0);
-          phaseC = runBFSForPhase(120,  S_C_map, 'C', V0);
-        }
-
-        V_neutral_shift_final = V0;
+        // 3-wire delta: use coupled BFS that enforces I_A+I_B+I_C=0
+        const coupled = runCoupledBFSForDelta(S_A_map, S_B_map, S_C_map);
+        phaseA = coupled.phaseA;
+        phaseB = coupled.phaseB;
+        phaseC = coupled.phaseC;
+      } else {
+        // 4-wire star: use 3 independent BFS (neutral modeled separately)
+        phaseA = runBFSForPhase(0,    S_A_map, 'A');
+        phaseB = runBFSForPhase(-120, S_B_map, 'B');
+        phaseC = runBFSForPhase(120,  S_C_map, 'C');
       }
-      // ============================================================
-      // END VIRTUAL NEUTRAL CORRECTION — LOT 4
-      // ============================================================
-
-      // is400V déjà calculé plus haut
       
       // ✅ EQUI8 : Déclaré ici pour être accessible dans la boucle neutre et les résultats câbles
       const equi8UpstreamReduction = new Map<string, Complex>();
@@ -1742,12 +1856,16 @@ export class ElectricalCalculator {
           // Relancer le BFS avec les impédances corrigées par l'effet Joule
           if (impedancesUpdated) {
             console.log(`🌡️ [GRD-FIX] Thermique passe ${thermalPass + 1}/${MAX_THERMAL_PASSES}: recalcul BFS avec R corrigé`);
-            phaseA = runBFSForPhase(0,    is400V ? S_A_final : S_A_map, 'A',
-              is400V ? undefined : V_neutral_shift_final);
-            phaseB = runBFSForPhase(-120, is400V ? S_B_final : S_B_map, 'B',
-              is400V ? undefined : V_neutral_shift_final);
-            phaseC = runBFSForPhase(120,  is400V ? S_C_final : S_C_map, 'C',
-              is400V ? undefined : V_neutral_shift_final);
+            if (!is400V) {
+              const coupled = runCoupledBFSForDelta(S_A_map, S_B_map, S_C_map);
+              phaseA = coupled.phaseA;
+              phaseB = coupled.phaseB;
+              phaseC = coupled.phaseC;
+            } else {
+              phaseA = runBFSForPhase(0,    S_A_final, 'A');
+              phaseB = runBFSForPhase(-120, S_B_final, 'B');
+              phaseC = runBFSForPhase(120,  S_C_final, 'C');
+            }
           } else {
             // Convergence thermique atteinte
             if (thermalPass > 0) {

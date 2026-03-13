@@ -2215,7 +2215,8 @@ export class ElectricalCalculator {
     for (const cab of cables) {
       const childId = cableChildId.get(cab.id);
       const parentId = cableParentId.get(cab.id);
-      const length_m = this.calculateLengthMeters(cab.coordinates || []);
+      const length_m_raw = this.calculateLengthMeters(cab.coordinates || []);
+      const length_m = applySagCorrection(length_m_raw, cab.pose);
       const L_km = length_m / 1000;
       const ct = cableTypeById.get(cab.typeId);
       if (!ct) throw new Error(`Cable type ${cab.typeId} introuvable`);

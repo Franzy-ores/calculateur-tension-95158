@@ -323,7 +323,7 @@ const createDefaultProject = (): Project => ({
   transformerConfig: createDefaultTransformerConfig("TÉTRAPHASÉ_400V"), // Configuration transformateur par défaut
   loadModel: 'mixte_mono_poly', // NOUVEAU : mode mixte par défaut
   desequilibrePourcent: 0,
-  season: 'winter',
+   season: 'summer',
   manualPhaseDistribution: {
     charges: { A: 33.33, B: 33.33, C: 33.34 },
     productions: { A: 33.33, B: 33.33, C: 33.34 },

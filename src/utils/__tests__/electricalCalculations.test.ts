@@ -429,11 +429,13 @@ describe('ElectricalCalculator - basic LV radial cases', () => {
     
     if (cable) {
       const I = cable.current_A!;
-      const L_km = 0.1; // 100m
+      const L_km = 0.1 * 1.03; // 100m + 3% sag correction (câble aérien)
       const R12 = cableType.R12_ohm_per_km;
       
-      // Formule: ΔU = √3 × R12 × I × L (avec √3 pour triphasé)
-      const deltaV_theory = Math.sqrt(3) * R12 * I * L_km;
+      // Mode équilibré: utilise GRD formula
+      const R_eff = (cableType.R0_ohm_per_km + 2 * R12) / 3;
+      // Formule: ΔU = √3 × R_eff × I × L (avec √3 pour triphasé)
+      const deltaV_theory = Math.sqrt(3) * R_eff * I * L_km;
       
       console.log(`📊 Hausse de tension 230V triangle (production):`);
       console.log(`   - Courant: ${I.toFixed(2)}A`);

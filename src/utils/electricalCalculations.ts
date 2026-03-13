@@ -1856,12 +1856,16 @@ export class ElectricalCalculator {
           // Relancer le BFS avec les impédances corrigées par l'effet Joule
           if (impedancesUpdated) {
             console.log(`🌡️ [GRD-FIX] Thermique passe ${thermalPass + 1}/${MAX_THERMAL_PASSES}: recalcul BFS avec R corrigé`);
-            phaseA = runBFSForPhase(0,    is400V ? S_A_final : S_A_map, 'A',
-              is400V ? undefined : V_neutral_shift_final);
-            phaseB = runBFSForPhase(-120, is400V ? S_B_final : S_B_map, 'B',
-              is400V ? undefined : V_neutral_shift_final);
-            phaseC = runBFSForPhase(120,  is400V ? S_C_final : S_C_map, 'C',
-              is400V ? undefined : V_neutral_shift_final);
+            if (!is400V) {
+              const coupled = runCoupledBFSForDelta(S_A_map, S_B_map, S_C_map);
+              phaseA = coupled.phaseA;
+              phaseB = coupled.phaseB;
+              phaseC = coupled.phaseC;
+            } else {
+              phaseA = runBFSForPhase(0,    S_A_final, 'A');
+              phaseB = runBFSForPhase(-120, S_B_final, 'B');
+              phaseC = runBFSForPhase(120,  S_C_final, 'C');
+            }
           } else {
             // Convergence thermique atteinte
             if (thermalPass > 0) {

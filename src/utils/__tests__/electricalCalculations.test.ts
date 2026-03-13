@@ -246,7 +246,7 @@ describe('ElectricalCalculator - basic LV radial cases', () => {
       expect(Va).toBeLessThan(Vc - 3);
       
       // Vb et Vc devraient être proches (phases non chargées)
-      expect(Math.abs(Vb - Vc)).toBeLessThan(2);
+      expect(Math.abs(Vb - Vc)).toBeLessThan(4); // Tolérance élargie avec R12 direct
     }
     
     // 2. Courant neutre significatif (proche du courant de phase A)

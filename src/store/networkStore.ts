@@ -635,9 +635,11 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
             project.manualPhaseDistribution!.charges,
             project.manualPhaseDistribution!.productions,
             project.voltageSystem,
-            project.foisonnementChargesResidentiel ?? 15, // foisonnementChargesResidentiel
-            project.foisonnementChargesIndustriel ?? 70, // foisonnementChargesIndustriel
-            project.foisonnementProductions ?? 100, // foisonnementProductions
+            project.foisonnementChargesResidentiel ?? 15,
+            project.foisonnementChargesIndustriel ?? 70,
+            project.foisonnementProductions ?? 100,
+            undefined, // manualCouplingDistributionCharges
+            undefined, // manualCouplingDistributionProductions
             project.treatSmallPolyProductionsAsMono || false
           );
           node.autoPhaseDistribution = distribution;
@@ -1466,9 +1468,11 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       state.currentProject.manualPhaseDistribution?.charges || { A: 33.33, B: 33.33, C: 33.34 },
       state.currentProject.manualPhaseDistribution?.productions || { A: 33.33, B: 33.33, C: 33.34 },
       state.currentProject.voltageSystem,
-      state.currentProject.foisonnementChargesResidentiel ?? 15, // ✅ Foisonnement résidentiel
-      state.currentProject.foisonnementChargesIndustriel ?? 70, // ✅ Foisonnement industriel
-      state.currentProject.foisonnementProductions ?? 100, // ✅ Foisonnement productions
+      state.currentProject.foisonnementChargesResidentiel ?? 15,
+      state.currentProject.foisonnementChargesIndustriel ?? 70,
+      state.currentProject.foisonnementProductions ?? 100,
+      undefined, // manualCouplingDistributionCharges
+      undefined, // manualCouplingDistributionProductions
       state.currentProject.treatSmallPolyProductionsAsMono || false
     );
     
@@ -1677,9 +1681,11 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
             currentProject.manualPhaseDistribution?.charges || { A: 33.33, B: 33.33, C: 33.33 },
             currentProject.manualPhaseDistribution?.productions || { A: 33.33, B: 33.33, C: 33.33 },
             currentProject.voltageSystem,
-            currentProject.foisonnementChargesResidentiel ?? 15, // Foisonnement résidentiel
-            currentProject.foisonnementChargesIndustriel ?? 70, // Foisonnement industriel
-            currentProject.foisonnementProductions, // Foisonnement productions
+            currentProject.foisonnementChargesResidentiel ?? 15,
+            currentProject.foisonnementChargesIndustriel ?? 70,
+            currentProject.foisonnementProductions,
+            undefined, // manualCouplingDistributionCharges
+            undefined, // manualCouplingDistributionProductions
             currentProject.treatSmallPolyProductionsAsMono || false
           );
           node.autoPhaseDistribution = autoPhaseDistribution;

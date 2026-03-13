@@ -346,6 +346,7 @@ export interface Project {
   };
   // Saison pour le modèle thermique des câbles
   season?: 'winter' | 'summer';
+  sagFactorPercent?: number; // Facteur de flèche câbles aériens (%), défaut 3, plage 0-10
 }
 
 

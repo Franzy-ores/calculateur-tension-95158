@@ -606,7 +606,9 @@ export class ElectricalCalculator {
       magnitude: number;                        // Magnitude de I_EQUI8
     }>,
     // Saison pour correction thermique des câbles
-    season?: ThermalSeason
+    season?: ThermalSeason,
+    // Facteur de flèche câbles aériens (%), défaut 3
+    sagFactorPercent?: number
   ): CalculationResult {
     // Validation robuste des entrées
     this.validateInputs(nodes, cables, cableTypes, foisonnementCharges, foisonnementProductions, desequilibrePourcent);

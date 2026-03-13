@@ -1475,14 +1475,114 @@ export class ElectricalCalculator {
 
 
       // ============================================================
-      // VIRTUAL NEUTRAL CORRECTION — DISABLED (unstable Newton step)
-      // The Y_approx formula S/(3V²) is incorrect for delta networks.
-      // Re-enable only after implementing a proper coupled 3-phase BFS.
-      // V_neutral_shift_final stays at C(0,0) — no shift applied.
+      // VIRTUAL NEUTRAL CORRECTION — LOT 4
+      // Numerical Jacobian Newton solver for 3-wire delta networks.
+      // Enforces I_A + I_B + I_C = 0 (no zero-sequence return path).
+      //
+      // Method: at each iteration, a perturbed BFS (V0 + ε) gives the
+      // true network Jacobian dI0/dV0 without any topology assumption.
+      // Newton step: dV0 = -I0 / (dI0/dV0)
+      // Convergence: typically 2 iterations for BT networks.
       // ============================================================
+
       let V_neutral_shift_final: Complex = C(0, 0);
+
+      if (!is400V) {
+        const MAX_VN_ITER = 5;
+        const VN_CONVERGENCE_A = 0.05; // 0.05A threshold on |I_0|
+        const EPSILON_V = 1.0;         // 1V perturbation for Jacobian
+        const MAX_SHIFT_V = 12.0;      // Physical cap: >12V = divergence
+
+        // Helper: compute zero-sequence current at source from BFS result
+        const computeI0 = (
+          pA: { I_branch_phase: Map<string, Complex> },
+          pB: { I_branch_phase: Map<string, Complex> },
+          pC: { I_branch_phase: Map<string, Complex> }
+        ): Complex => {
+          let IA = C(0, 0), IB = C(0, 0), IC = C(0, 0);
+          for (const v of children.get(source.id) || []) {
+            const cab = parentCableOfChild.get(v);
+            if (!cab) continue;
+            IA = add(IA, pA.I_branch_phase.get(cab.id) || C(0, 0));
+            IB = add(IB, pB.I_branch_phase.get(cab.id) || C(0, 0));
+            IC = add(IC, pC.I_branch_phase.get(cab.id) || C(0, 0));
+          }
+          // I_0 = (IA + IB + IC) / 3
+          return scale(add(add(IA, IB), IC), 1 / 3);
+        };
+
+        let V0 = C(0, 0); // Current neutral shift estimate
+
+        for (let vnIter = 0; vnIter < MAX_VN_ITER; vnIter++) {
+
+          // === Step 1: BFS at current V0 (already done on iter 0) ===
+          // phaseA/B/C already computed at start (iter 0) or end of prev iter.
+
+          const I0 = computeI0(phaseA, phaseB, phaseC);
+          const I0_mag = abs(I0);
+
+          console.log(
+            `🔺 [3-wire] VN iter ${vnIter + 1}/${MAX_VN_ITER}: ` +
+            `|I_0|=${I0_mag.toFixed(3)}A, |V0|=${abs(V0).toFixed(3)}V`
+          );
+
+          // === Step 2: Convergence check ===
+          if (I0_mag < VN_CONVERGENCE_A) {
+            console.log(`✅ [3-wire] Virtual neutral converged at iter ${vnIter + 1}`);
+            break;
+          }
+
+          // === Step 3: Perturbed BFS to compute numerical Jacobian ===
+          // Apply a real perturbation ε along I0 direction (same angle)
+          // This gives the most relevant Jacobian component.
+          const I0_angle = abs(I0) > 1e-9 ? arg(I0) : 0;
+          const V_perturb = add(V0, fromPolar(EPSILON_V, I0_angle));
+
+          const pA_eps = runBFSForPhase(0,    S_A_map, 'A', V_perturb);
+          const pB_eps = runBFSForPhase(-120, S_B_map, 'B', V_perturb);
+          const pC_eps = runBFSForPhase(120,  S_C_map, 'C', V_perturb);
+
+          const I0_eps = computeI0(pA_eps, pB_eps, pC_eps);
+
+          // Jacobian: dI0/dV0 ≈ (I0_eps - I0) / ε  [complex derivative]
+          const dI0 = sub(I0_eps, I0);
+          const dI0_mag = abs(dI0);
+
+          // Guard: if perturbation had no effect, network is degenerate
+          if (dI0_mag < 1e-9) {
+            console.warn(`⚠️ [3-wire] Jacobian near-zero at iter ${vnIter + 1}, stopping`);
+            break;
+          }
+
+          // === Step 4: Newton step ===
+          // dV0 = -I0 / (dI0/dV0) = -I0 * ε / dI0
+          const dV0 = scale(div(mul(I0, C(EPSILON_V, 0)), dI0), -1);
+          const dV0_mag = abs(dV0);
+
+          console.log(
+            `🔺 [3-wire] Newton step: |dV0|=${dV0_mag.toFixed(3)}V`
+          );
+
+          // Physical cap: if correction > 12V something is wrong
+          if (dV0_mag > MAX_SHIFT_V) {
+            console.warn(
+              `⚠️ [3-wire] Newton step too large (${dV0_mag.toFixed(1)}V > ${MAX_SHIFT_V}V), stopping`
+            );
+            break;
+          }
+
+          // === Step 5: Update V0 and re-run BFS for next iteration ===
+          V0 = add(V0, dV0);
+
+          phaseA = runBFSForPhase(0,    S_A_map, 'A', V0);
+          phaseB = runBFSForPhase(-120, S_B_map, 'B', V0);
+          phaseC = runBFSForPhase(120,  S_C_map, 'C', V0);
+        }
+
+        V_neutral_shift_final = V0;
+      }
       // ============================================================
-      // END VIRTUAL NEUTRAL CORRECTION
+      // END VIRTUAL NEUTRAL CORRECTION — LOT 4
       // ============================================================
 
       // is400V déjà calculé plus haut
@@ -1642,9 +1742,12 @@ export class ElectricalCalculator {
           // Relancer le BFS avec les impédances corrigées par l'effet Joule
           if (impedancesUpdated) {
             console.log(`🌡️ [GRD-FIX] Thermique passe ${thermalPass + 1}/${MAX_THERMAL_PASSES}: recalcul BFS avec R corrigé`);
-            phaseA = runBFSForPhase(0,    is400V ? S_A_final : S_A_map, 'A');
-            phaseB = runBFSForPhase(-120, is400V ? S_B_final : S_B_map, 'B');
-            phaseC = runBFSForPhase(120,  is400V ? S_C_final : S_C_map, 'C');
+            phaseA = runBFSForPhase(0,    is400V ? S_A_final : S_A_map, 'A',
+              is400V ? undefined : V_neutral_shift_final);
+            phaseB = runBFSForPhase(-120, is400V ? S_B_final : S_B_map, 'B',
+              is400V ? undefined : V_neutral_shift_final);
+            phaseC = runBFSForPhase(120,  is400V ? S_C_final : S_C_map, 'C',
+              is400V ? undefined : V_neutral_shift_final);
           } else {
             // Convergence thermique atteinte
             if (thermalPass > 0) {

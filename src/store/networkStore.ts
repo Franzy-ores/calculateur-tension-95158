@@ -1468,9 +1468,11 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       state.currentProject.manualPhaseDistribution?.charges || { A: 33.33, B: 33.33, C: 33.34 },
       state.currentProject.manualPhaseDistribution?.productions || { A: 33.33, B: 33.33, C: 33.34 },
       state.currentProject.voltageSystem,
-      state.currentProject.foisonnementChargesResidentiel ?? 15, // ✅ Foisonnement résidentiel
-      state.currentProject.foisonnementChargesIndustriel ?? 70, // ✅ Foisonnement industriel
-      state.currentProject.foisonnementProductions ?? 100, // ✅ Foisonnement productions
+      state.currentProject.foisonnementChargesResidentiel ?? 15,
+      state.currentProject.foisonnementChargesIndustriel ?? 70,
+      state.currentProject.foisonnementProductions ?? 100,
+      undefined, // manualCouplingDistributionCharges
+      undefined, // manualCouplingDistributionProductions
       state.currentProject.treatSmallPolyProductionsAsMono || false
     );
     

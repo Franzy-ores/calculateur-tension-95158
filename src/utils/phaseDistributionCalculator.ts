@@ -441,6 +441,12 @@ export function calculateNodeAutoPhaseDistribution(
         result.productions.poly.A += totalProd / 3;
         result.productions.poly.B += totalProd / 3;
         result.productions.poly.C += totalProd / 3;
+        
+        if (networkVoltage === 'TRIPHASÉ_230V' && result.phasePhaseLoads) {
+          result.phasePhaseLoads.productions['A-B'] += totalProd / 3;
+          result.phasePhaseLoads.productions['B-C'] += totalProd / 3;
+          result.phasePhaseLoads.productions['A-C'] += totalProd / 3;
+        }
       }
       
       result.polyClientsCount++;

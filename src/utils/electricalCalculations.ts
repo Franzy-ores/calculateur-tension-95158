@@ -1544,8 +1544,7 @@ export class ElectricalCalculator {
       // END VIRTUAL NEUTRAL CORRECTION
       // ============================================================
 
-      // Détection du système 400V pour le calcul du courant neutre (déjà calculé)
-      const is400V = U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
+      // is400V déjà calculé plus haut
       
       // ✅ EQUI8 : Déclaré ici pour être accessible dans la boucle neutre et les résultats câbles
       const equi8UpstreamReduction = new Map<string, Complex>();

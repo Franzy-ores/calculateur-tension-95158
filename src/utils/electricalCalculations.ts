@@ -1542,6 +1542,7 @@ export class ElectricalCalculator {
           phaseB = runBFSForPhase(-120, S_B_map, 'B', V_neutral_shift);
           phaseC = runBFSForPhase(120,  S_C_map, 'C', V_neutral_shift);
         }
+        V_neutral_shift_final = V_neutral_shift;
       }
       // ============================================================
       // END VIRTUAL NEUTRAL CORRECTION

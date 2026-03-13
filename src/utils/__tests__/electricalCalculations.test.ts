@@ -296,11 +296,13 @@ describe('ElectricalCalculator - basic LV radial cases', () => {
     
     if (cable) {
       const I = cable.current_A!;
-      const L_km = 0.1; // 100m
+      const L_km = 0.1 * 1.03; // 100m + 3% sag correction (câble aérien)
       const R12 = cableType.R12_ohm_per_km;
       
       // Formule triangle: ΔU = √3 × R12 × I × L (pas de R0)
-      const deltaV_theory = Math.sqrt(3) * R12 * I * L_km;
+      // Note: mode équilibré utilise GRD formula, pas R12 directement
+      const R_eff = (cableType.R0_ohm_per_km + 2 * R12) / 3; // GRD formula en mode équilibré
+      const deltaV_theory = Math.sqrt(3) * R_eff * I * L_km;
       
       console.log(`📊 Chute de tension 230V triangle:`);
       console.log(`   - Théorique: ${deltaV_theory.toFixed(2)}V`);

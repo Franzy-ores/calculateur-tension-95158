@@ -578,7 +578,8 @@ export class ElectricalCalculator {
       (project as any).foisonnementChargesResidentiel,
       (project as any).foisonnementChargesIndustriel,
       undefined, // equi8CurrentInjections
-      project.season as ThermalSeason | undefined
+      project.season as ThermalSeason | undefined,
+      project.sagFactorPercent
     );
   }
   calculateScenario(

@@ -262,8 +262,12 @@ interface NodePhaseDistributionResult {
   };
   // NOUVEAU : Charges phase-phase pour réseau 230V triangle (pour calcul correct du courant)
   phasePhaseLoads?: {
-    charges: { 'A-B': number; 'B-C': number; 'A-C': number };
-    productions: { 'A-B': number; 'B-C': number; 'A-C': number };
+    // Raw physical totals (MONO + POLY, before foisonnement)
+    charges:    { 'A-B': number; 'B-C': number; 'A-C': number };
+    productions:{ 'A-B': number; 'B-C': number; 'A-C': number };
+    // Foisonné + curseurs — consumed by runDeltaBFS as S_AB/BC/CA_map
+    foisonneCharges?:     { 'A-B': number; 'B-C': number; 'A-C': number };
+    foisonneProductions?: { 'A-B': number; 'B-C': number; 'A-C': number };
   };
   monoClientsCount: { A: number; B: number; C: number };
   polyClientsCount: number;

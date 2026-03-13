@@ -1477,73 +1477,12 @@ export class ElectricalCalculator {
       let V_neutral_shift_final: Complex = C(0, 0);
 
       // ============================================================
-      // VIRTUAL NEUTRAL CORRECTION — 3-wire delta networks only
-      // Enforces I_A + I_B + I_C = 0 (no zero-sequence return path)
-      // The floating neutral shifts by V0 until the constraint holds
+      // VIRTUAL NEUTRAL CORRECTION — DISABLED (unstable Newton step)
+      // The Y_approx formula S/(3V²) is incorrect for delta networks.
+      // Re-enable only after implementing a proper coupled 3-phase BFS.
+      // V_neutral_shift_final stays at C(0,0) — no shift applied.
       // ============================================================
-      if (!is400V) {
-        let V_neutral_shift = C(0, 0);
-        const MAX_VN_ITER = 3;
-        const VN_CONVERGENCE_A = 0.1; // 0.1A threshold on I_0
-
-        for (let vnIter = 0; vnIter < MAX_VN_ITER; vnIter++) {
-          // Compute source current for each phase (sum of outgoing branch currents)
-          const computeSourceCurrent = (
-            phaseResult: { I_branch_phase: Map<string, Complex> }
-          ): Complex => {
-            let I_src = C(0, 0);
-            for (const v of children.get(source.id) || []) {
-              const cab = parentCableOfChild.get(v);
-              if (!cab) continue;
-              I_src = add(I_src, phaseResult.I_branch_phase.get(cab.id) || C(0, 0));
-            }
-            return I_src;
-          };
-
-          const I_A_src = computeSourceCurrent(phaseA);
-          const I_B_src = computeSourceCurrent(phaseB);
-          const I_C_src = computeSourceCurrent(phaseC);
-
-          // Zero-sequence current: must be 0 in a 3-wire network
-          const I_0 = scale(add(add(I_A_src, I_B_src), I_C_src), 1 / 3);
-          const I_0_mag = abs(I_0);
-
-          console.log(
-            `🔺 [3-wire] VN iter ${vnIter + 1}: |I_0|=${I_0_mag.toFixed(3)}A` +
-            `, |V0_shift|=${abs(V_neutral_shift).toFixed(3)}V`
-          );
-
-          if (I_0_mag < VN_CONVERGENCE_A) {
-            console.log(`✅ [3-wire] Virtual neutral converged at iter ${vnIter + 1}`);
-            break;
-          }
-
-          // Newton step: dV_0 = I_0 / Y_network
-          // Y_network ≈ |S_net| / (3 × Vslack_phase²)
-          const S_net_VA = Math.abs(totalLoads - totalProductions) * 1000;
-          const Y_approx = S_net_VA > 100
-            ? S_net_VA / (3 * Vslack_phase * Vslack_phase)
-            : 1;
-          const dV_0 = scale(I_0, 1 / Y_approx);
-
-          // Safety cap: neutral displacement > 25V indicates divergence
-          if (abs(dV_0) > 25) {
-            console.warn(
-              `⚠️ [3-wire] VN correction too large (${abs(dV_0).toFixed(1)}V), ` +
-              `capping iteration`
-            );
-            break;
-          }
-
-          V_neutral_shift = add(V_neutral_shift, dV_0);
-
-          // Re-run BFS with shifted slacks
-          phaseA = runBFSForPhase(0,    S_A_map, 'A', V_neutral_shift);
-          phaseB = runBFSForPhase(-120, S_B_map, 'B', V_neutral_shift);
-          phaseC = runBFSForPhase(120,  S_C_map, 'C', V_neutral_shift);
-        }
-        V_neutral_shift_final = V_neutral_shift;
-      }
+      let V_neutral_shift_final: Complex = C(0, 0);
       // ============================================================
       // END VIRTUAL NEUTRAL CORRECTION
       // ============================================================

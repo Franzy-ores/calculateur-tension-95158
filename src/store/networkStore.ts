@@ -1681,9 +1681,11 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
             currentProject.manualPhaseDistribution?.charges || { A: 33.33, B: 33.33, C: 33.33 },
             currentProject.manualPhaseDistribution?.productions || { A: 33.33, B: 33.33, C: 33.33 },
             currentProject.voltageSystem,
-            currentProject.foisonnementChargesResidentiel ?? 15, // Foisonnement résidentiel
-            currentProject.foisonnementChargesIndustriel ?? 70, // Foisonnement industriel
-            currentProject.foisonnementProductions, // Foisonnement productions
+            currentProject.foisonnementChargesResidentiel ?? 15,
+            currentProject.foisonnementChargesIndustriel ?? 70,
+            currentProject.foisonnementProductions,
+            undefined, // manualCouplingDistributionCharges
+            undefined, // manualCouplingDistributionProductions
             currentProject.treatSmallPolyProductionsAsMono || false
           );
           node.autoPhaseDistribution = autoPhaseDistribution;

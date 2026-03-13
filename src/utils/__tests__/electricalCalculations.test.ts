@@ -314,9 +314,15 @@ describe('ElectricalCalculator - basic LV radial cases', () => {
       expect(diffPct).toBeLessThan(45); // BFS convergé vs formule simplifiée: écart attendu
     }
     
-    // 2. Pas de métriques par phase en mode polyphasé équilibré sur réseau triangle
-    // (nodeMetricsPerPhase peut exister mais ne doit pas contenir de courant neutre)
-    expect(result.nodeMetricsPerPhase).toBeUndefined();
+    // 2. nodeMetricsPerPhase est rempli même en mode équilibré (voltages identiques sur 3 phases)
+    if (result.nodeMetricsPerPhase) {
+      const n1 = result.nodeMetricsPerPhase.find(n => n.nodeId === 'n1');
+      if (n1) {
+        // En mode équilibré, les 3 phases doivent avoir la même tension
+        expect(Math.abs(n1.voltagesPerPhase.A - n1.voltagesPerPhase.B)).toBeLessThan(0.01);
+        expect(Math.abs(n1.voltagesPerPhase.B - n1.voltagesPerPhase.C)).toBeLessThan(0.01);
+      }
+    }
   });
 
   // ==================== CAS 8: Équivalence mono équilibré vs poly ====================

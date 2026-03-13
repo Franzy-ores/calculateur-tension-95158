@@ -300,8 +300,15 @@ export class ElectricalCalculator {
       };
     }
     
-    // Conducteurs de phase → formule GRD belge (R0 + 2*R12) / 3
-    // Applicable en 230V triangle ET 400V étoile
+    // Conducteurs de phase
+    if (isUnbalanced) {
+      // Mode déséquilibré: R12/X12 direct (le neutre est modélisé séparément via R0/X0)
+      return {
+        R: cableType.R12_ohm_per_km * thermalFactor,
+        X: cableType.X12_ohm_per_km
+      };
+    }
+    // Mode équilibré: formule GRD belge (R0 + 2*R12) / 3
     return this.calculateGRDImpedance(cableType, thermalFactor);
   }
 
@@ -571,7 +578,8 @@ export class ElectricalCalculator {
       (project as any).foisonnementChargesResidentiel,
       (project as any).foisonnementChargesIndustriel,
       undefined, // equi8CurrentInjections
-      project.season as ThermalSeason | undefined
+      project.season as ThermalSeason | undefined,
+      project.sagFactorPercent
     );
   }
   calculateScenario(
@@ -598,8 +606,18 @@ export class ElectricalCalculator {
       magnitude: number;                        // Magnitude de I_EQUI8
     }>,
     // Saison pour correction thermique des câbles
-    season?: ThermalSeason
+    season?: ThermalSeason,
+    // Facteur de flèche câbles aériens (%), défaut 3
+    sagFactorPercent?: number
   ): CalculationResult {
+    // Helper: correction facteur de flèche pour câbles aériens
+    const applySagCorrection = (rawLength_m: number, pose: string): number => {
+      if (pose === 'AÉRIEN') {
+        return rawLength_m * (1 + ((sagFactorPercent ?? 3) / 100));
+      }
+      return rawLength_m;
+    };
+
     // Validation robuste des entrées
     this.validateInputs(nodes, cables, cableTypes, foisonnementCharges, foisonnementProductions, desequilibrePourcent);
     
@@ -837,7 +855,8 @@ export class ElectricalCalculator {
       const distalNode = nodeById.get(childId)!;
       const ct = cableTypeById.get(cab.typeId);
       if (!ct) throw new Error(`Cable type ${cab.typeId} introuvable`);
-      const length_m = this.calculateLengthMeters(cab.coordinates || []);
+      const length_m_raw = this.calculateLengthMeters(cab.coordinates || []);
+      const length_m = applySagCorrection(length_m_raw, cab.pose);
       const L_km = length_m / 1000;
 
       // Déterminer le type de réseau et le mode
@@ -1464,7 +1483,8 @@ export class ElectricalCalculator {
           for (const [childId, cab] of parentCableOfChild.entries()) {
             const ct = cableTypeById.get(cab.typeId);
             if (!ct) continue;
-            const length_m = this.calculateLengthMeters(cab.coordinates || []);
+            const length_m_raw = this.calculateLengthMeters(cab.coordinates || []);
+            const length_m = applySagCorrection(length_m_raw, cab.pose);
             const L_km = length_m / 1000;
             
             // Courant max des 3 phases (pire cas pour échauffement)
@@ -1636,7 +1656,8 @@ export class ElectricalCalculator {
             // Récupérer l'impédance du conducteur neutre (R0, X0)
             const ct = cableTypeById.get(cab.typeId);
             if (!ct) continue;
-            const length_m = this.calculateLengthMeters(cab.coordinates || []);
+            const length_m_raw = this.calculateLengthMeters(cab.coordinates || []);
+            const length_m = applySagCorrection(length_m_raw, cab.pose);
             const L_km = length_m / 1000;
             
             // Utiliser R0/X0 pour le conducteur neutre (forNeutral = true)
@@ -1722,7 +1743,8 @@ export class ElectricalCalculator {
       for (const cab of cables) {
         const childId = cableChildId.get(cab.id);
         const parentId = cableParentId.get(cab.id);
-        const length_m = this.calculateLengthMeters(cab.coordinates || []);
+        const length_m_raw = this.calculateLengthMeters(cab.coordinates || []);
+        const length_m = applySagCorrection(length_m_raw, cab.pose);
         const ct = cableTypeById.get(cab.typeId);
         if (!ct) throw new Error(`Cable type ${cab.typeId} introuvable`);
 
@@ -2193,7 +2215,8 @@ export class ElectricalCalculator {
     for (const cab of cables) {
       const childId = cableChildId.get(cab.id);
       const parentId = cableParentId.get(cab.id);
-      const length_m = this.calculateLengthMeters(cab.coordinates || []);
+      const length_m_raw = this.calculateLengthMeters(cab.coordinates || []);
+      const length_m = applySagCorrection(length_m_raw, cab.pose);
       const L_km = length_m / 1000;
       const ct = cableTypeById.get(cab.typeId);
       if (!ct) throw new Error(`Cable type ${cab.typeId} introuvable`);

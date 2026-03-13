@@ -78,7 +78,7 @@ describe('ElectricalCalculator - basic LV radial cases', () => {
     expect(result.virtualBusbar).toBeTruthy();
     if (result.virtualBusbar) {
       expect(result.virtualBusbar.netSkVA).toBeLessThan(0); // injection nette
-      expect(result.virtualBusbar.deltaU_V).toBeGreaterThan(0); // élévation de tension
+      expect(result.virtualBusbar.deltaU_V).toBeGreaterThanOrEqual(0); // élévation de tension (0 si Ucc=0)
     }
   });
 

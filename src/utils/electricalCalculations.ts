@@ -1468,6 +1468,98 @@ export class ElectricalCalculator {
       let phaseB = runBFSForPhase(-120, S_B_map, 'B');   // -120°
       let phaseC = runBFSForPhase(120, S_C_map, 'C');    // +120°
 
+      // Détection du système 400V pour le calcul du courant neutre
+      const is400V = U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
+      
+      // ✅ EQUI8 : Déclaré ici pour être accessible dans la boucle neutre et les résultats câbles
+      const equi8UpstreamReduction = new Map<string, Complex>();
+      if (is400V) {
+        // ✅ EQUI8 CME: Identifier les nœuds avec injection de courant
+        const equi8CompensationByNode = new Map<string, number>();
+        
+        if (equi8CurrentInjections) {
+          for (const [nodeId, injection] of equi8CurrentInjections.entries()) {
+            equi8CompensationByNode.set(nodeId, injection.magnitude);
+            console.log(`🔌 EQUI8 CME détecté sur nœud ${nodeId}: I_injection=${injection.magnitude.toFixed(1)}A`);
+          }
+        }
+        
+        for (const n of nodes) {
+          if (n.customProps?.['equi8_I_compensation'] && !equi8CompensationByNode.has(n.id)) {
+            const I_comp = n.customProps['equi8_I_compensation'] as number;
+            equi8CompensationByNode.set(n.id, I_comp);
+            console.log(`🔌 EQUI8 legacy détecté sur nœud ${n.id}: I_compensation=${I_comp.toFixed(1)}A`);
+          }
+        }
+        
+        for (const [equi8NodeId, I_comp] of equi8CompensationByNode.entries()) {
+          let currentNodeId = equi8NodeId;
+          
+          const injection = equi8CurrentInjections?.get(equi8NodeId);
+          const I_neutral_phasor: Complex = injection
+            ? C(injection.I_neutral.re, injection.I_neutral.im)
+            : C(I_comp, 0);
+          
+          while (parent.get(currentNodeId)) {
+            const parentNodeId = parent.get(currentNodeId)!;
+            const cable = parentCableOfChild.get(currentNodeId);
+            
+            if (cable) {
+              const existingReduction = equi8UpstreamReduction.get(cable.id) || C(0, 0);
+              equi8UpstreamReduction.set(cable.id, add(existingReduction, I_neutral_phasor));
+              console.log(`🔌 EQUI8 réduction I_N sur câble ${cable.id}: +${abs(I_neutral_phasor).toFixed(1)}A phaseur (total: ${abs(add(existingReduction, I_neutral_phasor)).toFixed(1)}A)`);
+            }
+            
+            currentNodeId = parentNodeId;
+          }
+        }
+      }
+
+      // ===== Boucle de couplage neutre (400V uniquement) =====
+      // Itère entre BFS par phase et calcul V_neutral pour converger vers l'état couplé
+      if (is400V) {
+        let V_neutral_iter = new Map<string, Complex>(
+          nodes.map(n => [n.id, C(0, 0)])
+        );
+        const MAX_NEUTRAL_PASSES = 3;
+        const NEUTRAL_CONVERGENCE_V = 0.1;
+
+        for (let neutralPass = 0; neutralPass < MAX_NEUTRAL_PASSES; neutralPass++) {
+          const V_neutral_new = this.computeNeutralVoltages(
+            source, children, parentCableOfChild, nodeById, cableTypeById,
+            phaseA, phaseB, phaseC, U_line_base, isUnbalanced,
+            equi8UpstreamReduction, projectSeason, applySagCorrection
+          );
+
+          let maxDelta = 0;
+          for (const n of nodes) {
+            const Vn_new = V_neutral_new.get(n.id) || C(0, 0);
+            const Vn_prev = V_neutral_iter.get(n.id) || C(0, 0);
+            const delta = abs(sub(Vn_new, Vn_prev));
+            if (delta > maxDelta) maxDelta = delta;
+          }
+
+          V_neutral_iter = V_neutral_new;
+
+          if (maxDelta < NEUTRAL_CONVERGENCE_V && neutralPass > 0) {
+            console.log(`✅ Neutral coupling converged at pass ${neutralPass + 1}, maxΔV_n=${maxDelta.toFixed(3)}V`);
+            break;
+          }
+
+          if (neutralPass < MAX_NEUTRAL_PASSES - 1) {
+            const S_A_corr = this.correctSMapForNeutral(S_A_map, phaseA.V_node_phase, V_neutral_iter, nodes, source.id);
+            const S_B_corr = this.correctSMapForNeutral(S_B_map, phaseB.V_node_phase, V_neutral_iter, nodes, source.id);
+            const S_C_corr = this.correctSMapForNeutral(S_C_map, phaseC.V_node_phase, V_neutral_iter, nodes, source.id);
+
+            phaseA = runBFSForPhase(0, S_A_corr, 'A');
+            phaseB = runBFSForPhase(-120, S_B_corr, 'B');
+            phaseC = runBFSForPhase(120, S_C_corr, 'C');
+
+            console.log(`🔄 Neutral pass ${neutralPass + 1}/${MAX_NEUTRAL_PASSES}: maxΔV_n=${maxDelta.toFixed(3)}V`);
+          }
+        }
+      }
+
       // ===== 🔧 FIX GRD — MICRO-ITÉRATION THERMIQUE 2 PASSES (Effet Joule) =====
       // Passe 1: BFS avec R à 20°C → courants I_phase
       // Passe 2: correction R(T) avec I réel → BFS final
@@ -1538,191 +1630,23 @@ export class ElectricalCalculator {
         }
       }
 
-      // Détection du système 400V pour le calcul du courant neutre
-      const is400V = U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
-      
-      // ===== CORRECTION MAJEURE : Propagation de la chute de tension du conducteur neutre =====
-      // Pour les réseaux 400V phase-neutre, le courant neutre crée une chute de tension supplémentaire
-      // qui doit être ajoutée aux tensions phase-neutre calculées
-      // ✅ EQUI8 : Déclaré ici (hors du bloc is400V) pour être accessible dans les résultats câbles
-      const equi8UpstreamReduction = new Map<string, Complex>();
+      // ===== Recalcul final V_neutral après passes thermiques + correction d'affichage =====
+      // Le neutre est recalculé ici car les passes thermiques ont pu modifier phaseA/B/C
       if (is400V) {
-        // ✅ EQUI8 CME: Identifier les nœuds avec injection de courant
-        // Le courant injecté sur le neutre réduit directement le courant neutre dans les câbles amont
-        const equi8CompensationByNode = new Map<string, number>();
-        
-        // Source 1: Injections explicites passées en paramètre (mode CME)
-        if (equi8CurrentInjections) {
-          for (const [nodeId, injection] of equi8CurrentInjections.entries()) {
-            // Le courant injecté sur le neutre = magnitude
-            equi8CompensationByNode.set(nodeId, injection.magnitude);
-            console.log(`🔌 EQUI8 CME détecté sur nœud ${nodeId}: I_injection=${injection.magnitude.toFixed(1)}A`);
-          }
-        }
-        
-        // Source 2: Legacy customProps (mode LOAD_SHIFT ou ancien modèle)
-        for (const n of nodes) {
-          if (n.customProps?.['equi8_I_compensation'] && !equi8CompensationByNode.has(n.id)) {
-            const I_comp = n.customProps['equi8_I_compensation'] as number;
-            equi8CompensationByNode.set(n.id, I_comp);
-            console.log(`🔌 EQUI8 legacy détecté sur nœud ${n.id}: I_compensation=${I_comp.toFixed(1)}A`);
-          }
-        }
-        
-        // ✅ EQUI8 : Calculer le courant de compensation cumulé vers l'amont pour chaque nœud
-        // Un nœud en amont d'un EQUI8 voit son courant neutre réduit
-        
-        // Pour chaque nœud EQUI8, propager la réduction vers la source
-        for (const [equi8NodeId, I_comp] of equi8CompensationByNode.entries()) {
-          let currentNodeId = equi8NodeId;
-          
-          // Récupérer le phaseur I_neutral de l'injection EQUI8 (mode CME)
-          const injection = equi8CurrentInjections?.get(equi8NodeId);
-          const I_neutral_phasor: Complex = injection
-            ? C(injection.I_neutral.re, injection.I_neutral.im)
-            : C(I_comp, 0); // fallback legacy : courant réel si pas de phaseur
-          
-          // Remonter vers la source
-          while (parent.get(currentNodeId)) {
-            const parentNodeId = parent.get(currentNodeId)!;
-            const cable = parentCableOfChild.get(currentNodeId);
-            
-            if (cable) {
-              // Accumuler la réduction phaseur sur ce câble
-              const existingReduction = equi8UpstreamReduction.get(cable.id) || C(0, 0);
-              equi8UpstreamReduction.set(cable.id, add(existingReduction, I_neutral_phasor));
-              console.log(`🔌 EQUI8 réduction I_N sur câble ${cable.id}: +${abs(I_neutral_phasor).toFixed(1)}A phaseur (total: ${abs(add(existingReduction, I_neutral_phasor)).toFixed(1)}A)`);
-            }
-            
-            currentNodeId = parentNodeId;
-          }
-        }
-        
-        // Calculer la tension du neutre à chaque nœud en propageant la chute Z_neutre * I_N
-        const V_neutral = new Map<string, Complex>();
-        V_neutral.set(source.id, C(0, 0)); // Le neutre à la source est à 0V (référence)
-        
-        // BFS depuis la source pour propager la tension du neutre
-        const stack3 = [source.id];
-        const visited3 = new Set<string>();
-        
-        while (stack3.length) {
-          const u = stack3.pop()!;
-          if (visited3.has(u)) continue;
-          visited3.add(u);
-          
-          const Vn_parent = V_neutral.get(u) || C(0, 0);
-          
-          for (const v of children.get(u) || []) {
-            const cab = parentCableOfChild.get(v);
-            if (!cab) continue;
-            
-            // Calcul du courant neutre sur ce segment (somme vectorielle complexe)
-            const IA = phaseA.I_branch_phase.get(cab.id) || C(0, 0);
-            const IB = phaseB.I_branch_phase.get(cab.id) || C(0, 0);
-            const IC = phaseC.I_branch_phase.get(cab.id) || C(0, 0);
-            let IN_phasor = add(add(IA, IB), IC); // Somme vectorielle complexe
-            
-            // ✅ EQUI8 : Soustraction phaseur complexe (cohérente avec IN_phasor)
-            const equi8ReductionPhasor = equi8UpstreamReduction.get(cab.id);
-            if (equi8ReductionPhasor && abs(equi8ReductionPhasor) > 0.01) {
-              const IN_mag_before = abs(IN_phasor);
-              IN_phasor = sub(IN_phasor, equi8ReductionPhasor);
-              
-              // Sécurité : si la soustraction inverse le courant, ramener à zéro
-              // (ne peut pas injecter du courant neutre vers l'amont)
-              if (abs(IN_phasor) > IN_mag_before + 0.01) {
-                IN_phasor = C(0, 0);
-              }
-              
-              console.log(
-                `🔌 EQUI8 câble ${cab.id}: I_N phaseur ${IN_mag_before.toFixed(1)}A → ${abs(IN_phasor).toFixed(1)}A`
-              );
-            }
-
-            // ── Fuite vers la terre au nœud enfant v (APRÈS correction EQUI8) ──
-            const distalNode = nodeById.get(v)!;
-            const Rt = distalNode?.rt_terre_ohm ?? 25; // 25 Ω par défaut (NF C 11-201)
-            if (Rt > 0) {
-              const I_fuite = div(Vn_parent, C(Rt, 0));
-              IN_phasor = sub(IN_phasor, I_fuite);
-              console.log(
-                `🌍 Terre nœud ${v}: Rt=${Rt}Ω, |I_fuite|=${abs(I_fuite).toFixed(2)}A, ` +
-                `|I_N| final=${abs(IN_phasor).toFixed(2)}A`
-              );
-            }
-            // ─────────────────────────────────────────────────────────────────────
-
-            // Récupérer l'impédance du conducteur neutre (R0, X0)
-            const ct = cableTypeById.get(cab.typeId);
-            if (!ct) continue;
-            const length_m_raw = this.calculateLengthMeters(cab.coordinates || []);
-            const length_m = applySagCorrection(length_m_raw, cab.pose);
-            const L_km = length_m / 1000;
-            
-            // Utiliser R0/X0 pour le conducteur neutre (forNeutral = true)
-            const is400V_local = U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
-            // Courant neutre réel pour correction thermique dynamique
-            const IA_n = phaseA.I_branch_phase.get(cab.id) || C(0, 0);
-            const IB_n = phaseB.I_branch_phase.get(cab.id) || C(0, 0);
-            const IC_n = phaseC.I_branch_phase.get(cab.id) || C(0, 0);
-            const IN_real_A = abs(add(add(IA_n, IB_n), IC_n));
-            const thermalCtxNeutral = projectSeason ? {
-              season: projectSeason,
-              pose: cab.pose,
-              I_A: IN_real_A,
-              Imax_A: ct.maxCurrent_A || 0
-            } : undefined;
-            const { R: R0, X: X0 } = this.selectRX(ct, is400V_local, isUnbalanced, true, thermalCtxNeutral);
-            const Z_neutral = C(R0 * L_km, X0 * L_km);
-            
-            // Chute de tension dans le neutre (phasor)
-            const dVn = mul(Z_neutral, IN_phasor);
-            
-            // ─── Convention de signe du neutre ───────────────────────────────
-            // Phases : le courant conventionnel circule de parent (u) vers enfant (v).
-            //          La chute de tension est donc V_phase(v) = V_phase(u) − Z·I_phase
-            //          (le potentiel diminue dans le sens du courant).
-            //
-            // Neutre : par KCL, IN = IA + IB + IC (somme vectorielle des courants de ligne).
-            //          Physiquement, ce courant de retour circule de l'enfant (v) vers le
-            //          parent (u), c'est-à-dire en sens inverse des phases.
-            //          La chute Z_n·IN se produit donc dans le sens v → u, ce qui revient
-            //          à une ÉLÉVATION du potentiel neutre au nœud enfant :
-            //              V_neutral(v) = V_neutral(u) + Z_n · IN
-            //
-            // Conséquence sur la tension phase-neutre côté charge :
-            //   V_ph-n(v) = V_phase(v) − V_neutral(v)
-            //             = [V_phase(u) − Z·I_ph] − [V_neutral(u) + Z_n·IN]
-            //   → La tension phase-neutre diminue à la fois par la chute dans la phase
-            //     ET par l'élévation du neutre. C'est le comportement attendu en cas de
-            //     déséquilibre : plus le déséquilibre est fort, plus IN est grand, plus
-            //     le neutre s'élève, et plus la tension phase-neutre diminue.
-            //
-            // C'est pourquoi on utilise add() ici et non sub().
-            // ─────────────────────────────────────────────────────────────────────
-            const Vn_child = add(Vn_parent, dVn);
-            V_neutral.set(v, Vn_child);
-            
-            stack3.push(v);
-          }
-        }
+        const V_neutral = this.computeNeutralVoltages(
+          source, children, parentCableOfChild, nodeById, cableTypeById,
+          phaseA, phaseB, phaseC, U_line_base, isUnbalanced,
+          equi8UpstreamReduction, projectSeason, applySagCorrection
+        );
         
         // Corriger les tensions phase-neutre en soustrayant la tension du neutre
         // V_phase_neutre_corrigé = V_phase - V_neutral
-        // ============================================================================
-        // NOTE: En mode EQUI8 CME, les tensions résultent naturellement du BFS
-        // avec injection de courant. Aucune imposition directe de tensions.
-        // L'ancien check "equi8_modified" qui sautait la correction neutre a été
-        // supprimé car il n'est plus utilisé en mode CME.
-        // ============================================================================
         for (const n of nodes) {
-          if (n.id === source.id) continue; // La source n'a pas besoin de correction
+          if (n.id === source.id) continue;
           
           const Vn = V_neutral.get(n.id);
           if (!Vn) continue;
           
-          // Corriger les 3 phases
           const Va = phaseA.V_node_phase.get(n.id);
           const Vb = phaseB.V_node_phase.get(n.id);
           const Vc = phaseC.V_node_phase.get(n.id);
@@ -1733,8 +1657,6 @@ export class ElectricalCalculator {
         }
       }
 
-      // ✅ EQUI8 : equi8UpstreamReduction est déclaré avant le bloc is400V
-      // et rempli à l'intérieur — une seule source de vérité
 
       // Compose cable results (par phase)
       calculatedCables.length = 0;
@@ -2552,5 +2474,153 @@ export class ElectricalCalculator {
     if (missingNodes.length > 0) {
       throw new Error(`Nœuds manquants référencés dans les câbles: ${[...new Set(missingNodes)].join(', ')}`);
     }
+  }
+
+  // ===== Méthode privée : Calcul des tensions du neutre par BFS =====
+  private computeNeutralVoltages(
+    source: Node,
+    children: Map<string, string[]>,
+    parentCableOfChild: Map<string, Cable>,
+    nodeById: Map<string, Node>,
+    cableTypeById: Map<string, CableType>,
+    phaseA: { V_node_phase: Map<string, Complex>; I_branch_phase: Map<string, Complex> },
+    phaseB: { V_node_phase: Map<string, Complex>; I_branch_phase: Map<string, Complex> },
+    phaseC: { V_node_phase: Map<string, Complex>; I_branch_phase: Map<string, Complex> },
+    U_line_base: number,
+    isUnbalanced: boolean,
+    equi8UpstreamReduction: Map<string, Complex>,
+    projectSeason?: ThermalSeason,
+    applySagCorrection?: (rawLength_m: number, pose: string) => number
+  ): Map<string, Complex> {
+    const V_neutral = new Map<string, Complex>();
+    V_neutral.set(source.id, C(0, 0)); // Le neutre à la source est à 0V (référence)
+    
+    // BFS depuis la source pour propager la tension du neutre
+    const stack3 = [source.id];
+    const visited3 = new Set<string>();
+    
+    while (stack3.length) {
+      const u = stack3.pop()!;
+      if (visited3.has(u)) continue;
+      visited3.add(u);
+      
+      const Vn_parent = V_neutral.get(u) || C(0, 0);
+      
+      for (const v of children.get(u) || []) {
+        const cab = parentCableOfChild.get(v);
+        if (!cab) continue;
+        
+        // Calcul du courant neutre sur ce segment (somme vectorielle complexe)
+        const IA = phaseA.I_branch_phase.get(cab.id) || C(0, 0);
+        const IB = phaseB.I_branch_phase.get(cab.id) || C(0, 0);
+        const IC = phaseC.I_branch_phase.get(cab.id) || C(0, 0);
+        let IN_phasor = add(add(IA, IB), IC); // Somme vectorielle complexe
+        
+        // ✅ EQUI8 : Soustraction phaseur complexe (cohérente avec IN_phasor)
+        const equi8ReductionPhasor = equi8UpstreamReduction.get(cab.id);
+        if (equi8ReductionPhasor && abs(equi8ReductionPhasor) > 0.01) {
+          const IN_mag_before = abs(IN_phasor);
+          IN_phasor = sub(IN_phasor, equi8ReductionPhasor);
+          
+          // Sécurité : si la soustraction inverse le courant, ramener à zéro
+          if (abs(IN_phasor) > IN_mag_before + 0.01) {
+            IN_phasor = C(0, 0);
+          }
+          
+          console.log(
+            `🔌 EQUI8 câble ${cab.id}: I_N phaseur ${IN_mag_before.toFixed(1)}A → ${abs(IN_phasor).toFixed(1)}A`
+          );
+        }
+
+        // ── Fuite vers la terre au nœud enfant v (APRÈS correction EQUI8) ──
+        const distalNode = nodeById.get(v)!;
+        const Rt = distalNode?.rt_terre_ohm ?? 25; // 25 Ω par défaut (NF C 11-201)
+        if (Rt > 0) {
+          const I_fuite = div(Vn_parent, C(Rt, 0));
+          IN_phasor = sub(IN_phasor, I_fuite);
+          console.log(
+            `🌍 Terre nœud ${v}: Rt=${Rt}Ω, |I_fuite|=${abs(I_fuite).toFixed(2)}A, ` +
+            `|I_N| final=${abs(IN_phasor).toFixed(2)}A`
+          );
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
+        // Récupérer l'impédance du conducteur neutre (R0, X0)
+        const ct = cableTypeById.get(cab.typeId);
+        if (!ct) continue;
+        const length_m_raw = this.calculateLengthMeters(cab.coordinates || []);
+        const length_m = applySagCorrection ? applySagCorrection(length_m_raw, cab.pose) : length_m_raw;
+        const L_km = length_m / 1000;
+        
+        // Utiliser R0/X0 pour le conducteur neutre (forNeutral = true)
+        const is400V_local = U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
+        // Courant neutre réel pour correction thermique dynamique
+        const IA_n = phaseA.I_branch_phase.get(cab.id) || C(0, 0);
+        const IB_n = phaseB.I_branch_phase.get(cab.id) || C(0, 0);
+        const IC_n = phaseC.I_branch_phase.get(cab.id) || C(0, 0);
+        const IN_real_A = abs(add(add(IA_n, IB_n), IC_n));
+        const thermalCtxNeutral = projectSeason ? {
+          season: projectSeason,
+          pose: cab.pose,
+          I_A: IN_real_A,
+          Imax_A: ct.maxCurrent_A || 0
+        } : undefined;
+        const { R: R0, X: X0 } = this.selectRX(ct, is400V_local, isUnbalanced, true, thermalCtxNeutral);
+        const Z_neutral = C(R0 * L_km, X0 * L_km);
+        
+        // Chute de tension dans le neutre (phasor)
+        const dVn = mul(Z_neutral, IN_phasor);
+        
+        // ─── Convention de signe du neutre ───────────────────────────────
+        // V_neutral(v) = V_neutral(u) + Z_n · IN
+        // Le courant neutre circule de l'enfant vers le parent (retour),
+        // donc le potentiel neutre s'ÉLÈVE au nœud enfant.
+        // ─────────────────────────────────────────────────────────────────────
+        const Vn_child = add(Vn_parent, dVn);
+        V_neutral.set(v, Vn_child);
+        
+        stack3.push(v);
+      }
+    }
+    
+    return V_neutral;
+  }
+
+  // ===== Méthode privée : Correction des S_maps pour le potentiel neutre =====
+  private correctSMapForNeutral(
+    S_map: Map<string, Complex>,
+    V_phase_map: Map<string, Complex>,
+    V_neutral_map: Map<string, Complex>,
+    nodes: Node[],
+    sourceId: string
+  ): Map<string, Complex> {
+    const corrected = new Map<string, Complex>();
+    for (const n of nodes) {
+      const S = S_map.get(n.id) || C(0, 0);
+      if (n.id === sourceId) {
+        corrected.set(n.id, S);
+        continue;
+      }
+      const Vph = V_phase_map.get(n.id);
+      const Vn = V_neutral_map.get(n.id) || C(0, 0);
+      if (!Vph) { corrected.set(n.id, S); continue; }
+      
+      // Effective voltage seen by the load: V_phase - V_neutral
+      const Veff = sub(Vph, Vn);
+      const Veff_mag = abs(Veff);
+      
+      // Guard: skip correction if effective voltage < 1V (avoid division instability)
+      if (Veff_mag < 1) { corrected.set(n.id, S); continue; }
+      
+      // S_corr = S × V_phase / (V_phase - V_neutral)
+      const Vph_mag = abs(Vph);
+      if (Vph_mag < ElectricalCalculator.MIN_VOLTAGE_SAFETY) {
+        corrected.set(n.id, S);
+        continue;
+      }
+      const scale_factor = div(Vph, Veff); // complex ratio
+      corrected.set(n.id, mul(S, scale_factor));
+    }
+    return corrected;
   }
 }

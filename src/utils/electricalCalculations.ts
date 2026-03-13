@@ -1303,12 +1303,14 @@ export class ElectricalCalculator {
         addExtra((n as any).productions || [], -1);
       }
 
-      const runBFSForPhase = (angleDeg: number, S_map: Map<string, Complex>, phaseLabel: 'A'|'B'|'C') => {
+      const runBFSForPhase = (angleDeg: number, S_map: Map<string, Complex>, phaseLabel: 'A'|'B'|'C', V0_shift?: Complex) => {
         const V_node_phase = new Map<string, Complex>();
         const I_branch_phase = new Map<string, Complex>();
         const I_inj_node_phase = new Map<string, Complex>();
 
-        const Vslack_phase_ph = fromPolar(Vslack_phase, this.deg2rad(angleDeg));
+        const Vslack_phase_ph = V0_shift
+          ? sub(fromPolar(Vslack_phase, this.deg2rad(angleDeg)), V0_shift)
+          : fromPolar(Vslack_phase, this.deg2rad(angleDeg));
         for (const n of nodes) V_node_phase.set(n.id, Vslack_phase_ph);
 
         let iter2 = 0;
@@ -1470,6 +1472,79 @@ export class ElectricalCalculator {
 
       // Détection du système 400V pour le calcul du courant neutre
       const is400V = U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
+
+      // ============================================================
+      // VIRTUAL NEUTRAL CORRECTION — 3-wire delta networks only
+      // Enforces I_A + I_B + I_C = 0 (no zero-sequence return path)
+      // The floating neutral shifts by V0 until the constraint holds
+      // ============================================================
+      if (!is400V) {
+        let V_neutral_shift = C(0, 0);
+        const MAX_VN_ITER = 3;
+        const VN_CONVERGENCE_A = 0.1; // 0.1A threshold on I_0
+
+        for (let vnIter = 0; vnIter < MAX_VN_ITER; vnIter++) {
+          // Compute source current for each phase (sum of outgoing branch currents)
+          const computeSourceCurrent = (
+            phaseResult: { I_branch_phase: Map<string, Complex> }
+          ): Complex => {
+            let I_src = C(0, 0);
+            for (const v of children.get(source.id) || []) {
+              const cab = parentCableOfChild.get(v);
+              if (!cab) continue;
+              I_src = add(I_src, phaseResult.I_branch_phase.get(cab.id) || C(0, 0));
+            }
+            return I_src;
+          };
+
+          const I_A_src = computeSourceCurrent(phaseA);
+          const I_B_src = computeSourceCurrent(phaseB);
+          const I_C_src = computeSourceCurrent(phaseC);
+
+          // Zero-sequence current: must be 0 in a 3-wire network
+          const I_0 = scale(add(add(I_A_src, I_B_src), I_C_src), 1 / 3);
+          const I_0_mag = abs(I_0);
+
+          console.log(
+            `🔺 [3-wire] VN iter ${vnIter + 1}: |I_0|=${I_0_mag.toFixed(3)}A` +
+            `, |V0_shift|=${abs(V_neutral_shift).toFixed(3)}V`
+          );
+
+          if (I_0_mag < VN_CONVERGENCE_A) {
+            console.log(`✅ [3-wire] Virtual neutral converged at iter ${vnIter + 1}`);
+            break;
+          }
+
+          // Newton step: dV_0 = I_0 / Y_network
+          // Y_network ≈ |S_net| / (3 × Vslack_phase²)
+          const S_net_VA = Math.abs(totalLoads - totalProductions) * 1000;
+          const Y_approx = S_net_VA > 100
+            ? S_net_VA / (3 * Vslack_phase * Vslack_phase)
+            : 1;
+          const dV_0 = scale(I_0, 1 / Y_approx);
+
+          // Safety cap: neutral displacement > 25V indicates divergence
+          if (abs(dV_0) > 25) {
+            console.warn(
+              `⚠️ [3-wire] VN correction too large (${abs(dV_0).toFixed(1)}V), ` +
+              `capping iteration`
+            );
+            break;
+          }
+
+          V_neutral_shift = add(V_neutral_shift, dV_0);
+
+          // Re-run BFS with shifted slacks
+          phaseA = runBFSForPhase(0,    S_A_map, 'A', V_neutral_shift);
+          phaseB = runBFSForPhase(-120, S_B_map, 'B', V_neutral_shift);
+          phaseC = runBFSForPhase(120,  S_C_map, 'C', V_neutral_shift);
+        }
+      }
+      // ============================================================
+      // END VIRTUAL NEUTRAL CORRECTION
+      // ============================================================
+
+      // is400V déjà calculé plus haut
       
       // ✅ EQUI8 : Déclaré ici pour être accessible dans la boucle neutre et les résultats câbles
       const equi8UpstreamReduction = new Map<string, Complex>();

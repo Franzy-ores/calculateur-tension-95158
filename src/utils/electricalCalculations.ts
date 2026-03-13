@@ -1473,6 +1473,9 @@ export class ElectricalCalculator {
       // Détection du système 400V pour le calcul du courant neutre
       const is400V = U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
 
+      // Variable to carry the converged neutral shift from the !is400V loop into thermal passes
+      let V_neutral_shift_final: Complex = C(0, 0);
+
       // ============================================================
       // VIRTUAL NEUTRAL CORRECTION — 3-wire delta networks only
       // Enforces I_A + I_B + I_C = 0 (no zero-sequence return path)
@@ -1539,6 +1542,7 @@ export class ElectricalCalculator {
           phaseB = runBFSForPhase(-120, S_B_map, 'B', V_neutral_shift);
           phaseC = runBFSForPhase(120,  S_C_map, 'C', V_neutral_shift);
         }
+        V_neutral_shift_final = V_neutral_shift;
       }
       // ============================================================
       // END VIRTUAL NEUTRAL CORRECTION
@@ -1592,6 +1596,11 @@ export class ElectricalCalculator {
 
       // ===== Boucle de couplage neutre (400V uniquement) =====
       // Itère entre BFS par phase et calcul V_neutral pour converger vers l'état couplé
+      // S_*_final captures the last corrected S_maps for use in thermal passes
+      let S_A_final = S_A_map;
+      let S_B_final = S_B_map;
+      let S_C_final = S_C_map;
+
       if (is400V) {
         let V_neutral_iter = new Map<string, Complex>(
           nodes.map(n => [n.id, C(0, 0)])
@@ -1625,6 +1634,10 @@ export class ElectricalCalculator {
             const S_A_corr = this.correctSMapForNeutral(S_A_map, phaseA.V_node_phase, V_neutral_iter, nodes, source.id);
             const S_B_corr = this.correctSMapForNeutral(S_B_map, phaseB.V_node_phase, V_neutral_iter, nodes, source.id);
             const S_C_corr = this.correctSMapForNeutral(S_C_map, phaseC.V_node_phase, V_neutral_iter, nodes, source.id);
+
+            S_A_final = S_A_corr;
+            S_B_final = S_B_corr;
+            S_C_final = S_C_corr;
 
             phaseA = runBFSForPhase(0, S_A_corr, 'A');
             phaseB = runBFSForPhase(-120, S_B_corr, 'B');
@@ -1692,9 +1705,12 @@ export class ElectricalCalculator {
           // Relancer le BFS avec les impédances corrigées par l'effet Joule
           if (impedancesUpdated) {
             console.log(`🌡️ [GRD-FIX] Thermique passe ${thermalPass + 1}/${MAX_THERMAL_PASSES}: recalcul BFS avec R corrigé`);
-            phaseA = runBFSForPhase(0, S_A_map, 'A');
-            phaseB = runBFSForPhase(-120, S_B_map, 'B');
-            phaseC = runBFSForPhase(120, S_C_map, 'C');
+            phaseA = runBFSForPhase(0,    is400V ? S_A_final : S_A_map, 'A',
+              is400V ? undefined : V_neutral_shift_final);
+            phaseB = runBFSForPhase(-120, is400V ? S_B_final : S_B_map, 'B',
+              is400V ? undefined : V_neutral_shift_final);
+            phaseC = runBFSForPhase(120,  is400V ? S_C_final : S_C_map, 'C',
+              is400V ? undefined : V_neutral_shift_final);
           } else {
             // Convergence thermique atteinte
             if (thermalPass > 0) {

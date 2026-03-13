@@ -323,7 +323,7 @@ const createDefaultProject = (): Project => ({
   transformerConfig: createDefaultTransformerConfig("TÉTRAPHASÉ_400V"), // Configuration transformateur par défaut
   loadModel: 'mixte_mono_poly', // NOUVEAU : mode mixte par défaut
   desequilibrePourcent: 0,
-  season: 'winter',
+   season: 'summer',
   manualPhaseDistribution: {
     charges: { A: 33.33, B: 33.33, C: 33.34 },
     productions: { A: 33.33, B: 33.33, C: 33.34 },
@@ -352,7 +352,7 @@ const createDefaultProject2 = (name: string, voltageSystem: VoltageSystem): Proj
   transformerConfig: createDefaultTransformerConfig(voltageSystem), // Configuration transformateur adaptée au système
   loadModel: 'mixte_mono_poly', // NOUVEAU : mode mixte par défaut
   desequilibrePourcent: 0,
-  season: 'winter', // Saison par défaut : hiver (comportement conservateur)
+  season: 'summer', // Saison par défaut : été (contrainte thermique dimensionnante)
   addEmptyNodeByDefault: true, // Par défaut, ajouter des nœuds vierges
   treatSmallPolyProductionsAsMono: true, // Par défaut, traiter productions TRI/TETRA ≤5kVA comme MONO
   manualPhaseDistribution: {

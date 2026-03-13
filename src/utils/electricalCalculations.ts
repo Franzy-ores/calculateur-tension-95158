@@ -1572,6 +1572,97 @@ export class ElectricalCalculator {
 
       // ✅ EQUI8 : equi8UpstreamReduction déclaré avant la boucle neutre, rempli dans le bloc is400V
 
+      // Détection du système 400V pour le calcul du courant neutre
+      const is400V = U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
+      
+      // ✅ EQUI8 : Déclaré ici pour être accessible dans la boucle neutre et les résultats câbles
+      const equi8UpstreamReduction = new Map<string, Complex>();
+      if (is400V) {
+        // ✅ EQUI8 CME: Identifier les nœuds avec injection de courant
+        const equi8CompensationByNode = new Map<string, number>();
+        
+        if (equi8CurrentInjections) {
+          for (const [nodeId, injection] of equi8CurrentInjections.entries()) {
+            equi8CompensationByNode.set(nodeId, injection.magnitude);
+            console.log(`🔌 EQUI8 CME détecté sur nœud ${nodeId}: I_injection=${injection.magnitude.toFixed(1)}A`);
+          }
+        }
+        
+        for (const n of nodes) {
+          if (n.customProps?.['equi8_I_compensation'] && !equi8CompensationByNode.has(n.id)) {
+            const I_comp = n.customProps['equi8_I_compensation'] as number;
+            equi8CompensationByNode.set(n.id, I_comp);
+            console.log(`🔌 EQUI8 legacy détecté sur nœud ${n.id}: I_compensation=${I_comp.toFixed(1)}A`);
+          }
+        }
+        
+        for (const [equi8NodeId, I_comp] of equi8CompensationByNode.entries()) {
+          let currentNodeId = equi8NodeId;
+          
+          const injection = equi8CurrentInjections?.get(equi8NodeId);
+          const I_neutral_phasor: Complex = injection
+            ? C(injection.I_neutral.re, injection.I_neutral.im)
+            : C(I_comp, 0);
+          
+          while (parent.get(currentNodeId)) {
+            const parentNodeId = parent.get(currentNodeId)!;
+            const cable = parentCableOfChild.get(currentNodeId);
+            
+            if (cable) {
+              const existingReduction = equi8UpstreamReduction.get(cable.id) || C(0, 0);
+              equi8UpstreamReduction.set(cable.id, add(existingReduction, I_neutral_phasor));
+              console.log(`🔌 EQUI8 réduction I_N sur câble ${cable.id}: +${abs(I_neutral_phasor).toFixed(1)}A phaseur (total: ${abs(add(existingReduction, I_neutral_phasor)).toFixed(1)}A)`);
+            }
+            
+            currentNodeId = parentNodeId;
+          }
+        }
+      }
+
+      // ===== Boucle de couplage neutre (400V uniquement) =====
+      if (is400V) {
+        let V_neutral_iter = new Map<string, Complex>(
+          nodes.map(n => [n.id, C(0, 0)])
+        );
+        const MAX_NEUTRAL_PASSES = 3;
+        const NEUTRAL_CONVERGENCE_V = 0.1;
+
+        for (let neutralPass = 0; neutralPass < MAX_NEUTRAL_PASSES; neutralPass++) {
+          const V_neutral_new = this.computeNeutralVoltages(
+            source, children, parentCableOfChild, nodeById, cableTypeById,
+            phaseA, phaseB, phaseC, U_line_base, isUnbalanced,
+            equi8UpstreamReduction, projectSeason, applySagCorrection
+          );
+
+          let maxDelta = 0;
+          for (const n of nodes) {
+            const Vn_new = V_neutral_new.get(n.id) || C(0, 0);
+            const Vn_prev = V_neutral_iter.get(n.id) || C(0, 0);
+            const delta = abs(sub(Vn_new, Vn_prev));
+            if (delta > maxDelta) maxDelta = delta;
+          }
+
+          V_neutral_iter = V_neutral_new;
+
+          if (maxDelta < NEUTRAL_CONVERGENCE_V && neutralPass > 0) {
+            console.log(`✅ Neutral coupling converged at pass ${neutralPass + 1}, maxΔV_n=${maxDelta.toFixed(3)}V`);
+            break;
+          }
+
+          if (neutralPass < MAX_NEUTRAL_PASSES - 1) {
+            const S_A_corr = this.correctSMapForNeutral(S_A_map, phaseA.V_node_phase, V_neutral_iter, nodes, source.id);
+            const S_B_corr = this.correctSMapForNeutral(S_B_map, phaseB.V_node_phase, V_neutral_iter, nodes, source.id);
+            const S_C_corr = this.correctSMapForNeutral(S_C_map, phaseC.V_node_phase, V_neutral_iter, nodes, source.id);
+
+            phaseA = runBFSForPhase(0, S_A_corr, 'A');
+            phaseB = runBFSForPhase(-120, S_B_corr, 'B');
+            phaseC = runBFSForPhase(120, S_C_corr, 'C');
+
+            console.log(`🔄 Neutral pass ${neutralPass + 1}/${MAX_NEUTRAL_PASSES}: maxΔV_n=${maxDelta.toFixed(3)}V`);
+          }
+        }
+      }
+
 
       // Compose cable results (par phase)
       calculatedCables.length = 0;

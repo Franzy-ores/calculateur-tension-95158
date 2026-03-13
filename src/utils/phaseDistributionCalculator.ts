@@ -396,6 +396,13 @@ export function calculateNodeAutoPhaseDistribution(
       result.charges.poly.B += totalCharge / 3;
       result.charges.poly.C += totalCharge / 3;
       
+      // ✅ FIX: POLY contributes 1/3 per coupling to phasePhaseLoads
+      if (networkVoltage === 'TRIPHASÉ_230V' && result.phasePhaseLoads) {
+        result.phasePhaseLoads.charges['A-B'] += totalCharge / 3;
+        result.phasePhaseLoads.charges['B-C'] += totalCharge / 3;
+        result.phasePhaseLoads.charges['A-C'] += totalCharge / 3;
+      }
+      
       // Productions : dépend de l'option treatSmallPolyProductionsAsMono
       if (treatSmallPolyProductionsAsMono && totalProd > 0 && totalProd <= 5) {
         // Production ≤5 kVA : traiter comme MONO (comptée dans productions.mono)

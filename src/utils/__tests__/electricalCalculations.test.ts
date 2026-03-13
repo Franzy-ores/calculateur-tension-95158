@@ -113,10 +113,10 @@ describe('ElectricalCalculator - basic LV radial cases', () => {
     }
     
     if (triMetrics) {
-      // Nœud triphasé : tensions composées ~400V ±10%
+      // Nœud triphasé : voltagesPerPhase retourne des tensions phase-neutre ~230V ±10%
       const maxLineVoltage = Math.max(triMetrics.voltagesPerPhase.A, triMetrics.voltagesPerPhase.B, triMetrics.voltagesPerPhase.C);
-      expect(maxLineVoltage).toBeGreaterThan(360); 
-      expect(maxLineVoltage).toBeLessThan(440);
+      expect(maxLineVoltage).toBeGreaterThan(200); 
+      expect(maxLineVoltage).toBeLessThan(260);
     }
   });
 

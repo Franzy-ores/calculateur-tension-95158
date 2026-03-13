@@ -152,7 +152,7 @@ describe('phaseDistributionCalculator', () => {
   });
   
   describe('calculateNodeAutoPhaseDistribution (Option B)', () => {
-    it('should apply sliders to all clients (MONO, TRI/TÉTRA)', () => {
+    it('should store physical distribution and apply cursors to foisonné totals', () => {
       const node: Node = {
         id: 'node-1',
         name: 'Test Node',
@@ -198,23 +198,35 @@ describe('phaseDistributionCalculator', () => {
         linkedClients,
         manualCharges,
         manualProductions,
-        'TÉTRAPHASÉ_400V'
+        'TÉTRAPHASÉ_400V',
+        15,   // foisonnementChargesResidentiel
+        70,   // foisonnementChargesIndustriel
+        100,  // foisonnementProductions
+        undefined, // manualCouplingDistributionCharges
+        undefined, // manualCouplingDistributionProductions
+        false
       );
       
-      // MONO: 30 kVA réparti selon curseurs
-      expect(result.charges.mono.A).toBeCloseTo(30 * 0.6, 1); // 18 kVA
-      expect(result.charges.mono.B).toBeCloseTo(30 * 0.2, 1); // 6 kVA
-      expect(result.charges.mono.C).toBeCloseTo(30 * 0.2, 1); // 6 kVA
+      // Physical distribution: MONO on phase A, POLY 1/3 each
+      expect(result.charges.mono.A).toBeCloseTo(30, 1);
+      expect(result.charges.mono.B).toBeCloseTo(0, 1);
+      expect(result.charges.mono.C).toBeCloseTo(0, 1);
       
-      // TRI: 60 kVA réparti selon curseurs (Option B)
-      expect(result.charges.poly.A).toBeCloseTo(60 * 0.6, 1); // 36 kVA
-      expect(result.charges.poly.B).toBeCloseTo(60 * 0.2, 1); // 12 kVA
-      expect(result.charges.poly.C).toBeCloseTo(60 * 0.2, 1); // 12 kVA
+      expect(result.charges.poly.A).toBeCloseTo(20, 1);
+      expect(result.charges.poly.B).toBeCloseTo(20, 1);
+      expect(result.charges.poly.C).toBeCloseTo(20, 1);
       
-      // Total
-      expect(result.charges.total.A).toBeCloseTo(54, 1); // 18 + 36
-      expect(result.charges.total.B).toBeCloseTo(18, 1); // 6 + 12
-      expect(result.charges.total.C).toBeCloseTo(18, 1); // 6 + 12
+      // Total physical
+      expect(result.charges.total.A).toBeCloseTo(50, 1);
+      expect(result.charges.total.B).toBeCloseTo(20, 1);
+      expect(result.charges.total.C).toBeCloseTo(20, 1);
+      
+      // Foisonné with cursors: total foisonné redistributed by cursors
+      // Total = (30+60) * 15/100 = 13.5 kVA (all résidentiel)
+      const totalFoisonne = 90 * 0.15; // 13.5
+      expect(result.charges.foisonneAvecCurseurs).toBeDefined();
+      expect(result.charges.foisonneAvecCurseurs!.A).toBeCloseTo(totalFoisonne * 0.6, 1); // 8.1
+      expect(result.charges.foisonneAvecCurseurs!.B).toBeCloseTo(totalFoisonne * 0.2, 1); // 2.7
+      expect(result.charges.foisonneAvecCurseurs!.C).toBeCloseTo(totalFoisonne * 0.2, 1); // 2.7
     });
   });
-});

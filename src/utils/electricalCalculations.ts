@@ -610,6 +610,14 @@ export class ElectricalCalculator {
     // Facteur de flèche câbles aériens (%), défaut 3
     sagFactorPercent?: number
   ): CalculationResult {
+    // Helper: correction facteur de flèche pour câbles aériens
+    const applySagCorrection = (rawLength_m: number, pose: string): number => {
+      if (pose === 'AÉRIEN') {
+        return rawLength_m * (1 + ((sagFactorPercent ?? 3) / 100));
+      }
+      return rawLength_m;
+    };
+
     // Validation robuste des entrées
     this.validateInputs(nodes, cables, cableTypes, foisonnementCharges, foisonnementProductions, desequilibrePourcent);
     

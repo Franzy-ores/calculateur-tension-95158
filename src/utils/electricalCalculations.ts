@@ -300,8 +300,15 @@ export class ElectricalCalculator {
       };
     }
     
-    // Conducteurs de phase → formule GRD belge (R0 + 2*R12) / 3
-    // Applicable en 230V triangle ET 400V étoile
+    // Conducteurs de phase
+    if (isUnbalanced) {
+      // Mode déséquilibré: R12/X12 direct (le neutre est modélisé séparément via R0/X0)
+      return {
+        R: cableType.R12_ohm_per_km * thermalFactor,
+        X: cableType.X12_ohm_per_km
+      };
+    }
+    // Mode équilibré: formule GRD belge (R0 + 2*R12) / 3
     return this.calculateGRDImpedance(cableType, thermalFactor);
   }
 

@@ -1905,7 +1905,16 @@ export class SimulationCalculator extends ElectricalCalculator {
       const compensator = compensators.find(c => c.id === compId);
       if (!compensator) continue;
       
-      const injection = buildEQUI8Injection(compensator.nodeId, Iinj);
+      // Récupérer les tensions finales au nœud pour distribution proportionnelle
+      const finalNodeMetrics = finalResult.nodeMetricsPerPhase?.find(nm => nm.nodeId === compensator.nodeId);
+      const finalVoltages = finalNodeMetrics?.voltagesPerPhase
+        ? { A: finalNodeMetrics.voltagesPerPhase.A, B: finalNodeMetrics.voltagesPerPhase.B, C: finalNodeMetrics.voltagesPerPhase.C }
+        : { A: 230, B: 230, C: 230 };
+      const minVFinal = Math.min(finalVoltages.A, finalVoltages.B, finalVoltages.C);
+      const neutralAngleFinal = finalVoltages.A === minVFinal ? 0 : finalVoltages.B === minVFinal ? -2*Math.PI/3 : 2*Math.PI/3;
+      const IN_existingFinal = { re: Math.cos(neutralAngleFinal), im: Math.sin(neutralAngleFinal) };
+      
+      const injection = buildEQUI8Injection(compensator.nodeId, Iinj, finalVoltages, IN_existingFinal);
       finalEqui8Injections.set(compensator.nodeId, {
         I_neutral: { re: injection.I_neutral.re, im: injection.I_neutral.im },
         I_phaseA: { re: injection.I_phaseA.re, im: injection.I_phaseA.im },

@@ -928,6 +928,8 @@ export class ElectricalCalculator {
       // 4. Fallback sur U_line_base
       if (source.connectionType === 'TÉTRA_3P+N_230_400V') {
         Vslack_phase = U_line_base / Math.sqrt(3);
+      } else if (source.connectionType === 'TRI_230V_3F') {
+        Vslack_phase = U_line_base / Math.sqrt(3);
       } else {
         Vslack_phase = U_line_base;
       }

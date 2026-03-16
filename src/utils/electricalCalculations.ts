@@ -2878,8 +2878,9 @@ export class ElectricalCalculator {
         const distalNode = nodeById.get(v)!;
         const Rt = distalNode?.rt_terre_ohm ?? 25; // 25 Ω par défaut (NF C 11-201)
         if (Rt > 0) {
-          const I_fuite = div(Vn_parent, C(Rt, 0));
-          IN_phasor = sub(IN_phasor, I_fuite);
+          // La fuite à la terre s'ajoute à la charge du conducteur neutre (réseau TT/TN-S)
+          const I_fuite_approx = div(Vn_parent, C(Rt, 0));
+          IN_phasor = add(IN_phasor, I_fuite_approx);
           console.log(
             `🌍 Terre nœud ${v}: Rt=${Rt}Ω, |I_fuite|=${abs(I_fuite).toFixed(2)}A, ` +
             `|I_N| final=${abs(IN_phasor).toFixed(2)}A`

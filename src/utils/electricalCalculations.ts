@@ -1956,12 +1956,23 @@ export class ElectricalCalculator {
 
       // ===== Recalcul final V_neutral après passes thermiques + correction d'affichage =====
       // Le neutre est recalculé ici car les passes thermiques ont pu modifier phaseA/B/C
+      let I_neutral_cable_final: Map<string, Complex> | undefined;
       if (is400V) {
-        const V_neutral = this.computeNeutralVoltages(
+        // Passe standard
+        const { V_neutral, I_neutral_cable } = this.computeNeutralVoltages(
           source, children, parentCableOfChild, nodeById, cableTypeById,
           phaseA, phaseB, phaseC, U_line_base, isUnbalanced,
           equi8UpstreamReduction, projectSeason, applySagCorrection
         );
+
+        // Passe de raffinement terre : utilise Vn_child (calculé) au lieu de Vn_parent
+        const { V_neutral: V_neutral_refined, I_neutral_cable: I_neutral_cable_refined } =
+          this.computeNeutralVoltagesRefined(
+            source, children, parentCableOfChild, nodeById, cableTypeById,
+            phaseA, phaseB, phaseC, V_neutral, U_line_base, isUnbalanced,
+            equi8UpstreamReduction, projectSeason, applySagCorrection
+          );
+        I_neutral_cable_final = I_neutral_cable_refined;
         
         // Corriger les tensions phase-neutre en soustrayant la tension du neutre
         // V_phase_neutre_corrigé = V_phase - V_neutral

@@ -835,7 +835,17 @@ export class ElectricalCalculator {
 
     // ---- Détection des équipements SRG2 actifs et mode déséquilibré ----
     const hasSRG2Active = nodes.some(n => n.hasSRG2Device === true);
-    const isUnbalanced = loadModel === 'monophase_reparti' || loadModel === 'mixte_mono_poly' || hasSRG2Active;
+    // Mode équilibré désactivé — le réseau est toujours traité en mixte déséquilibré.
+    // Raison : seul le mode mixte_mono_poly couvre correctement :
+    //   - la correction thermique saisonnière en 2 passes (été/hiver)
+    //   - le conducteur neutre (R0/X0 + passes thermiques)
+    //   - les charges MONO phase-phase (delta 230V) via phasePhaseLoads_map
+    //   - le déséquilibre réel par nœud via autoPhaseDistribution
+    if (loadModel !== 'mixte_mono_poly' && loadModel !== 'monophase_reparti') {
+      console.warn(`⚠️ LoadModel "${loadModel}" désactivé — forcé en mixte_mono_poly (mode équilibré retiré)`);
+      loadModel = 'mixte_mono_poly';
+    }
+    const isUnbalanced = true; // Toujours déséquilibré
     
     console.log(`🔍 Mode calculation decision: loadModel=${loadModel}, hasSRG2Active=${hasSRG2Active}, isUnbalanced=${isUnbalanced}`);
     if (hasSRG2Active) {

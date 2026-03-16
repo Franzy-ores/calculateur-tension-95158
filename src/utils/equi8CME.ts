@@ -382,33 +382,44 @@ export function computeCME_UtargetsAndI(
 /**
  * Construit l'injection de courant EQUI8 pour le BFS
  * 
- * Modèle physique:
- * - +I_EQUI8 sur le NEUTRE (injection)
- * - -I_EQUI8/3 sur chaque PHASE (soutirage)
- * 
- * Les phasors sont alignés sur les angles des phases respectives.
+ * Modèle physique corrigé (KCL-compliant):
+ * - Redistribue le courant de déséquilibre depuis les phases surchargées
+ *   vers les phases sous-chargées, proportionnellement à l'écart de tension
+ * - I_neutral aligné sur l'angle du courant neutre existant pour maximiser
+ *   la compensation
+ * - KCL respecté : I_A + I_B + I_C + I_N = 0 au nœud
  */
 export function buildEQUI8Injection(
   nodeId: string,
-  Iinj_magnitude: number
+  Iinj_magnitude: number,
+  voltages: { A: number; B: number; C: number } = { A: 230, B: 230, C: 230 },
+  I_neutral_existing: { re: number; im: number } = { re: 1, im: 0 }
 ): EQUI8Injection {
-  // Angles de phase (radians)
-  const angleA = 0;                    // 0°
-  const angleB = -2 * Math.PI / 3;     // -120°
-  const angleC = 2 * Math.PI / 3;      // +120°
+  const Umoy = (voltages.A + voltages.B + voltages.C) / 3;
   
-  // Courant par phase (soutiré = négatif)
-  const I_per_phase = -Iinj_magnitude / 3;
+  // Déséquilibre par phase (positif = sous-tension → recevra de la compensation)
+  const dA = Umoy - voltages.A;
+  const dB = Umoy - voltages.B;
+  const dC = Umoy - voltages.C;
+  const dSum = Math.abs(dA) + Math.abs(dB) + Math.abs(dC);
   
-  // Phasors de courant
-  const I_phaseA = fromPolar(I_per_phase, angleA);
-  const I_phaseB = fromPolar(I_per_phase, angleB);
-  const I_phaseC = fromPolar(I_per_phase, angleC);
+  // Distribution proportionnelle au déséquilibre
+  const wA = dSum > 0.01 ? dA / dSum : -1/3;
+  const wB = dSum > 0.01 ? dB / dSum : -1/3;
+  const wC = dSum > 0.01 ? dC / dSum : -1/3;
   
-  // Courant neutre (injecté = somme opposée des phases)
-  // En pratique: I_N = -(I_A + I_B + I_C) pour équilibrer
-  // Mais l'EQUI8 injecte un courant positif sur le neutre
-  const I_neutral = C(Iinj_magnitude, 0); // Réel, aligné sur phase A
+  // Courant par phase : positif = injection (soulagement), négatif = soutirage
+  const I_A_mag = Iinj_magnitude * wA;
+  const I_B_mag = Iinj_magnitude * wB;
+  const I_C_mag = Iinj_magnitude * wC;
+  
+  const I_phaseA = fromPolar(I_A_mag, 0);              // phase A à 0°
+  const I_phaseB = fromPolar(I_B_mag, -2 * Math.PI / 3); // phase B à -120°
+  const I_phaseC = fromPolar(I_C_mag,  2 * Math.PI / 3); // phase C à +120°
+  
+  // I_neutral aligné sur l'angle du courant neutre existant
+  const I_neutral_angle = Math.atan2(I_neutral_existing.im, I_neutral_existing.re);
+  const I_neutral = fromPolar(Iinj_magnitude, I_neutral_angle);
   
   return {
     nodeId,

@@ -1,11 +1,11 @@
 import { ClientImporte, VoltageSystem, ClientConnectionType, Node, LoadModel } from '@/types/network';
 
-/**
- * Facteur de conversion pour les réseaux Triangle (Delta) 230V
- * Relation physique : I_ligne = √3 × I_couplage
- * Donc : S_phase = S_couplage / √3 ≈ 0.577
- */
-const DELTA_PHASE_CONTRIBUTION_FACTOR = 1 / Math.sqrt(3); // ≈ 0.577350269
+// Mapping couplage → phase legacy pour compatibilité descendante
+const COUPLING_TO_PHASE: Record<'A-B' | 'B-C' | 'A-C', 'A' | 'B' | 'C'> = {
+  'A-B': 'A',
+  'B-C': 'B',
+  'A-C': 'C',
+};
 
 /**
  * Normalise le couplage brut du client en type de connexion standardisé

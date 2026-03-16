@@ -169,9 +169,15 @@ describe('EQUI8 CME - Formules fournisseur', () => {
       expect(abs(injection.I_phaseA)).toBeGreaterThan(abs(injection.I_phaseC));
       expect(abs(injection.I_phaseB)).toBeGreaterThan(abs(injection.I_phaseC));
       
-      // Vérifier les signes : dA = 225-230 = -5 → I_A négatif, dB = 235-230 = +5 → I_B positif
-      expect(injection.I_phaseA.re).toBeLessThan(0); // phase A sous-tension → injecte → négatif
-      expect(injection.I_phaseB.re).toBeGreaterThan(0); // phase B surtension → absorbe → positif (re component of -120° scaled positive)
+      // Vérifier les signes des amplitudes (pas des composantes .re qui dépendent de l'angle de phase)
+      // dA = 225-230 = -5 → I_A_signed négatif, dB = 235-230 = +5 → I_B_signed positif
+      // Phase A à 0° : I_phaseA.re = I_A_signed * cos(0) = négatif
+      expect(injection.I_phaseA.re).toBeLessThan(0);
+      // Phase B à -120° : I_phaseB.re = I_B_signed * cos(-120°) = positif * (-0.5) = négatif (composante re)
+      // Mais l'amplitude signée est positive → vérifier via le produit scalaire avec e_B
+      const e_B = fromPolar(1, -2 * Math.PI / 3);
+      const I_B_scalar = injection.I_phaseB.re * e_B.re + injection.I_phaseB.im * e_B.im;
+      expect(I_B_scalar).toBeGreaterThan(0); // amplitude positive = absorbe
     });
     
     it('KCL strict : I_A + I_B + I_C + I_N = 0', () => {

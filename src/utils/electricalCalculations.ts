@@ -1388,7 +1388,11 @@ export class ElectricalCalculator {
       const runCoupledBFSForDelta = (
         S_A_m: Map<string, Complex>,
         S_B_m: Map<string, Complex>,
-        S_C_m: Map<string, Complex>
+        S_C_m: Map<string, Complex>,
+        phasePhaseLoads_map: Map<string, {
+          charges:     { 'A-B': number; 'B-C': number; 'A-C': number };
+          productions: { 'A-B': number; 'B-C': number; 'A-C': number };
+        }>
       ): {
         phaseA: { V_node_phase: Map<string, Complex>; I_branch_phase: Map<string, Complex> };
         phaseB: { V_node_phase: Map<string, Complex>; I_branch_phase: Map<string, Complex> };

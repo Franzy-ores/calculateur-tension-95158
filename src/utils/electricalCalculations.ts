@@ -1645,8 +1645,44 @@ export class ElectricalCalculator {
       let phaseC: { V_node_phase: Map<string, Complex>; I_branch_phase: Map<string, Complex> };
 
       if (!is400V) {
+        // Build phasePhaseLoads_map for MONO delta injections in coupled BFS
+        // Uses foisonné values if available, otherwise raw phasePhaseLoads with foisonnement applied
+        const phasePhaseLoads_map = new Map<string, {
+          charges:     { 'A-B': number; 'B-C': number; 'A-C': number };
+          productions: { 'A-B': number; 'B-C': number; 'A-C': number };
+        }>();
+
+        for (const n of nodes) {
+          if (n.autoPhaseDistribution?.phasePhaseLoads) {
+            const ppLoads = n.autoPhaseDistribution.phasePhaseLoads;
+            // Prefer foisonné values (already include foisonnement + cursors)
+            if (ppLoads.foisonneCharges && ppLoads.foisonneProductions) {
+              phasePhaseLoads_map.set(n.id, {
+                charges: { ...ppLoads.foisonneCharges },
+                productions: { ...ppLoads.foisonneProductions },
+              });
+            } else {
+              // Fallback: apply global foisonnement to raw values
+              const foisChargeCoeff = (foisonnementCharges ?? 100) / 100;
+              const foisProdCoeff = (foisonnementProductions ?? 100) / 100;
+              phasePhaseLoads_map.set(n.id, {
+                charges: {
+                  'A-B': ppLoads.charges['A-B'] * foisChargeCoeff,
+                  'B-C': ppLoads.charges['B-C'] * foisChargeCoeff,
+                  'A-C': ppLoads.charges['A-C'] * foisChargeCoeff,
+                },
+                productions: {
+                  'A-B': ppLoads.productions['A-B'] * foisProdCoeff,
+                  'B-C': ppLoads.productions['B-C'] * foisProdCoeff,
+                  'A-C': ppLoads.productions['A-C'] * foisProdCoeff,
+                },
+              });
+            }
+          }
+        }
+
         // 3-wire delta: use coupled BFS that enforces I_A+I_B+I_C=0
-        const coupled = runCoupledBFSForDelta(S_A_map, S_B_map, S_C_map);
+        const coupled = runCoupledBFSForDelta(S_A_map, S_B_map, S_C_map, phasePhaseLoads_map);
         phaseA = coupled.phaseA;
         phaseB = coupled.phaseB;
         phaseC = coupled.phaseC;

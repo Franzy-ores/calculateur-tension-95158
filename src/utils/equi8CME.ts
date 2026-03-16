@@ -387,13 +387,13 @@ export function computeCME_UtargetsAndI(
 /**
  * Construit l'injection de courant EQUI8 pour le BFS
  * 
- * Modèle physique corrigé (KCL-compliant):
- * - Redistribue le courant de déséquilibre depuis les phases surchargées
- *   vers les phases sous-chargées, proportionnellement à l'écart de tension
- * - I_neutral aligné sur l'angle du courant neutre existant pour maximiser
- *   la compensation
- * - KCL respecté : I_A + I_B + I_C + I_N = 0 au nœud
- */
+  * Modèle physique corrigé (KCL-compliant):
+  * - Convention BFS : courant positif = charge sur la source = augmente la chute de tension
+  * - Phase sous-tension (V < Umoy) → I_inj négatif (réduit la demande amont)
+  * - Phase sur-tension (V > Umoy) → I_inj positif (absorbe vers EQUI8)
+  * - KCL strict : I_neutral = -(I_A + I_B + I_C)
+  * - Utilise scale() au lieu de fromPolar() pour éviter l'inversion d'angle avec magnitude négative
+  */
 export function buildEQUI8Injection(
   nodeId: string,
   Iinj_magnitude: number,
@@ -401,31 +401,47 @@ export function buildEQUI8Injection(
   I_neutral_existing: { re: number; im: number } = { re: 1, im: 0 }
 ): EQUI8Injection {
   const Umoy = (voltages.A + voltages.B + voltages.C) / 3;
-  
-  // Déséquilibre par phase (positif = sous-tension → recevra de la compensation)
-  const dA = Umoy - voltages.A;
-  const dB = Umoy - voltages.B;
-  const dC = Umoy - voltages.C;
+
+  // Écart de tension par phase
+  // Positif = sur-tension  → absorbe (charge supplémentaire → I_inj positif)
+  // Négatif = sous-tension → injecte (réduit la demande → I_inj négatif)
+  const dA = voltages.A - Umoy;
+  const dB = voltages.B - Umoy;
+  const dC = voltages.C - Umoy;
   const dSum = Math.abs(dA) + Math.abs(dB) + Math.abs(dC);
-  
-  // Distribution proportionnelle au déséquilibre
-  const wA = dSum > 0.01 ? dA / dSum : -1/3;
-  const wB = dSum > 0.01 ? dB / dSum : -1/3;
-  const wC = dSum > 0.01 ? dC / dSum : -1/3;
-  
-  // Courant par phase : positif = injection (soulagement), négatif = soutirage
-  const I_A_mag = Iinj_magnitude * wA;
-  const I_B_mag = Iinj_magnitude * wB;
-  const I_C_mag = Iinj_magnitude * wC;
-  
-  const I_phaseA = fromPolar(I_A_mag, 0);              // phase A à 0°
-  const I_phaseB = fromPolar(I_B_mag, -2 * Math.PI / 3); // phase B à -120°
-  const I_phaseC = fromPolar(I_C_mag,  2 * Math.PI / 3); // phase C à +120°
-  
-  // I_neutral aligné sur l'angle du courant neutre existant
-  const I_neutral_angle = Math.atan2(I_neutral_existing.im, I_neutral_existing.re);
-  const I_neutral = fromPolar(Iinj_magnitude, I_neutral_angle);
-  
+
+  // Poids normalisés — signe conservé pour la direction de correction
+  const wA = dSum > 0.01 ? dA / dSum : 0;
+  const wB = dSum > 0.01 ? dB / dSum : 0;
+  const wC = dSum > 0.01 ? dC / dSum : 0;
+
+  // Amplitudes signées :
+  // Négatif = injecte du courant (réduit la demande amont sur cette phase)
+  // Positif = absorbe du courant (augmente légèrement la demande amont)
+  const I_A_signed = Iinj_magnitude * wA;
+  const I_B_signed = Iinj_magnitude * wB;
+  const I_C_signed = Iinj_magnitude * wC;
+
+  // Phaseurs de phase : scale(vecteur_unitaire_phase, amplitude_signée)
+  // scale() conserve le signe — pas de fromPolar avec magnitude négative
+  const e_A = fromPolar(1,  0);               // vecteur unitaire phase A (0°)
+  const e_B = fromPolar(1, -2 * Math.PI / 3); // vecteur unitaire phase B (-120°)
+  const e_C = fromPolar(1,  2 * Math.PI / 3); // vecteur unitaire phase C (+120°)
+
+  const I_phaseA = scale(e_A, I_A_signed);
+  const I_phaseB = scale(e_B, I_B_signed);
+  const I_phaseC = scale(e_C, I_C_signed);
+
+  // KCL strict : I_neutral = -(I_A + I_B + I_C)
+  const I_phases_sum_re = I_phaseA.re + I_phaseB.re + I_phaseC.re;
+  const I_phases_sum_im = I_phaseA.im + I_phaseB.im + I_phaseC.im;
+  const I_neutral = C(-I_phases_sum_re, -I_phases_sum_im);
+
+  console.log(`🔌 EQUI8 injection @ ${nodeId}:`);
+  console.log(`   Umoy=${Umoy.toFixed(1)}V | dA=${dA.toFixed(2)}V dB=${dB.toFixed(2)}V dC=${dC.toFixed(2)}V`);
+  console.log(`   I_A=${I_A_signed.toFixed(2)}A I_B=${I_B_signed.toFixed(2)}A I_C=${I_C_signed.toFixed(2)}A`);
+  console.log(`   I_N=${abs(I_neutral).toFixed(2)}A (KCL: ${Math.abs(I_phases_sum_re + I_neutral.re).toFixed(6)})`);
+
   return {
     nodeId,
     I_neutral,

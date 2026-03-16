@@ -2833,8 +2833,9 @@ export class ElectricalCalculator {
     equi8UpstreamReduction: Map<string, Complex>,
     projectSeason?: ThermalSeason,
     applySagCorrection?: (rawLength_m: number, pose: string) => number
-  ): Map<string, Complex> {
+  ): { V_neutral: Map<string, Complex>; I_neutral_cable: Map<string, Complex> } {
     const V_neutral = new Map<string, Complex>();
+    const I_neutral_cable = new Map<string, Complex>();
     V_neutral.set(source.id, C(0, 0)); // Le neutre à la source est à 0V (référence)
     
     // BFS depuis la source pour propager la tension du neutre

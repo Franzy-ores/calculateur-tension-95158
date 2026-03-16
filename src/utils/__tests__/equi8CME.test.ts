@@ -23,7 +23,7 @@ import {
   adjustSecant,
   EQUI8_THERMAL_LIMITS,
 } from '../equi8CME';
-import { abs } from '../complex';
+import { abs, fromPolar } from '../complex';
 
 describe('EQUI8 CME - Formules fournisseur', () => {
   

@@ -125,7 +125,8 @@ export const EQUI8_THERMAL_LIMITS: Record<EQUI8ThermalWindow, number> = {
  */
 export function computeEquivImpedancesToSource(
   nodeId: string,
-  project: Project
+  project: Project,
+  isUnbalanced: boolean = true  // toujours true pour réseau mixte 400V
 ): EquivalentImpedances {
   const { nodes, cables, cableTypes } = project;
   
@@ -203,11 +204,15 @@ export function computeEquivImpedancesToSource(
       }
     }
     
-    // Sommer les résistances selon formule GRD belge
-    // Phases: R = (R0 + 2*R12) / 3 (formule ORES/RESA/Sibelga)
-    // Neutre: R0 directement
-    const R_grd = (cableType.R0_ohm_per_km + 2 * cableType.R12_ohm_per_km) / 3;
-    Zph_total += R_grd * length_km;
+    // Mode déséquilibré (cohérent avec selectRX du BFS) :
+    // Phases utilisent R12 directement car le neutre est modélisé séparément
+    // Mode équilibré : formule GRD belge R = (R0 + 2*R12) / 3
+    if (isUnbalanced) {
+      Zph_total += cableType.R12_ohm_per_km * length_km;
+    } else {
+      const R_grd = (cableType.R0_ohm_per_km + 2 * cableType.R12_ohm_per_km) / 3;
+      Zph_total += R_grd * length_km;
+    }
     Zn_total += cableType.R0_ohm_per_km * length_km;
     
     currentNodeId = parent.get(currentNodeId)!;
@@ -224,7 +229,7 @@ export function computeEquivImpedancesToSource(
     console.warn(`⚠️ EQUI8 CME: Zn=${Zn_total.toFixed(4)}Ω < ${CME_CLAMP_IMPEDANCE_MIN}Ω (condition CME non satisfaite)`);
   }
   
-  console.log(`📊 EQUI8 CME - Impédances équivalentes au nœud ${nodeId}:`, {
+  console.log(`📊 EQUI8 CME - Impédances équivalentes au nœud ${nodeId} (mode ${isUnbalanced ? 'déséquilibré' : 'équilibré'}):`, {
     Zph: `${Zph_total.toFixed(4)}Ω`,
     Zn: `${Zn_total.toFixed(4)}Ω`,
     Zph_valid,

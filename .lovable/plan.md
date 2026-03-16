@@ -1,35 +1,46 @@
 
 
-# Diagnostic : hourlyProfiles.json non reactif dans le Labo
+## Plan: Fix MONO client assignment to use coupling-only logic for 230V delta
 
-## Probleme identifie
+### Problem
+In `autoAssignPhaseForMonoClient`, for 230V delta networks:
+- The function accumulates `phaseLoads` with a 50/50 split per coupling (lines 96-110) — physically incorrect
+- The `assignedPhase` return value is derived from `phaseLoads` (line 123-127), not from the coupling selection
+- The coupling-based selection (lines 134-143) is already correct but disconnected from the phase assignment
 
-Le fichier `hourlyProfiles.json` **est bien utilise** par le `DailyProfileCalculator` (import statique ligne 6 de `dailyProfileCalculator.ts`). Cependant, le Labo ne reagit pas aux modifications pour deux raisons :
+The same issue exists in `autoAssignProductionPhaseForSmallPolyClient` (lines 183-210).
 
-1. **Import indirect** : Les profils sont importes dans `dailyProfileCalculator.ts`, pas dans `LaboFoisonnementTab.tsx`. Le composant Labo passe `undefined` comme `customProfiles` (ligne 242), laissant le calculator utiliser son import interne.
+### Changes
 
-2. **useMemo aveugle** : Le `useMemo` (ligne 272) qui lance les 3 runs a pour dependances `[currentProject, selectedNodeId, season, weather, ...]` — les profils JSON n'y figurent pas. Meme si Vite HMR recharge le module, le memo ne se re-execute pas car aucune de ses dependances reactives n'a change.
+**File: `src/utils/phaseDistributionCalculator.ts`**
 
-En resume : vous modifiez le JSON, Vite le recharge, mais le `useMemo` du Labo ne sait pas qu'il doit recalculer.
+**1. Remove `DELTA_PHASE_CONTRIBUTION_FACTOR` constant (line 8)**
+No longer needed — balancing is done on couplings, not pseudo-phase contributions.
 
-## Correction
+**2. Fix `autoAssignPhaseForMonoClient` (lines 86-158)**
 
-### `LaboFoisonnementTab.tsx`
+For 230V delta:
+- Remove the 50/50 `phaseLoads` accumulation (lines 96-110) — don't update `phaseLoads` at all for 230V MONO clients
+- Move the coupling selection **before** the phase selection
+- Derive `assignedPhase` from the selected coupling (e.g., `A-B` → `A`, `B-C` → `B`, `A-C` → `A`) — this is a legacy field needed by downstream code; the first letter of the coupling is a reasonable convention
+- Use **only** `couplingLoads` for the optimization decision in 230V mode
 
-1. **Importer directement** `hourlyProfiles.json` dans le composant Labo
-2. **Passer** cet import comme `customProfiles` aux 3 constructeurs `DailyProfileCalculator` (au lieu de `undefined`)
-3. **Ajouter** l'objet profiles aux dependances du `useMemo` principal
+**3. Fix `autoAssignProductionPhaseForSmallPolyClient` (lines 166-248)**
 
-```text
-Avant:  new DailyProfileCalculator(currentProject, baseOptions, undefined, ...)
-Apres:  new DailyProfileCalculator(currentProject, baseOptions, profilesData, ...)
-```
+Same pattern: for 230V, remove 50/50 `phaseProductions` accumulation and derive `assignedPhase` from the selected coupling.
 
-Cela rend le Labo reactif a toute modification du fichier JSON.
+### Mapping coupling → assignedPhase
 
-### Fichier modifie
+For backward compatibility (some downstream code reads `assignedPhase`), derive it from the coupling:
+- `A-B` → `A`
+- `B-C` → `B`  
+- `A-C` → `C`
 
-| Fichier | Modification |
-|---|---|
-| `src/components/topMenu/LaboFoisonnementTab.tsx` | +1 import hourlyProfiles.json, passer comme customProfiles aux 3 runs, ajouter aux deps useMemo |
+This maps each coupling to a unique phase, ensuring the `assignedPhase` field remains populated but the real balancing decision is made on couplings.
+
+### What stays unchanged
+- 400V star path — uses `phaseLoads` as before
+- `calculateNodeAutoPhaseDistribution` — already uses `phaseCoupling` for 230V
+- `runCoupledBFSForDelta` — already reads `phasePhaseLoads_map`
+- All other functions listed in the "do not modify" list
 

@@ -1849,7 +1849,38 @@ export class ElectricalCalculator {
           if (impedancesUpdated) {
             console.log(`🌡️ [GRD-FIX] Thermique passe ${thermalPass + 1}/${MAX_THERMAL_PASSES}: recalcul BFS avec R corrigé`);
             if (!is400V) {
-              const coupled = runCoupledBFSForDelta(S_A_map, S_B_map, S_C_map);
+              // Rebuild phasePhaseLoads_map for thermal re-run
+              const ppMap_thermal = new Map<string, {
+                charges:     { 'A-B': number; 'B-C': number; 'A-C': number };
+                productions: { 'A-B': number; 'B-C': number; 'A-C': number };
+              }>();
+              for (const n of nodes) {
+                if (n.autoPhaseDistribution?.phasePhaseLoads) {
+                  const ppLoads = n.autoPhaseDistribution.phasePhaseLoads;
+                  if (ppLoads.foisonneCharges && ppLoads.foisonneProductions) {
+                    ppMap_thermal.set(n.id, {
+                      charges: { ...ppLoads.foisonneCharges },
+                      productions: { ...ppLoads.foisonneProductions },
+                    });
+                  } else {
+                    const foisChargeCoeff = (foisonnementCharges ?? 100) / 100;
+                    const foisProdCoeff = (foisonnementProductions ?? 100) / 100;
+                    ppMap_thermal.set(n.id, {
+                      charges: {
+                        'A-B': ppLoads.charges['A-B'] * foisChargeCoeff,
+                        'B-C': ppLoads.charges['B-C'] * foisChargeCoeff,
+                        'A-C': ppLoads.charges['A-C'] * foisChargeCoeff,
+                      },
+                      productions: {
+                        'A-B': ppLoads.productions['A-B'] * foisProdCoeff,
+                        'B-C': ppLoads.productions['B-C'] * foisProdCoeff,
+                        'A-C': ppLoads.productions['A-C'] * foisProdCoeff,
+                      },
+                    });
+                  }
+                }
+              }
+              const coupled = runCoupledBFSForDelta(S_A_map, S_B_map, S_C_map, ppMap_thermal);
               phaseA = coupled.phaseA;
               phaseB = coupled.phaseB;
               phaseC = coupled.phaseC;

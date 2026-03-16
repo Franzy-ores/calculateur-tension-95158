@@ -1730,7 +1730,19 @@ export class SimulationCalculator extends ElectricalCalculator {
         const compensator = compensators.find(c => c.id === compId);
         if (!compensator) continue;
         
-        const injection = buildEQUI8Injection(compensator.nodeId, Iinj);
+        // Récupérer les tensions actuelles au nœud pour distribution proportionnelle
+        const prevNodeMetrics = finalResult.nodeMetricsPerPhase?.find(nm => nm.nodeId === compensator.nodeId);
+        const voltages = prevNodeMetrics?.voltagesPerPhase
+          ? { A: prevNodeMetrics.voltagesPerPhase.A, B: prevNodeMetrics.voltagesPerPhase.B, C: prevNodeMetrics.voltagesPerPhase.C }
+          : { A: 230, B: 230, C: 230 };
+        
+        // Approximer le phaseur neutre existant depuis le courant scalaire
+        // L'angle est aligné sur la phase la plus chargée (tension la plus basse)
+        const minV = Math.min(voltages.A, voltages.B, voltages.C);
+        const neutralAngle = voltages.A === minV ? 0 : voltages.B === minV ? -2*Math.PI/3 : 2*Math.PI/3;
+        const IN_existing = { re: Math.cos(neutralAngle), im: Math.sin(neutralAngle) };
+        
+        const injection = buildEQUI8Injection(compensator.nodeId, Iinj, voltages, IN_existing);
         equi8Injections.set(compensator.nodeId, {
           I_neutral: { re: injection.I_neutral.re, im: injection.I_neutral.im },
           I_phaseA: { re: injection.I_phaseA.re, im: injection.I_phaseA.im },

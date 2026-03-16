@@ -155,34 +155,44 @@ describe('EQUI8 CME - Formules fournisseur', () => {
   
   describe('buildEQUI8Injection', () => {
     
-    it('construit une injection avec +I sur neutre et -I/3 sur phases', () => {
-      const injection = buildEQUI8Injection('node-1', 30);
+    it('construit une injection proportionnelle au déséquilibre de tension', () => {
+      // Phase A sous-tension (225V), B surtension (235V), C moyenne (230V)
+      const voltages = { A: 225, B: 235, C: 230 };
+      const I_neutral_existing = { re: 1, im: 0 };
+      const injection = buildEQUI8Injection('node-1', 30, voltages, I_neutral_existing);
       
       expect(injection.nodeId).toBe('node-1');
       expect(injection.magnitude).toBe(30);
       
-      // +I sur neutre
-      expect(injection.I_neutral.re).toBeCloseTo(30, 2);
-      expect(injection.I_neutral.im).toBeCloseTo(0, 4);
+      // Phase A sous-tension → devrait recevoir le plus de courant (positif)
+      // Phase B surtension → devrait être soutirée (négatif)
+      expect(abs(injection.I_phaseA)).toBeGreaterThan(abs(injection.I_phaseC));
+      expect(abs(injection.I_phaseB)).toBeGreaterThan(abs(injection.I_phaseC));
       
-      // -I/3 sur chaque phase
-      expect(abs(injection.I_phaseA)).toBeCloseTo(10, 2);
-      expect(abs(injection.I_phaseB)).toBeCloseTo(10, 2);
-      expect(abs(injection.I_phaseC)).toBeCloseTo(10, 2);
+      // I_neutral doit avoir la magnitude demandée
+      expect(abs(injection.I_neutral)).toBeCloseTo(30, 1);
     });
     
-    it('les phases sont déphasées de 120°', () => {
-      const injection = buildEQUI8Injection('node-1', 30);
+    it('aligne I_neutral sur l\'angle du courant neutre existant', () => {
+      const voltages = { A: 225, B: 235, C: 230 };
+      const angle = -2 * Math.PI / 3; // -120°
+      const I_neutral_existing = { re: Math.cos(angle), im: Math.sin(angle) };
+      const injection = buildEQUI8Injection('node-1', 30, voltages, I_neutral_existing);
       
-      // Les phases sont négatives (soutirage), donc les angles sont décalés de 180°
-      // Phase A: originellement 0°, négatif donc -I à 0° = magnitude à 180°
-      // Phase B: originellement -120°, négatif = 60°
-      // Phase C: originellement +120°, négatif = -60°
+      // L'angle du courant neutre injecté doit être aligné sur -120°
+      const injAngle = Math.atan2(injection.I_neutral.im, injection.I_neutral.re);
+      expect(injAngle).toBeCloseTo(angle, 2);
+    });
+    
+    it('distribution uniforme -I/3 quand tensions équilibrées', () => {
+      const voltages = { A: 230, B: 230, C: 230 };
+      const I_neutral_existing = { re: 1, im: 0 };
+      const injection = buildEQUI8Injection('node-1', 30, voltages, I_neutral_existing);
       
-      // Vérifier que les magnitudes sont correctes (10A chacune)
-      expect(abs(injection.I_phaseA)).toBeCloseTo(10, 2);
-      expect(abs(injection.I_phaseB)).toBeCloseTo(10, 2);
-      expect(abs(injection.I_phaseC)).toBeCloseTo(10, 2);
+      // Quand toutes les tensions sont égales, distribution uniforme
+      expect(abs(injection.I_phaseA)).toBeCloseTo(10, 1);
+      expect(abs(injection.I_phaseB)).toBeCloseTo(10, 1);
+      expect(abs(injection.I_phaseC)).toBeCloseTo(10, 1);
     });
     
   });

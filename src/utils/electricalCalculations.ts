@@ -2032,8 +2032,17 @@ export class ElectricalCalculator {
         
         // ✅ CORRECTION : Pour conformité EN50160, toujours prendre la PIRE phase (MIN pour chute de tension)
         let U_node_line_tension: number;
-        const scaleLine = this.getDisplayLineScale(n.connectionType);
-        U_node_line_tension = Math.min(Va_mag, Vb_mag, Vc_mag) * scaleLine;
+        if (n.connectionType === 'TRI_230V_3F') {
+          // Delta sans neutre : les tensions physiques sont ligne-à-ligne
+          U_node_line_tension = Math.min(
+            abs(sub(Va, Vb)),  // V_AB
+            abs(sub(Vb, Vc)),  // V_BC
+            abs(sub(Va, Vc))   // V_AC
+          );
+        } else {
+          const scaleLine = this.getDisplayLineScale(n.connectionType);
+          U_node_line_tension = Math.min(Va_mag, Vb_mag, Vc_mag) * scaleLine;
+        }
 
         // ===== 🔧 FIX GRD — RÉFÉRENCE EN50160 : TOUJOURS U_base NOMINALE =====
         // La conformité EN50160 s'évalue par rapport à la tension nominale du réseau,

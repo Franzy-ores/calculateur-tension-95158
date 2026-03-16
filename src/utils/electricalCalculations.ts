@@ -892,9 +892,10 @@ export class ElectricalCalculator {
         Vslack_phase = source.tensionCible / Math.sqrt(3);
         console.log(`📐 Tétra 400V: ${source.tensionCible}V phase-phase → ${Vslack_phase.toFixed(1)}V phase-neutre`);
       } else if (source.connectionType === 'TRI_230V_3F') {
-        // Réseau triangle : pas de neutre → utiliser tension phase-phase directement
-        Vslack_phase = source.tensionCible;
-        console.log(`📐 Triangle 230V: ${source.tensionCible}V phase-phase (utilisé directement, pas de neutre)`);
+        // Réseau triangle 3-fil : V_phase_interne = V_LL / √3
+        // Le BFS travaille en tensions de phase (≈133V), les tensions LL sont reconstituées à l'affichage
+        Vslack_phase = source.tensionCible / Math.sqrt(3);
+        console.log(`📐 Triangle 230V: ${source.tensionCible}V phase-phase → ${Vslack_phase.toFixed(1)}V phase interne (÷√3)`);
       } else {
         // Autres types (monophasé, etc.) : tensionCible est déjà en phase
         Vslack_phase = source.tensionCible;
@@ -906,6 +907,8 @@ export class ElectricalCalculator {
       console.log(`🎚️ Utilisation tension source (slider): ${U_line}V`);
       if (source.connectionType === 'TÉTRA_3P+N_230_400V') {
         Vslack_phase = U_line / Math.sqrt(3);
+      } else if (source.connectionType === 'TRI_230V_3F') {
+        Vslack_phase = U_line / Math.sqrt(3);
       } else {
         Vslack_phase = U_line;
       }
@@ -916,23 +919,33 @@ export class ElectricalCalculator {
       // Décision basée sur le type de connexion, pas sur un seuil de tension
       if (source.connectionType === 'TÉTRA_3P+N_230_400V') {
         Vslack_phase = U_line / Math.sqrt(3); // Tétra : convertir phase-phase → phase-neutre
+      } else if (source.connectionType === 'TRI_230V_3F') {
+        Vslack_phase = U_line / Math.sqrt(3); // Triangle : V_phase_interne = V_LL / √3
       } else {
-        Vslack_phase = U_line; // Triangle ou mono : utiliser directement
+        Vslack_phase = U_line; // Mono : utiliser directement
       }
     } else {
       // 4. Fallback sur U_line_base
       if (source.connectionType === 'TÉTRA_3P+N_230_400V') {
+        Vslack_phase = U_line_base / Math.sqrt(3);
+      } else if (source.connectionType === 'TRI_230V_3F') {
         Vslack_phase = U_line_base / Math.sqrt(3);
       } else {
         Vslack_phase = U_line_base;
       }
     }
     
-    // 3. Validation élargie : accepter 180-450V pour couvrir à la fois 230V et 400V
-    if (!isFinite(Vslack_phase) || Vslack_phase < 180 || Vslack_phase > 450) {
+    // 3. Validation élargie : accepter 100-450V pour couvrir 230V/√3≈133V (triangle interne) jusqu'à 400V
+    if (!isFinite(Vslack_phase) || Vslack_phase < 100 || Vslack_phase > 450) {
       console.warn(`⚠️ Vslack_phase hors limites: ${Vslack_phase}V, réinitialisation basée sur type réseau`);
       // Réinitialisation intelligente basée sur le type de réseau
-      Vslack_phase = source.connectionType === 'TÉTRA_3P+N_230_400V' ? 230 : U_line_base;
+      if (source.connectionType === 'TÉTRA_3P+N_230_400V') {
+        Vslack_phase = 230;
+      } else if (source.connectionType === 'TRI_230V_3F') {
+        Vslack_phase = U_line_base / Math.sqrt(3);
+      } else {
+        Vslack_phase = U_line_base;
+      }
     }
     
     console.log(`✅ Vslack_phase: ${Vslack_phase.toFixed(1)}V | U_line_base nominal: ${U_line_base}V`);
@@ -1169,113 +1182,10 @@ export class ElectricalCalculator {
         S_B_map.set(n.id, C(P_B_net_kW * 1000, Q_B_net_kVAr * 1000));
         S_C_map.set(n.id, C(P_C_net_kW * 1000, Q_C_net_kVAr * 1000));
 
-        // ===== CORRECTION MONO 230V PHASE-PHASE (Approche vectorielle) =====
-        // Pour les réseaux 230V triangle, les charges MONO sont entre phases (A-B, B-C, A-C).
-        // Le courant de ligne est I = S_total / U_LL, pas I = (S_total/2) / U_LL.
-        // 
-        // Approche vectorielle : pour un client MONO sur A-B avec puissance S_total,
-        // le courant ENTRE par la phase A et SORT par la phase B.
-        // On modélise : S_A = +S_total (courant entrant), S_B = -S_total (courant sortant)
-        // La puissance totale est conservée car P = V_AB * I* = (V_A - V_B) * I*
-        //
-        // NOTE : On ne REMPLACE PAS la distribution 50/50 (qui reste pour l'affichage),
-        // on AJUSTE les phaseurs pour le calcul de courant correct.
-        //
-        // 🔧 FIX GRD — Foisonnement appliqué une seule fois
-        // Si autoPhaseDistribution.charges.foisonneAvecCurseurs existe, les valeurs
-        // dans phasePhaseLoads sont BRUTES (non foisonnées). Le foisonnement a déjà été
-        // appliqué dans S_prel_map (lignes 646-668). On applique donc foisChargeCoeff
-        // uniquement sur les phasePhaseLoads bruts.
-        // MAIS si S_prel_map utilise déjà foisonnementCharges, alors phasePhaseLoads
-        // doit aussi l'utiliser pour rester cohérent.
-        const is230VTriangle = U_line_base < ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
-        if (is230VTriangle && n.autoPhaseDistribution?.phasePhaseLoads) {
-          const ppLoads = n.autoPhaseDistribution.phasePhaseLoads;
-          
-          // 🔧 FIX GRD — Le foisonnement est appliqué via S_prel_map et S_pv_map.
-          // Les phasePhaseLoads contiennent les puissances BRUTES par couplage.
-          // On doit appliquer le même coefficient de foisonnement que S_prel_map/S_pv_map.
-          const foisChargeCoeff = (foisonnementCharges ?? 100) / 100;
-          const foisProdCoeff = (foisonnementProductions ?? 100) / 100;
-          
-          // Appliquer les curseurs de déséquilibre aux phasePhaseLoads
-          // Les curseurs définissent la répartition finale souhaitée par l'utilisateur
-          // On calcule le ratio de chaque phase dans chaque couplage
-          const totalChargePercent = pA_charges + pB_charges + pC_charges;
-          const totalProdPercent = pA_productions + pB_productions + pC_productions;
-          
-          // Pour A-B: les phases A et B contribuent
-          // Ratio de A dans A-B = pA / (pA + pB), Ratio de B dans A-B = pB / (pA + pB)
-          const ratioAB_A_charges = (pA_charges + pB_charges) > 0 ? pA_charges / (pA_charges + pB_charges) : 0.5;
-          const ratioBC_B_charges = (pB_charges + pC_charges) > 0 ? pB_charges / (pB_charges + pC_charges) : 0.5;
-          const ratioAC_A_charges = (pA_charges + pC_charges) > 0 ? pA_charges / (pA_charges + pC_charges) : 0.5;
-          
-          const ratioAB_A_prods = (pA_productions + pB_productions) > 0 ? pA_productions / (pA_productions + pB_productions) : 0.5;
-          const ratioBC_B_prods = (pB_productions + pC_productions) > 0 ? pB_productions / (pB_productions + pC_productions) : 0.5;
-          const ratioAC_A_prods = (pA_productions + pC_productions) > 0 ? pA_productions / (pA_productions + pC_productions) : 0.5;
-          
-          // NET des charges et productions par couplage (avec foisonnement séparé)
-          // Pondéré par les ratios des curseurs de déséquilibre
-          const S_AB_charges = ppLoads.charges['A-B'] * foisChargeCoeff;
-          const S_AB_prods = ppLoads.productions['A-B'] * foisProdCoeff;
-          const S_AB_net = S_AB_charges - S_AB_prods;
-          
-          const S_BC_charges = ppLoads.charges['B-C'] * foisChargeCoeff;
-          const S_BC_prods = ppLoads.productions['B-C'] * foisProdCoeff;
-          const S_BC_net = S_BC_charges - S_BC_prods;
-          
-          const S_AC_charges = ppLoads.charges['A-C'] * foisChargeCoeff;
-          const S_AC_prods = ppLoads.productions['A-C'] * foisProdCoeff;
-          const S_AC_net = S_AC_charges - S_AC_prods;
-          
-          // La distribution 50/50 actuelle met S/2 sur chaque phase du couplage.
-          // Pour obtenir le courant correct I = S_total / U_LL, on doit :
-          // - Retirer la moitié (déjà comptée dans 50/50)
-          // - Ajouter la puissance complète sur la phase "entrante" avec phaseur opposé sur "sortante"
-          //
-          // Simplification : la correction nette sur chaque phase est la différence
-          // entre ce qu'il faut (phaseurs opposés) et ce qu'on a (50/50).
-          //
-          // Pour A-B: 50/50 donne S_A=S/2, S_B=S/2
-          //           Phaseurs opposés: S_A=+S, S_B=-S (ou l'inverse selon convention)
-          //           Différence à ajouter: S_A += +S/2, S_B += -S/2
-          //
-          // Pour chaque couplage, on ajoute +S/2 sur la première phase et -S/2 sur la seconde
-          
-          // Correction A-B : +S_AB/2 sur A, -S_AB/2 sur B
-          const correction_AB_A_kVA = S_AB_net / 2;
-          const correction_AB_B_kVA = -S_AB_net / 2;
-          
-          // Correction B-C : +S_BC/2 sur B, -S_BC/2 sur C
-          const correction_BC_B_kVA = S_BC_net / 2;
-          const correction_BC_C_kVA = -S_BC_net / 2;
-          
-          // Correction A-C : +S_AC/2 sur A, -S_AC/2 sur C
-          const correction_AC_A_kVA = S_AC_net / 2;
-          const correction_AC_C_kVA = -S_AC_net / 2;
-          
-          // Somme des corrections par phase
-          const S_A_correction_kVA = correction_AB_A_kVA + correction_AC_A_kVA;
-          const S_B_correction_kVA = correction_AB_B_kVA + correction_BC_B_kVA;
-          const S_C_correction_kVA = correction_BC_C_kVA + correction_AC_C_kVA;
-          
-          // Utiliser cosPhi moyen pour les corrections (pondéré par charges vs productions)
-          // Note: pour simplifier, on utilise cosPhi charges si net > 0, sinon cosPhi productions
-          const applyCorrection = (correction_kVA: number) => {
-            if (Math.abs(correction_kVA) < 0.001) return C(0, 0);
-            const cosPhiEff = correction_kVA >= 0 ? cosPhiCharges_eff : cosPhiProductions_eff;
-            const sinPhiEff = correction_kVA >= 0 ? sinPhiCharges : sinPhiProductions;
-            return C(correction_kVA * cosPhiEff * 1000, correction_kVA * sinPhiEff * 1000);
-          };
-          
-          S_A_map.set(n.id, add(S_A_map.get(n.id) || C(0,0), applyCorrection(S_A_correction_kVA)));
-          S_B_map.set(n.id, add(S_B_map.get(n.id) || C(0,0), applyCorrection(S_B_correction_kVA)));
-          S_C_map.set(n.id, add(S_C_map.get(n.id) || C(0,0), applyCorrection(S_C_correction_kVA)));
-          
-          if (Math.abs(S_AB_net) > 0.01 || Math.abs(S_BC_net) > 0.01 || Math.abs(S_AC_net) > 0.01) {
-            console.log(`🔧 Correction vectorielle MONO 230V nœud ${n.name || n.id}: corrections A=${S_A_correction_kVA.toFixed(2)}kVA, B=${S_B_correction_kVA.toFixed(2)}kVA, C=${S_C_correction_kVA.toFixed(2)}kVA`);
-          }
-        }
+        // NOTE: Pour les réseaux 230V triangle, les charges MONO phase-phase
+        // sont maintenant injectées directement dans runCoupledBFSForDelta
+        // via phasePhaseLoads_map (courants calculés depuis V_AB, V_BC, V_AC).
+        // Les S_A/B/C_map ne contiennent que les charges POLY équilibrées.
 
         // Intégrer les contributions explicites P/Q (équipements virtuels)
         const addExtra = (items: any[], sign: 1 | -1) => {
@@ -1484,7 +1394,11 @@ export class ElectricalCalculator {
       const runCoupledBFSForDelta = (
         S_A_m: Map<string, Complex>,
         S_B_m: Map<string, Complex>,
-        S_C_m: Map<string, Complex>
+        S_C_m: Map<string, Complex>,
+        phasePhaseLoads_map: Map<string, {
+          charges:     { 'A-B': number; 'B-C': number; 'A-C': number };
+          productions: { 'A-B': number; 'B-C': number; 'A-C': number };
+        }>
       ): {
         phaseA: { V_node_phase: Map<string, Complex>; I_branch_phase: Map<string, Complex> };
         phaseB: { V_node_phase: Map<string, Complex>; I_branch_phase: Map<string, Complex> };
@@ -1555,9 +1469,57 @@ export class ElectricalCalculator {
               Ic_inj = add(Ic_inj, C(injection.I_phaseC.re, injection.I_phaseC.im));
             }
 
+            // ── MONO DELTA INJECTION ──────────────────────────────────
+            // Inject MONO phase-phase loads directly from V_AB, V_BC, V_AC
+            // instead of going through S_maps (which only contain POLY loads).
+            // This computes physically correct line currents for delta loads.
+            const ppLoads = phasePhaseLoads_map.get(u);
+            if (ppLoads) {
+              // Net power per coupling (charges - productions), already foisonné
+              const S_AB_net_kVA = ppLoads.charges['A-B'] - ppLoads.productions['A-B'];
+              const S_BC_net_kVA = ppLoads.charges['B-C'] - ppLoads.productions['B-C'];
+              const S_AC_net_kVA = ppLoads.charges['A-C'] - ppLoads.productions['A-C'];
+
+              // Phase-phase voltages from current BFS iteration
+              const V_AB = sub(Va_safe, Vb_safe);
+              const V_BC = sub(Vb_safe, Vc_safe);
+              const V_AC = sub(Va_safe, Vc_safe);
+
+              // Build complex S with cosφ: S = P + jQ (in VA)
+              const buildS = (net_kVA: number): Complex => {
+                const cosPhiEff = net_kVA >= 0 ? cosPhiCharges_eff : cosPhiProductions_eff;
+                const sinPhiEff = net_kVA >= 0 ? sinPhiCharges : sinPhiProductions;
+                return C(net_kVA * cosPhiEff * 1000, net_kVA * sinPhiEff * 1000);
+              };
+
+              const S_AB = buildS(S_AB_net_kVA);
+              const S_BC = buildS(S_BC_net_kVA);
+              const S_AC = buildS(S_AC_net_kVA);
+
+              // Delta load currents: I_AB = conj(S_AB / V_AB)
+              const I_AB = abs(V_AB) > ElectricalCalculator.MIN_VOLTAGE_SAFETY
+                ? conj(div(S_AB, V_AB)) : C(0, 0);
+              const I_BC = abs(V_BC) > ElectricalCalculator.MIN_VOLTAGE_SAFETY
+                ? conj(div(S_BC, V_BC)) : C(0, 0);
+              const I_AC = abs(V_AC) > ElectricalCalculator.MIN_VOLTAGE_SAFETY
+                ? conj(div(S_AC, V_AC)) : C(0, 0);
+
+              // Line currents from delta load currents (Kirchhoff):
+              // I_A = I_AB + I_AC   (current enters A via A-B and A-C branches)
+              // I_B = I_BC - I_AB   (current enters B via B-C, exits via A-B)
+              // I_C = -I_BC - I_AC  (current exits C via both B-C and A-C)
+              // Verify: I_A + I_B + I_C = (I_AB+I_AC) + (I_BC-I_AB) + (-I_BC-I_AC) = 0 ✓
+              Ia_inj = add(Ia_inj, add(I_AB, I_AC));
+              Ib_inj = add(Ib_inj, sub(I_BC, I_AB));
+              Ic_inj = sub(Ic_inj, add(I_BC, I_AC));
+            }
+            // ─────────────────────────────────────────────────────────
+
             // ── KEY COUPLING STEP ────────────────────────────────────
             // In a 3-wire network, I_A + I_B + I_C = 0 at every node.
             // Remove the zero-sequence component to enforce this constraint.
+            // Note: MONO delta injections already satisfy I_A+I_B+I_C=0,
+            // but POLY loads from S_maps may have residual I_0.
             const I_0 = scale(add(add(Ia_inj, Ib_inj), Ic_inj), 1 / 3);
             Ia_inj = sub(Ia_inj, I_0);
             Ib_inj = sub(Ib_inj, I_0);
@@ -1689,8 +1651,44 @@ export class ElectricalCalculator {
       let phaseC: { V_node_phase: Map<string, Complex>; I_branch_phase: Map<string, Complex> };
 
       if (!is400V) {
+        // Build phasePhaseLoads_map for MONO delta injections in coupled BFS
+        // Uses foisonné values if available, otherwise raw phasePhaseLoads with foisonnement applied
+        const phasePhaseLoads_map = new Map<string, {
+          charges:     { 'A-B': number; 'B-C': number; 'A-C': number };
+          productions: { 'A-B': number; 'B-C': number; 'A-C': number };
+        }>();
+
+        for (const n of nodes) {
+          if (n.autoPhaseDistribution?.phasePhaseLoads) {
+            const ppLoads = n.autoPhaseDistribution.phasePhaseLoads;
+            // Prefer foisonné values (already include foisonnement + cursors)
+            if (ppLoads.foisonneCharges && ppLoads.foisonneProductions) {
+              phasePhaseLoads_map.set(n.id, {
+                charges: { ...ppLoads.foisonneCharges },
+                productions: { ...ppLoads.foisonneProductions },
+              });
+            } else {
+              // Fallback: apply global foisonnement to raw values
+              const foisChargeCoeff = (foisonnementCharges ?? 100) / 100;
+              const foisProdCoeff = (foisonnementProductions ?? 100) / 100;
+              phasePhaseLoads_map.set(n.id, {
+                charges: {
+                  'A-B': ppLoads.charges['A-B'] * foisChargeCoeff,
+                  'B-C': ppLoads.charges['B-C'] * foisChargeCoeff,
+                  'A-C': ppLoads.charges['A-C'] * foisChargeCoeff,
+                },
+                productions: {
+                  'A-B': ppLoads.productions['A-B'] * foisProdCoeff,
+                  'B-C': ppLoads.productions['B-C'] * foisProdCoeff,
+                  'A-C': ppLoads.productions['A-C'] * foisProdCoeff,
+                },
+              });
+            }
+          }
+        }
+
         // 3-wire delta: use coupled BFS that enforces I_A+I_B+I_C=0
-        const coupled = runCoupledBFSForDelta(S_A_map, S_B_map, S_C_map);
+        const coupled = runCoupledBFSForDelta(S_A_map, S_B_map, S_C_map, phasePhaseLoads_map);
         phaseA = coupled.phaseA;
         phaseB = coupled.phaseB;
         phaseC = coupled.phaseC;
@@ -1857,7 +1855,38 @@ export class ElectricalCalculator {
           if (impedancesUpdated) {
             console.log(`🌡️ [GRD-FIX] Thermique passe ${thermalPass + 1}/${MAX_THERMAL_PASSES}: recalcul BFS avec R corrigé`);
             if (!is400V) {
-              const coupled = runCoupledBFSForDelta(S_A_map, S_B_map, S_C_map);
+              // Rebuild phasePhaseLoads_map for thermal re-run
+              const ppMap_thermal = new Map<string, {
+                charges:     { 'A-B': number; 'B-C': number; 'A-C': number };
+                productions: { 'A-B': number; 'B-C': number; 'A-C': number };
+              }>();
+              for (const n of nodes) {
+                if (n.autoPhaseDistribution?.phasePhaseLoads) {
+                  const ppLoads = n.autoPhaseDistribution.phasePhaseLoads;
+                  if (ppLoads.foisonneCharges && ppLoads.foisonneProductions) {
+                    ppMap_thermal.set(n.id, {
+                      charges: { ...ppLoads.foisonneCharges },
+                      productions: { ...ppLoads.foisonneProductions },
+                    });
+                  } else {
+                    const foisChargeCoeff = (foisonnementCharges ?? 100) / 100;
+                    const foisProdCoeff = (foisonnementProductions ?? 100) / 100;
+                    ppMap_thermal.set(n.id, {
+                      charges: {
+                        'A-B': ppLoads.charges['A-B'] * foisChargeCoeff,
+                        'B-C': ppLoads.charges['B-C'] * foisChargeCoeff,
+                        'A-C': ppLoads.charges['A-C'] * foisChargeCoeff,
+                      },
+                      productions: {
+                        'A-B': ppLoads.productions['A-B'] * foisProdCoeff,
+                        'B-C': ppLoads.productions['B-C'] * foisProdCoeff,
+                        'A-C': ppLoads.productions['A-C'] * foisProdCoeff,
+                      },
+                    });
+                  }
+                }
+              }
+              const coupled = runCoupledBFSForDelta(S_A_map, S_B_map, S_C_map, ppMap_thermal);
               phaseA = coupled.phaseA;
               phaseB = coupled.phaseB;
               phaseC = coupled.phaseC;

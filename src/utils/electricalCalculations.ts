@@ -1807,7 +1807,7 @@ export class ElectricalCalculator {
         const NEUTRAL_CONVERGENCE_V = 0.1;
 
         for (let neutralPass = 0; neutralPass < MAX_NEUTRAL_PASSES; neutralPass++) {
-          const V_neutral_new = this.computeNeutralVoltages(
+          const { V_neutral: V_neutral_new } = this.computeNeutralVoltages(
             source, children, parentCableOfChild, nodeById, cableTypeById,
             phaseA, phaseB, phaseC, U_line_base, isUnbalanced,
             equi8UpstreamReduction, projectSeason, applySagCorrection

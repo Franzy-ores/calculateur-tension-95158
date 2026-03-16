@@ -1014,7 +1014,37 @@ export class ElectricalCalculator {
         let pA_charges = 1/3, pB_charges = 1/3, pC_charges = 1/3;
         let pA_productions = 1/3, pB_productions = 1/3, pC_productions = 1/3;
         
-        if (n.autoPhaseDistribution) {
+        // Détecter réseau 230V delta pour exclure MONO des S_maps
+        const is230VDelta = U_line_base < ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
+
+        if (is230VDelta && n.autoPhaseDistribution) {
+          // ✅ 230V Delta : S_maps ne doivent contenir que les charges POLY
+          // Les charges MONO sont injectées séparément via phasePhaseLoads_map dans runCoupledBFSForDelta
+          const polyCharges = n.autoPhaseDistribution.charges.poly;
+          const polyProds   = n.autoPhaseDistribution.productions.poly;
+          const totalPolyC  = polyCharges.A + polyCharges.B + polyCharges.C;
+          const totalPolyP  = polyProds.A + polyProds.B + polyProds.C;
+
+          if (totalPolyC > 0.001) {
+            pA_charges = polyCharges.A / totalPolyC;
+            pB_charges = polyCharges.B / totalPolyC;
+            pC_charges = polyCharges.C / totalPolyC;
+          } else {
+            // Aucune charge POLY : S_maps = 0 (tout sera dans phasePhaseLoads_map)
+            pA_charges = 0; pB_charges = 0; pC_charges = 0;
+          }
+
+          if (totalPolyP > 0.001) {
+            pA_productions = polyProds.A / totalPolyP;
+            pB_productions = polyProds.B / totalPolyP;
+            pC_productions = polyProds.C / totalPolyP;
+          } else {
+            pA_productions = 0; pB_productions = 0; pC_productions = 0;
+          }
+
+          console.log(`📊 Nœud ${n.name || n.id}: 230V Delta → S_maps POLY uniquement (MONO via phasePhaseLoads_map)`);
+          console.log(`   Ratios charges POLY: A=${(pA_charges*100).toFixed(1)}%, B=${(pB_charges*100).toFixed(1)}%, C=${(pC_charges*100).toFixed(1)}%`);
+        } else if (n.autoPhaseDistribution) {
           // ✅ PRIORITÉ : utiliser les valeurs foisonnées avec curseurs si disponibles
           if (n.autoPhaseDistribution.charges.foisonneAvecCurseurs && 
               n.autoPhaseDistribution.productions.foisonneAvecCurseurs) {
@@ -1099,29 +1129,48 @@ export class ElectricalCalculator {
           console.log(`📊 Nœud ${n.name || n.id}: utilise manualPhaseDistribution`);
         }
         
-        // Vérification de cohérence
+        // Vérification de cohérence (skip pour delta MONO-only car ratios peuvent être 0)
         const totalCharges = pA_charges + pB_charges + pC_charges;
         const totalProductions = pA_productions + pB_productions + pC_productions;
-        if (Math.abs(totalCharges - 1) > 1e-6) {
+        if (!is230VDelta && Math.abs(totalCharges - 1) > 1e-6) {
           console.warn(`⚠️ Répartition des charges incohérente pour nœud ${n.id}: total=${totalCharges}`);
         }
-        if (Math.abs(totalProductions - 1) > 1e-6) {
+        if (!is230VDelta && Math.abs(totalProductions - 1) > 1e-6) {
           console.warn(`⚠️ Répartition des productions incohérente pour nœud ${n.id}: total=${totalProductions}`);
         }
         
         // Récupérer les charges et productions brutes (AVANT NET)
         const S_prel_kVA = S_prel_map.get(n.id) || 0;
         const S_pv_kVA = S_pv_map.get(n.id) || 0;
+
+        // Pour 230V Delta : S_maps = puissance POLY foisonnée uniquement
+        // Les charges MONO sont injectées via phasePhaseLoads_map dans le BFS couplé
+        let S_charges_for_maps_kVA: number;
+        let S_prods_for_maps_kVA: number;
+
+        if (is230VDelta && n.autoPhaseDistribution) {
+          const polyC = n.autoPhaseDistribution.charges.poly;
+          const polyP = n.autoPhaseDistribution.productions.poly;
+          const totalPolyCharges = polyC.A + polyC.B + polyC.C;
+          const totalPolyProds = polyP.A + polyP.B + polyP.C;
+          // Appliquer foisonnement aux charges POLY uniquement
+          S_charges_for_maps_kVA = totalPolyCharges * ((foisonnementChargesResidentiel ?? foisonnementCharges) / 100);
+          S_prods_for_maps_kVA = totalPolyProds * ((foisonnementProductions ?? 100) / 100);
+          console.log(`📊 Nœud ${n.name || n.id}: S_maps POLY: charges=${S_charges_for_maps_kVA.toFixed(2)}kVA, prods=${S_prods_for_maps_kVA.toFixed(2)}kVA`);
+        } else {
+          S_charges_for_maps_kVA = S_prel_kVA;
+          S_prods_for_maps_kVA = S_pv_kVA;
+        }
         
         // 1. Calculer les CHARGES par phase
-        const S_A_charges_kVA = S_prel_kVA * pA_charges;
-        const S_B_charges_kVA = S_prel_kVA * pB_charges;
-        const S_C_charges_kVA = S_prel_kVA * pC_charges;
+        const S_A_charges_kVA = S_charges_for_maps_kVA * pA_charges;
+        const S_B_charges_kVA = S_charges_for_maps_kVA * pB_charges;
+        const S_C_charges_kVA = S_charges_for_maps_kVA * pC_charges;
         
         // 2. Calculer les PRODUCTIONS par phase
-        const S_A_prod_kVA = S_pv_kVA * pA_productions;
-        const S_B_prod_kVA = S_pv_kVA * pB_productions;
-        const S_C_prod_kVA = S_pv_kVA * pC_productions;
+        const S_A_prod_kVA = S_prods_for_maps_kVA * pA_productions;
+        const S_B_prod_kVA = S_prods_for_maps_kVA * pB_productions;
+        const S_C_prod_kVA = S_prods_for_maps_kVA * pC_productions;
         
         // 3. Calculer le NET par phase selon le scénario
         let S_A_kVA = 0, S_B_kVA = 0, S_C_kVA = 0;
@@ -1964,11 +2013,20 @@ export class ElectricalCalculator {
         const dVC = abs(mul(Z, IC));
 
         const current_A = Math.max(IA_mag, IB_mag, IC_mag);
-        // sqrt(3) uniquement pour étoile (phase-neutre -> ligne-ligne)
-        // En triangle, la chute est déjà en tension composée
-        const deltaU_line_V = isStarNetwork
-          ? Math.max(dVA, dVB, dVC) * Math.sqrt(3)
-          : Math.max(dVA, dVB, dVC);
+
+        let deltaU_line_V: number;
+        if (isStarNetwork) {
+          // Étoile 400V : chute phase-neutre → ligne via √3
+          deltaU_line_V = Math.max(dVA, dVB, dVC) * Math.sqrt(3);
+        } else if (!is400V) {
+          // Delta 230V : chute ligne-à-ligne = |Z×(I_x - I_y)|, pire paire
+          const dV_AB = abs(mul(Z, sub(IA, IB)));
+          const dV_BC = abs(mul(Z, sub(IB, IC)));
+          const dV_AC = abs(mul(Z, sub(IA, IC)));
+          deltaU_line_V = Math.max(dV_AB, dV_BC, dV_AC);
+        } else {
+          deltaU_line_V = Math.max(dVA, dVB, dVC);
+        }
 
         // Base voltage for percent
         let { U_base } = this.getVoltage(distalNode.connectionType);

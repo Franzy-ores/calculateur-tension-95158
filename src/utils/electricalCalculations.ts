@@ -2043,9 +2043,21 @@ export class ElectricalCalculator {
         const { U_base: U_base_nominal } = this.getVoltage(distalNode.connectionType);
         const deltaU_percent = U_base_nominal ? (deltaU_line_V / U_base_nominal) * 100 : 0;
 
-        // Pertes (somme des 3 phases)
-        const R_total = Z.re;
-        const losses_kW = ((IA_mag*IA_mag) + (IB_mag*IB_mag) + (IC_mag*IC_mag)) * R_total / 1000;
+        // Pertes phases
+        const R_phase = Z.re;
+        const losses_phases_kW = ((IA_mag*IA_mag) + (IB_mag*IB_mag) + (IC_mag*IC_mag)) * R_phase / 1000;
+
+        // Pertes neutre (400V uniquement)
+        let losses_neutral_kW = 0;
+        if (is400V) {
+          const length_m_raw_n = this.calculateLengthMeters(cab.coordinates || []);
+          const length_km_n = applySagCorrection(length_m_raw_n, cab.pose) / 1000;
+          const R0_ohm = ct.R0_ohm_per_km * length_km_n;
+          const IN_mag_local = abs(add(add(IA, IB), IC));
+          losses_neutral_kW = (IN_mag_local * IN_mag_local) * R0_ohm / 1000;
+        }
+
+        const losses_kW = losses_phases_kW + losses_neutral_kW;
         globalLosses += losses_kW;
 
         // Courant de neutre (si 400V L-N)

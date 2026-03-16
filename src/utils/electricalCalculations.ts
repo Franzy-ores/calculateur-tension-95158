@@ -892,9 +892,10 @@ export class ElectricalCalculator {
         Vslack_phase = source.tensionCible / Math.sqrt(3);
         console.log(`📐 Tétra 400V: ${source.tensionCible}V phase-phase → ${Vslack_phase.toFixed(1)}V phase-neutre`);
       } else if (source.connectionType === 'TRI_230V_3F') {
-        // Réseau triangle : pas de neutre → utiliser tension phase-phase directement
-        Vslack_phase = source.tensionCible;
-        console.log(`📐 Triangle 230V: ${source.tensionCible}V phase-phase (utilisé directement, pas de neutre)`);
+        // Réseau triangle 3-fil : V_phase_interne = V_LL / √3
+        // Le BFS travaille en tensions de phase (≈133V), les tensions LL sont reconstituées à l'affichage
+        Vslack_phase = source.tensionCible / Math.sqrt(3);
+        console.log(`📐 Triangle 230V: ${source.tensionCible}V phase-phase → ${Vslack_phase.toFixed(1)}V phase interne (÷√3)`);
       } else {
         // Autres types (monophasé, etc.) : tensionCible est déjà en phase
         Vslack_phase = source.tensionCible;

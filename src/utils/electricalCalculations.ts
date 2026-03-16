@@ -935,11 +935,17 @@ export class ElectricalCalculator {
       }
     }
     
-    // 3. Validation élargie : accepter 180-450V pour couvrir à la fois 230V et 400V
-    if (!isFinite(Vslack_phase) || Vslack_phase < 180 || Vslack_phase > 450) {
+    // 3. Validation élargie : accepter 100-450V pour couvrir 230V/√3≈133V (triangle interne) jusqu'à 400V
+    if (!isFinite(Vslack_phase) || Vslack_phase < 100 || Vslack_phase > 450) {
       console.warn(`⚠️ Vslack_phase hors limites: ${Vslack_phase}V, réinitialisation basée sur type réseau`);
       // Réinitialisation intelligente basée sur le type de réseau
-      Vslack_phase = source.connectionType === 'TÉTRA_3P+N_230_400V' ? 230 : U_line_base;
+      if (source.connectionType === 'TÉTRA_3P+N_230_400V') {
+        Vslack_phase = 230;
+      } else if (source.connectionType === 'TRI_230V_3F') {
+        Vslack_phase = U_line_base / Math.sqrt(3);
+      } else {
+        Vslack_phase = U_line_base;
+      }
     }
     
     console.log(`✅ Vslack_phase: ${Vslack_phase.toFixed(1)}V | U_line_base nominal: ${U_line_base}V`);

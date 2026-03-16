@@ -2139,10 +2139,10 @@ export class ElectricalCalculator {
           U_ref = 230; // Référence phase-neutre EN50160
           
         } else if (n.connectionType === 'TRI_230V_3F') {
-          // Triphasé 230V : tensions composées = tensions de phase (système 230V)
-          Va_display = Va_phase;
-          Vb_display = Vb_phase;
-          Vc_display = Vc_phase;
+          // Delta sans neutre : les seules tensions physiques sont ligne-à-ligne
+          Va_display = abs(sub(Va, Vb));   // V_AB
+          Vb_display = abs(sub(Vb, Vc));   // V_BC
+          Vc_display = abs(sub(Va, Vc));   // V_AC
           U_ref = 230;
           
         } else if (n.connectionType === 'TÉTRA_3P+N_230_400V') {

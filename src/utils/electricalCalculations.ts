@@ -1095,7 +1095,7 @@ export class ElectricalCalculator {
             console.log(`   Charges: A=${(pA_charges*100).toFixed(1)}%, B=${(pB_charges*100).toFixed(1)}%, C=${(pC_charges*100).toFixed(1)}%`);
 
             // Avertissement POLY sous curseurs inégaux
-            if (is400V && n.autoPhaseDistribution.polyClientsCount > 0) {
+            if (U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD && n.autoPhaseDistribution.polyClientsCount > 0) {
               const maxRatio = Math.max(pA_charges, pB_charges, pC_charges);
               const minRatio = Math.min(pA_charges, pB_charges, pC_charges);
               if (maxRatio - minRatio > 0.1) {

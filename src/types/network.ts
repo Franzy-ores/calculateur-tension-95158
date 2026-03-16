@@ -210,10 +210,8 @@ export interface Node {
     // NOUVEAU : Charges phase-phase pour réseau 230V triangle (pour calcul correct du courant)
     // Le courant dans un couplage phase-phase est I = S_total / U_LL (pas S/2 / U_LL)
     phasePhaseLoads?: {
-      charges: { 'A-B': number; 'B-C': number; 'A-C': number };  // kVA par couplage (bruts)
-      productions: { 'A-B': number; 'B-C': number; 'A-C': number }; // kVA par couplage (bruts)
-      foisonneCharges?: { 'A-B': number; 'B-C': number; 'A-C': number };     // kVA foisonnées + curseurs
-      foisonneProductions?: { 'A-B': number; 'B-C': number; 'A-C': number }; // kVA foisonnées + curseurs
+      charges: { 'A-B': number; 'B-C': number; 'A-C': number };  // kVA par couplage
+      productions: { 'A-B': number; 'B-C': number; 'A-C': number }; // kVA par couplage
     };
     monoClientsCount: { A: number; B: number; C: number }; // Nombre de clients MONO par phase
     polyClientsCount: number; // Nombre total de clients TRI/TÉTRA

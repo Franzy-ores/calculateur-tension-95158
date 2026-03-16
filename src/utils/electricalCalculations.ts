@@ -1463,9 +1463,57 @@ export class ElectricalCalculator {
               Ic_inj = add(Ic_inj, C(injection.I_phaseC.re, injection.I_phaseC.im));
             }
 
+            // ── MONO DELTA INJECTION ──────────────────────────────────
+            // Inject MONO phase-phase loads directly from V_AB, V_BC, V_AC
+            // instead of going through S_maps (which only contain POLY loads).
+            // This computes physically correct line currents for delta loads.
+            const ppLoads = phasePhaseLoads_map.get(u);
+            if (ppLoads) {
+              // Net power per coupling (charges - productions), already foisonné
+              const S_AB_net_kVA = ppLoads.charges['A-B'] - ppLoads.productions['A-B'];
+              const S_BC_net_kVA = ppLoads.charges['B-C'] - ppLoads.productions['B-C'];
+              const S_AC_net_kVA = ppLoads.charges['A-C'] - ppLoads.productions['A-C'];
+
+              // Phase-phase voltages from current BFS iteration
+              const V_AB = sub(Va_safe, Vb_safe);
+              const V_BC = sub(Vb_safe, Vc_safe);
+              const V_AC = sub(Va_safe, Vc_safe);
+
+              // Build complex S with cosφ: S = P + jQ (in VA)
+              const buildS = (net_kVA: number): Complex => {
+                const cosPhiEff = net_kVA >= 0 ? cosPhiCharges_eff : cosPhiProductions_eff;
+                const sinPhiEff = net_kVA >= 0 ? sinPhiCharges : sinPhiProductions;
+                return C(net_kVA * cosPhiEff * 1000, net_kVA * sinPhiEff * 1000);
+              };
+
+              const S_AB = buildS(S_AB_net_kVA);
+              const S_BC = buildS(S_BC_net_kVA);
+              const S_AC = buildS(S_AC_net_kVA);
+
+              // Delta load currents: I_AB = conj(S_AB / V_AB)
+              const I_AB = abs(V_AB) > ElectricalCalculator.MIN_VOLTAGE_SAFETY
+                ? conj(div(S_AB, V_AB)) : C(0, 0);
+              const I_BC = abs(V_BC) > ElectricalCalculator.MIN_VOLTAGE_SAFETY
+                ? conj(div(S_BC, V_BC)) : C(0, 0);
+              const I_AC = abs(V_AC) > ElectricalCalculator.MIN_VOLTAGE_SAFETY
+                ? conj(div(S_AC, V_AC)) : C(0, 0);
+
+              // Line currents from delta load currents (Kirchhoff):
+              // I_A = I_AB + I_AC   (current enters A via A-B and A-C branches)
+              // I_B = I_BC - I_AB   (current enters B via B-C, exits via A-B)
+              // I_C = -I_BC - I_AC  (current exits C via both B-C and A-C)
+              // Verify: I_A + I_B + I_C = (I_AB+I_AC) + (I_BC-I_AB) + (-I_BC-I_AC) = 0 ✓
+              Ia_inj = add(Ia_inj, add(I_AB, I_AC));
+              Ib_inj = add(Ib_inj, sub(I_BC, I_AB));
+              Ic_inj = sub(Ic_inj, add(I_BC, I_AC));
+            }
+            // ─────────────────────────────────────────────────────────
+
             // ── KEY COUPLING STEP ────────────────────────────────────
             // In a 3-wire network, I_A + I_B + I_C = 0 at every node.
             // Remove the zero-sequence component to enforce this constraint.
+            // Note: MONO delta injections already satisfy I_A+I_B+I_C=0,
+            // but POLY loads from S_maps may have residual I_0.
             const I_0 = scale(add(add(Ia_inj, Ib_inj), Ic_inj), 1 / 3);
             Ia_inj = sub(Ia_inj, I_0);
             Ib_inj = sub(Ib_inj, I_0);

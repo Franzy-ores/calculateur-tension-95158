@@ -919,8 +919,10 @@ export class ElectricalCalculator {
       // Décision basée sur le type de connexion, pas sur un seuil de tension
       if (source.connectionType === 'TÉTRA_3P+N_230_400V') {
         Vslack_phase = U_line / Math.sqrt(3); // Tétra : convertir phase-phase → phase-neutre
+      } else if (source.connectionType === 'TRI_230V_3F') {
+        Vslack_phase = U_line / Math.sqrt(3); // Triangle : V_phase_interne = V_LL / √3
       } else {
-        Vslack_phase = U_line; // Triangle ou mono : utiliser directement
+        Vslack_phase = U_line; // Mono : utiliser directement
       }
     } else {
       // 4. Fallback sur U_line_base

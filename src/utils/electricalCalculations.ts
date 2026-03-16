@@ -1807,7 +1807,7 @@ export class ElectricalCalculator {
         const NEUTRAL_CONVERGENCE_V = 0.1;
 
         for (let neutralPass = 0; neutralPass < MAX_NEUTRAL_PASSES; neutralPass++) {
-          const V_neutral_new = this.computeNeutralVoltages(
+          const { V_neutral: V_neutral_new } = this.computeNeutralVoltages(
             source, children, parentCableOfChild, nodeById, cableTypeById,
             phaseA, phaseB, phaseC, U_line_base, isUnbalanced,
             equi8UpstreamReduction, projectSeason, applySagCorrection
@@ -1956,19 +1956,30 @@ export class ElectricalCalculator {
 
       // ===== Recalcul final V_neutral après passes thermiques + correction d'affichage =====
       // Le neutre est recalculé ici car les passes thermiques ont pu modifier phaseA/B/C
+      let I_neutral_cable_final: Map<string, Complex> | undefined;
       if (is400V) {
-        const V_neutral = this.computeNeutralVoltages(
+        // Passe standard
+        const { V_neutral, I_neutral_cable } = this.computeNeutralVoltages(
           source, children, parentCableOfChild, nodeById, cableTypeById,
           phaseA, phaseB, phaseC, U_line_base, isUnbalanced,
           equi8UpstreamReduction, projectSeason, applySagCorrection
         );
+
+        // Passe de raffinement terre : utilise Vn_child (calculé) au lieu de Vn_parent
+        const { V_neutral: V_neutral_refined, I_neutral_cable: I_neutral_cable_refined } =
+          this.computeNeutralVoltagesRefined(
+            source, children, parentCableOfChild, nodeById, cableTypeById,
+            phaseA, phaseB, phaseC, V_neutral, U_line_base, isUnbalanced,
+            equi8UpstreamReduction, projectSeason, applySagCorrection
+          );
+        I_neutral_cable_final = I_neutral_cable_refined;
         
         // Corriger les tensions phase-neutre en soustrayant la tension du neutre
         // V_phase_neutre_corrigé = V_phase - V_neutral
         for (const n of nodes) {
           if (n.id === source.id) continue;
           
-          const Vn = V_neutral.get(n.id);
+          const Vn = V_neutral_refined.get(n.id);
           if (!Vn) continue;
           
           const Va = phaseA.V_node_phase.get(n.id);
@@ -2041,16 +2052,24 @@ export class ElectricalCalculator {
 
         // Courant de neutre (si 400V L-N)
         // ✅ EQUI8 : Appliquer la réduction phaseur du courant neutre pour les câbles en amont
-        let IN_phasor_result = is400V ? add(add(IA, IB), IC) : C(0, 0);
-        const equi8ReductionResult = equi8UpstreamReduction.get(cab.id);
-        if (equi8ReductionResult && abs(equi8ReductionResult) > 0.01) {
-          const IN_before = abs(IN_phasor_result);
-          IN_phasor_result = sub(IN_phasor_result, equi8ReductionResult);
-          // Sécurité : éviter inversion
-          if (abs(IN_phasor_result) > IN_before + 0.01) {
-            IN_phasor_result = C(0, 0);
+        const IN_corrected = I_neutral_cable_final?.get(cab.id);
+        let IN_phasor_result: Complex;
+        if (is400V && IN_corrected) {
+          // Utilise le courant neutre corrigé (EQUI8 + terre déjà appliqués)
+          IN_phasor_result = IN_corrected;
+        } else if (is400V) {
+          // Fallback : somme brute + réduction EQUI8
+          IN_phasor_result = add(add(IA, IB), IC);
+          const equi8ReductionResult = equi8UpstreamReduction.get(cab.id);
+          if (equi8ReductionResult && abs(equi8ReductionResult) > 0.01) {
+            const IN_before = abs(IN_phasor_result);
+            IN_phasor_result = sub(IN_phasor_result, equi8ReductionResult);
+            if (abs(IN_phasor_result) > IN_before + 0.01) {
+              IN_phasor_result = C(0, 0);
+            }
           }
-          console.log(`🔌 EQUI8 résultat câble ${cab.id}: I_N ${IN_before.toFixed(1)}A → ${abs(IN_phasor_result).toFixed(1)}A`);
+        } else {
+          IN_phasor_result = C(0, 0);
         }
         let IN_mag = abs(IN_phasor_result);
 
@@ -2833,8 +2852,9 @@ export class ElectricalCalculator {
     equi8UpstreamReduction: Map<string, Complex>,
     projectSeason?: ThermalSeason,
     applySagCorrection?: (rawLength_m: number, pose: string) => number
-  ): Map<string, Complex> {
+  ): { V_neutral: Map<string, Complex>; I_neutral_cable: Map<string, Complex> } {
     const V_neutral = new Map<string, Complex>();
+    const I_neutral_cable = new Map<string, Complex>();
     V_neutral.set(source.id, C(0, 0)); // Le neutre à la source est à 0V (référence)
     
     // BFS depuis la source pour propager la tension du neutre
@@ -2878,10 +2898,11 @@ export class ElectricalCalculator {
         const distalNode = nodeById.get(v)!;
         const Rt = distalNode?.rt_terre_ohm ?? 25; // 25 Ω par défaut (NF C 11-201)
         if (Rt > 0) {
-          const I_fuite = div(Vn_parent, C(Rt, 0));
-          IN_phasor = sub(IN_phasor, I_fuite);
+          // La fuite à la terre s'ajoute à la charge du conducteur neutre (réseau TT/TN-S)
+          const I_fuite_approx = div(Vn_parent, C(Rt, 0));
+          IN_phasor = add(IN_phasor, I_fuite_approx);
           console.log(
-            `🌍 Terre nœud ${v}: Rt=${Rt}Ω, |I_fuite|=${abs(I_fuite).toFixed(2)}A, ` +
+            `🌍 Terre nœud ${v}: Rt=${Rt}Ω, |I_fuite|=${abs(I_fuite_approx).toFixed(2)}A, ` +
             `|I_N| final=${abs(IN_phasor).toFixed(2)}A`
           );
         }
@@ -2918,6 +2939,9 @@ export class ElectricalCalculator {
         // Le courant neutre circule de l'enfant vers le parent (retour),
         // donc le potentiel neutre s'ÉLÈVE au nœud enfant.
         // ─────────────────────────────────────────────────────────────────────
+        // Stocker le courant neutre corrigé pour ce câble
+        I_neutral_cable.set(cab.id, IN_phasor);
+
         const Vn_child = add(Vn_parent, dVn);
         V_neutral.set(v, Vn_child);
         
@@ -2925,7 +2949,7 @@ export class ElectricalCalculator {
       }
     }
     
-    return V_neutral;
+    return { V_neutral, I_neutral_cable };
   }
 
   // ===== Méthode privée : Correction des S_maps pour le potentiel neutre =====
@@ -2964,5 +2988,97 @@ export class ElectricalCalculator {
       corrected.set(n.id, mul(S, scale_factor));
     }
     return corrected;
+  }
+
+  // ===== Passe raffinée terre : utilise V_neutral_previous (Vn_child) pour I_fuite =====
+  private computeNeutralVoltagesRefined(
+    source: Node,
+    children: Map<string, string[]>,
+    parentCableOfChild: Map<string, Cable>,
+    nodeById: Map<string, Node>,
+    cableTypeById: Map<string, CableType>,
+    phaseA: { V_node_phase: Map<string, Complex>; I_branch_phase: Map<string, Complex> },
+    phaseB: { V_node_phase: Map<string, Complex>; I_branch_phase: Map<string, Complex> },
+    phaseC: { V_node_phase: Map<string, Complex>; I_branch_phase: Map<string, Complex> },
+    V_neutral_previous: Map<string, Complex>,
+    U_line_base: number,
+    isUnbalanced: boolean,
+    equi8UpstreamReduction: Map<string, Complex>,
+    projectSeason?: ThermalSeason,
+    applySagCorrection?: (rawLength_m: number, pose: string) => number
+  ): { V_neutral: Map<string, Complex>; I_neutral_cable: Map<string, Complex> } {
+    const V_neutral = new Map<string, Complex>();
+    const I_neutral_cable = new Map<string, Complex>();
+    V_neutral.set(source.id, C(0, 0));
+
+    const stack = [source.id];
+    const visited = new Set<string>();
+
+    while (stack.length) {
+      const u = stack.pop()!;
+      if (visited.has(u)) continue;
+      visited.add(u);
+
+      const Vn_parent = V_neutral.get(u) || C(0, 0);
+
+      for (const v of children.get(u) || []) {
+        const cab = parentCableOfChild.get(v);
+        if (!cab) continue;
+
+        const IA = phaseA.I_branch_phase.get(cab.id) || C(0, 0);
+        const IB = phaseB.I_branch_phase.get(cab.id) || C(0, 0);
+        const IC = phaseC.I_branch_phase.get(cab.id) || C(0, 0);
+        let IN_phasor = add(add(IA, IB), IC);
+
+        // EQUI8 reduction
+        const equi8ReductionPhasor = equi8UpstreamReduction.get(cab.id);
+        if (equi8ReductionPhasor && abs(equi8ReductionPhasor) > 0.01) {
+          const IN_mag_before = abs(IN_phasor);
+          IN_phasor = sub(IN_phasor, equi8ReductionPhasor);
+          if (abs(IN_phasor) > IN_mag_before + 0.01) {
+            IN_phasor = C(0, 0);
+          }
+        }
+
+        // Fuite terre raffinée : utiliser V_neutral_previous du nœud enfant v
+        const distalNode = nodeById.get(v)!;
+        const Rt = distalNode?.rt_terre_ohm ?? 25;
+        if (Rt > 0) {
+          const Vn_v_prev = V_neutral_previous.get(v) || C(0, 0);
+          const I_fuite = div(Vn_v_prev, C(Rt, 0));
+          IN_phasor = add(IN_phasor, I_fuite);
+        }
+
+        I_neutral_cable.set(cab.id, IN_phasor);
+
+        // Impédance neutre
+        const ct = cableTypeById.get(cab.typeId);
+        if (!ct) continue;
+        const length_m_raw = this.calculateLengthMeters(cab.coordinates || []);
+        const length_m = applySagCorrection ? applySagCorrection(length_m_raw, cab.pose) : length_m_raw;
+        const L_km = length_m / 1000;
+
+        const is400V_local = U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD;
+        const IN_real_A = abs(add(add(phaseA.I_branch_phase.get(cab.id) || C(0, 0),
+                                       phaseB.I_branch_phase.get(cab.id) || C(0, 0)),
+                                       phaseC.I_branch_phase.get(cab.id) || C(0, 0)));
+        const thermalCtxNeutral = projectSeason ? {
+          season: projectSeason,
+          pose: cab.pose,
+          I_A: IN_real_A,
+          Imax_A: ct.maxCurrent_A || 0
+        } : undefined;
+        const { R: R0, X: X0 } = this.selectRX(ct, is400V_local, isUnbalanced, true, thermalCtxNeutral);
+        const Z_neutral = C(R0 * L_km, X0 * L_km);
+
+        const dVn = mul(Z_neutral, IN_phasor);
+        const Vn_child = add(Vn_parent, dVn);
+        V_neutral.set(v, Vn_child);
+
+        stack.push(v);
+      }
+    }
+
+    return { V_neutral, I_neutral_cable };
   }
 }

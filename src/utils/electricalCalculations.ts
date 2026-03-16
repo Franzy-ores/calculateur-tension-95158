@@ -2039,11 +2039,9 @@ export class ElectricalCalculator {
           deltaU_line_V = Math.max(dVA, dVB, dVC);
         }
 
-        // Base voltage for percent
-        let { U_base } = this.getVoltage(distalNode.connectionType);
-        const srcTarget = nodes.find(n => n.isSource)?.tensionCible;
-        if (srcTarget) U_base = srcTarget;
-        const deltaU_percent = U_base ? (deltaU_line_V / U_base) * 100 : 0;
+        // Conformité EN50160 : toujours référence nominale (400V ou 230V), jamais tensionCible
+        const { U_base: U_base_nominal } = this.getVoltage(distalNode.connectionType);
+        const deltaU_percent = U_base_nominal ? (deltaU_line_V / U_base_nominal) * 100 : 0;
 
         // Pertes (somme des 3 phases)
         const R_total = Z.re;

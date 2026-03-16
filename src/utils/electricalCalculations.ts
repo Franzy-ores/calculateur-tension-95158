@@ -2053,18 +2053,23 @@ export class ElectricalCalculator {
         // Courant de neutre (si 400V L-N)
         // ✅ EQUI8 : Appliquer la réduction phaseur du courant neutre pour les câbles en amont
         const IN_corrected = I_neutral_cable_final?.get(cab.id);
-        let IN_phasor_result = is400V
-          ? (IN_corrected ?? add(add(IA, IB), IC))
-          : C(0, 0);
-        const equi8ReductionResult = equi8UpstreamReduction.get(cab.id);
-        if (equi8ReductionResult && abs(equi8ReductionResult) > 0.01) {
-          const IN_before = abs(IN_phasor_result);
-          IN_phasor_result = sub(IN_phasor_result, equi8ReductionResult);
-          // Sécurité : éviter inversion
-          if (abs(IN_phasor_result) > IN_before + 0.01) {
-            IN_phasor_result = C(0, 0);
+        let IN_phasor_result: Complex;
+        if (is400V && IN_corrected) {
+          // Utilise le courant neutre corrigé (EQUI8 + terre déjà appliqués)
+          IN_phasor_result = IN_corrected;
+        } else if (is400V) {
+          // Fallback : somme brute + réduction EQUI8
+          IN_phasor_result = add(add(IA, IB), IC);
+          const equi8ReductionResult = equi8UpstreamReduction.get(cab.id);
+          if (equi8ReductionResult && abs(equi8ReductionResult) > 0.01) {
+            const IN_before = abs(IN_phasor_result);
+            IN_phasor_result = sub(IN_phasor_result, equi8ReductionResult);
+            if (abs(IN_phasor_result) > IN_before + 0.01) {
+              IN_phasor_result = C(0, 0);
+            }
           }
-          console.log(`🔌 EQUI8 résultat câble ${cab.id}: I_N ${IN_before.toFixed(1)}A → ${abs(IN_phasor_result).toFixed(1)}A`);
+        } else {
+          IN_phasor_result = C(0, 0);
         }
         let IN_mag = abs(IN_phasor_result);
 

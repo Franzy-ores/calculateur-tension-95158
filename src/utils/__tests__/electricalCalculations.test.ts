@@ -25,14 +25,15 @@ describe('ElectricalCalculator - basic LV radial cases', () => {
     const cableTypes: CableType[] = [mkCableType('t1', 0.5, 0, 0.5, 0)];
     const transformer = baseTransformer(400, 160, 0); // pas de chute transfo
 
+    // polyphase_equilibre est désormais forcé en mixte_mono_poly
     const result = calc.calculateScenario(nodes, cables, cableTypes, 'PRÉLÈVEMENT' as CalculationScenario, 100, 100, transformer, 'polyphase_equilibre', 0, undefined);
     const cab = result.cables[0];
 
-    // Courant attendu ~ 43.5 A ; ΔU ~ I * R * L = 43.5 * 0.05 = 2.175 V
-    expect(cab.current_A!).toBeGreaterThan(40);
-    expect(cab.current_A!).toBeLessThan(47);
-    expect(cab.voltageDrop_V!).toBeGreaterThan(1.9);
-    expect(cab.voltageDrop_V!).toBeLessThan(2.4);
+    // En mode mixte_mono_poly, 10 kVA MONO est réparti sur 3 phases → ~3.33 kVA/phase → ~14.5 A/phase
+    expect(cab.current_A!).toBeGreaterThan(12);
+    expect(cab.current_A!).toBeLessThan(18);
+    expect(cab.voltageDrop_V!).toBeGreaterThan(0.5);
+    expect(cab.voltageDrop_V!).toBeLessThan(1.2);
     expect(Math.abs((cab.voltageDropPercent || 0) - (cab.voltageDrop_V! / 230 * 100))).toBeLessThan(0.5);
   });
 

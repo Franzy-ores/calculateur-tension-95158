@@ -1,22 +1,35 @@
 
 
-## Plan : Désactiver définitivement le mode équilibré
+# Diagnostic : hourlyProfiles.json non reactif dans le Labo
 
-Fichier unique : `src/utils/electricalCalculations.ts`
+## Probleme identifie
 
-### Modification 1 — Ligne 838 (forcer `isUnbalanced = true`)
+Le fichier `hourlyProfiles.json` **est bien utilise** par le `DailyProfileCalculator` (import statique ligne 6 de `dailyProfileCalculator.ts`). Cependant, le Labo ne reagit pas aux modifications pour deux raisons :
 
-Remplacer la ligne 838 et la ligne 840 par :
-- Un guard qui force `loadModel = 'mixte_mono_poly'` si ce n'est pas déjà `mixte_mono_poly` ou `monophase_reparti`, avec `console.warn`
-- `const isUnbalanced = true;`
+1. **Import indirect** : Les profils sont importes dans `dailyProfileCalculator.ts`, pas dans `LaboFoisonnementTab.tsx`. Le composant Labo passe `undefined` comme `customProfiles` (ligne 242), laissant le calculator utiliser son import interne.
 
-### Modification 2 — Ligne 2360+ (bloc mode équilibré)
+2. **useMemo aveugle** : Le `useMemo` (ligne 272) qui lance les 3 runs a pour dependances `[currentProject, selectedNodeId, season, weather, ...]` — les profils JSON n'y figurent pas. Meme si Vite HMR recharge le module, le memo ne se re-execute pas car aucune de ses dependances reactives n'a change.
 
-Remplacer tout le bloc `// ---- Mode équilibré ----` (de la ligne 2360 jusqu'à la fin de la méthode) par un `throw new Error(...)` indiquant que ce chemin est désactivé.
+En resume : vous modifiez le JSON, Vite le recharge, mais le `useMemo` du Labo ne sait pas qu'il doit recalculer.
 
-Le bloc commence à la ligne 2360 et s'étend probablement jusqu'à la fin de `calculateScenario`. Il faut identifier la fin exacte pour ne supprimer que le bloc équilibré sans toucher au reste.
+## Correction
 
-### Rien d'autre n'est modifié
+### `LaboFoisonnementTab.tsx`
 
-`selectRX`, `runBFSForPhase`, `computeNeutralVoltages`, `runCoupledBFSForDelta`, passes thermiques — tout reste intact.
+1. **Importer directement** `hourlyProfiles.json` dans le composant Labo
+2. **Passer** cet import comme `customProfiles` aux 3 constructeurs `DailyProfileCalculator` (au lieu de `undefined`)
+3. **Ajouter** l'objet profiles aux dependances du `useMemo` principal
+
+```text
+Avant:  new DailyProfileCalculator(currentProject, baseOptions, undefined, ...)
+Apres:  new DailyProfileCalculator(currentProject, baseOptions, profilesData, ...)
+```
+
+Cela rend le Labo reactif a toute modification du fichier JSON.
+
+### Fichier modifie
+
+| Fichier | Modification |
+|---|---|
+| `src/components/topMenu/LaboFoisonnementTab.tsx` | +1 import hourlyProfiles.json, passer comme customProfiles aux 3 runs, ajouter aux deps useMemo |
 

@@ -2920,6 +2920,9 @@ export class ElectricalCalculator {
         // Le courant neutre circule de l'enfant vers le parent (retour),
         // donc le potentiel neutre s'ÉLÈVE au nœud enfant.
         // ─────────────────────────────────────────────────────────────────────
+        // Stocker le courant neutre corrigé pour ce câble
+        I_neutral_cable.set(cab.id, IN_phasor);
+
         const Vn_child = add(Vn_parent, dVn);
         V_neutral.set(v, Vn_child);
         
@@ -2927,7 +2930,7 @@ export class ElectricalCalculator {
       }
     }
     
-    return V_neutral;
+    return { V_neutral, I_neutral_cable };
   }
 
   // ===== Méthode privée : Correction des S_maps pour le potentiel neutre =====

@@ -2052,7 +2052,10 @@ export class ElectricalCalculator {
 
         // Courant de neutre (si 400V L-N)
         // ✅ EQUI8 : Appliquer la réduction phaseur du courant neutre pour les câbles en amont
-        let IN_phasor_result = is400V ? add(add(IA, IB), IC) : C(0, 0);
+        const IN_corrected = I_neutral_cable_final?.get(cab.id);
+        let IN_phasor_result = is400V
+          ? (IN_corrected ?? add(add(IA, IB), IC))
+          : C(0, 0);
         const equi8ReductionResult = equi8UpstreamReduction.get(cab.id);
         if (equi8ReductionResult && abs(equi8ReductionResult) > 0.01) {
           const IN_before = abs(IN_phasor_result);

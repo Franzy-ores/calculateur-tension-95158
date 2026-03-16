@@ -1093,6 +1093,19 @@ export class ElectricalCalculator {
             
             console.log(`📊 Nœud ${n.name || n.id}: utilise foisonneAvecCurseurs (foisonnement + curseurs)`);
             console.log(`   Charges: A=${(pA_charges*100).toFixed(1)}%, B=${(pB_charges*100).toFixed(1)}%, C=${(pC_charges*100).toFixed(1)}%`);
+
+            // Avertissement POLY sous curseurs inégaux
+            if (U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD && n.autoPhaseDistribution.polyClientsCount > 0) {
+              const maxRatio = Math.max(pA_charges, pB_charges, pC_charges);
+              const minRatio = Math.min(pA_charges, pB_charges, pC_charges);
+              if (maxRatio - minRatio > 0.1) {
+                console.warn(
+                  `⚠️ Nœud ${n.name || n.id}: ${n.autoPhaseDistribution.polyClientsCount} client(s) POLY TRI` +
+                  ` distribués inégalement (A=${(pA_charges*100).toFixed(0)}%, B=${(pB_charges*100).toFixed(0)}%,` +
+                  ` C=${(pC_charges*100).toFixed(0)}%). Les clients TRI ont des courants équilibrés en réalité.`
+                );
+              }
+            }
           } else {
             // Fallback : utiliser les valeurs physiques totales
             const totalCharges = n.autoPhaseDistribution.charges.total.A + 
@@ -2039,15 +2052,25 @@ export class ElectricalCalculator {
           deltaU_line_V = Math.max(dVA, dVB, dVC);
         }
 
-        // Base voltage for percent
-        let { U_base } = this.getVoltage(distalNode.connectionType);
-        const srcTarget = nodes.find(n => n.isSource)?.tensionCible;
-        if (srcTarget) U_base = srcTarget;
-        const deltaU_percent = U_base ? (deltaU_line_V / U_base) * 100 : 0;
+        // Conformité EN50160 : toujours référence nominale (400V ou 230V), jamais tensionCible
+        const { U_base: U_base_nominal } = this.getVoltage(distalNode.connectionType);
+        const deltaU_percent = U_base_nominal ? (deltaU_line_V / U_base_nominal) * 100 : 0;
 
-        // Pertes (somme des 3 phases)
-        const R_total = Z.re;
-        const losses_kW = ((IA_mag*IA_mag) + (IB_mag*IB_mag) + (IC_mag*IC_mag)) * R_total / 1000;
+        // Pertes phases
+        const R_phase = Z.re;
+        const losses_phases_kW = ((IA_mag*IA_mag) + (IB_mag*IB_mag) + (IC_mag*IC_mag)) * R_phase / 1000;
+
+        // Pertes neutre (400V uniquement)
+        let losses_neutral_kW = 0;
+        if (is400V) {
+          const length_m_raw_n = this.calculateLengthMeters(cab.coordinates || []);
+          const length_km_n = applySagCorrection(length_m_raw_n, cab.pose) / 1000;
+          const R0_ohm = ct.R0_ohm_per_km * length_km_n;
+          const IN_mag_local = abs(add(add(IA, IB), IC));
+          losses_neutral_kW = (IN_mag_local * IN_mag_local) * R0_ohm / 1000;
+        }
+
+        const losses_kW = losses_phases_kW + losses_neutral_kW;
         globalLosses += losses_kW;
 
         // Courant de neutre (si 400V L-N)

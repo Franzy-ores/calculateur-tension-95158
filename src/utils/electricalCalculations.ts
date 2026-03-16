@@ -1979,7 +1979,7 @@ export class ElectricalCalculator {
         for (const n of nodes) {
           if (n.id === source.id) continue;
           
-          const Vn = V_neutral.get(n.id);
+          const Vn = V_neutral_refined.get(n.id);
           if (!Vn) continue;
           
           const Va = phaseA.V_node_phase.get(n.id);

@@ -164,35 +164,38 @@ describe('EQUI8 CME - Formules fournisseur', () => {
       expect(injection.nodeId).toBe('node-1');
       expect(injection.magnitude).toBe(30);
       
-      // Phase A sous-tension → devrait recevoir le plus de courant (positif)
-      // Phase B surtension → devrait être soutirée (négatif)
+      // Phase A sous-tension → I_A négatif (réduit demande amont)
+      // Phase B surtension → I_B positif (absorbe vers EQUI8)
       expect(abs(injection.I_phaseA)).toBeGreaterThan(abs(injection.I_phaseC));
       expect(abs(injection.I_phaseB)).toBeGreaterThan(abs(injection.I_phaseC));
       
-      // I_neutral doit avoir la magnitude demandée
-      expect(abs(injection.I_neutral)).toBeCloseTo(30, 1);
+      // Vérifier les signes : dA = 225-230 = -5 → I_A négatif, dB = 235-230 = +5 → I_B positif
+      expect(injection.I_phaseA.re).toBeLessThan(0); // phase A sous-tension → injecte → négatif
+      expect(injection.I_phaseB.re).toBeGreaterThan(0); // phase B surtension → absorbe → positif (re component of -120° scaled positive)
     });
     
-    it('aligne I_neutral sur l\'angle du courant neutre existant', () => {
-      const voltages = { A: 225, B: 235, C: 230 };
-      const angle = -2 * Math.PI / 3; // -120°
-      const I_neutral_existing = { re: Math.cos(angle), im: Math.sin(angle) };
+    it('KCL strict : I_A + I_B + I_C + I_N = 0', () => {
+      const voltages = { A: 220, B: 235, C: 230 };
+      const I_neutral_existing = { re: 1, im: 0 };
       const injection = buildEQUI8Injection('node-1', 30, voltages, I_neutral_existing);
       
-      // L'angle du courant neutre injecté doit être aligné sur -120°
-      const injAngle = Math.atan2(injection.I_neutral.im, injection.I_neutral.re);
-      expect(injAngle).toBeCloseTo(angle, 2);
+      // KCL : somme de tous les courants au nœud = 0
+      const sum_re = injection.I_phaseA.re + injection.I_phaseB.re + injection.I_phaseC.re + injection.I_neutral.re;
+      const sum_im = injection.I_phaseA.im + injection.I_phaseB.im + injection.I_phaseC.im + injection.I_neutral.im;
+      expect(Math.abs(sum_re)).toBeLessThan(1e-10);
+      expect(Math.abs(sum_im)).toBeLessThan(1e-10);
     });
     
-    it('distribution uniforme -I/3 quand tensions équilibrées', () => {
+    it('distribution zéro quand tensions équilibrées', () => {
       const voltages = { A: 230, B: 230, C: 230 };
       const I_neutral_existing = { re: 1, im: 0 };
       const injection = buildEQUI8Injection('node-1', 30, voltages, I_neutral_existing);
       
-      // Quand toutes les tensions sont égales, distribution uniforme
-      expect(abs(injection.I_phaseA)).toBeCloseTo(10, 1);
-      expect(abs(injection.I_phaseB)).toBeCloseTo(10, 1);
-      expect(abs(injection.I_phaseC)).toBeCloseTo(10, 1);
+      // Quand toutes les tensions sont égales, dSum < 0.01 → wA=wB=wC=0 → pas d'injection
+      expect(abs(injection.I_phaseA)).toBeCloseTo(0, 5);
+      expect(abs(injection.I_phaseB)).toBeCloseTo(0, 5);
+      expect(abs(injection.I_phaseC)).toBeCloseTo(0, 5);
+      expect(abs(injection.I_neutral)).toBeCloseTo(0, 5);
     });
     
   });

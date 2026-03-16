@@ -2013,11 +2013,20 @@ export class ElectricalCalculator {
         const dVC = abs(mul(Z, IC));
 
         const current_A = Math.max(IA_mag, IB_mag, IC_mag);
-        // sqrt(3) uniquement pour étoile (phase-neutre -> ligne-ligne)
-        // En triangle, la chute est déjà en tension composée
-        const deltaU_line_V = isStarNetwork
-          ? Math.max(dVA, dVB, dVC) * Math.sqrt(3)
-          : Math.max(dVA, dVB, dVC);
+
+        let deltaU_line_V: number;
+        if (isStarNetwork) {
+          // Étoile 400V : chute phase-neutre → ligne via √3
+          deltaU_line_V = Math.max(dVA, dVB, dVC) * Math.sqrt(3);
+        } else if (!is400V) {
+          // Delta 230V : chute ligne-à-ligne = |Z×(I_x - I_y)|, pire paire
+          const dV_AB = abs(mul(Z, sub(IA, IB)));
+          const dV_BC = abs(mul(Z, sub(IB, IC)));
+          const dV_AC = abs(mul(Z, sub(IA, IC)));
+          deltaU_line_V = Math.max(dV_AB, dV_BC, dV_AC);
+        } else {
+          deltaU_line_V = Math.max(dVA, dVB, dVC);
+        }
 
         // Base voltage for percent
         let { U_base } = this.getVoltage(distalNode.connectionType);

@@ -2883,7 +2883,7 @@ export class ElectricalCalculator {
           const I_fuite_approx = div(Vn_parent, C(Rt, 0));
           IN_phasor = add(IN_phasor, I_fuite_approx);
           console.log(
-            `🌍 Terre nœud ${v}: Rt=${Rt}Ω, |I_fuite|=${abs(I_fuite).toFixed(2)}A, ` +
+            `🌍 Terre nœud ${v}: Rt=${Rt}Ω, |I_fuite|=${abs(I_fuite_approx).toFixed(2)}A, ` +
             `|I_N| final=${abs(IN_phasor).toFixed(2)}A`
           );
         }

@@ -473,14 +473,10 @@ export interface CalculationResult {
   nodeMetrics?: { nodeId: string; V_phase_V: number; V_pu: number; I_inj_A: number }[];
   nodePhasors?: { nodeId: string; V_real: number; V_imag: number; V_phase_V: number; V_angle_deg: number }[];
   nodePhasorsPerPhase?: { nodeId: string; phase: 'A' | 'B' | 'C'; V_real: number; V_imag: number; V_phase_V: number; V_angle_deg: number }[];
-  nodeMetricsPerPhase?: { 
-    nodeId: string; 
-    voltagesPerPhase: { A: number; B: number; C: number };
-    voltageDropsPerPhase: { A: number; B: number; C: number };
-    deviationsPerPhase?: { A: number; B: number; C: number }; // Déviation EN50160 en % (+ surtension, - sous-tension)
-    compliancePerPhase?: { A: 'normal' | 'warning' | 'critical'; B: 'normal' | 'warning' | 'critical'; C: 'normal' | 'warning' | 'critical' };
-    nodeCompliance?: 'normal' | 'warning' | 'critical';
-  }[];
+  nodeMetricsPerPhase?: NodeMetricsPerPhase[];
+  // Déséquilibre global EN 50160 = max ku% parmi tous les nœuds 400V
+  unbalanceEN50160_percent?: number;
+  unbalanceEN50160_status?: 'normal' | 'warning' | 'critical';
   cablePowerFlows?: { cableId: string; P_kW: number; Q_kVAr: number; S_kVA: number; pf: number }[];
   /** Températures estimées des conducteurs (°C) - calculées dynamiquement par micro-itération thermique */
   cableTemperatures?: { cableId: string; temperature_C: number }[];

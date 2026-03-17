@@ -12,6 +12,7 @@ import { getNodeConnectionType } from '@/utils/nodeConnectionType';
 import { getLinkedClientsForNode } from '@/utils/clientsUtils';
 import { toast } from 'sonner';
 import { ClientEditPanel } from './ClientEditPanel';
+import { NodePhaseDisplay } from './NodePhaseDisplay';
 
 export const EditPanel = () => {
   const {
@@ -475,7 +476,10 @@ export const EditPanel = () => {
                  </Card>
                )}
 
-               {/* Tensions extrêmes des clients liés */}
+                {/* Composantes de séquence (U1/U2/U0, ku%) */}
+                {selectedNode && <NodePhaseDisplay nodeId={selectedNode.id} />}
+
+                {/* Tensions extrêmes des clients liés */}
                {linkedClients.length > 0 && (extremeTensions.hasMinData || extremeTensions.hasMaxData) && (
                  <Card className="bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800">
                    <CardHeader className="pb-3">

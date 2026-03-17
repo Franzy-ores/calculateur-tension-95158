@@ -1188,7 +1188,14 @@ export const MapView = () => {
                   const vA = phaseMetrics.voltagesPerPhase.A.toFixed(0);
                   const vB = phaseMetrics.voltagesPerPhase.B.toFixed(0);
                   const vC = phaseMetrics.voltagesPerPhase.C.toFixed(0);
-                  return `<span class="text-gray-500">${phaseLabels.A}:</span><span class="text-black font-semibold">${vA}V</span><br><span class="text-gray-500">${phaseLabels.B}:</span><span class="text-black font-semibold">${vB}V</span><br><span class="text-gray-500">${phaseLabels.C}:</span><span class="text-black font-semibold">${vC}V</span>`;
+                  let phaseHtml = `<span class="text-gray-500">${phaseLabels.A}:</span><span class="text-black font-semibold">${vA}V</span><br><span class="text-gray-500">${phaseLabels.B}:</span><span class="text-black font-semibold">${vB}V</span><br><span class="text-gray-500">${phaseLabels.C}:</span><span class="text-black font-semibold">${vC}V</span>`;
+                  if (phaseMetrics.sequenceComponents) {
+                    const ku = phaseMetrics.sequenceComponents.ku_percent;
+                    const kuColor = ku > 2 ? 'text-red-500' : ku > 1.5 ? 'text-yellow-500' : 'text-green-500';
+                    const kuIcon = ku > 2 ? '❌' : ku > 1.5 ? '⚠️' : '✅';
+                    phaseHtml += `<br><span class="${kuColor}">ku=${ku.toFixed(2)}% ${kuIcon}</span>`;
+                  }
+                  return phaseHtml;
                 } else {
                   const is230V = currentProject?.voltageSystem === 'TRIPHASÉ_230V';
                   const phaseLabels = is230V 

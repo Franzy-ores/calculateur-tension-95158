@@ -1,33 +1,35 @@
 
 
-## Problem
+# Diagnostic : hourlyProfiles.json non reactif dans le Labo
 
-The `NodePhaseDisplay` component (with sequence components U1/U2/U0 and ku%) exists but is **never imported or used** anywhere in the app. The node info is displayed in two places:
+## Probleme identifie
 
-1. **Map tooltip** (MapView.tsx ~line 1191) — raw HTML string showing L1/L2/L3 voltages
-2. **Edit panel** (EditPanel.tsx) — Sheet sidebar when clicking a node
+Le fichier `hourlyProfiles.json` **est bien utilise** par le `DailyProfileCalculator` (import statique ligne 6 de `dailyProfileCalculator.ts`). Cependant, le Labo ne reagit pas aux modifications pour deux raisons :
 
-The user wants sequence components visible "dans le noeud" (in the node display), replacing or augmenting the circuit info.
+1. **Import indirect** : Les profils sont importes dans `dailyProfileCalculator.ts`, pas dans `LaboFoisonnementTab.tsx`. Le composant Labo passe `undefined` comme `customProfiles` (ligne 242), laissant le calculator utiliser son import interne.
 
-## Plan
+2. **useMemo aveugle** : Le `useMemo` (ligne 272) qui lance les 3 runs a pour dependances `[currentProject, selectedNodeId, season, weather, ...]` — les profils JSON n'y figurent pas. Meme si Vite HMR recharge le module, le memo ne se re-execute pas car aucune de ses dependances reactives n'a change.
 
-### 1. Add `NodePhaseDisplay` to the EditPanel (primary location)
+En resume : vous modifiez le JSON, Vite le recharge, mais le `useMemo` du Labo ne sait pas qu'il doit recalculer.
 
-In `EditPanel.tsx`, after the "Puissances totales du noeud" card (~line 476), import and render `<NodePhaseDisplay nodeId={selectedNode.id} />` when `editTarget === 'node'` and a node is selected. This shows the full sequence component breakdown (U1, U2, U0, ku%) in the node's edit sidebar.
+## Correction
 
-### 2. Add ku% summary to the map tooltip (compact)
+### `LaboFoisonnementTab.tsx`
 
-In `MapView.tsx` (~line 1191), after the 3-phase voltage lines, append a compact ku% line when `sequenceComponents` is available on the `phaseMetrics`:
+1. **Importer directement** `hourlyProfiles.json` dans le composant Labo
+2. **Passer** cet import comme `customProfiles` aux 3 constructeurs `DailyProfileCalculator` (au lieu de `undefined`)
+3. **Ajouter** l'objet profiles aux dependances du `useMemo` principal
 
+```text
+Avant:  new DailyProfileCalculator(currentProject, baseOptions, undefined, ...)
+Apres:  new DailyProfileCalculator(currentProject, baseOptions, profilesData, ...)
 ```
-L1: 228V  L2: 225V  L3: 231V
-ku=1.4% ✅
-```
 
-This keeps the tooltip compact while surfacing the key EN 50160 metric. Color-coded: green < 1.5%, orange 1.5-2%, red > 2%.
+Cela rend le Labo reactif a toute modification du fichier JSON.
 
-### Files to modify
+### Fichier modifie
 
-- **`src/components/EditPanel.tsx`** — Import `NodePhaseDisplay`, render it in the node editing section
-- **`src/components/MapView.tsx`** — Add ku% line to the node tooltip HTML when `phaseMetrics.sequenceComponents` exists
+| Fichier | Modification |
+|---|---|
+| `src/components/topMenu/LaboFoisonnementTab.tsx` | +1 import hourlyProfiles.json, passer comme customProfiles aux 3 runs, ajouter aux deps useMemo |
 

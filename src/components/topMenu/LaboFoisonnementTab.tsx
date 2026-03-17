@@ -69,10 +69,25 @@ function buildNetworkPaths(nodes: NetworkNode[], cables: Cable[]): BranchPath[] 
       if (visited.has(nextId)) continue;
       visited.add(nextId);
 
-      if (!children.has(currentId)) children.set(currentId, []);
-      children.get(currentId)!.push({ nodeId: nextId, cableLength: cable.length_m || 0 });
+      // Correction 1: calculer la longueur depuis les coordonnées GPS si disponibles
+      const cableLen = (() => {
+        if (cable.coordinates && cable.coordinates.length >= 2) {
+          let len = 0;
+          for (let i = 1; i < cable.coordinates.length; i++) {
+            len += calculateGeodeticDistance(
+              cable.coordinates[i-1].lat, cable.coordinates[i-1].lng,
+              cable.coordinates[i].lat, cable.coordinates[i].lng
+            );
+          }
+          return len;
+        }
+        return cable.length_m || 0; // fallback si déjà calculé
+      })();
 
-      distanceMap.set(nextId, currentDist + (cable.length_m || 0));
+      if (!children.has(currentId)) children.set(currentId, []);
+      children.get(currentId)!.push({ nodeId: nextId, cableLength: cableLen });
+
+      distanceMap.set(nextId, currentDist + cableLen);
       queue.push(nextId);
     }
   }
@@ -414,6 +429,12 @@ export const LaboFoisonnementTab = () => {
             voltage_A: perPhase.A,
             voltage_B: perPhase.B,
             voltage_C: perPhase.C,
+            voltageWorstCharge: Math.min(
+              perPhase.A > 0 ? perPhase.A : Infinity,
+              perPhase.B > 0 ? perPhase.B : Infinity,
+              perPhase.C > 0 ? perPhase.C : Infinity
+            ),
+            voltageWorstInjection: Math.max(perPhase.A, perPhase.B, perPhase.C),
             I_neutral: +I_neutral.toFixed(2),
           };
         }),
@@ -479,14 +500,15 @@ export const LaboFoisonnementTab = () => {
 
       const voltageSystem = currentProject!.voltageSystem;
       if (voltageSystem === 'TRIPHASÉ_230V') {
-        // Triangle : tension entre deux phases, prendre le pire cas
-        const phaseMap: Record<string, [number, number]> = {
-          'A-B': [bp.voltage_A, bp.voltage_B],
-          'B-C': [bp.voltage_B, bp.voltage_C],
-          'A-C': [bp.voltage_A, bp.voltage_C],
+        // Triangle : en TRI_230V_3F, voltage_A = V_AB, voltage_B = V_BC, voltage_C = V_AC
+        const couplingVoltageMap: Record<string, number> = {
+          'A-B': bp.voltage_A,
+          'B-C': bp.voltage_B,
+          'A-C': bp.voltage_C,
         };
-        const pair = phaseMap[coupling];
-        if (pair) return mode === 'charge' ? Math.min(...pair) : Math.max(...pair);
+        if (couplingVoltageMap[coupling] !== undefined) {
+          return couplingVoltageMap[coupling];
+        }
       }
       // 400V étoile : phase simple
       const singleMap: Record<string, number> = { A: bp.voltage_A, B: bp.voltage_B, C: bp.voltage_C };
@@ -537,8 +559,13 @@ export const LaboFoisonnementTab = () => {
                 clientV = nodeV;
               }
             } else {
-              // Charge : conso à 80% du contractuel, pas de PV
-              const I_charge = (client.puissanceContractuelle_kVA * 0.80 * 1000) / (V_nom * (client.couplage === 'MONO' ? 1 : Math.sqrt(3)));
+              // Charge : utiliser le foisonnement réel de l'heure de pire cas
+              const foisFactor = Math.min(
+                (powerData.find(d => d.hour === voltageDistanceData!.minHour)?.foisonnement ?? 7) / 100,
+                1.0
+              );
+              const I_charge = (client.puissanceContractuelle_kVA * foisFactor * 1000)
+                / (V_nom * (client.couplage === 'MONO' ? 1 : Math.sqrt(3)));
               const deltaV = facteurDV * (R_per_m * cosPhiCharges + X_per_m * sinPhiCharges) * I_charge * dist_m;
               clientV = Math.max(0, nodeV - deltaV);
             }
@@ -1027,8 +1054,8 @@ export const LaboFoisonnementTab = () => {
                     <ReferenceLine yAxisId="left" y={voltageDistanceData.busbarVoltageCharge} stroke="hsl(280, 70%, 50%)" strokeDasharray="6 3" strokeWidth={1.5}
                       label={{ value: `Busbar ${voltageDistanceData.busbarVoltageCharge.toFixed(1)}V`, fontSize: 9, fill: 'hsl(280, 70%, 50%)' }} />
                     {voltageDistanceData.minBranches.map((branch) => (
-                      <Line key={`min-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
-                        type="monotone" dataKey="voltage" name={branch.label}
+                      <Line key={`min-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltageWorstCharge > 0 && isFinite(p.voltageWorstCharge))}
+                        type="monotone" dataKey="voltageWorstCharge" name={branch.label}
                         stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
                     ))}
                     {showPerPhaseDistance && voltageDistanceData.minBranches.map((branch) => (
@@ -1117,8 +1144,8 @@ export const LaboFoisonnementTab = () => {
                     <ReferenceLine yAxisId="left" y={voltageDistanceData.busbarVoltageInjection} stroke="hsl(280, 70%, 50%)" strokeDasharray="6 3" strokeWidth={1.5}
                       label={{ value: `Busbar ${voltageDistanceData.busbarVoltageInjection.toFixed(1)}V`, fontSize: 9, fill: 'hsl(280, 70%, 50%)' }} />
                     {voltageDistanceData.maxBranches.map((branch) => (
-                      <Line key={`max-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
-                        type="monotone" dataKey="voltage" name={branch.label}
+                      <Line key={`max-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltageWorstInjection > 0)}
+                        type="monotone" dataKey="voltageWorstInjection" name={branch.label}
                         stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
                     ))}
                     {showPerPhaseDistance && voltageDistanceData.maxBranches.map((branch) => (
@@ -1375,8 +1402,8 @@ export const LaboFoisonnementTab = () => {
                       <ReferenceLine yAxisId="left" y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
                       <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} />
                       {voltageDistanceData?.minBranches.map((branch) => (
-                        <Line key={`fs-min-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
-                          type="monotone" dataKey="voltage" name={branch.label}
+                        <Line key={`fs-min-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltageWorstCharge > 0 && isFinite(p.voltageWorstCharge))}
+                          type="monotone" dataKey="voltageWorstCharge" name={branch.label}
                           stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
                       ))}
                       {/* Client points — dots only */}
@@ -1462,8 +1489,8 @@ export const LaboFoisonnementTab = () => {
                       <ReferenceLine yAxisId="left" y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
                       <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} />
                       {voltageDistanceData?.maxBranches.map((branch) => (
-                        <Line key={`fs-max-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
-                          type="monotone" dataKey="voltage" name={branch.label}
+                        <Line key={`fs-max-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltageWorstInjection > 0)}
+                          type="monotone" dataKey="voltageWorstInjection" name={branch.label}
                           stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
                       ))}
                       {clientPointsData?.maxClientPoints && clientPointsData.maxClientPoints.length > 0 && (
@@ -1601,8 +1628,8 @@ export const LaboFoisonnementTab = () => {
             <ReferenceLine yAxisId="left" y={voltageDistanceData.busbarVoltageCharge} stroke="hsl(280, 70%, 50%)" strokeDasharray="6 3" strokeWidth={1.5}
               label={{ value: `Busbar ${voltageDistanceData.busbarVoltageCharge.toFixed(1)}V`, fontSize: 10, fill: 'hsl(280, 70%, 50%)' }} />
             {voltageDistanceData.minBranches.map((branch) => (
-              <Line key={`fs-min-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
-                type="monotone" dataKey="voltage" name={branch.label}
+              <Line key={`fs-min-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltageWorstCharge > 0 && isFinite(p.voltageWorstCharge))}
+                type="monotone" dataKey="voltageWorstCharge" name={branch.label}
                 stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
             ))}
             {showPerPhaseDistance && voltageDistanceData.minBranches.map((branch) => (
@@ -1663,8 +1690,8 @@ export const LaboFoisonnementTab = () => {
             <ReferenceLine yAxisId="left" y={voltageDistanceData.busbarVoltageInjection} stroke="hsl(280, 70%, 50%)" strokeDasharray="6 3" strokeWidth={1.5}
               label={{ value: `Busbar ${voltageDistanceData.busbarVoltageInjection.toFixed(1)}V`, fontSize: 10, fill: 'hsl(280, 70%, 50%)' }} />
             {voltageDistanceData.maxBranches.map((branch) => (
-              <Line key={`fs-max-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
-                type="monotone" dataKey="voltage" name={branch.label}
+              <Line key={`fs-max-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltageWorstInjection > 0)}
+                type="monotone" dataKey="voltageWorstInjection" name={branch.label}
                 stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
             ))}
             {showPerPhaseDistance && voltageDistanceData.maxBranches.map((branch) => (

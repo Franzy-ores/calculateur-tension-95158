@@ -338,7 +338,9 @@ export const LaboFoisonnementTab = () => {
         label: `${h.hour}h`,
         P_charge: +pCharge.toFixed(2),
         P_pv: +pPV.toFixed(2),
-        P_net: +(pCharge - pPV).toFixed(2),
+        P_net: +(pCharge + h.evPower_kVA + h.pacPower_kVA - pPV).toFixed(2),
+        P_ev: +h.evPower_kVA.toFixed(2),
+        P_pac: +h.pacPower_kVA.toFixed(2),
         foisonnement: h.chargesResidentialFoisonnement,
       };
     });

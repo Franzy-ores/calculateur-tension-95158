@@ -494,14 +494,15 @@ export const LaboFoisonnementTab = () => {
 
       const voltageSystem = currentProject!.voltageSystem;
       if (voltageSystem === 'TRIPHASÉ_230V') {
-        // Triangle : tension entre deux phases, prendre le pire cas
-        const phaseMap: Record<string, [number, number]> = {
-          'A-B': [bp.voltage_A, bp.voltage_B],
-          'B-C': [bp.voltage_B, bp.voltage_C],
-          'A-C': [bp.voltage_A, bp.voltage_C],
+        // Triangle : en TRI_230V_3F, voltage_A = V_AB, voltage_B = V_BC, voltage_C = V_AC
+        const couplingVoltageMap: Record<string, number> = {
+          'A-B': bp.voltage_A,
+          'B-C': bp.voltage_B,
+          'A-C': bp.voltage_C,
         };
-        const pair = phaseMap[coupling];
-        if (pair) return mode === 'charge' ? Math.min(...pair) : Math.max(...pair);
+        if (couplingVoltageMap[coupling] !== undefined) {
+          return couplingVoltageMap[coupling];
+        }
       }
       // 400V étoile : phase simple
       const singleMap: Record<string, number> = { A: bp.voltage_A, B: bp.voltage_B, C: bp.voltage_C };

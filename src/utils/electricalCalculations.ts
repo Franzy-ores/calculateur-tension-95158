@@ -2406,6 +2406,12 @@ export class ElectricalCalculator {
           }))
         : undefined;
 
+      // Déséquilibre global EN 50160 = max ku% parmi tous les nœuds 400V
+      const maxKu = nodeMetricsPerPhase.reduce((max, nm) => {
+        const ku = nm.sequenceComponents?.ku_percent ?? 0;
+        return ku > max ? ku : max;
+      }, 0);
+
       const result: CalculationResult = {
         scenario,
         cables: calculatedCables,
@@ -2422,7 +2428,9 @@ export class ElectricalCalculator {
         nodeMetricsPerPhase,
         cablePowerFlows: undefined,
         cableTemperatures,
-        virtualBusbar
+        virtualBusbar,
+        unbalanceEN50160_percent: +maxKu.toFixed(3),
+        unbalanceEN50160_status: maxKu > 2 ? 'critical' : maxKu > 1.5 ? 'warning' : 'normal'
       };
 
       console.log(`[ElectricalCalculator] Conformité multi-phase: global=${globalComplianceFromPhases}, final=${finalCompliance}`);

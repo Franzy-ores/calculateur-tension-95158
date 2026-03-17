@@ -245,6 +245,34 @@ export class DailyProfileCalculator {
     
     const industrialFoisonnementHoraire = this.options.zeroConsumption ? 0 : industrialProfile;
 
+    // ── Calcul VE (Kaufmann) ──────────────────────────────────────────
+    const N_total = this.options.nResidential ?? this.countResidentialClients();
+    const evRate = this.options.evPenetrationRate ?? 0;
+    const evPowerKW = this.options.evChargingPower_kW ?? 3.7;
+    const N_EV = Math.round(N_total * evRate);
+    let S_EV_kVA = 0;
+
+    if (N_EV > 0 && !this.options.zeroConsumption) {
+      const evProfile = this.options.season === 'winter' ? VE_PROFILE_WINTER : VE_PROFILE_SUMMER;
+      const evFactor = (evProfile[hour] ?? 0) / 100;
+      const evParams = KAUFMANN_EV[evPowerKW as 3.7 | 11 | 22] || KAUFMANN_EV[3.7];
+      const K_EV = kaufmannCoeff(N_EV, evParams, 150);
+      S_EV_kVA = N_EV * evPowerKW * evFactor * K_EV;
+    }
+
+    // ── Calcul PAC (Kaufmann) ─────────────────────────────────────────
+    const pacRate = this.options.pacPenetrationRate ?? 0;
+    const pacPowerKW = this.options.pacPower_kW ?? 3;
+    const N_PAC = Math.round(N_total * pacRate);
+    let S_PAC_kVA = 0;
+
+    if (N_PAC > 0 && !this.options.zeroConsumption) {
+      const pacProfile = this.options.season === 'winter' ? PAC_PROFILE_WINTER : PAC_PROFILE_SUMMER;
+      const pacFactor = (pacProfile[hour] ?? 0) / 100;
+      const K_PAC = kaufmannCoeff(N_PAC, KAUFMANN_PAC, 150);
+      S_PAC_kVA = N_PAC * pacPowerKW * pacFactor * K_PAC;
+    }
+
     // Foisonnement productions = profil PV × facteur météo (ou 0% si zeroProduction activé)
     const productionsFoisonnement = this.options.zeroProduction 
       ? 0 

@@ -6,6 +6,55 @@ import { SimulationCalculator } from './simulationCalculator';
 import defaultProfiles from '@/data/hourlyProfiles.json';
 import { calculateAdaptiveFoisonnement } from './foisonnementCalculator';
 
+// ── Paramètres Kaufmann VE — g(n) = g_inf + (1−g_inf) × e^(−q×(n−1)) ──────
+// Source : Rolink, Tabelle 4.1
+const KAUFMANN_EV: Record<number, { g_inf: number; q: number }> = {
+  3.7: { g_inf: 0.056, q: 0.2793 },
+  11:  { g_inf: 0.0585, q: 0.4953 },
+  22:  { g_inf: 0.032,  q: 0.5875 },
+};
+
+const KAUFMANN_PAC = { g_inf: 0.065, q: 0.25 };
+
+const VE_PROFILE_WINTER: Record<number, number> = {
+  0:2, 1:3, 2:4, 3:4, 4:4, 5:3,
+  6:2, 7:5, 8:8, 9:5, 10:3, 11:2,
+  12:2, 13:2, 14:3, 15:5, 16:10, 17:25,
+  18:55, 19:80, 20:75, 21:60, 22:40, 23:20
+};
+
+const VE_PROFILE_SUMMER: Record<number, number> = {
+  0:2, 1:2, 2:3, 3:3, 4:3, 5:4,
+  6:5, 7:8, 8:10, 9:8, 10:6, 11:5,
+  12:5, 13:5, 14:6, 15:8, 16:12, 17:20,
+  18:40, 19:55, 20:50, 21:38, 22:25, 23:12
+};
+
+const PAC_PROFILE_WINTER: Record<number, number> = {
+  0:60, 1:65, 2:70, 3:75, 4:75, 5:72,
+  6:65, 7:55, 8:45, 9:35, 10:30, 11:28,
+  12:28, 13:30, 14:32, 15:38, 16:50, 17:65,
+  18:72, 19:75, 20:72, 21:68, 22:65, 23:62
+};
+
+const PAC_PROFILE_SUMMER: Record<number, number> = {
+  0:5, 1:5, 2:5, 3:5, 4:5, 5:5,
+  6:5, 7:5, 8:5, 9:5, 10:5, 11:5,
+  12:5, 13:5, 14:5, 15:5, 16:5, 17:5,
+  18:5, 19:5, 20:5, 21:5, 22:5, 23:5
+};
+
+function kaufmannCoeff(
+  n: number,
+  params: { g_inf: number; q: number },
+  N_ref: number = 150
+): number {
+  if (n <= 0) return 1;
+  const g = params.g_inf + (1 - params.g_inf) * Math.exp(-params.q * (n - 1));
+  const g_ref = params.g_inf + (1 - params.g_inf) * Math.exp(-params.q * (N_ref - 1));
+  return g_ref > 0 ? g / g_ref : 1;
+}
+
 /**
  * Service de calcul des tensions horaires sur 24h
  * Utilise le moteur de calcul électrique existant avec modulation temporelle
@@ -245,6 +294,34 @@ export class DailyProfileCalculator {
     
     const industrialFoisonnementHoraire = this.options.zeroConsumption ? 0 : industrialProfile;
 
+    // ── Calcul VE (Kaufmann) ──────────────────────────────────────────
+    const N_total = this.options.nResidential ?? this.countResidentialClients();
+    const evRate = this.options.evPenetrationRate ?? 0;
+    const evPowerKW = this.options.evChargingPower_kW ?? 3.7;
+    const N_EV = Math.round(N_total * evRate);
+    let S_EV_kVA = 0;
+
+    if (N_EV > 0 && !this.options.zeroConsumption) {
+      const evProfile = this.options.season === 'winter' ? VE_PROFILE_WINTER : VE_PROFILE_SUMMER;
+      const evFactor = (evProfile[hour] ?? 0) / 100;
+      const evParams = KAUFMANN_EV[evPowerKW as 3.7 | 11 | 22] || KAUFMANN_EV[3.7];
+      const K_EV = kaufmannCoeff(N_EV, evParams, 150);
+      S_EV_kVA = N_EV * evPowerKW * evFactor * K_EV;
+    }
+
+    // ── Calcul PAC (Kaufmann) ─────────────────────────────────────────
+    const pacRate = this.options.pacPenetrationRate ?? 0;
+    const pacPowerKW = this.options.pacPower_kW ?? 3;
+    const N_PAC = Math.round(N_total * pacRate);
+    let S_PAC_kVA = 0;
+
+    if (N_PAC > 0 && !this.options.zeroConsumption) {
+      const pacProfile = this.options.season === 'winter' ? PAC_PROFILE_WINTER : PAC_PROFILE_SUMMER;
+      const pacFactor = (pacProfile[hour] ?? 0) / 100;
+      const K_PAC = kaufmannCoeff(N_PAC, KAUFMANN_PAC, 150);
+      S_PAC_kVA = N_PAC * pacPowerKW * pacFactor * K_PAC;
+    }
+
     // Foisonnement productions = profil PV × facteur météo (ou 0% si zeroProduction activé)
     const productionsFoisonnement = this.options.zeroProduction 
       ? 0 
@@ -337,7 +414,9 @@ export class DailyProfileCalculator {
         nodePowers.residentialPower,
         nodePowers.industrialPower,
         nodePowers.productionPower,
-        evFoisonne * facteurVE
+        evFoisonne * facteurVE,
+        S_EV_kVA,
+        S_PAC_kVA
       );
       
       // Ajouter l'état SRG2 au résultat
@@ -358,7 +437,9 @@ export class DailyProfileCalculator {
         nodePowers.residentialPower,
         nodePowers.industrialPower,
         nodePowers.productionPower,
-        evFoisonne * facteurVE
+        evFoisonne * facteurVE,
+        S_EV_kVA,
+        S_PAC_kVA
       );
     }
   }
@@ -1006,7 +1087,9 @@ export class DailyProfileCalculator {
     residentialPower: number,
     industrialPower: number,
     totalProductionPower: number,
-    evBonus: number
+    evBonus: number,
+    evPower_kVA: number = 0,
+    pacPower_kVA: number = 0
   ): HourlyVoltageResult {
     const nodeId = this.options.selectedNodeId;
     const nodeMetrics = result.nodeMetricsPerPhase?.find(n => n.nodeId === nodeId);
@@ -1095,6 +1178,8 @@ export class DailyProfileCalculator {
       chargesIndustrialPower_kVA,
       productionsPower_kVA,
       evBonus,
+      evPower_kVA: +evPower_kVA.toFixed(2),
+      pacPower_kVA: +pacPower_kVA.toFixed(2),
       maxCableTemp_C,
       circuitThermal
     };
@@ -1113,7 +1198,9 @@ export class DailyProfileCalculator {
     residentialPower: number,
     industrialPower: number,
     totalProductionPower: number,
-    evBonus: number
+    evBonus: number,
+    evPower_kVA: number = 0,
+    pacPower_kVA: number = 0
   ): HourlyVoltageResult {
     const chargesResidentialPower_kVA = residentialPower * (residentialFoisonnement / 100);
     const chargesIndustrialPower_kVA = industrialPower * (industrialFoisonnement / 100);
@@ -1136,7 +1223,9 @@ export class DailyProfileCalculator {
       chargesResidentialPower_kVA,
       chargesIndustrialPower_kVA,
       productionsPower_kVA,
-      evBonus
+      evBonus,
+      evPower_kVA: +evPower_kVA.toFixed(2),
+      pacPower_kVA: +pacPower_kVA.toFixed(2),
     };
   }
 

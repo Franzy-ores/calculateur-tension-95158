@@ -190,6 +190,12 @@ export const LaboFoisonnementTab = () => {
   const [fullscreenInjectionOpen, setFullscreenInjectionOpen] = useState(false);
   const [fullscreenHourlyOpen, setFullscreenHourlyOpen] = useState(false);
 
+  // VE / PAC states
+  const [evPenetration, setEvPenetration] = useState(0);
+  const [evPower, setEvPower] = useState<3.7 | 11 | 22>(3.7);
+  const [pacPenetration, setPacPenetration] = useState(0);
+  const [pacPower, setPacPower] = useState(3);
+
   // Simulation equipment counters
   const srg2Count = simulationEquipment.srg2Devices?.filter(s => s.enabled).length || 0;
   const compensatorCount = simulationEquipment.neutralCompensators.filter(c => c.enabled).length;
@@ -280,6 +286,11 @@ export const LaboFoisonnementTab = () => {
       selectedClusterId,
       adaptiveFoisonnement: false,
       customDiversityCoeff: continuCoeff,
+      evPenetrationRate: evPenetration,
+      evChargingPower_kW: evPower,
+      pacPenetrationRate: pacPenetration,
+      pacPower_kW: pacPower,
+      nResidential: nResidentialGlobal,
     };
 
     // Run 1: Complet (conso + prod) → puissance 24h + tension 24h
@@ -314,7 +325,7 @@ export const LaboFoisonnementTab = () => {
       rawConsoPure: rawConso,
       rawProdPure: rawProd,
     };
-  }, [currentProject, selectedNodeId, season, weather, selectedClusterId, continuCoeff, dailyProfileOptions, simulationEquipment, isSimulationActive, nResidentialGlobal, dailyProfileCustomProfiles]);
+  }, [currentProject, selectedNodeId, season, weather, selectedClusterId, continuCoeff, dailyProfileOptions, simulationEquipment, isSimulationActive, nResidentialGlobal, dailyProfileCustomProfiles, evPenetration, evPower, pacPenetration, pacPower]);
 
   // ─── Power chart data from engine results ────────────────────────────────────
   const powerData = useMemo(() => {
@@ -327,7 +338,9 @@ export const LaboFoisonnementTab = () => {
         label: `${h.hour}h`,
         P_charge: +pCharge.toFixed(2),
         P_pv: +pPV.toFixed(2),
-        P_net: +(pCharge - pPV).toFixed(2),
+        P_net: +(pCharge + h.evPower_kVA + h.pacPower_kVA - pPV).toFixed(2),
+        P_ev: +h.evPower_kVA.toFixed(2),
+        P_pac: +h.pacPower_kVA.toFixed(2),
         foisonnement: h.chargesResidentialFoisonnement,
       };
     });
@@ -837,7 +850,69 @@ export const LaboFoisonnementTab = () => {
             </div>
           </div>
 
-          {/* Summary puissances */}
+          {/* ── VE / PAC ─────────────────────────────────────────── */}
+          <div className="bg-muted/50 rounded-md p-3 space-y-3 text-xs">
+            <div className="font-medium text-foreground flex items-center gap-1">
+              <Zap className="h-3 w-3 text-amber-500" /> Véhicules Électriques
+            </div>
+            <div className="space-y-1">
+              <div className="flex justify-between items-center">
+                <Label className="text-[10px] text-muted-foreground">Pénétration VE</Label>
+                <span className="font-mono text-[10px] text-foreground">{Math.round(evPenetration * 100)}%</span>
+              </div>
+              <Slider
+                min={0} max={100} step={5}
+                value={[Math.round(evPenetration * 100)]}
+                onValueChange={([v]) => setEvPenetration(v / 100)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground">Puissance borne</Label>
+              <div className="flex gap-1">
+                {([3.7, 11, 22] as const).map(p => (
+                  <Button
+                    key={p}
+                    size="sm"
+                    variant={evPower === p ? 'default' : 'outline'}
+                    onClick={() => setEvPower(p)}
+                    className="text-xs h-6 flex-1"
+                  >
+                    {p} kW
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-muted/50 rounded-md p-3 space-y-3 text-xs">
+            <div className="font-medium text-foreground flex items-center gap-1">
+              🌡️ Pompes à Chaleur
+            </div>
+            <div className="space-y-1">
+              <div className="flex justify-between items-center">
+                <Label className="text-[10px] text-muted-foreground">Pénétration PAC</Label>
+                <span className="font-mono text-[10px] text-foreground">{Math.round(pacPenetration * 100)}%</span>
+              </div>
+              <Slider
+                min={0} max={100} step={5}
+                value={[Math.round(pacPenetration * 100)]}
+                onValueChange={([v]) => setPacPenetration(v / 100)}
+              />
+            </div>
+            <div className="space-y-1">
+              <div className="flex justify-between items-center">
+                <Label className="text-[10px] text-muted-foreground">Puissance</Label>
+                <span className="font-mono text-[10px] text-foreground">{pacPower} kW</span>
+              </div>
+              <Slider
+                min={1} max={9} step={0.5}
+                value={[pacPower]}
+                onValueChange={([v]) => setPacPower(v)}
+              />
+            </div>
+          </div>
+
+
           {peakSummary && (
             <div className="bg-muted/50 rounded-md p-3 space-y-1.5 text-xs">
               <div className="font-medium text-foreground">Synthèse puissances</div>
@@ -914,6 +989,8 @@ export const LaboFoisonnementTab = () => {
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Line type="monotone" dataKey="P_charge" name="P charge (rés.+ind.)" stroke="hsl(217, 91%, 60%)" strokeWidth={2} dot={false} />
                   <Line type="monotone" dataKey="P_pv" name="P PV" stroke="hsl(142, 76%, 36%)" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="P_ev" name="P VE" stroke="hsl(35, 95%, 55%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                  <Line type="monotone" dataKey="P_pac" name="P PAC" stroke="hsl(330, 81%, 60%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
                   <Line type="monotone" dataKey="P_net" name="P net" stroke="hsl(var(--destructive))" strokeWidth={2.5} dot={false} />
                 </LineChart>
               </ResponsiveContainer>

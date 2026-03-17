@@ -81,6 +81,21 @@ export interface DailySimulationOptions {
   customFacteurVE?: number;
   /** Override du coefficient de diversité (remplace les paliers terrain) */
   customDiversityCoeff?: number;
+
+  // ── VE (Véhicules Électriques) ──────────────────────────────────────
+  /** Taux de pénétration VE (0.0 → 1.0, ex: 0.30 = 30% des clients ont un VE) */
+  evPenetrationRate?: number;
+  /** Puissance de borne VE (kW) */
+  evChargingPower_kW?: 3.7 | 11 | 22;
+
+  // ── PAC (Pompes à Chaleur) ──────────────────────────────────────────
+  /** Taux de pénétration PAC (0.0 → 1.0) */
+  pacPenetrationRate?: number;
+  /** Puissance moyenne PAC (kW) */
+  pacPower_kW?: number;
+
+  /** Nombre de clients résidentiels (pour Kaufmann) */
+  nResidential?: number;
 }
 
 export interface HourlyVoltageResult {
@@ -104,6 +119,10 @@ export interface HourlyVoltageResult {
   productionsPower_kVA: number;
   // Bonus VE appliqué sur le foisonnement résidentiel (%)
   evBonus: number;
+  // Puissance VE foisonnée (kVA) — Kaufmann
+  evPower_kVA: number;
+  // Puissance PAC foisonnée (kVA) — Kaufmann
+  pacPower_kVA: number;
   // État SRG2 pour cette heure (si simulation active)
   srg2States?: SRG2HourlyActivation[];
   /** Température maximale estimée des conducteurs pour cette heure (°C) */

@@ -1178,6 +1178,8 @@ export class DailyProfileCalculator {
       chargesIndustrialPower_kVA,
       productionsPower_kVA,
       evBonus,
+      evPower_kVA: +evPower_kVA.toFixed(2),
+      pacPower_kVA: +pacPower_kVA.toFixed(2),
       maxCableTemp_C,
       circuitThermal
     };

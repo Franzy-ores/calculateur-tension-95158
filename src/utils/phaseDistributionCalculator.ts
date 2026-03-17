@@ -713,19 +713,19 @@ export function calculateNodeAutoPhaseDistribution(
           `Using physical distribution.`
         );
         result.phasePhaseLoads.foisonneCharges     = { ...chargeFoisonneParCouplage };
+        // RÈGLE : Productions MONO restent sur leur couplage physique — pas de redistribution
         result.phasePhaseLoads.foisonneProductions = { ...prodFoisonneParCouplage };
       } else {
-        // ✅ FIX: Cursors redistribute the FULL foisonné total (MONO + POLY).
+        // Charges : curseurs redistribuent le total foisonné MONO
         result.phasePhaseLoads.foisonneCharges = {
           'A-B': totalChargeFoisonne * (curseurCharges['A-B'] / 100),
           'B-C': totalChargeFoisonne * (curseurCharges['B-C'] / 100),
           'A-C': totalChargeFoisonne * (curseurCharges['A-C'] / 100),
         };
-        result.phasePhaseLoads.foisonneProductions = {
-          'A-B': totalProdFoisonne * (curseurProd['A-B'] / 100),
-          'B-C': totalProdFoisonne * (curseurProd['B-C'] / 100),
-          'A-C': totalProdFoisonne * (curseurProd['A-C'] / 100),
-        };
+        // RÈGLE : Productions MONO restent sur leur couplage physique assigné.
+        // Les curseurs ne redistribuent PAS les productions MONO — un PV sur A-C
+        // reste sur A-C. Seules les productions POLY (via S_maps) sont redistribuables.
+        result.phasePhaseLoads.foisonneProductions = { ...prodFoisonneParCouplage };
       }
 
       // Derive per-phase display values from coupling values.
@@ -736,6 +736,7 @@ export function calculateNodeAutoPhaseDistribution(
         B: (fc['A-B'] + fc['B-C']) * 0.5,
         C: (fc['B-C'] + fc['A-C']) * 0.5,
       };
+      // Productions : physiques (MONO sur couplage assigné, pas de redistribution)
       result.productions.foisonneAvecCurseurs = {
         A: (fp['A-B'] + fp['A-C']) * 0.5,
         B: (fp['A-B'] + fp['B-C']) * 0.5,
@@ -767,10 +768,21 @@ export function calculateNodeAutoPhaseDistribution(
            polyResChargesPhase.C * (foisonnementChargesResidentiel / 100) +
            polyIndChargesPhase.C * (foisonnementChargesIndustriel  / 100),
       };
+      // Séparer MONO (phase fixe) et POLY (redistribuable) pour les productions
+      const monoProdFoisonneParPhase = {
+        A: monoResProdPhase.A * (foisonnementProductions / 100),
+        B: monoResProdPhase.B * (foisonnementProductions / 100),
+        C: monoResProdPhase.C * (foisonnementProductions / 100),
+      };
+      const polyProdFoisonneParPhase = {
+        A: polyProdPhase.A * (foisonnementProductions / 100),
+        B: polyProdPhase.B * (foisonnementProductions / 100),
+        C: polyProdPhase.C * (foisonnementProductions / 100),
+      };
       const prodFoisonneParPhase = {
-        A: (monoResProdPhase.A + polyProdPhase.A) * (foisonnementProductions / 100),
-        B: (monoResProdPhase.B + polyProdPhase.B) * (foisonnementProductions / 100),
-        C: (monoResProdPhase.C + polyProdPhase.C) * (foisonnementProductions / 100),
+        A: monoProdFoisonneParPhase.A + polyProdFoisonneParPhase.A,
+        B: monoProdFoisonneParPhase.B + polyProdFoisonneParPhase.B,
+        C: monoProdFoisonneParPhase.C + polyProdFoisonneParPhase.C,
       };
 
       // Total foisonné scalaire
@@ -778,25 +790,28 @@ export function calculateNodeAutoPhaseDistribution(
         chargeFoisonneParPhase.A +
         chargeFoisonneParPhase.B +
         chargeFoisonneParPhase.C;
-      const totalProdFoisonne =
-        prodFoisonneParPhase.A +
-        prodFoisonneParPhase.B +
-        prodFoisonneParPhase.C;
+      const totalPolyProdFoisonne =
+        polyProdFoisonneParPhase.A +
+        polyProdFoisonneParPhase.B +
+        polyProdFoisonneParPhase.C;
 
-      // ✅ FIX: Cursors redistribute the FULL foisonné total (MONO + POLY).
+      // Charges : curseurs redistribuent le total foisonné (MONO + POLY)
       result.charges.foisonneAvecCurseurs = {
         A: totalChargeFoisonne * (manualPhaseDistributionCharges.A / 100),
         B: totalChargeFoisonne * (manualPhaseDistributionCharges.B / 100),
         C: totalChargeFoisonne * (manualPhaseDistributionCharges.C / 100),
       };
+      // RÈGLE : Productions MONO restent sur leur phase physique assignée.
+      // Seules les productions POLY sont redistribuées par les curseurs.
       result.productions.foisonneAvecCurseurs = {
-        A: totalProdFoisonne * (manualPhaseDistributionProductions.A / 100),
-        B: totalProdFoisonne * (manualPhaseDistributionProductions.B / 100),
-        C: totalProdFoisonne * (manualPhaseDistributionProductions.C / 100),
+        A: monoProdFoisonneParPhase.A + totalPolyProdFoisonne * (manualPhaseDistributionProductions.A / 100),
+        B: monoProdFoisonneParPhase.B + totalPolyProdFoisonne * (manualPhaseDistributionProductions.B / 100),
+        C: monoProdFoisonneParPhase.C + totalPolyProdFoisonne * (manualPhaseDistributionProductions.C / 100),
       };
 
       console.log(`⭐ [400V] Nœud "${node.name}"`);
-      console.log(`   Total foisonné: charges=${totalChargeFoisonne.toFixed(2)}kVA prod=${totalProdFoisonne.toFixed(2)}kVA`);
+      const totalProdFoisonne = monoProdFoisonneParPhase.A + monoProdFoisonneParPhase.B + monoProdFoisonneParPhase.C + totalPolyProdFoisonne;
+      console.log(`   Total foisonné: charges=${totalChargeFoisonne.toFixed(2)}kVA prod=${totalProdFoisonne.toFixed(2)}kVA (mono=${(totalProdFoisonne - totalPolyProdFoisonne).toFixed(2)} poly=${totalPolyProdFoisonne.toFixed(2)})`);
       const fc400 = result.charges.foisonneAvecCurseurs;
       console.log(`   → A=${fc400.A.toFixed(2)} B=${fc400.B.toFixed(2)} C=${fc400.C.toFixed(2)} kVA`);
     }

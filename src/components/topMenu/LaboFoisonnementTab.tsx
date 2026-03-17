@@ -1628,8 +1628,8 @@ export const LaboFoisonnementTab = () => {
             <ReferenceLine yAxisId="left" y={voltageDistanceData.busbarVoltageCharge} stroke="hsl(280, 70%, 50%)" strokeDasharray="6 3" strokeWidth={1.5}
               label={{ value: `Busbar ${voltageDistanceData.busbarVoltageCharge.toFixed(1)}V`, fontSize: 10, fill: 'hsl(280, 70%, 50%)' }} />
             {voltageDistanceData.minBranches.map((branch) => (
-              <Line key={`fs-min-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
-                type="monotone" dataKey="voltage" name={branch.label}
+              <Line key={`fs-min-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltageWorstCharge > 0 && isFinite(p.voltageWorstCharge))}
+                type="monotone" dataKey="voltageWorstCharge" name={branch.label}
                 stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
             ))}
             {showPerPhaseDistance && voltageDistanceData.minBranches.map((branch) => (

@@ -12,6 +12,7 @@ import { getNodeConnectionType } from '@/utils/nodeConnectionType';
 import { getLinkedClientsForNode } from '@/utils/clientsUtils';
 import { toast } from 'sonner';
 import { ClientEditPanel } from './ClientEditPanel';
+import { NodePhaseDisplay } from './NodePhaseDisplay';
 
 export const EditPanel = () => {
   const {

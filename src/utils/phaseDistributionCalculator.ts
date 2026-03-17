@@ -260,7 +260,10 @@ export function calculateNodeAutoPhaseDistribution(
       poly: { A: 0, B: 0, C: 0 },
       total: { A: 0, B: 0, C: 0 }
     },
-    // NOUVEAU : Charges phase-phase pour calcul correct du courant en 230V triangle
+    // RÈGLE ABSOLUE 230V TRIANGLE :
+    // phasePhaseLoads → MONO uniquement (couplages physiques A-B, B-C, A-C)
+    // charges.poly / S_A/S_B/S_C → POLY uniquement
+    // Ces deux chemins sont mutuellement exclusifs — jamais les deux.
     phasePhaseLoads: {
       charges: { 'A-B': 0, 'B-C': 0, 'A-C': 0 },
       productions: { 'A-B': 0, 'B-C': 0, 'A-C': 0 }

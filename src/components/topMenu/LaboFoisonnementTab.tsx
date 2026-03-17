@@ -286,6 +286,11 @@ export const LaboFoisonnementTab = () => {
       selectedClusterId,
       adaptiveFoisonnement: false,
       customDiversityCoeff: continuCoeff,
+      evPenetrationRate: evPenetration,
+      evChargingPower_kW: evPower,
+      pacPenetrationRate: pacPenetration,
+      pacPower_kW: pacPower,
+      nResidential: nResidentialGlobal,
     };
 
     // Run 1: Complet (conso + prod) → puissance 24h + tension 24h

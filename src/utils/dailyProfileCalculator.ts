@@ -1087,7 +1087,9 @@ export class DailyProfileCalculator {
     residentialPower: number,
     industrialPower: number,
     totalProductionPower: number,
-    evBonus: number
+    evBonus: number,
+    evPower_kVA: number = 0,
+    pacPower_kVA: number = 0
   ): HourlyVoltageResult {
     const nodeId = this.options.selectedNodeId;
     const nodeMetrics = result.nodeMetricsPerPhase?.find(n => n.nodeId === nodeId);

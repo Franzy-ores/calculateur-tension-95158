@@ -810,7 +810,8 @@ export function calculateNodeAutoPhaseDistribution(
       };
 
       console.log(`⭐ [400V] Nœud "${node.name}"`);
-      console.log(`   Total foisonné: charges=${totalChargeFoisonne.toFixed(2)}kVA prod=${totalProdFoisonne.toFixed(2)}kVA`);
+      const totalProdFoisonne = monoProdFoisonneParPhase.A + monoProdFoisonneParPhase.B + monoProdFoisonneParPhase.C + totalPolyProdFoisonne;
+      console.log(`   Total foisonné: charges=${totalChargeFoisonne.toFixed(2)}kVA prod=${totalProdFoisonne.toFixed(2)}kVA (mono=${(totalProdFoisonne - totalPolyProdFoisonne).toFixed(2)} poly=${totalPolyProdFoisonne.toFixed(2)})`);
       const fc400 = result.charges.foisonneAvecCurseurs;
       console.log(`   → A=${fc400.A.toFixed(2)} B=${fc400.B.toFixed(2)} C=${fc400.C.toFixed(2)} kVA`);
     }

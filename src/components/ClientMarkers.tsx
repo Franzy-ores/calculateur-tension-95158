@@ -50,6 +50,9 @@ export const useClientMarkers = ({ map, clients, links, nodes, selectedClientId,
 
   useEffect(() => {
     if (!map || !clients) return;
+    // Guard against HMR race: map panes may not be ready yet
+    try { map.getPane('markerPane'); } catch { return; }
+    if (!map.getPane('markerPane')) return;
 
     // Nettoyer les marqueurs existants
     clientMarkersRef.current.forEach(marker => map.removeLayer(marker));

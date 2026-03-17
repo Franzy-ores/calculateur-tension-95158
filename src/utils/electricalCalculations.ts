@@ -2243,7 +2243,9 @@ export class ElectricalCalculator {
           I_source_net_A,
           Ztr_phase,
           cableIndexByPair,
-          { A: I_source_net_A, B: I_source_net_B, C: I_source_net_C }
+          { A: I_source_net_A, B: I_source_net_B, C: I_source_net_C },
+          phaseB.V_node_phase,
+          phaseC.V_node_phase
         );
       }
 

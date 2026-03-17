@@ -395,6 +395,7 @@ export class ElectricalCalculator {
     I_source_net: Complex,
     Ztr_phase: Complex | null,
     cableIndexByPair: Map<string, Cable>,
+    nodes: Node[],
     I_source_net_phases?: { A: Complex; B: Complex; C: Complex }, // Pour I_N en mode déséquilibré
     // Phases B et C pour calcul correct des tensions ligne-à-ligne en delta 230V
     V_node_B?: Map<string, Complex>,

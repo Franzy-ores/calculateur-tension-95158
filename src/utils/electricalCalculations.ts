@@ -2001,6 +2001,7 @@ export class ElectricalCalculator {
       // ===== Recalcul final V_neutral après passes thermiques + correction d'affichage =====
       // Le neutre est recalculé ici car les passes thermiques ont pu modifier phaseA/B/C
       let I_neutral_cable_final: Map<string, Complex> | undefined;
+      let V_neutral_refined_final: Map<string, Complex> | undefined;
       if (is400V) {
         // Passe standard
         const { V_neutral, I_neutral_cable } = this.computeNeutralVoltages(

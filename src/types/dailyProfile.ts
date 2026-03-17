@@ -119,6 +119,10 @@ export interface HourlyVoltageResult {
   productionsPower_kVA: number;
   // Bonus VE appliqué sur le foisonnement résidentiel (%)
   evBonus: number;
+  // Puissance VE foisonnée (kVA) — Kaufmann
+  evPower_kVA: number;
+  // Puissance PAC foisonnée (kVA) — Kaufmann
+  pacPower_kVA: number;
   // État SRG2 pour cette heure (si simulation active)
   srg2States?: SRG2HourlyActivation[];
   /** Température maximale estimée des conducteurs pour cette heure (°C) */

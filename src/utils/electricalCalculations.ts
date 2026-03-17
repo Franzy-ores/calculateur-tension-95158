@@ -2326,6 +2326,43 @@ export class ElectricalCalculator {
         const nodeCompliance: 'normal' | 'warning' | 'critical' = phaseCompliances.includes('critical') ? 'critical' :
                               phaseCompliances.includes('warning') ? 'warning' : 'normal';
         
+        // ── Composantes de séquence (400V étoile uniquement) ──────────────
+        let sequenceComponents: undefined | {
+          U0_mag: number; U1_mag: number; U2_mag: number;
+          U0_angle_deg: number; U1_angle_deg: number; U2_angle_deg: number;
+          ku_percent: number;
+        };
+
+        if (n.connectionType === 'TÉTRA_3P+N_230_400V') {
+          const a_re = Math.cos(2 * Math.PI / 3);
+          const a_im = Math.sin(2 * Math.PI / 3);
+          const a2_re = Math.cos(4 * Math.PI / 3);
+          const a2_im = Math.sin(4 * Math.PI / 3);
+
+          const aVb  = { re: a_re * Vb.re - a_im * Vb.im, im: a_re * Vb.im + a_im * Vb.re };
+          const a2Vc = { re: a2_re * Vc.re - a2_im * Vc.im, im: a2_re * Vc.im + a2_im * Vc.re };
+          const a2Vb = { re: a2_re * Vb.re - a2_im * Vb.im, im: a2_re * Vb.im + a2_im * Vb.re };
+          const aVc  = { re: a_re * Vc.re - a_im * Vc.im, im: a_re * Vc.im + a_im * Vc.re };
+
+          const U0 = { re: (Va.re + Vb.re + Vc.re) / 3, im: (Va.im + Vb.im + Vc.im) / 3 };
+          const U1 = { re: (Va.re + aVb.re + a2Vc.re) / 3, im: (Va.im + aVb.im + a2Vc.im) / 3 };
+          const U2 = { re: (Va.re + a2Vb.re + aVc.re) / 3, im: (Va.im + a2Vb.im + aVc.im) / 3 };
+
+          const U0_mag = Math.hypot(U0.re, U0.im);
+          const U1_mag = Math.hypot(U1.re, U1.im);
+          const U2_mag = Math.hypot(U2.re, U2.im);
+
+          sequenceComponents = {
+            U0_mag: +U0_mag.toFixed(2),
+            U1_mag: +U1_mag.toFixed(2),
+            U2_mag: +U2_mag.toFixed(2),
+            U0_angle_deg: +(Math.atan2(U0.im, U0.re) * 180 / Math.PI).toFixed(2),
+            U1_angle_deg: +(Math.atan2(U1.im, U1.re) * 180 / Math.PI).toFixed(2),
+            U2_angle_deg: +(Math.atan2(U2.im, U2.re) * 180 / Math.PI).toFixed(2),
+            ku_percent: U1_mag > 0.1 ? +(U2_mag / U1_mag * 100).toFixed(3) : 0
+          };
+        }
+
         return {
           nodeId: n.id,
           voltagesPerPhase: {
@@ -2344,7 +2381,8 @@ export class ElectricalCalculator {
             C: deviationC_percent
           },
           compliancePerPhase,
-          nodeCompliance
+          nodeCompliance,
+          sequenceComponents
         };
       });
 

@@ -1489,8 +1489,8 @@ export const LaboFoisonnementTab = () => {
                       <ReferenceLine yAxisId="left" y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" />
                       <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} />
                       {voltageDistanceData?.maxBranches.map((branch) => (
-                        <Line key={`fs-max-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
-                          type="monotone" dataKey="voltage" name={branch.label}
+                        <Line key={`fs-max-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltageWorstInjection > 0)}
+                          type="monotone" dataKey="voltageWorstInjection" name={branch.label}
                           stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
                       ))}
                       {clientPointsData?.maxClientPoints && clientPointsData.maxClientPoints.length > 0 && (

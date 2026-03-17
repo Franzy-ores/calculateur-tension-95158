@@ -471,7 +471,7 @@ export class ElectricalCalculator {
       for (const nid of subtreeNodes) {
         const nV = V_node.get(nid);
         if (!nV) continue;
-        const nodeConnType: ConnectionType = source.connectionType;
+        const nodeConnType: ConnectionType = nodes.find(n => n.id === nid)?.connectionType ?? source.connectionType;
 
         if (nodeConnType === 'TRI_230V_3F' && V_node_B && V_node_C) {
           // Delta 230V : tensions physiques = ligne-à-ligne depuis phaseurs complexes

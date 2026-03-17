@@ -470,15 +470,32 @@ export class ElectricalCalculator {
       for (const nid of subtreeNodes) {
         const nV = V_node.get(nid);
         if (!nV) continue;
-        // Conversion ligne/phase basée sur le type de connexion (fallback: type de la source)
-        const nodeConnType: ConnectionType = nid === source.id
-          ? source.connectionType
-          : source.connectionType;
-        const isThree = this.getVoltage(nodeConnType).isThreePhase;
-        const scaleLine = this.getDisplayLineScale(nodeConnType);
-        const U_node_line = abs(nV) * scaleLine;
-        if (U_node_line < minNodeVoltage) minNodeVoltage = U_node_line;
-        if (U_node_line > maxNodeVoltage) maxNodeVoltage = U_node_line;
+        const nodeConnType: ConnectionType = source.connectionType;
+
+        if (nodeConnType === 'TRI_230V_3F' && V_node_B && V_node_C) {
+          // Delta 230V : tensions physiques = ligne-à-ligne depuis phaseurs complexes
+          const Vb = V_node_B.get(nid);
+          const Vc = V_node_C.get(nid);
+          if (Vb && Vc) {
+            const vAB = abs(sub(nV, Vb));
+            const vBC = abs(sub(Vb, Vc));
+            const vAC = abs(sub(nV, Vc));
+            const vMin = Math.min(vAB, vBC, vAC);
+            const vMax = Math.max(vAB, vBC, vAC);
+            if (vMin < minNodeVoltage) minNodeVoltage = vMin;
+            if (vMax > maxNodeVoltage) maxNodeVoltage = vMax;
+          } else {
+            // Fallback : estimation √3
+            const U_node_line = abs(nV) * Math.sqrt(3);
+            if (U_node_line < minNodeVoltage) minNodeVoltage = U_node_line;
+            if (U_node_line > maxNodeVoltage) maxNodeVoltage = U_node_line;
+          }
+        } else {
+          const scaleLine = this.getDisplayLineScale(nodeConnType);
+          const U_node_line = abs(nV) * scaleLine;
+          if (U_node_line < minNodeVoltage) minNodeVoltage = U_node_line;
+          if (U_node_line > maxNodeVoltage) maxNodeVoltage = U_node_line;
+        }
       }
       if (subtreeNodes.length === 0 || !isFinite(minNodeVoltage)) {
         const U_node_line = abs(V_bus) * (isSourceThree ? Math.sqrt(3) : 1);

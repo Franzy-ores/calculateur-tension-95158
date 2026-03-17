@@ -69,10 +69,25 @@ function buildNetworkPaths(nodes: NetworkNode[], cables: Cable[]): BranchPath[] 
       if (visited.has(nextId)) continue;
       visited.add(nextId);
 
-      if (!children.has(currentId)) children.set(currentId, []);
-      children.get(currentId)!.push({ nodeId: nextId, cableLength: cable.length_m || 0 });
+      // Correction 1: calculer la longueur depuis les coordonnées GPS si disponibles
+      const cableLen = (() => {
+        if (cable.coordinates && cable.coordinates.length >= 2) {
+          let len = 0;
+          for (let i = 1; i < cable.coordinates.length; i++) {
+            len += calculateGeodeticDistance(
+              cable.coordinates[i-1].lat, cable.coordinates[i-1].lng,
+              cable.coordinates[i].lat, cable.coordinates[i].lng
+            );
+          }
+          return len;
+        }
+        return cable.length_m || 0; // fallback si déjà calculé
+      })();
 
-      distanceMap.set(nextId, currentDist + (cable.length_m || 0));
+      if (!children.has(currentId)) children.set(currentId, []);
+      children.get(currentId)!.push({ nodeId: nextId, cableLength: cableLen });
+
+      distanceMap.set(nextId, currentDist + cableLen);
       queue.push(nextId);
     }
   }

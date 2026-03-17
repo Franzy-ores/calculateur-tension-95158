@@ -1058,19 +1058,17 @@ export const LaboFoisonnementTab = () => {
                         type="monotone" dataKey="voltageWorstCharge" name={branch.label}
                         stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
                     ))}
-                    {showPerPhaseDistance && voltageDistanceData.minBranches.map((branch) => (
-                      <>
-                        <Line key={`min-A-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_A > 0)}
-                          type="monotone" dataKey="voltage_A" name={`${branch.label} A`}
-                          stroke="hsl(0, 75%, 55%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
-                        <Line key={`min-B-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_B > 0)}
-                          type="monotone" dataKey="voltage_B" name={`${branch.label} B`}
-                          stroke="hsl(142, 76%, 36%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
-                        <Line key={`min-C-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_C > 0)}
-                          type="monotone" dataKey="voltage_C" name={`${branch.label} C`}
-                          stroke="hsl(217, 91%, 60%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
-                      </>
-                    ))}
+                    {showPerPhaseDistance && voltageDistanceData.minBranches.flatMap((branch) => [
+                      <Line key={`min-A-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_A > 0)}
+                        type="monotone" dataKey="voltage_A" name={`${branch.label} A`}
+                        stroke="hsl(0, 75%, 55%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+                      <Line key={`min-B-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_B > 0)}
+                        type="monotone" dataKey="voltage_B" name={`${branch.label} B`}
+                        stroke="hsl(142, 76%, 36%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+                      <Line key={`min-C-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_C > 0)}
+                        type="monotone" dataKey="voltage_C" name={`${branch.label} C`}
+                        stroke="hsl(217, 91%, 60%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+                    ])}
                     {showNeutralCurrent && voltageDistanceData.minBranches.map((branch) => (
                       <Line key={`min-IN-${branch.branchId}`} yAxisId="right" data={branch.points}
                         type="monotone" dataKey="I_neutral" name={`I_N ${branch.label}`}
@@ -1148,19 +1146,17 @@ export const LaboFoisonnementTab = () => {
                         type="monotone" dataKey="voltageWorstInjection" name={branch.label}
                         stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
                     ))}
-                    {showPerPhaseDistance && voltageDistanceData.maxBranches.map((branch) => (
-                      <>
-                        <Line key={`max-A-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_A > 0)}
-                          type="monotone" dataKey="voltage_A" name={`${branch.label} A`}
-                          stroke="hsl(0, 75%, 55%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
-                        <Line key={`max-B-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_B > 0)}
-                          type="monotone" dataKey="voltage_B" name={`${branch.label} B`}
-                          stroke="hsl(142, 76%, 36%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
-                        <Line key={`max-C-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_C > 0)}
-                          type="monotone" dataKey="voltage_C" name={`${branch.label} C`}
-                          stroke="hsl(217, 91%, 60%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
-                      </>
-                    ))}
+                    {showPerPhaseDistance && voltageDistanceData.maxBranches.flatMap((branch) => [
+                      <Line key={`max-A-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_A > 0)}
+                        type="monotone" dataKey="voltage_A" name={`${branch.label} A`}
+                        stroke="hsl(0, 75%, 55%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+                      <Line key={`max-B-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_B > 0)}
+                        type="monotone" dataKey="voltage_B" name={`${branch.label} B`}
+                        stroke="hsl(142, 76%, 36%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+                      <Line key={`max-C-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_C > 0)}
+                        type="monotone" dataKey="voltage_C" name={`${branch.label} C`}
+                        stroke="hsl(217, 91%, 60%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+                    ])}
                     {showNeutralCurrent && voltageDistanceData.maxBranches.map((branch) => (
                       <Line key={`max-IN-${branch.branchId}`} yAxisId="right" data={branch.points}
                         type="monotone" dataKey="I_neutral" name={`I_N ${branch.label}`}
@@ -1289,19 +1285,17 @@ export const LaboFoisonnementTab = () => {
                                 type="monotone" dataKey="voltage" name={branch.label}
                                 stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
                             ))}
-                            {showPerPhaseDistance && hourlyBranches.map((branch) => (
-                              <>
-                                <Line key={`hourly-A-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_A > 0)}
-                                  type="monotone" dataKey="voltage_A" name={`${branch.label} A`}
-                                  stroke="hsl(0, 75%, 55%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
-                                <Line key={`hourly-B-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_B > 0)}
-                                  type="monotone" dataKey="voltage_B" name={`${branch.label} B`}
-                                  stroke="hsl(142, 76%, 36%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
-                                <Line key={`hourly-C-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_C > 0)}
-                                  type="monotone" dataKey="voltage_C" name={`${branch.label} C`}
-                                  stroke="hsl(217, 91%, 60%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
-                              </>
-                            ))}
+                            {showPerPhaseDistance && hourlyBranches.flatMap((branch) => [
+                              <Line key={`hourly-A-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_A > 0)}
+                                type="monotone" dataKey="voltage_A" name={`${branch.label} A`}
+                                stroke="hsl(0, 75%, 55%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+                              <Line key={`hourly-B-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_B > 0)}
+                                type="monotone" dataKey="voltage_B" name={`${branch.label} B`}
+                                stroke="hsl(142, 76%, 36%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+                              <Line key={`hourly-C-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_C > 0)}
+                                type="monotone" dataKey="voltage_C" name={`${branch.label} C`}
+                                stroke="hsl(217, 91%, 60%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+                            ])}
                             {showNeutralCurrent && hourlyBranches.map((branch) => (
                               <Line key={`hourly-IN-${branch.branchId}`} yAxisId="right" data={branch.points}
                                 type="monotone" dataKey="I_neutral" name={`I_N ${branch.label}`}
@@ -1632,19 +1626,17 @@ export const LaboFoisonnementTab = () => {
                 type="monotone" dataKey="voltageWorstCharge" name={branch.label}
                 stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
             ))}
-            {showPerPhaseDistance && voltageDistanceData.minBranches.map((branch) => (
-              <>
-                <Line key={`fs-A-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_A > 0)}
-                  type="monotone" dataKey="voltage_A" name={`${branch.label} A`}
-                  stroke="hsl(0, 75%, 55%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
-                <Line key={`fs-B-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_B > 0)}
-                  type="monotone" dataKey="voltage_B" name={`${branch.label} B`}
-                  stroke="hsl(142, 76%, 36%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
-                <Line key={`fs-C-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_C > 0)}
-                  type="monotone" dataKey="voltage_C" name={`${branch.label} C`}
-                  stroke="hsl(217, 91%, 60%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
-              </>
-            ))}
+            {showPerPhaseDistance && voltageDistanceData.minBranches.flatMap((branch) => [
+              <Line key={`fs-A-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_A > 0)}
+                type="monotone" dataKey="voltage_A" name={`${branch.label} A`}
+                stroke="hsl(0, 75%, 55%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+              <Line key={`fs-B-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_B > 0)}
+                type="monotone" dataKey="voltage_B" name={`${branch.label} B`}
+                stroke="hsl(142, 76%, 36%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+              <Line key={`fs-C-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_C > 0)}
+                type="monotone" dataKey="voltage_C" name={`${branch.label} C`}
+                stroke="hsl(217, 91%, 60%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+            ])}
             {showNeutralCurrent && voltageDistanceData.minBranches.map((branch) => (
               <Line key={`fs-IN-${branch.branchId}`} yAxisId="right" data={branch.points}
                 type="monotone" dataKey="I_neutral" name={`I_N ${branch.label}`}
@@ -1694,19 +1686,17 @@ export const LaboFoisonnementTab = () => {
                 type="monotone" dataKey="voltageWorstInjection" name={branch.label}
                 stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
             ))}
-            {showPerPhaseDistance && voltageDistanceData.maxBranches.map((branch) => (
-              <>
-                <Line key={`fs-max-A-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_A > 0)}
-                  type="monotone" dataKey="voltage_A" name={`${branch.label} A`}
-                  stroke="hsl(0, 75%, 55%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
-                <Line key={`fs-max-B-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_B > 0)}
-                  type="monotone" dataKey="voltage_B" name={`${branch.label} B`}
-                  stroke="hsl(142, 76%, 36%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
-                <Line key={`fs-max-C-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_C > 0)}
-                  type="monotone" dataKey="voltage_C" name={`${branch.label} C`}
-                  stroke="hsl(217, 91%, 60%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />
-              </>
-            ))}
+            {showPerPhaseDistance && voltageDistanceData.maxBranches.flatMap((branch) => [
+              <Line key={`fs-max-A-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_A > 0)}
+                type="monotone" dataKey="voltage_A" name={`${branch.label} A`}
+                stroke="hsl(0, 75%, 55%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+              <Line key={`fs-max-B-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_B > 0)}
+                type="monotone" dataKey="voltage_B" name={`${branch.label} B`}
+                stroke="hsl(142, 76%, 36%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+              <Line key={`fs-max-C-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_C > 0)}
+                type="monotone" dataKey="voltage_C" name={`${branch.label} C`}
+                stroke="hsl(217, 91%, 60%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+            ])}
             {showNeutralCurrent && voltageDistanceData.maxBranches.map((branch) => (
               <Line key={`fs-max-IN-${branch.branchId}`} yAxisId="right" data={branch.points}
                 type="monotone" dataKey="I_neutral" name={`I_N ${branch.label}`}

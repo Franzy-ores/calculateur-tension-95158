@@ -713,19 +713,19 @@ export function calculateNodeAutoPhaseDistribution(
           `Using physical distribution.`
         );
         result.phasePhaseLoads.foisonneCharges     = { ...chargeFoisonneParCouplage };
+        // RÈGLE : Productions MONO restent sur leur couplage physique — pas de redistribution
         result.phasePhaseLoads.foisonneProductions = { ...prodFoisonneParCouplage };
       } else {
-        // ✅ FIX: Cursors redistribute the FULL foisonné total (MONO + POLY).
+        // Charges : curseurs redistribuent le total foisonné MONO
         result.phasePhaseLoads.foisonneCharges = {
           'A-B': totalChargeFoisonne * (curseurCharges['A-B'] / 100),
           'B-C': totalChargeFoisonne * (curseurCharges['B-C'] / 100),
           'A-C': totalChargeFoisonne * (curseurCharges['A-C'] / 100),
         };
-        result.phasePhaseLoads.foisonneProductions = {
-          'A-B': totalProdFoisonne * (curseurProd['A-B'] / 100),
-          'B-C': totalProdFoisonne * (curseurProd['B-C'] / 100),
-          'A-C': totalProdFoisonne * (curseurProd['A-C'] / 100),
-        };
+        // RÈGLE : Productions MONO restent sur leur couplage physique assigné.
+        // Les curseurs ne redistribuent PAS les productions MONO — un PV sur A-C
+        // reste sur A-C. Seules les productions POLY (via S_maps) sont redistribuables.
+        result.phasePhaseLoads.foisonneProductions = { ...prodFoisonneParCouplage };
       }
 
       // Derive per-phase display values from coupling values.
@@ -736,6 +736,7 @@ export function calculateNodeAutoPhaseDistribution(
         B: (fc['A-B'] + fc['B-C']) * 0.5,
         C: (fc['B-C'] + fc['A-C']) * 0.5,
       };
+      // Productions : physiques (MONO sur couplage assigné, pas de redistribution)
       result.productions.foisonneAvecCurseurs = {
         A: (fp['A-B'] + fp['A-C']) * 0.5,
         B: (fp['A-B'] + fp['B-C']) * 0.5,

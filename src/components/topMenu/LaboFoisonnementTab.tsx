@@ -190,6 +190,12 @@ export const LaboFoisonnementTab = () => {
   const [fullscreenInjectionOpen, setFullscreenInjectionOpen] = useState(false);
   const [fullscreenHourlyOpen, setFullscreenHourlyOpen] = useState(false);
 
+  // VE / PAC states
+  const [evPenetration, setEvPenetration] = useState(0);
+  const [evPower, setEvPower] = useState<3.7 | 11 | 22>(3.7);
+  const [pacPenetration, setPacPenetration] = useState(0);
+  const [pacPower, setPacPower] = useState(3);
+
   // Simulation equipment counters
   const srg2Count = simulationEquipment.srg2Devices?.filter(s => s.enabled).length || 0;
   const compensatorCount = simulationEquipment.neutralCompensators.filter(c => c.enabled).length;

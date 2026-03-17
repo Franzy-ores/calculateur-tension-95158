@@ -395,6 +395,7 @@ export class ElectricalCalculator {
     I_source_net: Complex,
     Ztr_phase: Complex | null,
     cableIndexByPair: Map<string, Cable>,
+    nodes: Node[],
     I_source_net_phases?: { A: Complex; B: Complex; C: Complex }, // Pour I_N en mode déséquilibré
     // Phases B et C pour calcul correct des tensions ligne-à-ligne en delta 230V
     V_node_B?: Map<string, Complex>,
@@ -470,7 +471,7 @@ export class ElectricalCalculator {
       for (const nid of subtreeNodes) {
         const nV = V_node.get(nid);
         if (!nV) continue;
-        const nodeConnType: ConnectionType = source.connectionType;
+        const nodeConnType: ConnectionType = nodes.find(n => n.id === nid)?.connectionType ?? source.connectionType;
 
         if (nodeConnType === 'TRI_230V_3F' && V_node_B && V_node_C) {
           // Delta 230V : tensions physiques = ligne-à-ligne depuis phaseurs complexes
@@ -2243,6 +2244,7 @@ export class ElectricalCalculator {
           I_source_net_A,
           Ztr_phase,
           cableIndexByPair,
+          nodes,
           { A: I_source_net_A, B: I_source_net_B, C: I_source_net_C },
           phaseB.V_node_phase,
           phaseC.V_node_phase

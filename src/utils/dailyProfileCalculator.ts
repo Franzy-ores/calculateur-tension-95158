@@ -414,7 +414,9 @@ export class DailyProfileCalculator {
         nodePowers.residentialPower,
         nodePowers.industrialPower,
         nodePowers.productionPower,
-        evFoisonne * facteurVE
+        evFoisonne * facteurVE,
+        S_EV_kVA,
+        S_PAC_kVA
       );
       
       // Ajouter l'état SRG2 au résultat

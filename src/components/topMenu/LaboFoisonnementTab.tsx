@@ -429,6 +429,12 @@ export const LaboFoisonnementTab = () => {
             voltage_A: perPhase.A,
             voltage_B: perPhase.B,
             voltage_C: perPhase.C,
+            voltageWorstCharge: Math.min(
+              perPhase.A > 0 ? perPhase.A : Infinity,
+              perPhase.B > 0 ? perPhase.B : Infinity,
+              perPhase.C > 0 ? perPhase.C : Infinity
+            ),
+            voltageWorstInjection: Math.max(perPhase.A, perPhase.B, perPhase.C),
             I_neutral: +I_neutral.toFixed(2),
           };
         }),

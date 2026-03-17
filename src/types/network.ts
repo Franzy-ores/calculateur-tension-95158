@@ -460,6 +460,24 @@ export interface SimulationResult extends CalculationResult {
   iterations?: number; // Nombre d'itérations pour convergence
 }
 
+export interface NodeMetricsPerPhase {
+  nodeId: string;
+  voltagesPerPhase: { A: number; B: number; C: number };
+  voltageDropsPerPhase: { A: number; B: number; C: number };
+  deviationsPerPhase?: { A: number; B: number; C: number };
+  compliancePerPhase?: { A: 'normal' | 'warning' | 'critical'; B: 'normal' | 'warning' | 'critical'; C: 'normal' | 'warning' | 'critical' };
+  nodeCompliance?: 'normal' | 'warning' | 'critical';
+  sequenceComponents?: {
+    U0_mag: number;
+    U1_mag: number;
+    U2_mag: number;
+    U0_angle_deg: number;
+    U1_angle_deg: number;
+    U2_angle_deg: number;
+    ku_percent: number;
+  };
+}
+
 export interface CalculationResult {
   scenario: CalculationScenario;
   cables: Cable[];

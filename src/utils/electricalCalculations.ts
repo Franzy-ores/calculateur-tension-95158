@@ -2018,6 +2018,7 @@ export class ElectricalCalculator {
             equi8UpstreamReduction, projectSeason, applySagCorrection
           );
         I_neutral_cable_final = I_neutral_cable_refined;
+        V_neutral_refined_final = V_neutral_refined;
         
         // Corriger les tensions phase-neutre en soustrayant la tension du neutre
         // V_phase_neutre_corrigé = V_phase - V_neutral

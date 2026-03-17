@@ -661,14 +661,12 @@ export function calculateNodeAutoPhaseDistribution(
       const prodFoisonneParCouplage   = {} as Record<'A-B'|'B-C'|'A-C', number>;
 
       couplings.forEach(c => {
+        // MONO uniquement — POLY est géré via charges.poly / S_maps dans le BFS
         chargeFoisonneParCouplage[c] =
           monoResChargesCoupling[c] * (foisonnementChargesResidentiel / 100) +
-          monoIndChargesCoupling[c] * (foisonnementChargesIndustriel  / 100) +
-          polyResChargesCoupling[c] * (foisonnementChargesResidentiel / 100) +
-          polyIndChargesCoupling[c] * (foisonnementChargesIndustriel  / 100);
+          monoIndChargesCoupling[c] * (foisonnementChargesIndustriel  / 100);
         prodFoisonneParCouplage[c] =
-          (monoResProdCoupling[c] + polyProdCoupling[c]) *
-          (foisonnementProductions / 100);
+          monoResProdCoupling[c] * (foisonnementProductions / 100);
       });
 
       // Total foisonné scalaire — les curseurs redistribuent ce total

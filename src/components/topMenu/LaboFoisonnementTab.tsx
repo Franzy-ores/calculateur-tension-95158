@@ -989,6 +989,8 @@ export const LaboFoisonnementTab = () => {
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Line type="monotone" dataKey="P_charge" name="P charge (rés.+ind.)" stroke="hsl(217, 91%, 60%)" strokeWidth={2} dot={false} />
                   <Line type="monotone" dataKey="P_pv" name="P PV" stroke="hsl(142, 76%, 36%)" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="P_ev" name="P VE" stroke="hsl(35, 95%, 55%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                  <Line type="monotone" dataKey="P_pac" name="P PAC" stroke="hsl(330, 81%, 60%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
                   <Line type="monotone" dataKey="P_net" name="P net" stroke="hsl(var(--destructive))" strokeWidth={2.5} dot={false} />
                 </LineChart>
               </ResponsiveContainer>

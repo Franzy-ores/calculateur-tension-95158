@@ -850,7 +850,69 @@ export const LaboFoisonnementTab = () => {
             </div>
           </div>
 
-          {/* Summary puissances */}
+          {/* ── VE / PAC ─────────────────────────────────────────── */}
+          <div className="bg-muted/50 rounded-md p-3 space-y-3 text-xs">
+            <div className="font-medium text-foreground flex items-center gap-1">
+              <Zap className="h-3 w-3 text-amber-500" /> Véhicules Électriques
+            </div>
+            <div className="space-y-1">
+              <div className="flex justify-between items-center">
+                <Label className="text-[10px] text-muted-foreground">Pénétration VE</Label>
+                <span className="font-mono text-[10px] text-foreground">{Math.round(evPenetration * 100)}%</span>
+              </div>
+              <Slider
+                min={0} max={100} step={5}
+                value={[Math.round(evPenetration * 100)]}
+                onValueChange={([v]) => setEvPenetration(v / 100)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground">Puissance borne</Label>
+              <div className="flex gap-1">
+                {([3.7, 11, 22] as const).map(p => (
+                  <Button
+                    key={p}
+                    size="sm"
+                    variant={evPower === p ? 'default' : 'outline'}
+                    onClick={() => setEvPower(p)}
+                    className="text-xs h-6 flex-1"
+                  >
+                    {p} kW
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-muted/50 rounded-md p-3 space-y-3 text-xs">
+            <div className="font-medium text-foreground flex items-center gap-1">
+              🌡️ Pompes à Chaleur
+            </div>
+            <div className="space-y-1">
+              <div className="flex justify-between items-center">
+                <Label className="text-[10px] text-muted-foreground">Pénétration PAC</Label>
+                <span className="font-mono text-[10px] text-foreground">{Math.round(pacPenetration * 100)}%</span>
+              </div>
+              <Slider
+                min={0} max={100} step={5}
+                value={[Math.round(pacPenetration * 100)]}
+                onValueChange={([v]) => setPacPenetration(v / 100)}
+              />
+            </div>
+            <div className="space-y-1">
+              <div className="flex justify-between items-center">
+                <Label className="text-[10px] text-muted-foreground">Puissance</Label>
+                <span className="font-mono text-[10px] text-foreground">{pacPower} kW</span>
+              </div>
+              <Slider
+                min={1} max={9} step={0.5}
+                value={[pacPower]}
+                onValueChange={([v]) => setPacPower(v)}
+              />
+            </div>
+          </div>
+
+
           {peakSummary && (
             <div className="bg-muted/50 rounded-md p-3 space-y-1.5 text-xs">
               <div className="font-medium text-foreground">Synthèse puissances</div>

@@ -395,7 +395,10 @@ export class ElectricalCalculator {
     I_source_net: Complex,
     Ztr_phase: Complex | null,
     cableIndexByPair: Map<string, Cable>,
-    I_source_net_phases?: { A: Complex; B: Complex; C: Complex } // Pour I_N en mode déséquilibré
+    I_source_net_phases?: { A: Complex; B: Complex; C: Complex }, // Pour I_N en mode déséquilibré
+    // Phases B et C pour calcul correct des tensions ligne-à-ligne en delta 230V
+    V_node_B?: Map<string, Complex>,
+    V_node_C?: Map<string, Complex>
   ): VirtualBusbar {
     const { U_base: U_nom_source, isThreePhase: isSourceThree } = this.getVoltage(source.connectionType);
     const U_ref_line = source.tensionCible ?? transformerConfig.sourceVoltage ?? transformerConfig.nominalVoltage_V ?? U_nom_source;

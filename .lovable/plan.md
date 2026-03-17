@@ -1,35 +1,32 @@
 
 
-# Diagnostic : hourlyProfiles.json non reactif dans le Labo
+## Plan : Corriger le bug `nodeConnType` dans `calculateVirtualBusbar`
 
-## Probleme identifie
+**Fichier unique** : `src/utils/electricalCalculations.ts`
 
-Le fichier `hourlyProfiles.json` **est bien utilise** par le `DailyProfileCalculator` (import statique ligne 6 de `dailyProfileCalculator.ts`). Cependant, le Labo ne reagit pas aux modifications pour deux raisons :
+### Problème
+Ligne 473 : `nodeConnType` utilise toujours `source.connectionType` pour tous les nœuds, au lieu du type de connexion réel de chaque nœud. En réseau mixte (source 400V étoile, clients mono), tous les nœuds sont traités comme la source.
 
-1. **Import indirect** : Les profils sont importes dans `dailyProfileCalculator.ts`, pas dans `LaboFoisonnementTab.tsx`. Le composant Labo passe `undefined` comme `customProfiles` (ligne 242), laissant le calculator utiliser son import interne.
+### Modification 1 — Ajouter `nodes` en paramètre (ligne 387-401)
 
-2. **useMemo aveugle** : Le `useMemo` (ligne 272) qui lance les 3 runs a pour dependances `[currentProject, selectedNodeId, season, weather, ...]` — les profils JSON n'y figurent pas. Meme si Vite HMR recharge le module, le memo ne se re-execute pas car aucune de ses dependances reactives n'a change.
+Ajouter un paramètre `nodes: Node[]` à la signature de `calculateVirtualBusbar`, après `cableIndexByPair`.
 
-En resume : vous modifiez le JSON, Vite le recharge, mais le `useMemo` du Labo ne sait pas qu'il doit recalculer.
+### Modification 2 — Utiliser le vrai `connectionType` par nœud (ligne 473)
 
-## Correction
-
-### `LaboFoisonnementTab.tsx`
-
-1. **Importer directement** `hourlyProfiles.json` dans le composant Labo
-2. **Passer** cet import comme `customProfiles` aux 3 constructeurs `DailyProfileCalculator` (au lieu de `undefined`)
-3. **Ajouter** l'objet profiles aux dependances du `useMemo` principal
-
-```text
-Avant:  new DailyProfileCalculator(currentProject, baseOptions, undefined, ...)
-Apres:  new DailyProfileCalculator(currentProject, baseOptions, profilesData, ...)
+Remplacer :
+```ts
+const nodeConnType: ConnectionType = source.connectionType;
+```
+Par :
+```ts
+const nodeConnType: ConnectionType = nodes.find(n => n.id === nid)?.connectionType
+  ?? source.connectionType;
 ```
 
-Cela rend le Labo reactif a toute modification du fichier JSON.
+### Modification 3 — Mettre à jour l'appel (ligne 2235-2249)
 
-### Fichier modifie
+Passer `nodes` dans l'appel existant, entre `cableIndexByPair` et `I_source_net_phases`.
 
-| Fichier | Modification |
-|---|---|
-| `src/components/topMenu/LaboFoisonnementTab.tsx` | +1 import hourlyProfiles.json, passer comme customProfiles aux 3 runs, ajouter aux deps useMemo |
+### Aucune autre modification
+Le bloc TRI_230V_3F ligne-à-ligne (lignes 475-498) est déjà correct et reste inchangé.
 

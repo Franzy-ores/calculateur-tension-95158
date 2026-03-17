@@ -2335,20 +2335,26 @@ export class ElectricalCalculator {
           ku_percent: number;
         };
 
-        if (n.connectionType === 'TÉTRA_3P+N_230_400V') {
+        if (is400V) {
+          // Reconstruct raw (pre-neutral-correction) phasors for Fortescue
+          const Vn_seq = V_neutral_refined_final?.get(n.id) || C(0, 0);
+          const Va_seq = n.id === source.id ? Va : add(Va, Vn_seq);
+          const Vb_seq = n.id === source.id ? Vb : add(Vb, Vn_seq);
+          const Vc_seq = n.id === source.id ? Vc : add(Vc, Vn_seq);
+
           const a_re = Math.cos(2 * Math.PI / 3);
           const a_im = Math.sin(2 * Math.PI / 3);
           const a2_re = Math.cos(4 * Math.PI / 3);
           const a2_im = Math.sin(4 * Math.PI / 3);
 
-          const aVb  = { re: a_re * Vb.re - a_im * Vb.im, im: a_re * Vb.im + a_im * Vb.re };
-          const a2Vc = { re: a2_re * Vc.re - a2_im * Vc.im, im: a2_re * Vc.im + a2_im * Vc.re };
-          const a2Vb = { re: a2_re * Vb.re - a2_im * Vb.im, im: a2_re * Vb.im + a2_im * Vb.re };
-          const aVc  = { re: a_re * Vc.re - a_im * Vc.im, im: a_re * Vc.im + a_im * Vc.re };
+          const aVb  = { re: a_re * Vb_seq.re - a_im * Vb_seq.im, im: a_re * Vb_seq.im + a_im * Vb_seq.re };
+          const a2Vc = { re: a2_re * Vc_seq.re - a2_im * Vc_seq.im, im: a2_re * Vc_seq.im + a2_im * Vc_seq.re };
+          const a2Vb = { re: a2_re * Vb_seq.re - a2_im * Vb_seq.im, im: a2_re * Vb_seq.im + a2_im * Vb_seq.re };
+          const aVc  = { re: a_re * Vc_seq.re - a_im * Vc_seq.im, im: a_re * Vc_seq.im + a_im * Vc_seq.re };
 
-          const U0 = { re: (Va.re + Vb.re + Vc.re) / 3, im: (Va.im + Vb.im + Vc.im) / 3 };
-          const U1 = { re: (Va.re + aVb.re + a2Vc.re) / 3, im: (Va.im + aVb.im + a2Vc.im) / 3 };
-          const U2 = { re: (Va.re + a2Vb.re + aVc.re) / 3, im: (Va.im + a2Vb.im + aVc.im) / 3 };
+          const U0 = { re: (Va_seq.re + Vb_seq.re + Vc_seq.re) / 3, im: (Va_seq.im + Vb_seq.im + Vc_seq.im) / 3 };
+          const U1 = { re: (Va_seq.re + aVb.re + a2Vc.re) / 3, im: (Va_seq.im + aVb.im + a2Vc.im) / 3 };
+          const U2 = { re: (Va_seq.re + a2Vb.re + aVc.re) / 3, im: (Va_seq.im + a2Vb.im + aVc.im) / 3 };
 
           const U0_mag = Math.hypot(U0.re, U0.im);
           const U1_mag = Math.hypot(U1.re, U1.im);
@@ -2363,6 +2369,13 @@ export class ElectricalCalculator {
             U2_angle_deg: +(Math.atan2(U2.im, U2.re) * 180 / Math.PI).toFixed(2),
             ku_percent: U1_mag > 0.1 ? +(U2_mag / U1_mag * 100).toFixed(3) : 0
           };
+
+          console.log(
+            `🔬 Séquences ${n.name || n.id}: ` +
+            `Va=${abs(Va_seq).toFixed(1)}∠${(Math.atan2(Va_seq.im, Va_seq.re) * 180 / Math.PI).toFixed(1)}° ` +
+            `U1=${U1_mag.toFixed(1)}V U2=${U2_mag.toFixed(1)}V U0=${U0_mag.toFixed(1)}V ` +
+            `ku=${sequenceComponents.ku_percent}% ${sequenceComponents.ku_percent > 2 ? '⚠️' : '✅'}`
+          );
         }
 
         return {

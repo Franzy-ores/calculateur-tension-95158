@@ -1198,7 +1198,9 @@ export class DailyProfileCalculator {
     residentialPower: number,
     industrialPower: number,
     totalProductionPower: number,
-    evBonus: number
+    evBonus: number,
+    evPower_kVA: number = 0,
+    pacPower_kVA: number = 0
   ): HourlyVoltageResult {
     const chargesResidentialPower_kVA = residentialPower * (residentialFoisonnement / 100);
     const chargesIndustrialPower_kVA = industrialPower * (industrialFoisonnement / 100);
@@ -1221,7 +1223,9 @@ export class DailyProfileCalculator {
       chargesResidentialPower_kVA,
       chargesIndustrialPower_kVA,
       productionsPower_kVA,
-      evBonus
+      evBonus,
+      evPower_kVA: +evPower_kVA.toFixed(2),
+      pacPower_kVA: +pacPower_kVA.toFixed(2),
     };
   }
 

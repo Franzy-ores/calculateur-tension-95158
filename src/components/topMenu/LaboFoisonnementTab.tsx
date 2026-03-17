@@ -553,8 +553,13 @@ export const LaboFoisonnementTab = () => {
                 clientV = nodeV;
               }
             } else {
-              // Charge : conso à 80% du contractuel, pas de PV
-              const I_charge = (client.puissanceContractuelle_kVA * 0.80 * 1000) / (V_nom * (client.couplage === 'MONO' ? 1 : Math.sqrt(3)));
+              // Charge : utiliser le foisonnement réel de l'heure de pire cas
+              const foisFactor = Math.min(
+                (powerData.find(d => d.hour === voltageDistanceData!.minHour)?.foisonnement ?? 7) / 100,
+                1.0
+              );
+              const I_charge = (client.puissanceContractuelle_kVA * foisFactor * 1000)
+                / (V_nom * (client.couplage === 'MONO' ? 1 : Math.sqrt(3)));
               const deltaV = facteurDV * (R_per_m * cosPhiCharges + X_per_m * sinPhiCharges) * I_charge * dist_m;
               clientV = Math.max(0, nodeV - deltaV);
             }

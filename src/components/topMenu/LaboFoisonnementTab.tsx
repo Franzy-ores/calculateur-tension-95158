@@ -377,30 +377,49 @@ export const LaboFoisonnementTab = () => {
     const allNodeIds = new Set<string>();
     networkPaths.forEach(b => b.points.forEach(p => allNodeIds.add(p.nodeId)));
 
-    // Heure pire cas charge = pic foisonnement résidentiel (indépendant de la topologie)
-    const peakConsoIndex = powerData.length > 0
-      ? powerData.reduce((maxIdx, d, idx) => d.foisonnement > powerData[maxIdx].foisonnement ? idx : maxIdx, 0)
-      : 0;
-    const globalMinHour = powerData[peakConsoIndex]?.hour ?? 0;
+    // Pire cas charge = heure où rawConsoPure a la charge totale maximale
+    const globalMinHour = rawConsoPure.reduce((worstHour, r, h) => {
+      const loads = r?.totalLoads_kVA ?? 0;
+      const worstLoads = rawConsoPure[worstHour]?.totalLoads_kVA ?? 0;
+      return loads > worstLoads ? h : worstHour;
+    }, 0);
 
-    // Tension mini à cette heure (badge affichage uniquement)
+    // Pire cas injection = heure où rawProdPure a la production totale maximale
+    const globalMaxHour = rawProdPure.reduce((worstHour, r, h) => {
+      const prods = r?.totalProductions_kVA ?? 0;
+      const worstProds = rawProdPure[worstHour]?.totalProductions_kVA ?? 0;
+      return prods > worstProds ? h : worstHour;
+    }, 0);
+
+    // Fonction locale pire tension (min ou max selon mode)
+    const getWorstVoltage = (
+      results: CalculationResult[],
+      nodeId: string,
+      hour: number,
+      mode: 'min' | 'max'
+    ): number => {
+      const r = results[hour];
+      if (!r?.nodeMetricsPerPhase) return 0;
+      const nm = r.nodeMetricsPerPhase.find(m => m.nodeId === nodeId);
+      if (!nm) return 0;
+      const { A, B, C } = nm.voltagesPerPhase;
+      const vals = [A, B, C].filter(v => v > 0);
+      if (vals.length === 0) return 0;
+      return mode === 'min' ? Math.min(...vals) : Math.max(...vals);
+    };
+
+    // Badge Vmin — pire couplage (minimum)
     let globalMinV = Infinity;
     for (const nodeId of allNodeIds) {
-      const v = getNodeVoltage(rawConsoPure, nodeId, globalMinHour);
+      const v = getWorstVoltage(rawConsoPure, nodeId, globalMinHour, 'min');
       if (v > 0 && v < globalMinV) globalMinV = v;
     }
     if (!isFinite(globalMinV)) globalMinV = 220;
 
-    // Heure pire cas injection = pic production PV
-    const peakProdIndex = powerData.length > 0
-      ? powerData.reduce((maxIdx, d, idx) => d.P_pv > powerData[maxIdx].P_pv ? idx : maxIdx, 0)
-      : 0;
-    const globalMaxHour = powerData[peakProdIndex]?.hour ?? 12;
-
-    // Tension maxi à cette heure (badge affichage uniquement)
+    // Badge Vmax — pire couplage (maximum)
     let globalMaxV = -Infinity;
     for (const nodeId of allNodeIds) {
-      const v = getNodeVoltage(rawProdPure, nodeId, globalMaxHour);
+      const v = getWorstVoltage(rawProdPure, nodeId, globalMaxHour, 'max');
       if (v > 0 && v > globalMaxV) globalMaxV = v;
     }
     if (!isFinite(globalMaxV) || globalMaxV > 350) globalMaxV = 240;

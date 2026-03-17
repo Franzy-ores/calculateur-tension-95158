@@ -1,60 +1,35 @@
 
 
-## Fix: Remove POLY double-counting in `phasePhaseLoads` (230V Triangle)
+# Diagnostic : hourlyProfiles.json non reactif dans le Labo
 
-**File**: `src/utils/phaseDistributionCalculator.ts`
+## Probleme identifie
 
-**Root cause**: POLY clients are added to both `charges.poly` (correct, for S_maps) AND `phasePhaseLoads` (incorrect, reserved for MONO). This double-counting produces 154A instead of 63A for 25 kVA.
+Le fichier `hourlyProfiles.json` **est bien utilise** par le `DailyProfileCalculator` (import statique ligne 6 de `dailyProfileCalculator.ts`). Cependant, le Labo ne reagit pas aux modifications pour deux raisons :
 
-### Changes
+1. **Import indirect** : Les profils sont importes dans `dailyProfileCalculator.ts`, pas dans `LaboFoisonnementTab.tsx`. Le composant Labo passe `undefined` comme `customProfiles` (ligne 242), laissant le calculator utiliser son import interne.
 
-**1. Remove POLY from phasePhaseLoads in imported clients — charges (lines 357-362)**
+2. **useMemo aveugle** : Le `useMemo` (ligne 272) qui lance les 3 runs a pour dependances `[currentProject, selectedNodeId, season, weather, ...]` — les profils JSON n'y figurent pas. Meme si Vite HMR recharge le module, le memo ne se re-execute pas car aucune de ses dependances reactives n'a change.
 
-Delete:
-```ts
-if (networkVoltage === 'TRIPHASÉ_230V' && result.phasePhaseLoads) {
-  result.phasePhaseLoads.charges['A-B'] += totalCharge / 3;
-  result.phasePhaseLoads.charges['B-C'] += totalCharge / 3;
-  result.phasePhaseLoads.charges['A-C'] += totalCharge / 3;
-}
+En resume : vous modifiez le JSON, Vite le recharge, mais le `useMemo` du Labo ne sait pas qu'il doit recalculer.
+
+## Correction
+
+### `LaboFoisonnementTab.tsx`
+
+1. **Importer directement** `hourlyProfiles.json` dans le composant Labo
+2. **Passer** cet import comme `customProfiles` aux 3 constructeurs `DailyProfileCalculator` (au lieu de `undefined`)
+3. **Ajouter** l'objet profiles aux dependances du `useMemo` principal
+
+```text
+Avant:  new DailyProfileCalculator(currentProject, baseOptions, undefined, ...)
+Apres:  new DailyProfileCalculator(currentProject, baseOptions, profilesData, ...)
 ```
 
-**2. Remove POLY from phasePhaseLoads in imported clients — productions (lines 403-407)**
+Cela rend le Labo reactif a toute modification du fichier JSON.
 
-Delete:
-```ts
-if (networkVoltage === 'TRIPHASÉ_230V' && result.phasePhaseLoads) {
-  result.phasePhaseLoads.productions['A-B'] += totalProd / 3;
-  result.phasePhaseLoads.productions['B-C'] += totalProd / 3;
-  result.phasePhaseLoads.productions['A-C'] += totalProd / 3;
-}
-```
+### Fichier modifie
 
-**3. Remove POLY from foisonnement coupling accumulators in section 5b (lines 670-677)**
-
-Replace with MONO-only:
-```ts
-chargeFoisonneParCouplage[c] =
-  monoResChargesCoupling[c] * (foisonnementChargesResidentiel / 100) +
-  monoIndChargesCoupling[c] * (foisonnementChargesIndustriel  / 100);
-prodFoisonneParCouplage[c] =
-  monoResProdCoupling[c] * (foisonnementProductions / 100);
-```
-
-The POLY foisonné contributions are already correctly handled via `charges.poly` / `S_A/S_B/S_C` in the BFS solver — they must not appear in `phasePhaseLoads` or `chargeFoisonneParCouplage`.
-
-**4. Add rule comment** at the top of phasePhaseLoads initialization (around line 263):
-```ts
-// RÈGLE ABSOLUE 230V TRIANGLE :
-// phasePhaseLoads → MONO uniquement (couplages physiques A-B, B-C, A-C)
-// charges.poly / S_A/S_B/S_C → POLY uniquement
-// Ces deux chemins sont mutuellement exclusifs — jamais les deux.
-```
-
-### Not touched
-- 400V star path (unaffected)
-- Manual MONO node loads adding to phasePhaseLoads (correct — they are MONO)
-- `charges.poly` accumulation (correct — for S_maps)
-- Section 5c (400V foisonnement)
-- All UI components
+| Fichier | Modification |
+|---|---|
+| `src/components/topMenu/LaboFoisonnementTab.tsx` | +1 import hourlyProfiles.json, passer comme customProfiles aux 3 runs, ajouter aux deps useMemo |
 

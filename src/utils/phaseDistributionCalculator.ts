@@ -260,7 +260,10 @@ export function calculateNodeAutoPhaseDistribution(
       poly: { A: 0, B: 0, C: 0 },
       total: { A: 0, B: 0, C: 0 }
     },
-    // NOUVEAU : Charges phase-phase pour calcul correct du courant en 230V triangle
+    // RÈGLE ABSOLUE 230V TRIANGLE :
+    // phasePhaseLoads → MONO uniquement (couplages physiques A-B, B-C, A-C)
+    // charges.poly / S_A/S_B/S_C → POLY uniquement
+    // Ces deux chemins sont mutuellement exclusifs — jamais les deux.
     phasePhaseLoads: {
       charges: { 'A-B': 0, 'B-C': 0, 'A-C': 0 },
       productions: { 'A-B': 0, 'B-C': 0, 'A-C': 0 }
@@ -354,12 +357,7 @@ export function calculateNodeAutoPhaseDistribution(
       result.charges.poly.B += totalCharge / 3;
       result.charges.poly.C += totalCharge / 3;
       
-      // ✅ FIX: POLY contributes 1/3 per coupling to phasePhaseLoads
-      if (networkVoltage === 'TRIPHASÉ_230V' && result.phasePhaseLoads) {
-        result.phasePhaseLoads.charges['A-B'] += totalCharge / 3;
-        result.phasePhaseLoads.charges['B-C'] += totalCharge / 3;
-        result.phasePhaseLoads.charges['A-C'] += totalCharge / 3;
-      }
+      // POLY ne va PAS dans phasePhaseLoads (réservé MONO) — voir règle absolue ligne 263
       
       // Productions : dépend de l'option treatSmallPolyProductionsAsMono
       if (treatSmallPolyProductionsAsMono && totalProd > 0 && totalProd <= 5) {
@@ -400,11 +398,7 @@ export function calculateNodeAutoPhaseDistribution(
         result.productions.poly.B += totalProd / 3;
         result.productions.poly.C += totalProd / 3;
         
-        if (networkVoltage === 'TRIPHASÉ_230V' && result.phasePhaseLoads) {
-          result.phasePhaseLoads.productions['A-B'] += totalProd / 3;
-          result.phasePhaseLoads.productions['B-C'] += totalProd / 3;
-          result.phasePhaseLoads.productions['A-C'] += totalProd / 3;
-        }
+        // POLY ne va PAS dans phasePhaseLoads (réservé MONO) — voir règle absolue ligne 263
       }
       
       result.polyClientsCount++;
@@ -667,14 +661,12 @@ export function calculateNodeAutoPhaseDistribution(
       const prodFoisonneParCouplage   = {} as Record<'A-B'|'B-C'|'A-C', number>;
 
       couplings.forEach(c => {
+        // MONO uniquement — POLY est géré via charges.poly / S_maps dans le BFS
         chargeFoisonneParCouplage[c] =
           monoResChargesCoupling[c] * (foisonnementChargesResidentiel / 100) +
-          monoIndChargesCoupling[c] * (foisonnementChargesIndustriel  / 100) +
-          polyResChargesCoupling[c] * (foisonnementChargesResidentiel / 100) +
-          polyIndChargesCoupling[c] * (foisonnementChargesIndustriel  / 100);
+          monoIndChargesCoupling[c] * (foisonnementChargesIndustriel  / 100);
         prodFoisonneParCouplage[c] =
-          (monoResProdCoupling[c] + polyProdCoupling[c]) *
-          (foisonnementProductions / 100);
+          monoResProdCoupling[c] * (foisonnementProductions / 100);
       });
 
       // Total foisonné scalaire — les curseurs redistribuent ce total

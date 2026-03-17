@@ -460,6 +460,24 @@ export interface SimulationResult extends CalculationResult {
   iterations?: number; // Nombre d'itérations pour convergence
 }
 
+export interface NodeMetricsPerPhase {
+  nodeId: string;
+  voltagesPerPhase: { A: number; B: number; C: number };
+  voltageDropsPerPhase: { A: number; B: number; C: number };
+  deviationsPerPhase?: { A: number; B: number; C: number };
+  compliancePerPhase?: { A: 'normal' | 'warning' | 'critical'; B: 'normal' | 'warning' | 'critical'; C: 'normal' | 'warning' | 'critical' };
+  nodeCompliance?: 'normal' | 'warning' | 'critical';
+  sequenceComponents?: {
+    U0_mag: number;
+    U1_mag: number;
+    U2_mag: number;
+    U0_angle_deg: number;
+    U1_angle_deg: number;
+    U2_angle_deg: number;
+    ku_percent: number;
+  };
+}
+
 export interface CalculationResult {
   scenario: CalculationScenario;
   cables: Cable[];
@@ -473,14 +491,10 @@ export interface CalculationResult {
   nodeMetrics?: { nodeId: string; V_phase_V: number; V_pu: number; I_inj_A: number }[];
   nodePhasors?: { nodeId: string; V_real: number; V_imag: number; V_phase_V: number; V_angle_deg: number }[];
   nodePhasorsPerPhase?: { nodeId: string; phase: 'A' | 'B' | 'C'; V_real: number; V_imag: number; V_phase_V: number; V_angle_deg: number }[];
-  nodeMetricsPerPhase?: { 
-    nodeId: string; 
-    voltagesPerPhase: { A: number; B: number; C: number };
-    voltageDropsPerPhase: { A: number; B: number; C: number };
-    deviationsPerPhase?: { A: number; B: number; C: number }; // Déviation EN50160 en % (+ surtension, - sous-tension)
-    compliancePerPhase?: { A: 'normal' | 'warning' | 'critical'; B: 'normal' | 'warning' | 'critical'; C: 'normal' | 'warning' | 'critical' };
-    nodeCompliance?: 'normal' | 'warning' | 'critical';
-  }[];
+  nodeMetricsPerPhase?: NodeMetricsPerPhase[];
+  // Déséquilibre global EN 50160 = max ku% parmi tous les nœuds 400V
+  unbalanceEN50160_percent?: number;
+  unbalanceEN50160_status?: 'normal' | 'warning' | 'critical';
   cablePowerFlows?: { cableId: string; P_kW: number; Q_kVAr: number; S_kVA: number; pf: number }[];
   /** Températures estimées des conducteurs (°C) - calculées dynamiquement par micro-itération thermique */
   cableTemperatures?: { cableId: string; temperature_C: number }[];

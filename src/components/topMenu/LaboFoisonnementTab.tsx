@@ -629,7 +629,7 @@ export const LaboFoisonnementTab = () => {
       minClientPoints: buildClientPoints(voltageDistanceData.minBranches, 'charge'),
       maxClientPoints: buildClientPoints(voltageDistanceData.maxBranches, 'injection'),
     };
-  }, [voltageDistanceData, currentProject, branchementCable]);
+  }, [voltageDistanceData, currentProject, branchementCable, rawConsoPure, rawProdPure]);
 
   const getClientColor = (voltage: number, mode: 'charge' | 'injection' = 'charge') => {
     if (mode === 'injection') {

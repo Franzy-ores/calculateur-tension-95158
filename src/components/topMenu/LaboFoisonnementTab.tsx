@@ -593,11 +593,14 @@ export const LaboFoisonnementTab = () => {
                 clientV = nodeV;
               }
             } else {
-              // Charge : utiliser le foisonnement réel de l'heure de pire cas
-              const foisFactor = Math.min(
-                (powerData.find(d => d.hour === voltageDistanceData!.minHour)?.foisonnement ?? 7) / 100,
-                1.0
-              );
+              // Charge : puissance réelle depuis run 2 (charge pure) / puissance contractuelle totale
+              const rawResult = rawConsoPure[voltageDistanceData!.minHour];
+              const totalLoads = rawResult?.totalLoads_kVA ?? 0;
+              const totalContractuel = [...clientMap.values()]
+                .reduce((sum, c) => sum + c.puissanceContractuelle_kVA, 0);
+              const foisFactor = totalContractuel > 0
+                ? Math.min(totalLoads / totalContractuel, 1.0)
+                : 0.07;
               const I_charge = (client.puissanceContractuelle_kVA * foisFactor * 1000)
                 / (V_nom * (client.couplage === 'MONO' ? 1 : Math.sqrt(3)));
               const deltaV = facteurDV * (R_per_m * cosPhiCharges + X_per_m * sinPhiCharges) * I_charge * dist_m;

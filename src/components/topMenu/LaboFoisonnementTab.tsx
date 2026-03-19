@@ -476,13 +476,41 @@ export const LaboFoisonnementTab = () => {
       }));
     };
 
+    // Domaines Y dynamiques calculés depuis les données réelles
+    const minBranches = buildBranchData(rawConsoPure, globalMinHour);
+    const maxBranches = buildBranchData(rawProdPure, globalMaxHour);
+
+    const allChargeVoltages = minBranches
+      .flatMap(b => b.points)
+      .flatMap(p => [p.voltageWorstCharge].filter(v => v > 0 && isFinite(v)));
+
+    const allInjectionVoltages = maxBranches
+      .flatMap(b => b.points)
+      .flatMap(p => [p.voltageWorstInjection].filter(v => v > 0));
+
+    const domainCharge: [number, number] = allChargeVoltages.length > 0
+      ? [
+          Math.floor(Math.min(...allChargeVoltages) - 5),
+          Math.ceil(Math.max(...allChargeVoltages) + 5)
+        ]
+      : [200, 240];
+
+    const domainInjection: [number, number] = allInjectionVoltages.length > 0
+      ? [
+          Math.floor(Math.min(...allInjectionVoltages) - 5),
+          Math.ceil(Math.max(...allInjectionVoltages) + 5)
+        ]
+      : [225, 260];
+
     return {
       minHour: globalMinHour,
       maxHour: globalMaxHour,
       minV: globalMinV,
       maxV: globalMaxV,
-      minBranches: buildBranchData(rawConsoPure, globalMinHour),
-      maxBranches: buildBranchData(rawProdPure, globalMaxHour),
+      domainCharge,
+      domainInjection,
+      minBranches,
+      maxBranches,
       busbarVoltageCharge: rawConsoPure[globalMinHour]?.virtualBusbar?.voltage_V ?? 230,
       busbarVoltageInjection: rawProdPure[globalMaxHour]?.virtualBusbar?.voltage_V ?? 230,
     };

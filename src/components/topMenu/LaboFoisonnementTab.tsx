@@ -614,7 +614,7 @@ export const LaboFoisonnementTab = () => {
               // Injection PV : pas de conso, production à 100%
               const pvKVA = client.puissancePV_kVA || 0;
               if (pvKVA > 0) {
-                const I_pv = (pvKVA * 1000) / (V_nom * (client.couplage === 'MONO' ? 1 : Math.sqrt(3)));
+                const I_pv = (pvKVA * 1000) / (nodeV * (client.couplage === 'MONO' ? 1 : Math.sqrt(3)));
                 const deltaV_pv = facteurDV * (R_per_m * cosPhiProd + X_per_m * sinPhiProd) * I_pv * dist_m;
                 clientV = nodeV + deltaV_pv;
               } else {

@@ -476,13 +476,41 @@ export const LaboFoisonnementTab = () => {
       }));
     };
 
+    // Domaines Y dynamiques calculés depuis les données réelles
+    const minBranches = buildBranchData(rawConsoPure, globalMinHour);
+    const maxBranches = buildBranchData(rawProdPure, globalMaxHour);
+
+    const allChargeVoltages = minBranches
+      .flatMap(b => b.points)
+      .flatMap(p => [p.voltageWorstCharge].filter(v => v > 0 && isFinite(v)));
+
+    const allInjectionVoltages = maxBranches
+      .flatMap(b => b.points)
+      .flatMap(p => [p.voltageWorstInjection].filter(v => v > 0));
+
+    const domainCharge: [number, number] = allChargeVoltages.length > 0
+      ? [
+          Math.floor(Math.min(...allChargeVoltages) - 5),
+          Math.ceil(Math.max(...allChargeVoltages) + 5)
+        ]
+      : [200, 240];
+
+    const domainInjection: [number, number] = allInjectionVoltages.length > 0
+      ? [
+          Math.floor(Math.min(...allInjectionVoltages) - 5),
+          Math.ceil(Math.max(...allInjectionVoltages) + 5)
+        ]
+      : [225, 260];
+
     return {
       minHour: globalMinHour,
       maxHour: globalMaxHour,
       minV: globalMinV,
       maxV: globalMaxV,
-      minBranches: buildBranchData(rawConsoPure, globalMinHour),
-      maxBranches: buildBranchData(rawProdPure, globalMaxHour),
+      domainCharge,
+      domainInjection,
+      minBranches,
+      maxBranches,
       busbarVoltageCharge: rawConsoPure[globalMinHour]?.virtualBusbar?.voltage_V ?? 230,
       busbarVoltageInjection: rawProdPure[globalMaxHour]?.virtualBusbar?.voltage_V ?? 230,
     };
@@ -586,7 +614,7 @@ export const LaboFoisonnementTab = () => {
               // Injection PV : pas de conso, production à 100%
               const pvKVA = client.puissancePV_kVA || 0;
               if (pvKVA > 0) {
-                const I_pv = (pvKVA * 1000) / (V_nom * (client.couplage === 'MONO' ? 1 : Math.sqrt(3)));
+                const I_pv = (pvKVA * 1000) / (nodeV * (client.couplage === 'MONO' ? 1 : Math.sqrt(3)));
                 const deltaV_pv = facteurDV * (R_per_m * cosPhiProd + X_per_m * sinPhiProd) * I_pv * dist_m;
                 clientV = nodeV + deltaV_pv;
               } else {
@@ -1113,7 +1141,7 @@ export const LaboFoisonnementTab = () => {
                     <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 10 }}
                       label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 10 }} />
                     <YAxis yAxisId="left"
-                      domain={[205, 255]}
+                      domain={voltageDistanceData.domainCharge}
                       tick={{ fontSize: 10 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
                     {showNeutralCurrent && (
                       <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} unit=" A"
@@ -1201,7 +1229,7 @@ export const LaboFoisonnementTab = () => {
                     <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 10 }}
                       label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 10 }} />
                     <YAxis yAxisId="left"
-                      domain={[205, 255]}
+                      domain={voltageDistanceData.domainInjection}
                       tick={{ fontSize: 10 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
                     {showNeutralCurrent && (
                       <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} unit=" A"
@@ -1340,7 +1368,7 @@ export const LaboFoisonnementTab = () => {
                             <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 10 }}
                               label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 10 }} />
                             <YAxis yAxisId="left"
-                              domain={[205, 255]}
+                              domain={[Math.floor(minV - 5), Math.ceil(maxV + 5)]}
                               tick={{ fontSize: 10 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
                             {showNeutralCurrent && (
                               <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} unit=" A"
@@ -1707,7 +1735,7 @@ export const LaboFoisonnementTab = () => {
             <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
             <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 11 }}
               label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 11 }} />
-            <YAxis yAxisId="left" domain={[205, 255]}
+            <YAxis yAxisId="left" domain={voltageDistanceData.domainCharge}
               tick={{ fontSize: 11 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
             {showNeutralCurrent && (
               <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} unit=" A"
@@ -1767,7 +1795,7 @@ export const LaboFoisonnementTab = () => {
             <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
             <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 11 }}
               label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 11 }} />
-            <YAxis yAxisId="left" domain={[205, 255]}
+            <YAxis yAxisId="left" domain={voltageDistanceData.domainInjection}
               tick={{ fontSize: 11 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
             {showNeutralCurrent && (
               <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} unit=" A"
@@ -1831,7 +1859,7 @@ export const LaboFoisonnementTab = () => {
                 <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
                 <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 11 }}
                   label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 11 }} />
-                <YAxis yAxisId="left" domain={[205, 255]}
+                <YAxis yAxisId="left" domain={(() => { const pts = networkPaths.flatMap(b => b.points.map(p => { const ph = getNodeVoltagePerPhase(rawContinu, p.nodeId, clockHour); return [ph.A, ph.B, ph.C].filter(v => v > 0); }).flat()); return pts.length > 0 ? [Math.floor(Math.min(...pts) - 5), Math.ceil(Math.max(...pts) + 5)] : [205, 255]; })()}
                   tick={{ fontSize: 11 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
                 {showNeutralCurrent && (
                   <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} unit=" A"

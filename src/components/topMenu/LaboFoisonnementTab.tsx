@@ -461,12 +461,14 @@ export const LaboFoisonnementTab = () => {
             voltage_A: perPhase.A,
             voltage_B: perPhase.B,
             voltage_C: perPhase.C,
-            voltageWorstCharge: Math.min(
-              perPhase.A > 0 ? perPhase.A : Infinity,
-              perPhase.B > 0 ? perPhase.B : Infinity,
-              perPhase.C > 0 ? perPhase.C : Infinity
-            ),
-            voltageWorstInjection: Math.max(perPhase.A, perPhase.B, perPhase.C),
+            voltageWorstCharge: (() => {
+              const valid = [perPhase.A, perPhase.B, perPhase.C].filter(v => v > 10);
+              return valid.length > 0 ? Math.min(...valid) : 0;
+            })(),
+            voltageWorstInjection: (() => {
+              const valid = [perPhase.A, perPhase.B, perPhase.C].filter(v => v > 10);
+              return valid.length > 0 ? Math.max(...valid) : 0;
+            })(),
             I_neutral: +I_neutral.toFixed(2),
           };
         }),
@@ -591,11 +593,14 @@ export const LaboFoisonnementTab = () => {
                 clientV = nodeV;
               }
             } else {
-              // Charge : utiliser le foisonnement réel de l'heure de pire cas
-              const foisFactor = Math.min(
-                (powerData.find(d => d.hour === voltageDistanceData!.minHour)?.foisonnement ?? 7) / 100,
-                1.0
-              );
+              // Charge : puissance réelle depuis run 2 (charge pure) / puissance contractuelle totale
+              const rawResult = rawConsoPure[voltageDistanceData!.minHour];
+              const totalLoads = rawResult?.totalLoads_kVA ?? 0;
+              const totalContractuel = [...clientMap.values()]
+                .reduce((sum, c) => sum + c.puissanceContractuelle_kVA, 0);
+              const foisFactor = totalContractuel > 0
+                ? Math.min(totalLoads / totalContractuel, 1.0)
+                : 0.07;
               const I_charge = (client.puissanceContractuelle_kVA * foisFactor * 1000)
                 / (V_nom * (client.couplage === 'MONO' ? 1 : Math.sqrt(3)));
               const deltaV = facteurDV * (R_per_m * cosPhiCharges + X_per_m * sinPhiCharges) * I_charge * dist_m;
@@ -624,7 +629,7 @@ export const LaboFoisonnementTab = () => {
       minClientPoints: buildClientPoints(voltageDistanceData.minBranches, 'charge'),
       maxClientPoints: buildClientPoints(voltageDistanceData.maxBranches, 'injection'),
     };
-  }, [voltageDistanceData, currentProject, branchementCable]);
+  }, [voltageDistanceData, currentProject, branchementCable, rawConsoPure, rawProdPure]);
 
   const getClientColor = (voltage: number, mode: 'charge' | 'injection' = 'charge') => {
     if (mode === 'injection') {

@@ -1141,7 +1141,7 @@ export const LaboFoisonnementTab = () => {
                     <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 10 }}
                       label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 10 }} />
                     <YAxis yAxisId="left"
-                      domain={[205, 255]}
+                      domain={voltageDistanceData.domainCharge}
                       tick={{ fontSize: 10 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
                     {showNeutralCurrent && (
                       <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} unit=" A"

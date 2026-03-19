@@ -1795,7 +1795,7 @@ export const LaboFoisonnementTab = () => {
             <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
             <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 11 }}
               label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 11 }} />
-            <YAxis yAxisId="left" domain={[205, 255]}
+            <YAxis yAxisId="left" domain={voltageDistanceData.domainInjection}
               tick={{ fontSize: 11 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
             {showNeutralCurrent && (
               <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} unit=" A"

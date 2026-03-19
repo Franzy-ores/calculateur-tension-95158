@@ -1859,7 +1859,7 @@ export const LaboFoisonnementTab = () => {
                 <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
                 <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 11 }}
                   label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 11 }} />
-                <YAxis yAxisId="left" domain={[205, 255]}
+                <YAxis yAxisId="left" domain={(() => { const pts = networkPaths.flatMap(b => b.points.map(p => { const ph = getNodeVoltagePerPhase(rawContinu, p.nodeId, clockHour); return [ph.A, ph.B, ph.C].filter(v => v > 0); }).flat()); return pts.length > 0 ? [Math.floor(Math.min(...pts) - 5), Math.ceil(Math.max(...pts) + 5)] : [205, 255]; })()}
                   tick={{ fontSize: 11 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
                 {showNeutralCurrent && (
                   <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} unit=" A"

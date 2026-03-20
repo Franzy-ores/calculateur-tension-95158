@@ -403,10 +403,22 @@ export function calculateNodeAutoPhaseDistribution(
           result.productions.poly.C += totalProd / 3;
         }
       } else {
-        // Production >5 kVA ou option désactivée : répartir 33.33% par phase
-        result.productions.poly.A += totalProd / 3;
-        result.productions.poly.B += totalProd / 3;
-        result.productions.poly.C += totalProd / 3;
+        // Production >5 kVA ou option désactivée
+        // En 230V avec curseurs couplage productions, utiliser les ratios couplage→phase
+        // (même logique que pour les charges POLY lignes 356-362)
+        if (networkVoltage === 'TRIPHASÉ_230V' && manualCouplingDistributionProductions) {
+          const rAB = manualCouplingDistributionProductions['A-B'] / 100;
+          const rBC = manualCouplingDistributionProductions['B-C'] / 100;
+          const rAC = manualCouplingDistributionProductions['A-C'] / 100;
+          result.productions.poly.A += totalProd * (rAB + rAC) / 2;
+          result.productions.poly.B += totalProd * (rAB + rBC) / 2;
+          result.productions.poly.C += totalProd * (rBC + rAC) / 2;
+        } else {
+          // 400V ou pas de curseurs : répartir 33.33% par phase
+          result.productions.poly.A += totalProd / 3;
+          result.productions.poly.B += totalProd / 3;
+          result.productions.poly.C += totalProd / 3;
+        }
         
         // POLY ne va PAS dans phasePhaseLoads (réservé MONO) — voir règle absolue ligne 263
       }

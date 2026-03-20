@@ -15,7 +15,7 @@ interface PhaseDistributionSlidersProps {
 }
 
 export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlidersProps) => {
-  const { currentProject, updateProjectConfig } = useNetworkStore();
+  const { currentProject, updateProjectConfig, selectedNodeId } = useNetworkStore();
   const isInitialMount = useRef(true);
   
   // ✅ All hooks must be called before any conditional returns

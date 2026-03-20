@@ -160,7 +160,6 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
   };
 
   // Compter les clients poly du nœud sélectionné
-  const { selectedNodeId } = useNetworkStore();
   const polyClientsCount = (() => {
     if (type !== 'charges') return 0;
     if (!selectedNodeId) return 0;

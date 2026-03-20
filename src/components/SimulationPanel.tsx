@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Progress } from "@/components/ui/progress";
 import { useNetworkStore } from "@/store/networkStore";
 import { NeutralCompensator, CableUpgrade } from "@/types/network";
 import { NodeSelector } from "@/components/NodeSelector";
@@ -17,9 +18,10 @@ import { toast } from "sonner";
 import { DocumentationPanel } from "@/components/DocumentationPanel";
 import { SRG2Panel } from "@/components/SRG2Panel";
 import { CableReplacementSimulator } from "@/components/CableReplacementSimulator";
-import { Settings, Play, RotateCcw, Trash2, Plus, AlertTriangle, CheckCircle, Cable, MapPin, Sparkles, Target } from "lucide-react";
-import { useState, useMemo } from 'react';
+import { Settings, Play, RotateCcw, Trash2, Plus, AlertTriangle, CheckCircle, Cable, MapPin, Sparkles, Target, Search, Loader2 } from "lucide-react";
+import { useState, useMemo, useCallback } from 'react';
 import { findOptimalEqui8Node, OptimalEqui8Analysis } from "@/utils/optimalEqui8Finder";
+import { analyzeOptimalEquipmentPlacement, FullPlacementAnalysis } from "@/utils/equipmentPlacement";
 
 export const SimulationPanel = () => {
   const [showNodeSelector, setShowNodeSelector] = useState(false);

@@ -311,10 +311,12 @@ export class DailyProfileCalculator {
     const industrialFoisonnementHoraire = this.options.zeroConsumption ? 0 : industrialProfile;
 
     // ── Calcul VE (Kaufmann) ──────────────────────────────────────────
-    const N_total = this.countResidentialClientsTransitant();
+    // Utiliser nResidentialAtNode (clients du nœud sélectionné uniquement)
+    // pour le scaling VE/PAC — pas le transit (qui inclut tous les nœuds aval)
+    const N_node = this.options.nResidentialAtNode ?? this.countResidentialClientsTransitant();
     const evRate = this.options.evPenetrationRate ?? 0;
     const evPowerKW = this.options.evChargingPower_kW ?? 3.7;
-    const N_EV = Math.round(N_total * evRate);
+    const N_EV = Math.round(N_node * evRate);
     let S_EV_kVA = 0;
 
     if (N_EV > 0 && !this.options.zeroConsumption) {

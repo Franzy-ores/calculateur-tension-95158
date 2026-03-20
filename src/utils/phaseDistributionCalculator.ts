@@ -352,10 +352,20 @@ export function calculateNodeAutoPhaseDistribution(
       const totalCharge = client.puissanceContractuelle_kVA;
       const totalProd = client.puissancePV_kVA;
       
-      // Charges : TOUJOURS réparties 33.33% par phase (pas affecté par l'option)
-      result.charges.poly.A += totalCharge / 3;
-      result.charges.poly.B += totalCharge / 3;
-      result.charges.poly.C += totalCharge / 3;
+      // Charges POLY : en 230V avec curseurs couplage, utiliser les ratios couplage→phase
+      if (networkVoltage === 'TRIPHASÉ_230V' && manualCouplingDistributionCharges) {
+        const rAB = manualCouplingDistributionCharges['A-B'] / 100;
+        const rBC = manualCouplingDistributionCharges['B-C'] / 100;
+        const rAC = manualCouplingDistributionCharges['A-C'] / 100;
+        result.charges.poly.A += totalCharge * (rAB + rAC) / 2;
+        result.charges.poly.B += totalCharge * (rAB + rBC) / 2;
+        result.charges.poly.C += totalCharge * (rBC + rAC) / 2;
+      } else {
+        // 400V ou pas de curseurs : comportement inchangé
+        result.charges.poly.A += totalCharge / 3;
+        result.charges.poly.B += totalCharge / 3;
+        result.charges.poly.C += totalCharge / 3;
+      }
       
       // POLY ne va PAS dans phasePhaseLoads (réservé MONO) — voir règle absolue ligne 263
       

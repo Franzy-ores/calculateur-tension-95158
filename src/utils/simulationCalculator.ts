@@ -17,6 +17,7 @@ import {
 import { SRG2Config, SRG2SimulationResult, SRG2SwitchState, DEFAULT_SRG2_400_CONFIG, DEFAULT_SRG2_230_CONFIG } from '@/types/srg2';
 import { ElectricalCalculator } from '@/utils/electricalCalculations';
 import { Complex, C, add, sub, mul, div, abs, fromPolar, scale, normalize, arg } from '@/utils/complex';
+import { SRG2Regulator, createSRG2Regulator, SRG2RegulationResult } from '@/utils/srg2Regulator';
 import { getCircuitNodes } from '@/utils/networkConnectivity';
 // ============================================================================
 // @deprecated - Imports supprimés du module load-shift obsolète

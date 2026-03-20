@@ -2497,41 +2497,37 @@ export class SimulationCalculator extends ElectricalCalculator {
         
         console.log(`🔍 SRG2 ${srg2.nodeId}: tensions originales - A=${nodeVoltages.A.toFixed(1)}V, B=${nodeVoltages.B.toFixed(1)}V, C=${nodeVoltages.C.toFixed(1)}V`);
 
-        // Appliquer la régulation SRG2 sur les tensions lues
-        const regulationResult = this.applySRG2Regulation(srg2, nodeVoltages, project.voltageSystem);
+        // Utiliser SRG2Regulator pour la régulation
+        const reg = srg2Regulators.get(srg2.id)!;
+        const regResult = reg.update(nodeVoltages, 10); // dt=10s > 7s → commutation immédiate en BFS
+        const regulationResult = this.bridgeSRG2Result(regResult, nodeVoltages);
+        regResult.log.forEach(l => console.log(l));
         
         // Stocker l'état du commutateur
-        if (regulationResult.etatCommutateur) {
-          currentSwitchStates.set(srg2.nodeId, { ...regulationResult.etatCommutateur });
-          
-          // Détecter si le commutateur a changé
+        currentSwitchStates.set(srg2.nodeId, { ...regulationResult.etatCommutateur });
+        
+        // Détecter si le commutateur a changé via regResult.tapChanged
+        if (regResult.tapChanged) {
+          tapChange = true;
           const prevState = previousSwitchStates.get(srg2.nodeId);
-          if (!prevState || 
-              prevState.A !== regulationResult.etatCommutateur.A ||
-              prevState.B !== regulationResult.etatCommutateur.B ||
-              prevState.C !== regulationResult.etatCommutateur.C) {
-            tapChange = true;
-            console.log(`🔧 SRG2 ${srg2.nodeId} changement de prise: ` +
-              `${prevState ? `${prevState.A}/${prevState.B}/${prevState.C}` : 'INIT'} → ` +
-              `${regulationResult.etatCommutateur.A}/${regulationResult.etatCommutateur.B}/${regulationResult.etatCommutateur.C}`);
-          }
-          
-          // Mettre à jour les informations du SRG2 pour l'affichage
-          srg2.tensionEntree = regulationResult.tensionEntree;
-          srg2.etatCommutateur = regulationResult.etatCommutateur;
-          srg2.coefficientsAppliques = regulationResult.coefficientsAppliques;
-          srg2.tensionSortie = regulationResult.tensionSortie;
+          console.log(`🔧 SRG2 ${srg2.nodeId} changement de prise: ` +
+            `${prevState ? `${prevState.A}/${prevState.B}/${prevState.C}` : 'INIT'} → ` +
+            `${regulationResult.etatCommutateur.A}/${regulationResult.etatCommutateur.B}/${regulationResult.etatCommutateur.C}`);
         }
         
-        // ✅ NOUVEAU: Appliquer la tension série au câble (au lieu de marquer le nœud)
-        if (regulationResult.coefficientsAppliques && regulationResult.tensionEntree) {
-          this.applySRG2SerieVoltage(
-            workingCables,
-            srg2,
-            regulationResult.tensionEntree,
-            regulationResult.coefficientsAppliques
-          );
-        }
+        // Mettre à jour les informations du SRG2 pour l'affichage
+        srg2.tensionEntree = regulationResult.tensionEntree;
+        srg2.etatCommutateur = regulationResult.etatCommutateur;
+        srg2.coefficientsAppliques = regulationResult.coefficientsAppliques;
+        srg2.tensionSortie = regulationResult.tensionSortie;
+        
+        // Appliquer la tension série au câble
+        this.applySRG2SerieVoltage(
+          workingCables,
+          srg2,
+          regulationResult.tensionEntree,
+          regulationResult.coefficientsAppliques
+        );
       }
       
       // Mettre à jour les états précédents

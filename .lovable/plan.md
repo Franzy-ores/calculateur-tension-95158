@@ -1,114 +1,69 @@
 
 
-# Plan: Refonte LaboFoisonnementTab en 3 niveaux + correctif build
+# Diagnostic: Curseurs de déséquilibre → tensions nœuds
 
-## Contexte
+## Problème identifié
 
-Le fichier actuel `LaboFoisonnementTab.tsx` fait 1899 lignes avec tous les graphiques et paramètres affichés simultanément. L'objectif est de restructurer en 3 niveaux progressifs (Rapide / Personnalisé / Expert) tout en conservant 100% de la logique de calcul existante (3 runs, buildNetworkPaths, voltage-distance, etc.).
+**En 230V**: les curseurs n'ont AUCUN effet sur les tensions calculées.
 
-Il y a aussi un bug build bloquant dans `scenarioManager.ts` ligne 249 : `determineB etterScenario` (espace dans le nom de fonction).
+**En 400V**: les curseurs fonctionnent correctement.
 
-## Correctif build immédiat
+### Cause racine
 
-**Fichier:** `src/utils/scenarioManager.ts` ligne 249
-- Remplacer `determineB etterScenario` par `determineBetterScenario`
+Dans `networkStore.ts`, les 3 appels à `calculateNodeAutoPhaseDistribution()` passent **toujours `undefined`** pour les paramètres `manualCouplingDistributionCharges` et `manualCouplingDistributionProductions` (lignes 641-642, 1474-1475, 1687-1688).
 
-## Architecture des 3 niveaux
+Pour le path **400V**, ce n'est pas un problème car le paramètre `manualPhaseDistributionCharges` (A/B/C %) est utilisé directement (ligne 828 de `phaseDistributionCalculator.ts`).
 
-```text
-LaboFoisonnementTab
-├── viewMode state: 'rapid' | 'custom' | 'expert'
-├── Toute la logique de calcul existante (inchangée)
-│   ├── 3 runs DailyProfileCalculator
-│   ├── powerData, voltage24hData, voltageDistanceData
-│   ├── clientPointsData, networkPaths
-│   └── voltageRange, peakSummary
-├── Niveau 1 — Rapide (inline)
-│   ├── Config minimale: saison + météo + bouton "Analyser"
-│   ├── Alerte violations (criticalPointsDetector)
-│   ├── Graphique tension 24h avec zones ±5%/±10%
-│   └── Bouton → Niveau 2
-├── Niveau 2 — Personnalisé (inline)
-│   ├── Breadcrumb navigation
-│   ├── Tous paramètres existants (cluster, formule K(N), VE, PAC)
-│   ├── Graphiques puissance + tension 24h
-│   ├── Comparaison avant/après (baseline vs current)
-│   └── Boutons ← Niveau 1 / → Niveau 3
-└── Niveau 3 — Expert (inline)
-    ├── Breadcrumb navigation
-    ├── Graphiques tension-distance (charge/injection/horaire)
-    ├── ClockDial + analyse par heure
-    ├── Tableau horaire détaillé
-    ├── Export CSV + sauvegarde scénario
-    ├── Dialogs plein écran (existants)
-    └── Bouton ← Niveau 2
+Pour le path **230V**, la fonction attend des valeurs de **couplage** (A-B/B-C/A-C) via `manualCouplingDistributionCharges`. En recevant `undefined`, elle utilise un fallback qui préserve la distribution physique — donc les curseurs sont ignorés.
+
+### Chaîne de propagation (rappel)
+```
+Slider A/B/C %  →  manualPhaseDistribution.charges  →  calculateNodeAutoPhaseDistribution()
+                                                          ↓
+                                                  foisonneAvecCurseurs (A/B/C kVA)
+                                                          ↓
+                                              BFS: pA/pB/pC ratios (ligne 1091)
+                                                          ↓
+                                              S_maps par phase → tensions nœuds
 ```
 
-## Étapes d'implémentation
+## Correction
 
-### Étape 1 — Fix build error
-Corriger le typo dans `scenarioManager.ts` ligne 249.
+### Fichier: `src/store/networkStore.ts`
 
-### Étape 2 — Ajouter states et imports
-Dans `LaboFoisonnementTab.tsx`:
-- Ajouter `viewMode` state
-- Ajouter `analysisCompleted` state (true dès que les calculs tournent, ce qui est déjà automatique via useMemo)
-- Ajouter `baselineResults` state pour stocker la première configuration analysée
-- Ajouter `savedScenarios` state + useEffect pour charger au montage
-- Importer `detectCriticalPoints`, `exportToCSV`, `saveScenario`, `loadAllScenarios`, `deleteScenario`
-- Importer `ScenarioConfiguration` type
+Aux **3 call sites** de `calculateNodeAutoPhaseDistribution()` (lignes ~641, ~1474, ~1687):
 
-### Étape 3 — CriticalPoints useMemo
-Ajouter un `criticalPointsAnalysis` useMemo basé sur `voltageContinu` qui appelle `detectCriticalPoints(voltageContinu, 230)`.
+Remplacer:
+```typescript
+undefined, // manualCouplingDistributionCharges
+undefined, // manualCouplingDistributionProductions
+```
 
-### Étape 4 — Restructurer le JSX en 3 vues
-Toute la logique de calcul (useMemo, useEffect, callbacks) reste au niveau du composant parent. Seul le rendu JSX est conditionnel selon `viewMode`.
+Par une conversion A/B/C → A-B/B-C/A-C quand le réseau est 230V:
 
-**Niveau 1 — Rapide:**
-- Layout simple 1 colonne
-- Carte config: saison + météo (boutons existants)
-- Résultats automatiques (pas de bouton "Analyser" car les calculs sont déjà réactifs via useMemo)
-- Alerte violations avec badges (warning/critical count)
-- Graphique tension 24h avec ReferenceArea ±5%/±10% (réutilise le graphique existant)
-- Bouton "Personnaliser →"
+```typescript
+// Conversion : slider A% → couplage A-B, B% → B-C, C% → A-C
+const is230V = project.voltageSystem === 'TRIPHASÉ_230V';
+const couplingCharges = is230V && project.manualPhaseDistribution?.charges
+  ? { 'A-B': project.manualPhaseDistribution.charges.A,
+      'B-C': project.manualPhaseDistribution.charges.B,
+      'A-C': project.manualPhaseDistribution.charges.C }
+  : undefined;
+const couplingProductions = is230V && project.manualPhaseDistribution?.productions
+  ? { 'A-B': project.manualPhaseDistribution.productions.A,
+      'B-C': project.manualPhaseDistribution.productions.B,
+      'A-C': project.manualPhaseDistribution.productions.C }
+  : undefined;
+```
 
-**Niveau 2 — Personnalisé:**
-- Breadcrumb: Rapide > Personnalisé
-- Layout 2 colonnes (paramètres | graphiques)
-- Col paramètres: tous les paramètres existants (nœud, cluster, K(N), VE, PAC, simulation toggle)
-- Col graphiques: puissance 24h + tension 24h
-- Section comparaison: si `baselineResults` existe, afficher deltas (ΔV max, Δ violations)
-- Navigation: ← Rapide / Expert →
+Le mapping A→A-B, B→B-C, C→A-C correspond aux labels des sliders en 230V: L1-L2, L2-L3, L3-L1.
 
-**Niveau 3 — Expert:**
-- Breadcrumb: Rapide > Personnalisé > Expert
-- Graphiques tension-distance (charge, injection, horaire avec ClockDial)
-- Checkboxes existantes (per-phase, neutral current, client points)
-- Tableau horaire détaillé
-- Boutons export CSV + sauvegarde scénario
-- Dialogs plein écran existants
-- Navigation: ← Personnalisé
+### Pourquoi le 400V fonctionne déjà
 
-### Étape 5 — Handlers export/scénario
-- `handleExportCSV`: appelle `exportToCSV(voltageContinu, rawContinu, { projectName, filename })`
-- `handleSaveScenario`: prompt nom, appelle `saveScenario(name, config, voltageContinu)`, refresh liste
-- `handleLoadScenarios`: `useEffect(() => setSavedScenarios(loadAllScenarios()), [])`
+En 400V, `calculateNodeAutoPhaseDistribution` utilise directement `manualPhaseDistributionCharges.A/B/C` à la ligne 828 pour calculer `foisonneAvecCurseurs`. Ce chemin ne dépend pas du paramètre `manualCouplingDistribution`.
 
-### Étape 6 — Baseline comparison
-- Quand l'utilisateur change de niveau Rapide → Personnalisé pour la première fois, capturer `voltageContinu` comme `baselineResults`
-- Calculer deltas: ΔV min, ΔV max, Δ violations ±5%, Δ violations ±10%
+### Impact
 
-## Contraintes respectées
-
-- Toute la logique de calcul (3 runs, BFS, buildNetworkPaths, buildClientPoints, getNodeVoltagePerPhase) reste identique et au même niveau
-- Couleurs BRANCH_COLORS inchangées
-- Tous les useMemo existants conservés
-- TypeScript strict
-- Transitions entre niveaux = simple changement de state, pas de rechargement
-- Les dialogs plein écran restent en dehors du conditionnel (toujours montés)
-
-## Fichiers modifiés
-
-1. `src/utils/scenarioManager.ts` — fix typo ligne 249
-2. `src/components/topMenu/LaboFoisonnementTab.tsx` — restructuration JSX en 3 niveaux + nouveaux imports/states/handlers
-
+- **230V**: les curseurs redistribueront effectivement les puissances foisonnées par couplage, ce qui changera les courants phase-phase dans le BFS couplé et donc les tensions nodales.
+- **400V**: aucun changement (le path 400V n'utilise pas `manualCouplingDistribution`).
+- Rétrocompatibilité: quand les sliders sont en mode

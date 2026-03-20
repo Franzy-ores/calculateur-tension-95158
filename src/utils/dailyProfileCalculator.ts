@@ -149,6 +149,29 @@ export class DailyProfileCalculator {
   }
 
   /**
+   * Compte les clients résidentiels transitant par le nœud sélectionné
+   * (nœud lui-même + tous ses nœuds aval dans l'arbre réseau)
+   */
+  private countResidentialClientsTransitant(): number {
+    const nodeId = this.options.selectedNodeId;
+    if (!nodeId) return this.countResidentialClients();
+    const clients = this.project.clientsImportes || [];
+    const links = this.project.clientLinks || [];
+    if (clients.length === 0 || links.length === 0) return 0;
+    const downstreamIds = this.findDownstreamNodes(nodeId);
+    const relevantIds = new Set([nodeId, ...downstreamIds]);
+    let count = 0;
+    for (const nId of relevantIds) {
+      const nodeLinks = links.filter(l => l.nodeId === nId);
+      for (const l of nodeLinks) {
+        const client = clients.find(c => c.id === l.clientId);
+        if (client && client.clientType !== 'industriel') count++;
+      }
+    }
+    return count;
+  }
+
+  /**
    * Calcule le foisonnement pondéré en fonction du mix résidentiel/industriel
    */
   private calculateWeightedFoisonnement(
@@ -288,7 +311,7 @@ export class DailyProfileCalculator {
     const industrialFoisonnementHoraire = this.options.zeroConsumption ? 0 : industrialProfile;
 
     // ── Calcul VE (Kaufmann) ──────────────────────────────────────────
-    const N_total = this.options.nResidential ?? this.countResidentialClients();
+    const N_total = this.countResidentialClientsTransitant();
     const evRate = this.options.evPenetrationRate ?? 0;
     const evPowerKW = this.options.evChargingPower_kW ?? 3.7;
     const N_EV = Math.round(N_total * evRate);

@@ -1126,16 +1126,17 @@ export class SimulationCalculator extends ElectricalCalculator {
         srg2.tensionSortie = regulationResult.tensionSortie;
       }
       
-      // Appliquer les coefficients et tensions de sortie SRG2 aux nœuds
-      for (const srg2 of srg2Devices) {
-        const coefficients = voltageChanges.get(srg2.nodeId);
-        if (coefficients && srg2.tensionSortie) {
-          this.applySRG2Coefficients(workingNodes, srg2, coefficients, srg2.tensionSortie);
-        }
-      }
-      
-      // Vérifier la convergence
-      converged = this.checkSRG2Convergence(voltageChanges, previousVoltages);
+      // Vérifier la convergence via tapChanged des régulateurs
+      const anyTapChanged = srg2Devices.some(srg2 => {
+        const reg = srg2Regulators.get(srg2.id)!;
+        const taps = reg.getCurrentTaps();
+        const prev = previousVoltages.get(srg2.nodeId);
+        if (!prev) return true;
+        // Compare coefficients (discrete tap values)
+        const coeff = voltageChanges.get(srg2.nodeId);
+        return coeff && (coeff.A !== prev.A || coeff.B !== prev.B || coeff.C !== prev.C);
+      });
+      converged = !anyTapChanged && iteration > 1;
       previousVoltages = new Map(voltageChanges);
       
       console.log(`🔄 SRG2 Combined Iteration ${iteration}: ${converged ? 'Convergé' : 'En cours...'}`);

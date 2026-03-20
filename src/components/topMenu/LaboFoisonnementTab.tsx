@@ -532,8 +532,8 @@ export const LaboFoisonnementTab = () => {
       domainInjection,
       minBranches,
       maxBranches,
-      busbarVoltageCharge: rawConsoPure[globalMinHour]?.virtualBusbar?.voltage_V ?? 230,
-      busbarVoltageInjection: rawProdPure[globalMaxHour]?.virtualBusbar?.voltage_V ?? 230,
+      busbarVoltageCharge: (rawConsoPure[globalMinHour]?.virtualBusbar?.voltage_V ?? 230) * busbarScale,
+      busbarVoltageInjection: (rawProdPure[globalMaxHour]?.virtualBusbar?.voltage_V ?? 230) * busbarScale,
     };
   }, [networkPaths, rawConsoPure, rawProdPure, powerData]);
 

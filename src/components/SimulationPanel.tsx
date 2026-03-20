@@ -26,6 +26,9 @@ import { analyzeOptimalEquipmentPlacement, FullPlacementAnalysis } from "@/utils
 export const SimulationPanel = () => {
   const [showNodeSelector, setShowNodeSelector] = useState(false);
   const [showOptimalSuggestion, setShowOptimalSuggestion] = useState(false);
+  const [placementAnalysis, setPlacementAnalysis] = useState<FullPlacementAnalysis | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState({ step: '', current: 0, total: 0 });
   const {
     currentProject,
     simulationMode,

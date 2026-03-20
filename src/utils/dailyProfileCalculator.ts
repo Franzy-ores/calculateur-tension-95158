@@ -330,7 +330,7 @@ export class DailyProfileCalculator {
     // ── Calcul PAC (Kaufmann) ─────────────────────────────────────────
     const pacRate = this.options.pacPenetrationRate ?? 0;
     const pacPowerKW = this.options.pacPower_kW ?? 3;
-    const N_PAC = Math.round(N_total * pacRate);
+    const N_PAC = Math.round(N_node * pacRate);
     let S_PAC_kVA = 0;
 
     if (N_PAC > 0 && !this.options.zeroConsumption) {

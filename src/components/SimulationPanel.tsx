@@ -617,6 +617,139 @@ export const SimulationPanel = () => {
               <CableReplacementSimulator />
             </TabsContent>
 
+            <TabsContent value="analyse" className="mt-4 space-y-4">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Search className="h-4 w-4" />
+                    Placement optimal des équipements
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Analyse exhaustive pour trouver le meilleur emplacement SRG2 et EQUI8.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Button
+                    size="sm"
+                    onClick={handleRunPlacementAnalysis}
+                    disabled={isAnalyzing}
+                    className="w-full"
+                  >
+                    {isAnalyzing ? (
+                      <>
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        {analysisProgress.step} ({analysisProgress.current}/{analysisProgress.total})
+                      </>
+                    ) : (
+                      <>
+                        <Search className="h-3 w-3 mr-1" />
+                        Analyser placements optimaux
+                      </>
+                    )}
+                  </Button>
+
+                  {isAnalyzing && (
+                    <Progress value={analysisProgress.total > 0 ? (analysisProgress.current / analysisProgress.total) * 100 : 0} className="h-2" />
+                  )}
+
+                  {placementAnalysis && (
+                    <div className="space-y-3">
+                      {/* SRG2 */}
+                      <Card className={placementAnalysis.srg2.recommendation === 'install_srg2' ? 'border-green-500/50 bg-green-500/5' : 'border-destructive/30 bg-destructive/5'}>
+                        <CardHeader className="pb-2 pt-3 px-3">
+                          <CardTitle className="text-xs font-medium">SRG2 — Régulateur de tension</CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-3 pb-3 pt-0">
+                          {placementAnalysis.srg2.recommendation === 'install_srg2' ? (
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <CheckCircle className="h-3 w-3 text-green-600" />
+                                <span className="text-xs font-medium">Recommandé : {placementAnalysis.srg2.nodeName}</span>
+                                <Badge variant="outline" className="text-xs">{placementAnalysis.srg2.score.toFixed(0)}/100</Badge>
+                              </div>
+                              <div className="grid grid-cols-2 gap-1 text-xs text-muted-foreground">
+                                <div>Correction : {placementAnalysis.srg2.simulation.correctionRate_percent.toFixed(0)}%</div>
+                                <div>Marge : {placementAnalysis.srg2.simulation.powerMargin_percent.toFixed(0)}%</div>
+                                <div>Viabilité : {placementAnalysis.srg2.simulation.futureProofYears} ans</div>
+                                <div>P aval : {placementAnalysis.srg2.simulation.powerDownstream_kVA.toFixed(1)} kVA</div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-start gap-2">
+                              <AlertTriangle className="h-3 w-3 text-destructive mt-0.5" />
+                              <p className="text-xs text-muted-foreground">{placementAnalysis.srg2.reasoning.split('\n')[0]}</p>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      {/* EQUI8 */}
+                      <Card className={placementAnalysis.equi8.recommendation === 'install_equi8' ? 'border-green-500/50 bg-green-500/5' : 'border-destructive/30 bg-destructive/5'}>
+                        <CardHeader className="pb-2 pt-3 px-3">
+                          <CardTitle className="text-xs font-medium">EQUI8 — Compensateur de neutre</CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-3 pb-3 pt-0">
+                          {placementAnalysis.equi8.recommendation === 'install_equi8' ? (
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <CheckCircle className="h-3 w-3 text-green-600" />
+                                <span className="text-xs font-medium">Recommandé : {placementAnalysis.equi8.nodeName}</span>
+                                <Badge variant="outline" className="text-xs">{placementAnalysis.equi8.score.toFixed(0)}/100</Badge>
+                              </div>
+                              <div className="grid grid-cols-2 gap-1 text-xs text-muted-foreground">
+                                <div>Réd. I_N : {placementAnalysis.equi8.simulation.neutralCurrentReductionRate_percent.toFixed(0)}%</div>
+                                <div>Réd. déséq : {placementAnalysis.equi8.simulation.avgImbalanceReduction_percent.toFixed(0)}%</div>
+                                <div>Marge : {placementAnalysis.equi8.simulation.powerMargin_percent.toFixed(0)}%</div>
+                                <div>Viabilité : {placementAnalysis.equi8.simulation.futureProofYears} ans</div>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="w-full text-xs h-7"
+                                onClick={() => {
+                                  if (placementAnalysis.equi8.nodeId) {
+                                    const usedNodeIds = simulationEquipment.neutralCompensators.map(c => c.nodeId);
+                                    if (usedNodeIds.includes(placementAnalysis.equi8.nodeId)) {
+                                      toast.info('Un EQUI8 existe déjà sur ce nœud');
+                                    } else {
+                                      addNeutralCompensator(placementAnalysis.equi8.nodeId);
+                                      toast.success(`EQUI8 ajouté sur ${placementAnalysis.equi8.nodeName}`);
+                                    }
+                                  }
+                                }}
+                              >
+                                <Plus className="h-3 w-3 mr-1" />
+                                Ajouter EQUI8
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-start gap-2">
+                              <AlertTriangle className="h-3 w-3 text-destructive mt-0.5" />
+                              <p className="text-xs text-muted-foreground">{placementAnalysis.equi8.reasoning.split('\n')[0]}</p>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      <details className="text-xs">
+                        <summary className="cursor-pointer font-medium text-muted-foreground hover:text-foreground">
+                          Raisonnement détaillé
+                        </summary>
+                        <div className="mt-2 space-y-2">
+                          <pre className="whitespace-pre-wrap bg-muted/50 p-2 rounded text-xs font-mono overflow-auto max-h-60">
+                            {placementAnalysis.srg2.reasoning}
+                          </pre>
+                          <pre className="whitespace-pre-wrap bg-muted/50 p-2 rounded text-xs font-mono overflow-auto max-h-60">
+                            {placementAnalysis.equi8.reasoning}
+                          </pre>
+                        </div>
+                      </details>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             <TabsContent value="doc" className="mt-4">
               <DocumentationPanel />
             </TabsContent>

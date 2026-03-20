@@ -159,51 +159,78 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
     return 'text-red-600 dark:text-red-400';
   };
 
+  // Compter les clients poly du nœud sélectionné
+  const polyClientsCount = (() => {
+    if (type !== 'charges') return 0;
+    const selectedNodeId = currentProject.selectedNodeId;
+    if (!selectedNodeId) return 0;
+    const node = currentProject.nodes?.find(n => n.id === selectedNodeId);
+    if (!node) return 0;
+    // Clients importés poly liés au nœud
+    const links = currentProject.clientLinks || [];
+    const nodeLinks = links.filter(l => l.nodeId === selectedNodeId);
+    const importedPoly = nodeLinks.reduce((count, l) => {
+      const c = currentProject.clientsImportes?.find(cl => cl.id === l.clientId);
+      if (c && (c.connectionType === 'TRI' || c.connectionType === 'TETRA')) return count + 1;
+      return count;
+    }, 0);
+    // Clients manuels poly (non-MONO)
+    const manualPoly = node.clients.filter(c => c.loadType !== 'MONO').length;
+    return importedPoly + manualPoly;
+  })();
+
   return (
-    <div className={cn(
-      "flex items-center gap-3 p-1.5 rounded-md transition-colors",
-      isForced && "bg-warning/20 border border-warning"
-    )}>
-      <Label className="text-[10px] text-muted-foreground w-16">{title}</Label>
-      
-      {(['A', 'B', 'C'] as const).map((phase) => {
-        const ecart = calculateUnbalancePercent(distribution[phase]);
-        return (
-          <div key={phase} className="flex items-center gap-1.5 min-w-[100px]">
-            <span className="text-[10px] text-muted-foreground w-8">{phaseLabels[phase]}</span>
-            <Slider
-              value={[distribution[phase]]}
-              onValueChange={(values) => handlePhaseChange(phase, values[0])}
-              min={13.33}
-              max={53.33}
-              step={0.1}
-              className="w-16 h-3"
-            />
-            <span className={`text-[10px] font-mono w-10 text-right ${getEcartColor(ecart)}`}>
-              {ecart >= 0 ? '+' : ''}{ecart.toFixed(0)}%
-            </span>
-          </div>
-        );
-      })}
-      
-      {showResetButton && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={initializeToRealDistribution}
-                className="h-6 w-6"
-              >
-                <RefreshCw className="h-3 w-3" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{isForced ? "Revenir en mode automatique" : "Synchroniser avec le tableau"}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+    <div className="flex flex-col gap-0.5">
+      <div className={cn(
+        "flex items-center gap-3 p-1.5 rounded-md transition-colors",
+        isForced && "bg-warning/20 border border-warning"
+      )}>
+        <Label className="text-[10px] text-muted-foreground w-16">{title}</Label>
+        
+        {(['A', 'B', 'C'] as const).map((phase) => {
+          const ecart = calculateUnbalancePercent(distribution[phase]);
+          return (
+            <div key={phase} className="flex items-center gap-1.5 min-w-[100px]">
+              <span className="text-[10px] text-muted-foreground w-8">{phaseLabels[phase]}</span>
+              <Slider
+                value={[distribution[phase]]}
+                onValueChange={(values) => handlePhaseChange(phase, values[0])}
+                min={13.33}
+                max={53.33}
+                step={0.1}
+                className="w-16 h-3"
+              />
+              <span className={`text-[10px] font-mono w-10 text-right ${getEcartColor(ecart)}`}>
+                {ecart >= 0 ? '+' : ''}{ecart.toFixed(0)}%
+              </span>
+            </div>
+          );
+        })}
+        
+        {showResetButton && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={initializeToRealDistribution}
+                  className="h-6 w-6"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{isForced ? "Revenir en mode automatique" : "Synchroniser avec le tableau"}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </div>
+      {type === 'charges' && polyClientsCount > 0 && (
+        <span className="text-[9px] text-muted-foreground ml-[4.5rem]">
+          Appliqué aux {polyClientsCount} client{polyClientsCount > 1 ? 's' : ''} poly de ce nœud
+        </span>
       )}
     </div>
   );

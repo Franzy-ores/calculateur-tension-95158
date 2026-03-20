@@ -75,6 +75,34 @@ export const SimulationPanel = () => {
       toast.success(`EQUI8 ajouté sur ${optimalEqui8Analysis.optimalNode.nodeName}`);
     }
   };
+
+  const handleRunPlacementAnalysis = useCallback(() => {
+    const baseResult = baseline || calculationResults[selectedScenario];
+    if (!baseResult || !currentProject) {
+      toast.error('Aucun résultat de calcul disponible. Lancez un calcul d\'abord.');
+      return;
+    }
+    setIsAnalyzing(true);
+    setPlacementAnalysis(null);
+    // Run async to not block UI
+    setTimeout(() => {
+      try {
+        const result = analyzeOptimalEquipmentPlacement(
+          currentProject,
+          baseResult,
+          selectedScenario,
+          (step, current, total) => setAnalysisProgress({ step, current, total })
+        );
+        setPlacementAnalysis(result);
+        toast.success('Analyse de placement terminée');
+      } catch (error) {
+        console.error('Erreur analyse placement:', error);
+        toast.error('Erreur lors de l\'analyse de placement');
+      } finally {
+        setIsAnalyzing(false);
+      }
+    }, 50);
+  }, [baseline, calculationResults, selectedScenario, currentProject]);
   
   const CompensatorCard = ({
     compensator

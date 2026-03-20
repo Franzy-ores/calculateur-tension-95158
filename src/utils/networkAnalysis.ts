@@ -89,7 +89,9 @@ export function calculateDownstreamPower(
   for (const nodeId of downstreamNodeIds) {
     const node = project.nodes.find(n => n.id === nodeId);
     if (node) {
-      totalPower_kVA += (node.charge_kVA || 0) + (node.production_kVA || 0);
+      const chargeTotal = node.clients.reduce((sum, c) => sum + c.S_kVA, 0);
+      const prodTotal = node.productions.reduce((sum, p) => sum + p.S_kVA, 0);
+      totalPower_kVA += chargeTotal + prodTotal;
     }
   }
 

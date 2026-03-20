@@ -281,7 +281,6 @@ export function findOptimalEQUI8PlacementNode(
     const equi8Config: NeutralCompensator = {
       id: `equi8-placement-${candidate.id}`,
       nodeId: candidate.id,
-      name: `EQUI8 Test ${candidate.name}`,
       enabled: true,
       mode: 'CME',
       maxPower_kVA: 20,
@@ -289,8 +288,6 @@ export function findOptimalEQUI8PlacementNode(
       Zph_Ohm: 0.5,
       Zn_Ohm: 0.2,
       thermalWindow: 'permanent',
-      targetVoltage_V: 230,
-      reductionFraction: 1.0,
     };
 
     const equipment: SimulationEquipment = {

@@ -311,7 +311,7 @@ export class DailyProfileCalculator {
     const industrialFoisonnementHoraire = this.options.zeroConsumption ? 0 : industrialProfile;
 
     // ── Calcul VE (Kaufmann) ──────────────────────────────────────────
-    const N_total = this.options.nResidential ?? this.countResidentialClients();
+    const N_total = this.countResidentialClientsTransitant();
     const evRate = this.options.evPenetrationRate ?? 0;
     const evPowerKW = this.options.evChargingPower_kW ?? 3.7;
     const N_EV = Math.round(N_total * evRate);

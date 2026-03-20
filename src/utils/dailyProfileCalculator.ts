@@ -2,6 +2,7 @@ import { DailyProfileConfig, DailySimulationOptions, HourlyVoltageResult, Hourly
 import { Project, CalculationResult, SimulationEquipment, NeutralCompensator } from '@/types/network';
 import { SRG2Config, SRG2SwitchState } from '@/types/srg2';
 import { ElectricalCalculator } from './electricalCalculations';
+import { SRG2Regulator } from './srg2Regulator';
 import { SimulationCalculator } from './simulationCalculator';
 import defaultProfiles from '@/data/hourlyProfiles.json';
 import { calculateAdaptiveFoisonnement } from './foisonnementCalculator';

@@ -1753,10 +1753,11 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     set({ calculationResults: results });
 
     // Si mode simulation actif avec équipements actifs, recalculer aussi la simulation
-    const { simulationMode, simulationEquipment } = get();
-    const hasActiveEquipment = simulationMode && (
+    const { simulationMode, isSimulationActive, simulationEquipment } = get();
+    const hasActiveEquipment = (simulationMode || isSimulationActive) && (
       (simulationEquipment.srg2Devices?.some(s => s.enabled) || false) ||
-      simulationEquipment.neutralCompensators.some(c => c.enabled)
+      simulationEquipment.neutralCompensators.some(c => c.enabled) ||
+      (simulationEquipment.cableReplacement?.enabled || false)
     );
 
     if (hasActiveEquipment) {

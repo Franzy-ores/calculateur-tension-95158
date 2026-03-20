@@ -98,34 +98,26 @@ export class DailyProfileCalculator {
   calculateDailyVoltages(): HourlyVoltageResult[] {
     this._rawResults = [];
     const results: HourlyVoltageResult[] = [];
-    // Toujours 230V car on calcule en phase-neutre (seuils ±5% et ±10% basés sur 230V)
     const nominalVoltage = 230;
 
-    // 🔑 Mémoire mécanique SRG2: conserver l'état des commutateurs entre les heures
-    // Initialisation: tous en bypass au démarrage de la journée
-    let currentSRG2TapPositions: Map<string, { A: SRG2SwitchState; B: SRG2SwitchState; C: SRG2SwitchState }> = new Map();
+    // 🔑 Mémoire mécanique SRG2 via SRG2Regulator (conserve état entre les heures)
+    const srg2Regulators: Map<string, SRG2Regulator> = new Map();
     
-    // Initialiser les positions de prise pour chaque SRG2 actif
     if (this.isSimulationActive && this.simulationEquipment?.srg2Devices) {
       for (const srg2 of this.simulationEquipment.srg2Devices.filter(s => s.enabled)) {
-        // Position initiale: bypass (ou récupérer depuis l'état courant si disponible)
-        const initialState = srg2.etatCommutateur || { A: 'BYP' as SRG2SwitchState, B: 'BYP' as SRG2SwitchState, C: 'BYP' as SRG2SwitchState };
-        currentSRG2TapPositions.set(srg2.id, initialState);
+        const reg = new SRG2Regulator(srg2);
+        // Restaurer la position initiale si disponible
+        if (srg2.etatCommutateur) {
+          reg.setTaps(srg2.etatCommutateur as Record<'A' | 'B' | 'C', SRG2SwitchState>);
+        }
+        srg2Regulators.set(srg2.id, reg);
       }
     }
 
     for (let hour = 0; hour < 24; hour++) {
-      // Passer les positions de prise actuelles au calcul horaire
-      const hourlyResult = this.calculateHourlyVoltage(hour, nominalVoltage, currentSRG2TapPositions);
+      const hourlyResult = this.calculateHourlyVoltage(hour, nominalVoltage, srg2Regulators);
       results.push(hourlyResult);
-      
-      // 🔑 Mettre à jour les positions de prise SRG2 pour l'heure suivante
-      // Le SRG2 conserve sa position (mémoire mécanique) - seul un changement de seuil la modifie
-      if (hourlyResult.srg2States) {
-        for (const srg2State of hourlyResult.srg2States) {
-          currentSRG2TapPositions.set(srg2State.srg2Id, srg2State.switchStates);
-        }
-      }
+      // SRG2Regulator instances conservent leur état interne automatiquement
     }
 
     return results;

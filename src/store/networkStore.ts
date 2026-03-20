@@ -638,8 +638,12 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
             project.foisonnementChargesResidentiel ?? 15,
             project.foisonnementChargesIndustriel ?? 70,
             project.foisonnementProductions ?? 100,
-            undefined, // manualCouplingDistributionCharges
-            undefined, // manualCouplingDistributionProductions
+            project.voltageSystem === 'TRIPHASÉ_230V' && project.manualPhaseDistribution?.charges
+              ? { 'A-B': project.manualPhaseDistribution.charges.A, 'B-C': project.manualPhaseDistribution.charges.B, 'A-C': project.manualPhaseDistribution.charges.C }
+              : undefined,
+            project.voltageSystem === 'TRIPHASÉ_230V' && project.manualPhaseDistribution?.productions
+              ? { 'A-B': project.manualPhaseDistribution.productions.A, 'B-C': project.manualPhaseDistribution.productions.B, 'A-C': project.manualPhaseDistribution.productions.C }
+              : undefined,
             project.treatSmallPolyProductionsAsMono || false
           );
           node.autoPhaseDistribution = distribution;

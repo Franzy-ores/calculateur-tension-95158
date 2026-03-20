@@ -225,21 +225,10 @@ export const LaboFoisonnementTab = () => {
   const sourceNode = currentProject?.nodes.find(n => n.isSource);
   const busbarDisplayVoltage = useMemo(() => {
     if (!sourceNode || !currentProject) return 230;
-    const sv = currentProject.sourceVoltage ?? 400;
-    return currentProject.networkType === '400V' ? sv / Math.sqrt(3) : sv;
+    const nomV = currentProject.transformerConfig?.nominalVoltage_V ?? 400;
+    const sv = currentProject.transformerConfig?.sourceVoltage ?? nomV;
+    return nomV >= 400 ? sv / Math.sqrt(3) : sv;
   }, [sourceNode, currentProject]);
-
-  // Alerte surcharge transfo
-  const transformerOverload = useMemo(() => {
-    if (!currentProject || !powerData.length) return null;
-    const nominalPower = currentProject.transformerConfig?.nominalPower_kVA;
-    if (!nominalPower) return null;
-    const peakNet = Math.max(...powerData.map(d => Math.abs(d.P_net ?? d.P_total ?? 0)));
-    if (peakNet > nominalPower) {
-      return { peak: peakNet, capacity: nominalPower, delta: peakNet - nominalPower };
-    }
-    return null;
-  }, [currentProject, powerData]);
 
   const selectedNodeId = dailyProfileOptions.selectedNodeId;
   const selectedClusterId = dailyProfileOptions.selectedClusterId || DEFAULT_CLUSTER_ID;

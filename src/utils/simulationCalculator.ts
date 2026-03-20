@@ -2442,6 +2442,16 @@ export class SimulationCalculator extends ElectricalCalculator {
     // Copie des câbles pour modification itérative (injection tension série)
     let workingCables = JSON.parse(JSON.stringify(project.cables)) as Cable[];
     
+    // Créer les instances SRG2Regulator (persistent across iterations for tap memory)
+    const srg2Regulators = new Map<string, SRG2Regulator>();
+    for (const srg2 of srg2Devices) {
+      srg2Regulators.set(srg2.id, createSRG2Regulator(
+        srg2.nodeId,
+        project.voltageSystem as 'TRIPHASÉ_230V' | 'TÉTRAPHASÉ_400V',
+        srg2
+      ));
+    }
+    
     // Mémoire des états de commutateurs pour détection de stabilisation
     let previousSwitchStates = new Map<string, { A: SRG2SwitchState; B: SRG2SwitchState; C: SRG2SwitchState }>();
     

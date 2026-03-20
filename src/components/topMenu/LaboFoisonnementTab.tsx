@@ -535,7 +535,7 @@ export const LaboFoisonnementTab = () => {
       busbarVoltageCharge: (rawConsoPure[globalMinHour]?.virtualBusbar?.voltage_V ?? 230) * busbarScale,
       busbarVoltageInjection: (rawProdPure[globalMaxHour]?.virtualBusbar?.voltage_V ?? 230) * busbarScale,
     };
-  }, [networkPaths, rawConsoPure, rawProdPure, powerData]);
+  }, [networkPaths, rawConsoPure, rawProdPure, powerData, busbarScale]);
 
   // ─── Client raccordement points ──────────────────────────────────────────────
   const effectiveBranchementCableId = selectedBranchementCableId || 'exvb-4x16-cu';

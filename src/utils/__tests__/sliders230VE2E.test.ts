@@ -67,6 +67,7 @@ function runWithSliders(sliders: { A: number; B: number; C: number }) {
   const manualPD = {
     charges: sliders,
     productions: { A: 33.33, B: 33.33, C: 33.34 },
+    constraints: { min: 0, max: 100, total: 100 },
   };
 
   const calc = new ElectricalCalculator(0.95);

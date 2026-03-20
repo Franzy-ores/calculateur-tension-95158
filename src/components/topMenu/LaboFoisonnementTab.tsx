@@ -315,7 +315,6 @@ export const LaboFoisonnementTab = () => {
       pacPenetrationRate: pacPenetration,
       pacPower_kW: pacPower,
       nResidential: nResidentialGlobal,
-      nResidentialAtNode: nResidential,
     };
 
     // Run 1: Complet (conso + prod)

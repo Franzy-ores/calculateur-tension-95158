@@ -387,7 +387,19 @@ export const LaboFoisonnementTab = () => {
     });
   }, [voltageContinu]);
 
-  // ─── Voltage 24h chart data ──────────────────────────────────────────────────
+  // Alerte surcharge transfo
+  const transformerOverload = useMemo(() => {
+    if (!currentProject || !powerData.length) return null;
+    const nominalPower = currentProject.transformerConfig?.nominalPower_kVA;
+    if (!nominalPower) return null;
+    const peakNet = Math.max(...powerData.map(d => Math.abs(d.P_net)));
+    if (peakNet > nominalPower) {
+      return { peak: peakNet, capacity: nominalPower, delta: peakNet - nominalPower };
+    }
+    return null;
+  }, [currentProject, powerData]);
+
+
   const is400V = currentProject?.voltageSystem === 'TÉTRAPHASÉ_400V';
   const busbarScale = is400V ? 1 / Math.sqrt(3) : 1;
 

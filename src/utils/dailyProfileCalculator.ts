@@ -459,7 +459,7 @@ export class DailyProfileCalculator {
     srg2Devices: SRG2Config[],
     neutralCompensators?: NeutralCompensator[],
     cableReplacement?: { enabled: boolean; targetCableTypeId: string; affectedCableIds: string[] },
-    currentTapPositions?: Map<string, { A: SRG2SwitchState; B: SRG2SwitchState; C: SRG2SwitchState }>
+    srg2Regulators?: Map<string, SRG2Regulator>
   ): { result: CalculationResult; srg2States: SRG2HourlyActivation[] } {
     
     // Appliquer le remplacement de câbles si actif
@@ -485,39 +485,80 @@ export class DailyProfileCalculator {
       projectToUse.clientLinks
     );
     
-    // === ÉVALUATION DES SRG2 AVEC MÉMOIRE MÉCANIQUE ===
-    // 🔑 Le SRG2 possède une mémoire mécanique. Sa position de prise doit être
-    // conservée entre les pas de simulation journalière.
+    // === ÉVALUATION DES SRG2 VIA SRG2Regulator.update() ===
     const srg2States: SRG2HourlyActivation[] = [];
     let anySRG2Active = false;
     
     for (const srg2 of srg2Devices) {
-      // Récupérer la position de prise actuelle (mémoire de l'heure précédente)
-      const previousTapPosition = currentTapPositions?.get(srg2.id);
+      const reg = srg2Regulators?.get(srg2.id);
       
-      // Évaluer si un changement de prise est nécessaire (avec hystérésis)
-      const activation = this.evaluateSRG2ActivationWithMemory(
-        naturalResult, 
-        srg2, 
-        projectToUse.voltageSystem,
-        previousTapPosition
+      // Récupérer les tensions naturelles au nœud SRG2
+      const nodeMetrics = naturalResult.nodeMetricsPerPhase?.find(
+        nm => nm.nodeId === srg2.nodeId
       );
-      srg2States.push(activation);
-      if (activation.isActive) {
-        anySRG2Active = true;
+      
+      if (!nodeMetrics?.voltagesPerPhase || !reg) {
+        // Nœud non trouvé ou pas de régulateur → conserver l'état précédent
+        const currentTaps = reg?.getCurrentTaps() || { A: 'BYP' as SRG2SwitchState, B: 'BYP' as SRG2SwitchState, C: 'BYP' as SRG2SwitchState };
+        const isActive = currentTaps.A !== 'BYP' || currentTaps.B !== 'BYP' || currentTaps.C !== 'BYP';
+        srg2States.push({
+          srg2Id: srg2.id,
+          nodeId: srg2.nodeId,
+          isActive,
+          switchStates: currentTaps,
+          tensionEntree: { A: 230, B: 230, C: 230 }
+        });
+        if (isActive) anySRG2Active = true;
+        continue;
+      }
+      
+      const tensions: Record<'A' | 'B' | 'C', number> = {
+        A: nodeMetrics.voltagesPerPhase.A,
+        B: nodeMetrics.voltagesPerPhase.B,
+        C: nodeMetrics.voltagesPerPhase.C
+      };
+      
+      // 🔑 Appel centralisé : SRG2Regulator gère hystérésis, temporisation, contraintes
+      // dt=3600s (1 heure) >> 7s temporisation → commutation immédiate si seuil franchi
+      const regResult = reg.update(tensions, 3600);
+      
+      // Convertir le résultat SRG2Regulator → SRG2HourlyActivation
+      const switchStates = {
+        A: regResult.phases.A.state,
+        B: regResult.phases.B.state,
+        C: regResult.phases.C.state
+      };
+      
+      const tensionSortie = regResult.isActive ? {
+        A: regResult.phases.A.Vout,
+        B: regResult.phases.B.Vout,
+        C: regResult.phases.C.Vout
+      } : undefined;
+      
+      srg2States.push({
+        srg2Id: srg2.id,
+        nodeId: srg2.nodeId,
+        isActive: regResult.isActive,
+        switchStates,
+        tensionEntree: tensions,
+        tensionSortie
+      });
+      
+      if (regResult.isActive) anySRG2Active = true;
+      
+      // Log pour debug
+      if (regResult.log.length > 0) {
+        regResult.log.forEach(msg => console.log(`[24H] ${msg}`));
       }
     }
     
     // === PASSE 2: Recalcul avec SRG2 si actif ===
     if (anySRG2Active) {
-      // Créer une copie des devices SRG2 avec les états d'activation calculés
       const activatedSRG2Devices = srg2Devices.map((srg2, index) => {
         const state = srg2States[index];
         if (!state.isActive) {
-          // SRG2 en bypass - le désactiver pour ce calcul
           return { ...srg2, enabled: false };
         }
-        // SRG2 actif - mettre à jour les tensions d'entrée et états commutateurs
         return {
           ...srg2,
           tensionEntree: state.tensionEntree,
@@ -526,7 +567,6 @@ export class DailyProfileCalculator {
         };
       });
       
-      // Construire l'équipement de simulation avec états SRG2 pré-calculés
       const simulationEquipment: SimulationEquipment = {
         srg2Devices: activatedSRG2Devices.filter(s => s.enabled),
         neutralCompensators: neutralCompensators || [],
@@ -534,7 +574,6 @@ export class DailyProfileCalculator {
         cableReplacement: this.simulationEquipment?.cableReplacement
       };
       
-      // Si au moins un SRG2 reste actif, calculer avec régulation
       if (simulationEquipment.srg2Devices && simulationEquipment.srg2Devices.length > 0) {
         const simCalculator = new SimulationCalculator(
           this.project.cosPhi,
@@ -542,8 +581,6 @@ export class DailyProfileCalculator {
           this.project.cosPhiProductions
         );
         
-        // Créer un "fake" calculationResults avec le résultat naturel pour que le SRG2
-        // lise les bonnes tensions d'entrée
         const fakeCalcResults = { 'MIXTE': naturalResult };
         
         const simulatedResult = simCalculator.calculateWithSimulation(
@@ -574,7 +611,7 @@ export class DailyProfileCalculator {
       }
     }
     
-    // Pas de SRG2 actif ou tous en bypass → appliquer EQUI8 si présent
+    // Pas de SRG2 actif → appliquer EQUI8 si présent
     if (neutralCompensators && neutralCompensators.length > 0) {
       const simCalculator = new SimulationCalculator(
         this.project.cosPhi,
@@ -599,303 +636,6 @@ export class DailyProfileCalculator {
     }
     
     return { result: naturalResult, srg2States };
-  }
-  
-  /**
-   * Évalue l'activation d'un SRG2 pour une heure donnée
-   * Compare les tensions naturelles aux seuils de régulation
-   */
-  private evaluateSRG2Activation(
-    naturalResult: CalculationResult,
-    srg2: SRG2Config,
-    voltageSystem: string
-  ): SRG2HourlyActivation {
-    // Récupérer les tensions naturelles au nœud SRG2
-    const nodeMetrics = naturalResult.nodeMetricsPerPhase?.find(
-      nm => nm.nodeId === srg2.nodeId
-    );
-    
-    if (!nodeMetrics?.voltagesPerPhase) {
-      // Nœud non trouvé → bypass par défaut
-      return {
-        srg2Id: srg2.id,
-        nodeId: srg2.nodeId,
-        isActive: false,
-        switchStates: { A: 'BYP', B: 'BYP', C: 'BYP' },
-        tensionEntree: { A: 230, B: 230, C: 230 }
-      };
-    }
-    
-    const tensions = {
-      A: nodeMetrics.voltagesPerPhase.A,
-      B: nodeMetrics.voltagesPerPhase.B,
-      C: nodeMetrics.voltagesPerPhase.C
-    };
-    
-    // Déterminer l'état de chaque phase selon les seuils
-    const stateA = this.determineSRG2SwitchState(tensions.A, srg2);
-    const stateB = this.determineSRG2SwitchState(tensions.B, srg2);
-    const stateC = this.determineSRG2SwitchState(tensions.C, srg2);
-    
-    // Appliquer les contraintes SRG2-230 si nécessaire (pas de boost et lower simultanés)
-    const finalStates = this.applySRG230Constraints(
-      { A: stateA, B: stateB, C: stateC },
-      tensions,
-      srg2
-    );
-    
-    // SRG2 actif si au moins une phase n'est pas en bypass
-    const isActive = finalStates.A !== 'BYP' || finalStates.B !== 'BYP' || finalStates.C !== 'BYP';
-    
-    // Calculer les tensions de sortie prévisionnelles
-    const tensionSortie = isActive ? {
-      A: tensions.A * (1 + this.getVoltageCoefficient(finalStates.A, srg2) / 100),
-      B: tensions.B * (1 + this.getVoltageCoefficient(finalStates.B, srg2) / 100),
-      C: tensions.C * (1 + this.getVoltageCoefficient(finalStates.C, srg2) / 100)
-    } : undefined;
-    
-    return {
-      srg2Id: srg2.id,
-      nodeId: srg2.nodeId,
-      isActive,
-      switchStates: finalStates,
-      tensionEntree: tensions,
-      tensionSortie
-    };
-  }
-  
-  /**
-   * 🔑 MÉMOIRE MÉCANIQUE SRG2: Évalue l'activation avec hystérésis
-   * 
-   * Le SRG2 possède une mémoire mécanique. Sa position de prise doit être
-   * conservée entre les pas de simulation journalière.
-   * 
-   * Le changement de prise ne s'effectue QUE si:
-   * 1. La tension sort de la zone de tolérance de la position actuelle
-   * 2. L'hystérésis (±2V par défaut) est dépassée
-   * 
-   * Cela évite les oscillations causées par des variations mineures de tension.
-   */
-  private evaluateSRG2ActivationWithMemory(
-    naturalResult: CalculationResult,
-    srg2: SRG2Config,
-    voltageSystem: string,
-    previousTapPosition?: { A: SRG2SwitchState; B: SRG2SwitchState; C: SRG2SwitchState }
-  ): SRG2HourlyActivation {
-    // Récupérer les tensions naturelles au nœud SRG2
-    const nodeMetrics = naturalResult.nodeMetricsPerPhase?.find(
-      nm => nm.nodeId === srg2.nodeId
-    );
-    
-    if (!nodeMetrics?.voltagesPerPhase) {
-      // Nœud non trouvé → conserver la position précédente ou bypass par défaut
-      return {
-        srg2Id: srg2.id,
-        nodeId: srg2.nodeId,
-        isActive: previousTapPosition ? 
-          (previousTapPosition.A !== 'BYP' || previousTapPosition.B !== 'BYP' || previousTapPosition.C !== 'BYP') : 
-          false,
-        switchStates: previousTapPosition || { A: 'BYP', B: 'BYP', C: 'BYP' },
-        tensionEntree: { A: 230, B: 230, C: 230 }
-      };
-    }
-    
-    const tensions = {
-      A: nodeMetrics.voltagesPerPhase.A,
-      B: nodeMetrics.voltagesPerPhase.B,
-      C: nodeMetrics.voltagesPerPhase.C
-    };
-    
-    // Hystérésis du SRG2 (±2V par défaut)
-    const hysteresis = srg2.hysteresis_V || 2;
-    
-    // Pour chaque phase, déterminer si un changement de prise est nécessaire
-    const stateA = this.determineSRG2SwitchStateWithHysteresis(
-      tensions.A, srg2, previousTapPosition?.A || 'BYP', hysteresis
-    );
-    const stateB = this.determineSRG2SwitchStateWithHysteresis(
-      tensions.B, srg2, previousTapPosition?.B || 'BYP', hysteresis
-    );
-    const stateC = this.determineSRG2SwitchStateWithHysteresis(
-      tensions.C, srg2, previousTapPosition?.C || 'BYP', hysteresis
-    );
-    
-    // Appliquer les contraintes SRG2-230 si nécessaire
-    const finalStates = this.applySRG230Constraints(
-      { A: stateA, B: stateB, C: stateC },
-      tensions,
-      srg2
-    );
-    
-    // SRG2 actif si au moins une phase n'est pas en bypass
-    const isActive = finalStates.A !== 'BYP' || finalStates.B !== 'BYP' || finalStates.C !== 'BYP';
-    
-    // Calculer les tensions de sortie prévisionnelles
-    const tensionSortie = isActive ? {
-      A: tensions.A * (1 + this.getVoltageCoefficient(finalStates.A, srg2) / 100),
-      B: tensions.B * (1 + this.getVoltageCoefficient(finalStates.B, srg2) / 100),
-      C: tensions.C * (1 + this.getVoltageCoefficient(finalStates.C, srg2) / 100)
-    } : undefined;
-    
-    return {
-      srg2Id: srg2.id,
-      nodeId: srg2.nodeId,
-      isActive,
-      switchStates: finalStates,
-      tensionEntree: tensions,
-      tensionSortie
-    };
-  }
-  
-  /**
-   * 🔑 Détermine l'état du commutateur SRG2 avec hystérésis
-   * 
-   * Le SRG2 ne change de prise que si la tension sort de la zone d'hystérésis
-   * de la position actuelle. Cela simule l'inertie mécanique du système.
-   */
-  private determineSRG2SwitchStateWithHysteresis(
-    tension: number, 
-    srg2: SRG2Config, 
-    currentState: SRG2SwitchState,
-    hysteresis: number
-  ): SRG2SwitchState {
-    // Calculer les seuils avec hystérésis selon la position actuelle
-    // Le SRG2 reste dans sa position sauf si la tension force un changement
-    
-    switch (currentState) {
-      case 'LO2':
-        // En LO2 (abaissement max), on reste sauf si tension tombe sous seuilLO1 - hystérésis
-        if (tension < srg2.seuilLO1_V - hysteresis) return 'LO1';
-        return 'LO2';
-        
-      case 'LO1':
-        // En LO1 (abaissement partiel)
-        if (tension >= srg2.seuilLO2_V + hysteresis) return 'LO2';
-        if (tension < srg2.seuilBO1_V + hysteresis) return 'BYP'; // Zone de bypass
-        return 'LO1';
-        
-      case 'BYP':
-        // En bypass, on évalue si on doit passer en régulation
-        if (tension >= srg2.seuilLO2_V + hysteresis) return 'LO2';
-        if (tension >= srg2.seuilLO1_V + hysteresis) return 'LO1';
-        if (tension <= srg2.seuilBO2_V - hysteresis) return 'BO2';
-        if (tension <= srg2.seuilBO1_V - hysteresis) return 'BO1';
-        return 'BYP';
-        
-      case 'BO1':
-        // En BO1 (augmentation partielle)
-        if (tension <= srg2.seuilBO2_V - hysteresis) return 'BO2';
-        if (tension > srg2.seuilLO1_V - hysteresis) return 'BYP'; // Zone de bypass
-        return 'BO1';
-        
-      case 'BO2':
-        // En BO2 (augmentation max), on reste sauf si tension monte au-dessus seuilBO1 + hystérésis
-        if (tension > srg2.seuilBO1_V + hysteresis) return 'BO1';
-        return 'BO2';
-        
-      default:
-        // État inconnu, utiliser la logique standard sans hystérésis
-        return this.determineSRG2SwitchState(tension, srg2);
-    }
-  }
-  
-  /**
-   * Détermine l'état du commutateur SRG2 selon la tension
-   */
-  private determineSRG2SwitchState(tension: number, srg2: SRG2Config): SRG2SwitchState {
-    if (tension >= srg2.seuilLO2_V) return 'LO2';
-    if (tension >= srg2.seuilLO1_V) return 'LO1';
-    if (tension <= srg2.seuilBO2_V) return 'BO2';
-    if (tension <= srg2.seuilBO1_V) return 'BO1';
-    return 'BYP';
-  }
-  
-  // 🔧 FIX GRD — Contraintes SRG2 renforcées (tous types, pas seulement SRG2-230)
-  // - Interdire boost (BO) et buck (LO) simultanés
-  // - Prioriser le mode commun (A=B=C) quand possible
-  // - Limiter l'effet total à ±10%
-  private applySRG230Constraints(
-    states: { A: SRG2SwitchState; B: SRG2SwitchState; C: SRG2SwitchState },
-    tensions: { A: number; B: number; C: number },
-    srg2: SRG2Config
-  ): { A: SRG2SwitchState; B: SRG2SwitchState; C: SRG2SwitchState } {
-    const isBoost = (s: SRG2SwitchState) => s === 'BO1' || s === 'BO2';
-    const isLower = (s: SRG2SwitchState) => s === 'LO1' || s === 'LO2';
-    
-    const hasBoost = isBoost(states.A) || isBoost(states.B) || isBoost(states.C);
-    const hasLower = isLower(states.A) || isLower(states.B) || isLower(states.C);
-    
-    let result = { ...states };
-    
-    // 🔧 FIX GRD — Priorisation du mode commun : si les 3 phases sont dans le même sens,
-    // aligner sur le niveau le plus conservateur
-    const allBoost = isBoost(states.A) && isBoost(states.B) && isBoost(states.C);
-    const allLower = isLower(states.A) && isLower(states.B) && isLower(states.C);
-    
-    if (allBoost) {
-      // Aligner sur le boost le plus conservateur (BO1 < BO2)
-      const hasBO1 = states.A === 'BO1' || states.B === 'BO1' || states.C === 'BO1';
-      if (hasBO1) {
-        result = { A: 'BO1', B: 'BO1', C: 'BO1' };
-        console.log(`[GRD-FIX] SRG2 ${srg2.id}: mode commun BOOST → BO1 (conservateur)`);
-      }
-    } else if (allLower) {
-      // Aligner sur le lower le plus conservateur (LO1 < LO2)
-      const hasLO1 = states.A === 'LO1' || states.B === 'LO1' || states.C === 'LO1';
-      if (hasLO1) {
-        result = { A: 'LO1', B: 'LO1', C: 'LO1' };
-        console.log(`[GRD-FIX] SRG2 ${srg2.id}: mode commun LOWER → LO1 (conservateur)`);
-      }
-    }
-    
-    // 🔧 FIX GRD — Interdiction boost + buck simultanés (étendu à tous les types SRG2)
-    if (hasBoost && hasLower) {
-      const avgTension = (tensions.A + tensions.B + tensions.C) / 3;
-      const consigne = srg2.tensionConsigne_V;
-      
-      if (avgTension > consigne) {
-        // Privilégier LOWER (tensions trop hautes)
-        result = {
-          A: isBoost(result.A) ? 'BYP' : result.A,
-          B: isBoost(result.B) ? 'BYP' : result.B,
-          C: isBoost(result.C) ? 'BYP' : result.C
-        };
-        console.log(`[GRD-FIX] SRG2 ${srg2.id}: conflit BO/LO → privilégie LOWER (Uavg=${avgTension.toFixed(1)}V > ${consigne}V)`);
-      } else {
-        // Privilégier BOOST (tensions trop basses)
-        result = {
-          A: isLower(result.A) ? 'BYP' : result.A,
-          B: isLower(result.B) ? 'BYP' : result.B,
-          C: isLower(result.C) ? 'BYP' : result.C
-        };
-        console.log(`[GRD-FIX] SRG2 ${srg2.id}: conflit BO/LO → privilégie BOOST (Uavg=${avgTension.toFixed(1)}V < ${consigne}V)`);
-      }
-    }
-    
-    // 🔧 FIX GRD — Vérifier que le coefficient total ne dépasse pas ±10%
-    const MAX_SRG2_COEFF_PERCENT = 10;
-    for (const phase of ['A', 'B', 'C'] as const) {
-      const coeff = this.getVoltageCoefficient(result[phase], srg2);
-      if (Math.abs(coeff) > MAX_SRG2_COEFF_PERCENT) {
-        console.warn(`[GRD-FIX] SRG2 ${srg2.id} phase ${phase}: coeff ${coeff}% > ±${MAX_SRG2_COEFF_PERCENT}% → BYP`);
-        result[phase] = 'BYP';
-      }
-    }
-    
-    return result;
-  }
-  
-  /**
-   * Retourne le coefficient de régulation selon l'état du commutateur
-   */
-  private getVoltageCoefficient(state: SRG2SwitchState, srg2: SRG2Config): number {
-    switch (state) {
-      case 'LO2': return srg2.coefficientLO2;
-      case 'LO1': return srg2.coefficientLO1;
-      case 'BO1': return srg2.coefficientBO1;
-      case 'BO2': return srg2.coefficientBO2;
-      default: return 0;
-    }
   }
   
   /**

@@ -357,7 +357,7 @@ export class DailyProfileCalculator {
           this.simulationEquipment.srg2Devices.filter(s => s.enabled),
           this.simulationEquipment.neutralCompensators?.filter(c => c.enabled),
           this.simulationEquipment.cableReplacement,
-          currentSRG2TapPositions  // 🔑 Positions de prise actuelles (mémoire mécanique)
+          srg2Regulators
         );
         result = srg2Result.result;
         srg2States = srg2Result.srg2States;

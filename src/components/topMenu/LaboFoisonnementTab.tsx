@@ -377,6 +377,9 @@ export const LaboFoisonnementTab = () => {
   }, [voltageContinu]);
 
   // ─── Voltage 24h chart data ──────────────────────────────────────────────────
+  const is400V = currentProject?.voltageSystem === 'TÉTRAPHASÉ_400V';
+  const busbarScale = is400V ? 1 / Math.sqrt(3) : 1; // 400V: ligne→phase-neutre
+
   const voltage24hData = useMemo(() => {
     if (voltageContinu.length === 0) return [];
     return voltageContinu.map((h, i) => ({
@@ -386,10 +389,10 @@ export const LaboFoisonnementTab = () => {
       V_B: +h.voltageB_V.toFixed(2),
       V_C: +h.voltageC_V.toFixed(2),
       V_continu: +h.voltageAvg_V.toFixed(2),
-      V_busbar: +(rawContinu[i]?.virtualBusbar?.voltage_V ?? 230).toFixed(2),
+      V_busbar: +((rawContinu[i]?.virtualBusbar?.voltage_V ?? 230) * busbarScale).toFixed(2),
       foisonnement: +h.chargesResidentialFoisonnement.toFixed(2),
     }));
-  }, [voltageContinu, rawContinu]);
+  }, [voltageContinu, rawContinu, busbarScale]);
 
   // ─── Voltage-Distance data ─────────────────────────────────────────────────────
   const networkPaths = useMemo(() => {

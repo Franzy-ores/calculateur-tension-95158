@@ -352,10 +352,20 @@ export function calculateNodeAutoPhaseDistribution(
       const totalCharge = client.puissanceContractuelle_kVA;
       const totalProd = client.puissancePV_kVA;
       
-      // Charges : TOUJOURS réparties 33.33% par phase (pas affecté par l'option)
-      result.charges.poly.A += totalCharge / 3;
-      result.charges.poly.B += totalCharge / 3;
-      result.charges.poly.C += totalCharge / 3;
+      // Charges POLY : en 230V avec curseurs couplage, utiliser les ratios couplage→phase
+      if (networkVoltage === 'TRIPHASÉ_230V' && manualCouplingDistributionCharges) {
+        const rAB = manualCouplingDistributionCharges['A-B'] / 100;
+        const rBC = manualCouplingDistributionCharges['B-C'] / 100;
+        const rAC = manualCouplingDistributionCharges['A-C'] / 100;
+        result.charges.poly.A += totalCharge * (rAB + rAC) / 2;
+        result.charges.poly.B += totalCharge * (rAB + rBC) / 2;
+        result.charges.poly.C += totalCharge * (rBC + rAC) / 2;
+      } else {
+        // 400V ou pas de curseurs : comportement inchangé
+        result.charges.poly.A += totalCharge / 3;
+        result.charges.poly.B += totalCharge / 3;
+        result.charges.poly.C += totalCharge / 3;
+      }
       
       // POLY ne va PAS dans phasePhaseLoads (réservé MONO) — voir règle absolue ligne 263
       
@@ -481,17 +491,35 @@ export function calculateNodeAutoPhaseDistribution(
       }
     });
   } else {
-    // Charges manuelles POLY : répartir équitablement (33.33%)
+    // Charges manuelles POLY : en 230V avec curseurs couplage, utiliser ratios couplage→phase
     const manualChargeTotal = node.clients.reduce((sum, c) => sum + c.S_kVA, 0);
     const manualProdTotal = node.productions.reduce((sum, p) => sum + p.S_kVA, 0);
     
-    result.charges.poly.A += manualChargeTotal / 3;
-    result.charges.poly.B += manualChargeTotal / 3;
-    result.charges.poly.C += manualChargeTotal / 3;
+    if (networkVoltage === 'TRIPHASÉ_230V' && manualCouplingDistributionCharges) {
+      const rAB = manualCouplingDistributionCharges['A-B'] / 100;
+      const rBC = manualCouplingDistributionCharges['B-C'] / 100;
+      const rAC = manualCouplingDistributionCharges['A-C'] / 100;
+      result.charges.poly.A += manualChargeTotal * (rAB + rAC) / 2;
+      result.charges.poly.B += manualChargeTotal * (rAB + rBC) / 2;
+      result.charges.poly.C += manualChargeTotal * (rBC + rAC) / 2;
+    } else {
+      result.charges.poly.A += manualChargeTotal / 3;
+      result.charges.poly.B += manualChargeTotal / 3;
+      result.charges.poly.C += manualChargeTotal / 3;
+    }
     
-    result.productions.poly.A += manualProdTotal / 3;
-    result.productions.poly.B += manualProdTotal / 3;
-    result.productions.poly.C += manualProdTotal / 3;
+    if (networkVoltage === 'TRIPHASÉ_230V' && manualCouplingDistributionProductions) {
+      const rAB = manualCouplingDistributionProductions['A-B'] / 100;
+      const rBC = manualCouplingDistributionProductions['B-C'] / 100;
+      const rAC = manualCouplingDistributionProductions['A-C'] / 100;
+      result.productions.poly.A += manualProdTotal * (rAB + rAC) / 2;
+      result.productions.poly.B += manualProdTotal * (rAB + rBC) / 2;
+      result.productions.poly.C += manualProdTotal * (rBC + rAC) / 2;
+    } else {
+      result.productions.poly.A += manualProdTotal / 3;
+      result.productions.poly.B += manualProdTotal / 3;
+      result.productions.poly.C += manualProdTotal / 3;
+    }
   }
   
   // === 3. TOTAUX PAR PHASE ===

@@ -1125,18 +1125,7 @@ export class ElectricalCalculator {
             console.log(`📊 Nœud ${n.name || n.id}: utilise foisonneAvecCurseurs (foisonnement + curseurs)`);
             console.log(`   Charges: A=${(pA_charges*100).toFixed(1)}%, B=${(pB_charges*100).toFixed(1)}%, C=${(pC_charges*100).toFixed(1)}%`);
 
-            // Avertissement POLY sous curseurs inégaux
-            if (U_line_base >= ElectricalCalculator.VOLTAGE_400V_THRESHOLD && n.autoPhaseDistribution.polyClientsCount > 0) {
-              const maxRatio = Math.max(pA_charges, pB_charges, pC_charges);
-              const minRatio = Math.min(pA_charges, pB_charges, pC_charges);
-              if (maxRatio - minRatio > 0.1) {
-                console.warn(
-                  `⚠️ Nœud ${n.name || n.id}: ${n.autoPhaseDistribution.polyClientsCount} client(s) POLY TRI` +
-                  ` distribués inégalement (A=${(pA_charges*100).toFixed(0)}%, B=${(pB_charges*100).toFixed(0)}%,` +
-                  ` C=${(pC_charges*100).toFixed(0)}%). Les clients TRI ont des courants équilibrés en réalité.`
-                );
-              }
-            }
+            // (Avertissement POLY supprimé — en 230V les curseurs redistribuent désormais les POLY)
           } else {
             // Fallback : utiliser les valeurs physiques totales
             const totalCharges = n.autoPhaseDistribution.charges.total.A + 

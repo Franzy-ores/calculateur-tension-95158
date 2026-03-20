@@ -252,7 +252,7 @@ export const ParametersTab = () => {
             <BarChart3 className="h-3.5 w-3.5" />
             Déséquilibre
           </Label>
-          <PhaseDistributionSliders type="charges" title="Charges" />
+          <PhaseDistributionSliders type="charges" title="Charges (mono+poly)" />
           <div className="w-px h-8 bg-border/50" />
           <PhaseDistributionSliders type="productions" title="Productions" />
         </div>

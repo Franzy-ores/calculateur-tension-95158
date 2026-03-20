@@ -219,8 +219,8 @@ export function compareScenarios(
   }
 
   // Comparer les résultats
-  const voltages1 = scenario1.results.map(r => r.voltage);
-  const voltages2 = scenario2.results.map(r => r.voltage);
+  const voltages1 = scenario1.results.map(r => r.voltageAvg_V);
+  const voltages2 = scenario2.results.map(r => r.voltageAvg_V);
 
   const avg1 = voltages1.reduce((a, b) => a + b, 0) / voltages1.length;
   const avg2 = voltages2.reduce((a, b) => a + b, 0) / voltages2.length;
@@ -246,7 +246,7 @@ export function compareScenarios(
       violations5Diff: violations2.violations5 - violations1.violations5,
       violations10Diff: violations2.violations10 - violations1.violations10,
     },
-    betterScenario: determineB etterScenario(violations1, violations2, avg1, avg2),
+    betterScenario: determineBetterScenario(violations1, violations2, avg1, avg2),
   };
 }
 
@@ -275,7 +275,7 @@ function countViolations(results: HourlyVoltageResult[]): { violations5: number;
   let violations10 = 0;
 
   for (const result of results) {
-    const deviation = Math.abs((result.voltage - 230) / 230 * 100);
+    const deviation = Math.abs((result.voltageAvg_V - 230) / 230 * 100);
     if (deviation >= 10) {
       violations10++;
     } else if (deviation >= 5) {

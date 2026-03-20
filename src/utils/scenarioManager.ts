@@ -219,8 +219,8 @@ export function compareScenarios(
   }
 
   // Comparer les résultats
-  const voltages1 = scenario1.results.map(r => r.voltage);
-  const voltages2 = scenario2.results.map(r => r.voltage);
+  const voltages1 = scenario1.results.map(r => r.voltageAvg_V);
+  const voltages2 = scenario2.results.map(r => r.voltageAvg_V);
 
   const avg1 = voltages1.reduce((a, b) => a + b, 0) / voltages1.length;
   const avg2 = voltages2.reduce((a, b) => a + b, 0) / voltages2.length;

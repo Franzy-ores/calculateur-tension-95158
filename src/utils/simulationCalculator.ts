@@ -2630,7 +2630,59 @@ export class SimulationCalculator extends ElectricalCalculator {
     };
   }
 
-  // SUPPRIMÉ - Méthodes des régulateurs
+  /**
+   * Injection de tension série SRG2 dans le câble arrivant au nœud d'installation
+   * V_v = V_u - Z·I + V_série
+   */
+  private applySRG2SerieVoltage(
+    cables: Cable[],
+    srg2Device: SRG2Config,
+    tensionEntree: { A: number; B: number; C: number },
+    coefficients: { A: number; B: number; C: number }
+  ): void {
+    const targetCable = cables.find(c => 
+      c.nodeBId === srg2Device.nodeId || c.nodeAId === srg2Device.nodeId
+    );
+    
+    if (!targetCable) {
+      console.error(`❌ SRG2 ${srg2Device.id}: Aucun câble trouvé pour le nœud ${srg2Device.nodeId}`);
+      return;
+    }
+    
+    const Vnom = 230;
+    const serieVoltages = {
+      A: C(coefficients.A / 100 * Vnom, 0),
+      B: C(
+        coefficients.B / 100 * Vnom * Math.cos(-2 * Math.PI / 3),
+        coefficients.B / 100 * Vnom * Math.sin(-2 * Math.PI / 3)
+      ),
+      C: C(
+        coefficients.C / 100 * Vnom * Math.cos(2 * Math.PI / 3),
+        coefficients.C / 100 * Vnom * Math.sin(2 * Math.PI / 3)
+      )
+    };
+    
+    targetCable.serieVoltagePerPhase = serieVoltages;
+    targetCable.srg2Id = srg2Device.id;
+    
+    console.log(`✅ SRG2 câble ${targetCable.id}: V_série = ` +
+      `A=${abs(serieVoltages.A).toFixed(1)}V, ` +
+      `B=${abs(serieVoltages.B).toFixed(1)}V, ` +
+      `C=${abs(serieVoltages.C).toFixed(1)}V`);
+  }
+
+  /**
+   * Nettoie les tensions série SRG2 des câbles
+   */
+  private cleanupSRG2SerieVoltage(cables: Cable[]): void {
+    for (const cable of cables) {
+      if (cable.serieVoltagePerPhase) {
+        cable.serieVoltagePerPhase = undefined;
+        cable.srg2Id = undefined;
+      }
+    }
+  }
+
   
   /**
    * Nettoie les marqueurs SRG2 après calcul pour éviter les interférences

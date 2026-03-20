@@ -789,6 +789,16 @@ export class SimulationCalculator extends ElectricalCalculator {
     let networkEq: CalculationResult | null = null;
     let lastTapPosition: Map<string, { A: SRG2SwitchState; B: SRG2SwitchState; C: SRG2SwitchState }> = new Map();
     
+    // Créer les instances SRG2Regulator (persistent across iterations for tap memory)
+    const srg2Regulators = new Map<string, SRG2Regulator>();
+    for (const srg2 of srg2Devices) {
+      srg2Regulators.set(srg2.id, createSRG2Regulator(
+        srg2.nodeId,
+        workingProject.voltageSystem as 'TRIPHASÉ_230V' | 'TÉTRAPHASÉ_400V',
+        srg2
+      ));
+    }
+    
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // BOUCLE PRINCIPALE : simulateCoupledSRG2Equi8
     // Principe: Le SRG2 corrige la tension d'un réseau DÉJÀ équilibré par l'EQUI8.

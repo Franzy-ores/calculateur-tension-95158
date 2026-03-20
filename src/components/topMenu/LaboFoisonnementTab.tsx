@@ -305,6 +305,7 @@ export const LaboFoisonnementTab = () => {
       pacPenetrationRate: pacPenetration,
       pacPower_kW: pacPower,
       nResidential: nResidentialGlobal,
+      nResidentialAtNode: nResidential,
     };
 
     // Run 1: Complet (conso + prod)
@@ -339,7 +340,7 @@ export const LaboFoisonnementTab = () => {
       rawConsoPure: rawConso,
       rawProdPure: rawProd,
     };
-  }, [currentProject, selectedNodeId, season, weather, selectedClusterId, continuCoeff, dailyProfileOptions, simulationEquipment, isSimulationActive, nResidentialGlobal, dailyProfileCustomProfiles, evPenetration, evPower, pacPenetration, pacPower]);
+  }, [currentProject, selectedNodeId, season, weather, selectedClusterId, continuCoeff, dailyProfileOptions, simulationEquipment, isSimulationActive, nResidentialGlobal, nResidential, dailyProfileCustomProfiles, evPenetration, evPower, pacPenetration, pacPower]);
 
   // ─── Critical points detection ───────────────────────────────────────────────
   const criticalPointsAnalysis = useMemo<CriticalPointsAnalysis>(() => {

@@ -94,8 +94,10 @@ export interface DailySimulationOptions {
   /** Puissance moyenne PAC (kW) */
   pacPower_kW?: number;
 
-  /** Nombre de clients résidentiels (pour Kaufmann) */
+  /** Nombre de clients résidentiels global (pour coefficient de diversité K(N)) */
   nResidential?: number;
+  /** Nombre de clients résidentiels sur le nœud sélectionné uniquement (pour scaling VE/PAC) */
+  nResidentialAtNode?: number;
 }
 
 export interface HourlyVoltageResult {

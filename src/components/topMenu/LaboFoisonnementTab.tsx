@@ -893,28 +893,43 @@ export const LaboFoisonnementTab = () => {
 
           {/* Row 2: VE + PAC + Actions */}
           <div className="flex items-center gap-2 flex-wrap">
-            {/* VE inline */}
-            <div className="flex items-center gap-1.5 text-[10px]">
+            {/* VE inline — numeric inputs */}
+            <div className="flex items-center gap-1 text-[10px]">
               <Zap className="h-3 w-3 text-amber-500" />
               <span className="text-muted-foreground">VE</span>
-              <span className="font-mono w-7 text-right">{Math.round(evPenetration * 100)}%</span>
-              <Slider min={0} max={100} step={5} value={[Math.round(evPenetration * 100)]} onValueChange={([v]) => setEvPenetration(v / 100)} className="w-16" />
+              <input type="number" min={0} max={100} step={5}
+                value={Math.round(evPenetration * 100)}
+                onChange={e => setEvPenetration(Math.min(100, Math.max(0, Number(e.target.value))) / 100)}
+                className="w-12 h-6 text-xs text-center rounded border border-input bg-background font-mono tabular-nums px-1"
+              />
+              <span className="text-muted-foreground">%</span>
+              <span className="text-muted-foreground mx-0.5">×</span>
               <div className="flex gap-0.5">
                 {([3.7, 11, 22] as const).map(p => (
                   <Button key={p} size="sm" variant={evPower === p ? 'default' : 'ghost'} onClick={() => setEvPower(p)} className="text-[9px] h-5 px-1.5 min-w-0">{p}</Button>
                 ))}
               </div>
+              <span className="text-muted-foreground font-mono text-[9px]">→ {(nResidential * evPenetration * evPower).toFixed(1)}kW</span>
             </div>
 
             <div className="h-4 w-px bg-border/50" />
 
-            {/* PAC inline */}
-            <div className="flex items-center gap-1.5 text-[10px]">
+            {/* PAC inline — numeric inputs */}
+            <div className="flex items-center gap-1 text-[10px]">
               <span className="text-muted-foreground">🌡️ PAC</span>
-              <span className="font-mono w-7 text-right">{Math.round(pacPenetration * 100)}%</span>
-              <Slider min={0} max={100} step={5} value={[Math.round(pacPenetration * 100)]} onValueChange={([v]) => setPacPenetration(v / 100)} className="w-16" />
-              <span className="font-mono text-[9px]">{pacPower}kW</span>
-              <Slider min={1} max={9} step={0.5} value={[pacPower]} onValueChange={([v]) => setPacPower(v)} className="w-12" />
+              <input type="number" min={0} max={100} step={5}
+                value={Math.round(pacPenetration * 100)}
+                onChange={e => setPacPenetration(Math.min(100, Math.max(0, Number(e.target.value))) / 100)}
+                className="w-12 h-6 text-xs text-center rounded border border-input bg-background font-mono tabular-nums px-1"
+              />
+              <span className="text-muted-foreground">% ×</span>
+              <input type="number" min={1} max={9} step={0.5}
+                value={pacPower}
+                onChange={e => setPacPower(Math.min(9, Math.max(1, Number(e.target.value))))}
+                className="w-12 h-6 text-xs text-center rounded border border-input bg-background font-mono tabular-nums px-1"
+              />
+              <span className="text-muted-foreground">kW</span>
+              <span className="text-muted-foreground font-mono text-[9px]">→ {(nResidential * pacPenetration * pacPower).toFixed(1)}kW</span>
             </div>
 
             <div className="flex-1" />

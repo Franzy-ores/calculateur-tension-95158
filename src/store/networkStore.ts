@@ -1692,8 +1692,12 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
             currentProject.foisonnementChargesResidentiel ?? 15,
             currentProject.foisonnementChargesIndustriel ?? 70,
             currentProject.foisonnementProductions,
-            undefined, // manualCouplingDistributionCharges
-            undefined, // manualCouplingDistributionProductions
+            currentProject.voltageSystem === 'TRIPHASÉ_230V' && currentProject.manualPhaseDistribution?.charges
+              ? { 'A-B': currentProject.manualPhaseDistribution.charges.A, 'B-C': currentProject.manualPhaseDistribution.charges.B, 'A-C': currentProject.manualPhaseDistribution.charges.C }
+              : undefined,
+            currentProject.voltageSystem === 'TRIPHASÉ_230V' && currentProject.manualPhaseDistribution?.productions
+              ? { 'A-B': currentProject.manualPhaseDistribution.productions.A, 'B-C': currentProject.manualPhaseDistribution.productions.B, 'A-C': currentProject.manualPhaseDistribution.productions.C }
+              : undefined,
             currentProject.treatSmallPolyProductionsAsMono || false
           );
           node.autoPhaseDistribution = autoPhaseDistribution;

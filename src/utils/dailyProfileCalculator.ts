@@ -223,7 +223,7 @@ export class DailyProfileCalculator {
   private calculateHourlyVoltage(
     hour: number, 
     nominalVoltage: number,
-    currentSRG2TapPositions: Map<string, { A: SRG2SwitchState; B: SRG2SwitchState; C: SRG2SwitchState }>
+    srg2Regulators: Map<string, SRG2Regulator>
   ): HourlyVoltageResult {
     const seasonProfile = this.profiles.profiles[this.options.season];
     const weatherFactor = this.profiles.weatherFactors[this.options.weather];

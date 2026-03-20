@@ -246,7 +246,7 @@ export function compareScenarios(
       violations5Diff: violations2.violations5 - violations1.violations5,
       violations10Diff: violations2.violations10 - violations1.violations10,
     },
-    betterScenario: determineB etterScenario(violations1, violations2, avg1, avg2),
+    betterScenario: determineBetterScenario(violations1, violations2, avg1, avg2),
   };
 }
 

@@ -398,10 +398,11 @@ export const SimulationPanel = () => {
       <ScrollArea className="flex-1">
         <div className="p-4">
           <Tabs defaultValue="equi8" className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="equi8">EQUI8</TabsTrigger>
               <TabsTrigger value="srg2">SRG2</TabsTrigger>
               <TabsTrigger value="cables">Câbles</TabsTrigger>
+              <TabsTrigger value="analyse">Analyse</TabsTrigger>
               <TabsTrigger value="doc">Doc</TabsTrigger>
             </TabsList>
 

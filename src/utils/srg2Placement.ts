@@ -203,6 +203,21 @@ export function findOptimalSRG2Node(
   console.log(`✅ Réseau compatible SRG2 (${suitability.metrics.nonCompliantNodes} nœuds hors norme)`);
 
   const candidates = project.nodes.filter(n => !n.isSource);
+
+  // === DIAGNOSTIC: Vérifier le nombre de nœuds aval et la puissance ===
+  console.log('\n📊 DIAGNOSTIC PLACEMENT SRG2: Top 10 candidats\n');
+  for (const candidate of candidates.slice(0, 10)) {
+    const downstreamNodes = findDownstreamNodesFromNode(project, candidate.id);
+    const downstreamPower = calculateDownstreamPower(downstreamNodes, project);
+    const powerLimit = scenario === 'PRODUCTION' ? 85 : 110;
+    const margin = downstreamPower > 0 ? ((powerLimit - downstreamPower) / powerLimit * 100) : 100;
+    console.log(`  ${candidate.name}:`);
+    console.log(`    - Nœuds aval: ${downstreamNodes.length}`);
+    console.log(`    - Puissance aval: ${downstreamPower.toFixed(1)} kVA`);
+    console.log(`    - Marge: ${margin.toFixed(0)}% ${margin < 40 ? '⚠️ INSUFFISANT' : '✅'}`);
+  }
+  console.log('');
+
   let bestCandidate: SRG2PlacementResult | null = null;
   let bestScore = 0;
 

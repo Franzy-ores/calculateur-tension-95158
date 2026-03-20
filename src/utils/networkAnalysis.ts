@@ -45,31 +45,68 @@ export function calculateDistanceFromSource(
 }
 
 /**
- * Trouve tous les nœuds en aval d'un nœud donné.
+ * Trouve tous les nœuds en AVAL d'un nœud donné (s'éloignant de la source).
+ * Utilise un parcours directionnel basé sur la distance à la source.
  */
 export function findDownstreamNodesFromNode(
   project: Project,
   startNodeId: string
 ): string[] {
-  const downstream: string[] = [];
+  const sourceNode = project.nodes.find(n => n.isSource);
+  if (!sourceNode) {
+    console.error('findDownstreamNodes: Aucun nœud source trouvé');
+    return [];
+  }
+
+  // Étape 1 : Calculer la distance de chaque nœud à la source
+  const distanceFromSource = new Map<string, number>();
   const visited = new Set<string>();
-  const queue: string[] = [startNodeId];
-  visited.add(startNodeId);
+  const queue: Array<{ nodeId: string; distance: number }> = [
+    { nodeId: sourceNode.id, distance: 0 }
+  ];
+  visited.add(sourceNode.id);
+  distanceFromSource.set(sourceNode.id, 0);
 
   while (queue.length > 0) {
-    const currentId = queue.shift()!;
-
-    const outgoingCables = project.cables.filter(
-      c => c.nodeAId === currentId || c.nodeBId === currentId
+    const { nodeId, distance } = queue.shift()!;
+    const connectedCables = project.cables.filter(c =>
+      c.nodeAId === nodeId || c.nodeBId === nodeId
     );
-
-    for (const cable of outgoingCables) {
-      const nextNodeId = cable.nodeAId === currentId ? cable.nodeBId : cable.nodeAId;
-
+    for (const cable of connectedCables) {
+      const nextNodeId = cable.nodeAId === nodeId ? cable.nodeBId : cable.nodeAId;
+      const nextDistance = distance + (cable.length_m || 1);
       if (!visited.has(nextNodeId)) {
         visited.add(nextNodeId);
+        distanceFromSource.set(nextNodeId, nextDistance);
+        queue.push({ nodeId: nextNodeId, distance: nextDistance });
+      }
+    }
+  }
+
+  // Étape 2 : Parcourir depuis startNode en ne gardant que les nœuds PLUS LOIN
+  const startDistance = distanceFromSource.get(startNodeId);
+  if (startDistance === undefined) {
+    console.error(`findDownstreamNodes: Nœud ${startNodeId} non trouvé dans la topologie`);
+    return [];
+  }
+
+  const downstream: string[] = [];
+  const visitedDownstream = new Set<string>();
+  const queueDownstream: string[] = [startNodeId];
+  visitedDownstream.add(startNodeId);
+
+  while (queueDownstream.length > 0) {
+    const currentId = queueDownstream.shift()!;
+    const connectedCables = project.cables.filter(c =>
+      c.nodeAId === currentId || c.nodeBId === currentId
+    );
+    for (const cable of connectedCables) {
+      const nextNodeId = cable.nodeAId === currentId ? cable.nodeBId : cable.nodeAId;
+      const nextDistance = distanceFromSource.get(nextNodeId);
+      if (nextDistance !== undefined && nextDistance > startDistance && !visitedDownstream.has(nextNodeId)) {
+        visitedDownstream.add(nextNodeId);
         downstream.push(nextNodeId);
-        queue.push(nextNodeId);
+        queueDownstream.push(nextNodeId);
       }
     }
   }

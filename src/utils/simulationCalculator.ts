@@ -1110,19 +1110,20 @@ export class SimulationCalculator extends ElectricalCalculator {
         console.log(`🔍 SRG2 ${srg2.nodeId} (Combined): utilisation tensions NATURELLES - ` +
           `A=${nodeVoltages.A.toFixed(1)}V, B=${nodeVoltages.B.toFixed(1)}V, C=${nodeVoltages.C.toFixed(1)}V`);
 
-        // Appliquer la régulation SRG2 sur les tensions naturelles
-        const regulationResult = this.applySRG2Regulation(srg2, nodeVoltages, project.voltageSystem);
+        // Utiliser SRG2Regulator pour la régulation
+        const reg = srg2Regulators.get(srg2.id)!;
+        const regResult = reg.update(nodeVoltages, 10);
+        const regulationResult = this.bridgeSRG2Result(regResult, nodeVoltages);
+        regResult.log.forEach(l => console.log(l));
         
         // Stocker les coefficients de régulation pour ce nœud
-        if (regulationResult.coefficientsAppliques) {
-          voltageChanges.set(srg2.nodeId, regulationResult.coefficientsAppliques);
-          
-          // Mettre à jour les informations du SRG2
-          srg2.tensionEntree = regulationResult.tensionEntree;
-          srg2.etatCommutateur = regulationResult.etatCommutateur;
-          srg2.coefficientsAppliques = regulationResult.coefficientsAppliques;
-          srg2.tensionSortie = regulationResult.tensionSortie;
-        }
+        voltageChanges.set(srg2.nodeId, regulationResult.coefficientsAppliques);
+        
+        // Mettre à jour les informations du SRG2
+        srg2.tensionEntree = regulationResult.tensionEntree;
+        srg2.etatCommutateur = regulationResult.etatCommutateur;
+        srg2.coefficientsAppliques = regulationResult.coefficientsAppliques;
+        srg2.tensionSortie = regulationResult.tensionSortie;
       }
       
       // Appliquer les coefficients et tensions de sortie SRG2 aux nœuds

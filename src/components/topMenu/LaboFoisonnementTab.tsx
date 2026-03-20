@@ -216,8 +216,30 @@ export const LaboFoisonnementTab = () => {
 
   const nodes = useMemo(() => {
     if (!currentProject) return [];
-    return currentProject.nodes.filter(n => !n.isSource);
+    // Source en premier, puis les nœuds non-source
+    const sourceNodes = currentProject.nodes.filter(n => n.isSource);
+    const otherNodes = currentProject.nodes.filter(n => !n.isSource);
+    return [...sourceNodes, ...otherNodes];
   }, [currentProject]);
+
+  const sourceNode = currentProject?.nodes.find(n => n.isSource);
+  const busbarDisplayVoltage = useMemo(() => {
+    if (!sourceNode || !currentProject) return 230;
+    const sv = currentProject.sourceVoltage ?? 400;
+    return currentProject.networkType === '400V' ? sv / Math.sqrt(3) : sv;
+  }, [sourceNode, currentProject]);
+
+  // Alerte surcharge transfo
+  const transformerOverload = useMemo(() => {
+    if (!currentProject || !powerData.length) return null;
+    const nominalPower = currentProject.transformerConfig?.nominalPower_kVA;
+    if (!nominalPower) return null;
+    const peakNet = Math.max(...powerData.map(d => Math.abs(d.P_net ?? d.P_total ?? 0)));
+    if (peakNet > nominalPower) {
+      return { peak: peakNet, capacity: nominalPower, delta: peakNet - nominalPower };
+    }
+    return null;
+  }, [currentProject, powerData]);
 
   const selectedNodeId = dailyProfileOptions.selectedNodeId;
   const selectedClusterId = dailyProfileOptions.selectedClusterId || DEFAULT_CLUSTER_ID;

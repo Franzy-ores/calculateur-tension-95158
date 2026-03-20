@@ -160,9 +160,9 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
   };
 
   // Compter les clients poly du nœud sélectionné
+  const { selectedNodeId } = useNetworkStore();
   const polyClientsCount = (() => {
     if (type !== 'charges') return 0;
-    const selectedNodeId = currentProject.selectedNodeId;
     if (!selectedNodeId) return 0;
     const node = currentProject.nodes?.find(n => n.id === selectedNodeId);
     if (!node) return 0;
@@ -174,8 +174,8 @@ export const PhaseDistributionSliders = ({ type, title }: PhaseDistributionSlide
       if (c && (c.connectionType === 'TRI' || c.connectionType === 'TETRA')) return count + 1;
       return count;
     }, 0);
-    // Clients manuels poly (non-MONO)
-    const manualPoly = node.clients.filter(c => c.loadType !== 'MONO').length;
+    // Clients manuels: all manual clients on a node are considered poly (no connectionType field)
+    const manualPoly = node.clients.length;
     return importedPoly + manualPoly;
   })();
 

@@ -953,26 +953,40 @@ export const LaboFoisonnementTab = () => {
         </div>
 
         {/* ─── ALERTS ─── */}
-        {hasData && (
-          <div className="px-3 pt-2">
-            {criticalPointsAnalysis.summary.totalViolations > 0 ? (
-              <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 flex items-center gap-2 text-xs">
-                <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
-                <span className="font-medium text-destructive">{criticalPointsAnalysis.summary.totalViolations} violation(s)</span>
-                {criticalPointsAnalysis.summary.warningCount > 0 && (
-                  <Badge variant="outline" className="text-[9px] h-4 border-orange-500/50 text-orange-500">{criticalPointsAnalysis.summary.warningCount} ±5%</Badge>
-                )}
-                {criticalPointsAnalysis.summary.criticalCount > 0 && (
-                  <Badge variant="destructive" className="text-[9px] h-4">{criticalPointsAnalysis.summary.criticalCount} ±10%</Badge>
-                )}
-                {criticalPointsAnalysis.criticalHours.length > 0 && (
-                  <span className="text-muted-foreground ml-1">Heures: {criticalPointsAnalysis.criticalHours.join('h, ')}h</span>
-                )}
+        {(hasData || transformerOverload) && (
+          <div className="px-3 pt-2 space-y-1.5">
+            {/* Alerte surcharge transfo */}
+            {transformerOverload && (
+              <div className="rounded-md border border-destructive/60 bg-destructive/10 px-3 py-2 flex items-center gap-2 text-xs">
+                <Zap className="h-3.5 w-3.5 text-destructive shrink-0" />
+                <span className="font-medium text-destructive">Surcharge transfo</span>
+                <span className="text-destructive">pic {transformerOverload.peak.toFixed(1)} kVA &gt; capacité {transformerOverload.capacity} kVA</span>
+                <Badge variant="destructive" className="text-[9px] h-4">+{transformerOverload.delta.toFixed(1)} kVA</Badge>
               </div>
-            ) : (
-              <div className="rounded-md border border-emerald-500/40 bg-emerald-500/5 px-3 py-2 flex items-center gap-2 text-xs text-emerald-600">
-                ✅ Réseau conforme EN 50160
-              </div>
+            )}
+            {/* Alertes tension */}
+            {hasData && (
+              <>
+                {criticalPointsAnalysis.summary.totalViolations > 0 ? (
+                  <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 flex items-center gap-2 text-xs">
+                    <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
+                    <span className="font-medium text-destructive">{criticalPointsAnalysis.summary.totalViolations} violation(s)</span>
+                    {criticalPointsAnalysis.summary.warningCount > 0 && (
+                      <Badge variant="outline" className="text-[9px] h-4 border-orange-500/50 text-orange-500">{criticalPointsAnalysis.summary.warningCount} ±5%</Badge>
+                    )}
+                    {criticalPointsAnalysis.summary.criticalCount > 0 && (
+                      <Badge variant="destructive" className="text-[9px] h-4">{criticalPointsAnalysis.summary.criticalCount} ±10%</Badge>
+                    )}
+                    {criticalPointsAnalysis.criticalHours.length > 0 && (
+                      <span className="text-muted-foreground ml-1">Heures: {criticalPointsAnalysis.criticalHours.join('h, ')}h</span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-emerald-500/40 bg-emerald-500/5 px-3 py-2 flex items-center gap-2 text-xs text-emerald-600">
+                    ✅ Réseau conforme EN 50160
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

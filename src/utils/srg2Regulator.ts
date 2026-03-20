@@ -173,8 +173,11 @@ export class SRG2Regulator {
     }
 
     // ── Étape 2 : Contraintes SRG2-230 (pas de boost+buck simultanés) ───
+    // SRG2-400 : régulation indépendante par phase (pas de contraintes inter-phases)
     let constraintsApplied = false;
-    constraintsApplied = this.applySRG230Constraints(targetTaps, voltages);
+    if (this.config.type === 'SRG2-230') {
+      constraintsApplied = this.applySRG230Constraints(targetTaps, voltages);
+    }
 
     // ── Étape 3 : Vérification limite ±10% ──────────────────────────────
     for (const p of PHASES) {

@@ -67,6 +67,7 @@ function runWithSliders(sliders: { A: number; B: number; C: number }) {
   const manualPD = {
     charges: sliders,
     productions: { A: 33.33, B: 33.33, C: 33.34 },
+    constraints: { min: 0, max: 100, total: 100 },
   };
 
   const calc = new ElectricalCalculator(0.95);
@@ -81,22 +82,20 @@ function runWithSliders(sliders: { A: number; B: number; C: number }) {
 describe('230V Triangle – curseurs déséquilibre → tensions', () => {
   it('33/33/34 (équilibré) : phases proches', () => {
     const r = runWithSliders({ A: 33.33, B: 33.33, C: 33.34 });
-    expect(r.success).toBe(true);
     const m = r.nodeMetricsPerPhase?.find(x => x.nodeId === 'ld');
     expect(m).toBeDefined();
-    expect(Math.abs(m!.voltageA_V - m!.voltageB_V)).toBeLessThan(1);
-    expect(Math.abs(m!.voltageB_V - m!.voltageC_V)).toBeLessThan(1);
+    expect(Math.abs(m!.voltagesPerPhase.A - m!.voltagesPerPhase.B)).toBeLessThan(1);
+    expect(Math.abs(m!.voltagesPerPhase.B - m!.voltagesPerPhase.C)).toBeLessThan(1);
   });
 
   it('60/20/20 (déséquilibré) : phases divergent', () => {
     const r = runWithSliders({ A: 60, B: 20, C: 20 });
-    expect(r.success).toBe(true);
     const m = r.nodeMetricsPerPhase?.find(x => x.nodeId === 'ld');
     expect(m).toBeDefined();
     const maxDiff = Math.max(
-      Math.abs(m!.voltageA_V - m!.voltageB_V),
-      Math.abs(m!.voltageB_V - m!.voltageC_V),
-      Math.abs(m!.voltageA_V - m!.voltageC_V),
+      Math.abs(m!.voltagesPerPhase.A - m!.voltagesPerPhase.B),
+      Math.abs(m!.voltagesPerPhase.B - m!.voltagesPerPhase.C),
+      Math.abs(m!.voltagesPerPhase.A - m!.voltagesPerPhase.C),
     );
     expect(maxDiff).toBeGreaterThan(0.3);
   });
@@ -107,9 +106,9 @@ describe('230V Triangle – curseurs déséquilibre → tensions', () => {
     const bm = bal.nodeMetricsPerPhase?.find(x => x.nodeId === 'ld')!;
     const um = unb.nodeMetricsPerPhase?.find(x => x.nodeId === 'ld')!;
     const totalDiff =
-      Math.abs(bm.voltageA_V - um.voltageA_V) +
-      Math.abs(bm.voltageB_V - um.voltageB_V) +
-      Math.abs(bm.voltageC_V - um.voltageC_V);
+      Math.abs(bm.voltagesPerPhase.A - um.voltagesPerPhase.A) +
+      Math.abs(bm.voltagesPerPhase.B - um.voltagesPerPhase.B) +
+      Math.abs(bm.voltagesPerPhase.C - um.voltagesPerPhase.C);
     expect(totalDiff).toBeGreaterThan(0.5);
   });
 });

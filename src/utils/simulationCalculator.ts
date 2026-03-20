@@ -852,25 +852,27 @@ export class SimulationCalculator extends ElectricalCalculator {
       for (const srg2 of srg2Devices) {
         const nodeVoltages = srg2VoltagesAfterEQUI8.get(srg2.nodeId) || { A: 230, B: 230, C: 230 };
         
-        // Appliquer la régulation SRG2 (décision basée sur réseau équilibré)
-        const regulationResult = this.applySRG2Regulation(srg2, nodeVoltages, workingProject.voltageSystem);
+        // Utiliser SRG2Regulator pour la décision de régulation
+        const reg = srg2Regulators.get(srg2.id)!;
+        const regResult = reg.update(nodeVoltages, 10); // dt=10s > 7s → commutation immédiate en BFS
+        const regulationResult = this.bridgeSRG2Result(regResult, nodeVoltages);
         
         // Détecter si le SRG2 demande un changement de prise
-        const previousTap = lastTapPosition.get(srg2.nodeId);
-        const currentTap = regulationResult.etatCommutateur;
-        
-        if (currentTap) {
-          if (!previousTap ||
-              previousTap.A !== currentTap.A ||
-              previousTap.B !== currentTap.B ||
-              previousTap.C !== currentTap.C) {
-            tapChange = true;
-            console.log(`  🔧 SRG2 ${srg2.nodeId} CHANGE DE PRISE: ` +
-              `${previousTap ? `${previousTap.A}/${previousTap.B}/${previousTap.C}` : 'INIT'} → ` +
-              `${currentTap.A}/${currentTap.B}/${currentTap.C}`);
-          }
-          lastTapPosition.set(srg2.nodeId, { ...currentTap });
+        if (regResult.tapChanged) {
+          tapChange = true;
+          const taps = reg.getCurrentTaps();
+          const previousTap = lastTapPosition.get(srg2.nodeId);
+          console.log(`  🔧 SRG2 ${srg2.nodeId} CHANGE DE PRISE: ` +
+            `${previousTap ? `${previousTap.A}/${previousTap.B}/${previousTap.C}` : 'INIT'} → ` +
+            `${taps.A}/${taps.B}/${taps.C}`);
+          lastTapPosition.set(srg2.nodeId, { ...taps });
         }
+        
+        // Log des contraintes SRG2-230
+        if (regResult.constraintsApplied) {
+          console.log(`  ⚠️ SRG2 ${srg2.nodeId}: contraintes SRG2-230 appliquées`);
+        }
+        regResult.log.forEach(l => console.log(l));
         
         // Mettre à jour les informations du SRG2
         srg2.tensionEntree = regulationResult.tensionEntree;

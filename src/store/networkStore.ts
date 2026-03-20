@@ -1475,8 +1475,12 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       state.currentProject.foisonnementChargesResidentiel ?? 15,
       state.currentProject.foisonnementChargesIndustriel ?? 70,
       state.currentProject.foisonnementProductions ?? 100,
-      undefined, // manualCouplingDistributionCharges
-      undefined, // manualCouplingDistributionProductions
+      state.currentProject.voltageSystem === 'TRIPHASÉ_230V' && state.currentProject.manualPhaseDistribution?.charges
+        ? { 'A-B': state.currentProject.manualPhaseDistribution.charges.A, 'B-C': state.currentProject.manualPhaseDistribution.charges.B, 'A-C': state.currentProject.manualPhaseDistribution.charges.C }
+        : undefined,
+      state.currentProject.voltageSystem === 'TRIPHASÉ_230V' && state.currentProject.manualPhaseDistribution?.productions
+        ? { 'A-B': state.currentProject.manualPhaseDistribution.productions.A, 'B-C': state.currentProject.manualPhaseDistribution.productions.B, 'A-C': state.currentProject.manualPhaseDistribution.productions.C }
+        : undefined,
       state.currentProject.treatSmallPolyProductionsAsMono || false
     );
     

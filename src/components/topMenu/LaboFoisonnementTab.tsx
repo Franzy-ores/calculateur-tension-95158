@@ -216,8 +216,19 @@ export const LaboFoisonnementTab = () => {
 
   const nodes = useMemo(() => {
     if (!currentProject) return [];
-    return currentProject.nodes.filter(n => !n.isSource);
+    // Source en premier, puis les nœuds non-source
+    const sourceNodes = currentProject.nodes.filter(n => n.isSource);
+    const otherNodes = currentProject.nodes.filter(n => !n.isSource);
+    return [...sourceNodes, ...otherNodes];
   }, [currentProject]);
+
+  const sourceNode = currentProject?.nodes.find(n => n.isSource);
+  const busbarDisplayVoltage = useMemo(() => {
+    if (!sourceNode || !currentProject) return 230;
+    const nomV = currentProject.transformerConfig?.nominalVoltage_V ?? 400;
+    const sv = currentProject.transformerConfig?.sourceVoltage ?? nomV;
+    return nomV >= 400 ? sv / Math.sqrt(3) : sv;
+  }, [sourceNode, currentProject]);
 
   const selectedNodeId = dailyProfileOptions.selectedNodeId;
   const selectedClusterId = dailyProfileOptions.selectedClusterId || DEFAULT_CLUSTER_ID;
@@ -376,7 +387,19 @@ export const LaboFoisonnementTab = () => {
     });
   }, [voltageContinu]);
 
-  // ─── Voltage 24h chart data ──────────────────────────────────────────────────
+  // Alerte surcharge transfo
+  const transformerOverload = useMemo(() => {
+    if (!currentProject || !powerData.length) return null;
+    const nominalPower = currentProject.transformerConfig?.nominalPower_kVA;
+    if (!nominalPower) return null;
+    const peakNet = Math.max(...powerData.map(d => Math.abs(d.P_net)));
+    if (peakNet > nominalPower) {
+      return { peak: peakNet, capacity: nominalPower, delta: peakNet - nominalPower };
+    }
+    return null;
+  }, [currentProject, powerData]);
+
+
   const is400V = currentProject?.voltageSystem === 'TÉTRAPHASÉ_400V';
   const busbarScale = is400V ? 1 / Math.sqrt(3) : 1;
 
@@ -809,9 +832,18 @@ export const LaboFoisonnementTab = () => {
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1.5">
               <Select value={selectedNodeId || ''} onValueChange={v => setDailyProfileOptions({ selectedNodeId: v })}>
-                <SelectTrigger className="h-7 text-xs w-40"><SelectValue placeholder="Nœud…" /></SelectTrigger>
+                <SelectTrigger className="h-7 text-xs w-48"><SelectValue placeholder="Nœud…" /></SelectTrigger>
                 <SelectContent>
-                  {nodes.map(n => <SelectItem key={n.id} value={n.id} className="text-xs">{n.name || n.id.slice(0,8)}</SelectItem>)}
+                  {nodes.map(n => (
+                    <SelectItem key={n.id} value={n.id} className="text-xs">
+                      {n.isSource ? (
+                        <span className="flex items-center gap-1.5">
+                          <Badge variant="outline" className="text-[8px] h-3.5 px-1 border-primary/50 text-primary">Source</Badge>
+                          {n.name || 'Busbar'} · {busbarDisplayVoltage.toFixed(0)}V
+                        </span>
+                      ) : (n.name || n.id.slice(0,8))}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Button variant={nodeSelectionMode === 'profil24h' ? 'default' : 'ghost'} size="icon" className="h-7 w-7" onClick={() => startNodeSelection('profil24h')}>
@@ -862,28 +894,43 @@ export const LaboFoisonnementTab = () => {
 
           {/* Row 2: VE + PAC + Actions */}
           <div className="flex items-center gap-2 flex-wrap">
-            {/* VE inline */}
-            <div className="flex items-center gap-1.5 text-[10px]">
+            {/* VE inline — numeric inputs */}
+            <div className="flex items-center gap-1 text-[10px]">
               <Zap className="h-3 w-3 text-amber-500" />
               <span className="text-muted-foreground">VE</span>
-              <span className="font-mono w-7 text-right">{Math.round(evPenetration * 100)}%</span>
-              <Slider min={0} max={100} step={5} value={[Math.round(evPenetration * 100)]} onValueChange={([v]) => setEvPenetration(v / 100)} className="w-16" />
+              <input type="number" min={0} max={100} step={5}
+                value={Math.round(evPenetration * 100)}
+                onChange={e => setEvPenetration(Math.min(100, Math.max(0, Number(e.target.value))) / 100)}
+                className="w-12 h-6 text-xs text-center rounded border border-input bg-background font-mono tabular-nums px-1"
+              />
+              <span className="text-muted-foreground">%</span>
+              <span className="text-muted-foreground mx-0.5">×</span>
               <div className="flex gap-0.5">
                 {([3.7, 11, 22] as const).map(p => (
                   <Button key={p} size="sm" variant={evPower === p ? 'default' : 'ghost'} onClick={() => setEvPower(p)} className="text-[9px] h-5 px-1.5 min-w-0">{p}</Button>
                 ))}
               </div>
+              <span className="text-muted-foreground font-mono text-[9px]">→ {(nResidential * evPenetration * evPower).toFixed(1)}kW</span>
             </div>
 
             <div className="h-4 w-px bg-border/50" />
 
-            {/* PAC inline */}
-            <div className="flex items-center gap-1.5 text-[10px]">
+            {/* PAC inline — numeric inputs */}
+            <div className="flex items-center gap-1 text-[10px]">
               <span className="text-muted-foreground">🌡️ PAC</span>
-              <span className="font-mono w-7 text-right">{Math.round(pacPenetration * 100)}%</span>
-              <Slider min={0} max={100} step={5} value={[Math.round(pacPenetration * 100)]} onValueChange={([v]) => setPacPenetration(v / 100)} className="w-16" />
-              <span className="font-mono text-[9px]">{pacPower}kW</span>
-              <Slider min={1} max={9} step={0.5} value={[pacPower]} onValueChange={([v]) => setPacPower(v)} className="w-12" />
+              <input type="number" min={0} max={100} step={5}
+                value={Math.round(pacPenetration * 100)}
+                onChange={e => setPacPenetration(Math.min(100, Math.max(0, Number(e.target.value))) / 100)}
+                className="w-12 h-6 text-xs text-center rounded border border-input bg-background font-mono tabular-nums px-1"
+              />
+              <span className="text-muted-foreground">% ×</span>
+              <input type="number" min={1} max={9} step={0.5}
+                value={pacPower}
+                onChange={e => setPacPower(Math.min(9, Math.max(1, Number(e.target.value))))}
+                className="w-12 h-6 text-xs text-center rounded border border-input bg-background font-mono tabular-nums px-1"
+              />
+              <span className="text-muted-foreground">kW</span>
+              <span className="text-muted-foreground font-mono text-[9px]">→ {(nResidential * pacPenetration * pacPower).toFixed(1)}kW</span>
             </div>
 
             <div className="flex-1" />
@@ -907,26 +954,40 @@ export const LaboFoisonnementTab = () => {
         </div>
 
         {/* ─── ALERTS ─── */}
-        {hasData && (
-          <div className="px-3 pt-2">
-            {criticalPointsAnalysis.summary.totalViolations > 0 ? (
-              <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 flex items-center gap-2 text-xs">
-                <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
-                <span className="font-medium text-destructive">{criticalPointsAnalysis.summary.totalViolations} violation(s)</span>
-                {criticalPointsAnalysis.summary.warningCount > 0 && (
-                  <Badge variant="outline" className="text-[9px] h-4 border-orange-500/50 text-orange-500">{criticalPointsAnalysis.summary.warningCount} ±5%</Badge>
-                )}
-                {criticalPointsAnalysis.summary.criticalCount > 0 && (
-                  <Badge variant="destructive" className="text-[9px] h-4">{criticalPointsAnalysis.summary.criticalCount} ±10%</Badge>
-                )}
-                {criticalPointsAnalysis.criticalHours.length > 0 && (
-                  <span className="text-muted-foreground ml-1">Heures: {criticalPointsAnalysis.criticalHours.join('h, ')}h</span>
-                )}
+        {(hasData || transformerOverload) && (
+          <div className="px-3 pt-2 space-y-1.5">
+            {/* Alerte surcharge transfo */}
+            {transformerOverload && (
+              <div className="rounded-md border border-destructive/60 bg-destructive/10 px-3 py-2 flex items-center gap-2 text-xs">
+                <Zap className="h-3.5 w-3.5 text-destructive shrink-0" />
+                <span className="font-medium text-destructive">Surcharge transfo</span>
+                <span className="text-destructive">pic {transformerOverload.peak.toFixed(1)} kVA &gt; capacité {transformerOverload.capacity} kVA</span>
+                <Badge variant="destructive" className="text-[9px] h-4">+{transformerOverload.delta.toFixed(1)} kVA</Badge>
               </div>
-            ) : (
-              <div className="rounded-md border border-emerald-500/40 bg-emerald-500/5 px-3 py-2 flex items-center gap-2 text-xs text-emerald-600">
-                ✅ Réseau conforme EN 50160
-              </div>
+            )}
+            {/* Alertes tension */}
+            {hasData && (
+              <>
+                {criticalPointsAnalysis.summary.totalViolations > 0 ? (
+                  <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 flex items-center gap-2 text-xs">
+                    <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
+                    <span className="font-medium text-destructive">{criticalPointsAnalysis.summary.totalViolations} violation(s)</span>
+                    {criticalPointsAnalysis.summary.warningCount > 0 && (
+                      <Badge variant="outline" className="text-[9px] h-4 border-orange-500/50 text-orange-500">{criticalPointsAnalysis.summary.warningCount} ±5%</Badge>
+                    )}
+                    {criticalPointsAnalysis.summary.criticalCount > 0 && (
+                      <Badge variant="destructive" className="text-[9px] h-4">{criticalPointsAnalysis.summary.criticalCount} ±10%</Badge>
+                    )}
+                    {criticalPointsAnalysis.criticalHours.length > 0 && (
+                      <span className="text-muted-foreground ml-1">Heures: {criticalPointsAnalysis.criticalHours.join('h, ')}h</span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-emerald-500/40 bg-emerald-500/5 px-3 py-2 flex items-center gap-2 text-xs text-emerald-600">
+                    ✅ Réseau conforme EN 50160
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

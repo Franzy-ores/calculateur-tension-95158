@@ -1,5 +1,4 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -14,8 +13,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useNetworkStore } from '@/store/networkStore';
-import { FlaskConical, MapPin, Sun, Cloud, AlertTriangle, TrendingUp, TrendingDown, Zap, Ruler, Users, Clock, Settings, Maximize2, Download, Save, ChevronRight, ChevronLeft, RotateCcw } from 'lucide-react';
+import { FlaskConical, MapPin, Sun, Cloud, AlertTriangle, TrendingUp, TrendingDown, Zap, Ruler, Users, Clock, Settings, Maximize2, Download, Save, RotateCcw, ChevronDown, SlidersHorizontal } from 'lucide-react';
 import { ClockDial } from '@/components/ClockDial';
 import { ProfileVisualEditor } from '@/components/ProfileVisualEditor';
 import { clusterProfiles, getClusterById, DEFAULT_CLUSTER_ID } from '@/data/clusterProfiles';
@@ -165,8 +167,6 @@ const CLUSTER_MAP: Record<string, CircuitCluster> = {
   cluster_4: 'D',
 };
 
-type ViewMode = 'rapid' | 'custom' | 'expert';
-
 export const LaboFoisonnementTab = () => {
   const {
     currentProject,
@@ -183,13 +183,9 @@ export const LaboFoisonnementTab = () => {
     setDailyProfileCustomProfiles,
   } = useNetworkStore();
 
-  // ═══ VIEW MODE ═══
-  const [viewMode, setViewMode] = useState<ViewMode>('rapid');
   const [baselineResults, setBaselineResults] = useState<HourlyVoltageResult[]>([]);
   const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>([]);
-
   const [editorOpen, setEditorOpen] = useState(false);
-
   const [season, setSeason] = useState<'winter' | 'summer'>('winter');
   const [weather, setWeather] = useState<'sunny' | 'gray'>('sunny');
   const [showPerPhaseDistance, setShowPerPhaseDistance] = useState(false);
@@ -199,6 +195,9 @@ export const LaboFoisonnementTab = () => {
   const [fullscreenChargeOpen, setFullscreenChargeOpen] = useState(false);
   const [fullscreenInjectionOpen, setFullscreenInjectionOpen] = useState(false);
   const [fullscreenHourlyOpen, setFullscreenHourlyOpen] = useState(false);
+  const [distanceTab, setDistanceTab] = useState('charge');
+  const [tableOpen, setTableOpen] = useState(false);
+  const [scenariosOpen, setScenariosOpen] = useState(false);
 
   // VE / PAC states
   const [evPenetration, setEvPenetration] = useState(0);
@@ -379,7 +378,7 @@ export const LaboFoisonnementTab = () => {
 
   // ─── Voltage 24h chart data ──────────────────────────────────────────────────
   const is400V = currentProject?.voltageSystem === 'TÉTRAPHASÉ_400V';
-  const busbarScale = is400V ? 1 / Math.sqrt(3) : 1; // 400V: ligne→phase-neutre
+  const busbarScale = is400V ? 1 / Math.sqrt(3) : 1;
 
   const voltage24hData = useMemo(() => {
     if (voltageContinu.length === 0) return [];
@@ -400,14 +399,6 @@ export const LaboFoisonnementTab = () => {
     if (!currentProject) return [];
     return buildNetworkPaths(currentProject.nodes, currentProject.cables);
   }, [currentProject]);
-
-  const getNodeVoltage = (results: CalculationResult[], nodeId: string, hour: number): number => {
-    const r = results[hour];
-    if (!r?.nodeMetricsPerPhase) return 0;
-    const nm = r.nodeMetricsPerPhase.find(m => m.nodeId === nodeId);
-    if (!nm) return 0;
-    return (nm.voltagesPerPhase.A + nm.voltagesPerPhase.B + nm.voltagesPerPhase.C) / 3;
-  };
 
   const getNodeVoltagePerPhase = (results: CalculationResult[], nodeId: string, hour: number): { A: number; B: number; C: number; avg: number } => {
     const r = results[hour];
@@ -703,12 +694,11 @@ export const LaboFoisonnementTab = () => {
   }, [powerData]);
 
   // ─── Baseline comparison ─────────────────────────────────────────────────────
-  const handleNavigateToCustom = useCallback(() => {
-    if (baselineResults.length === 0 && voltageContinu.length > 0) {
+  const handleSetBaseline = useCallback(() => {
+    if (voltageContinu.length > 0) {
       setBaselineResults([...voltageContinu]);
     }
-    setViewMode('custom');
-  }, [baselineResults, voltageContinu]);
+  }, [voltageContinu]);
 
   const baselineDelta = useMemo(() => {
     if (baselineResults.length === 0 || voltageContinu.length === 0) return null;
@@ -765,10 +755,9 @@ export const LaboFoisonnementTab = () => {
     return <div className="p-4 text-center text-muted-foreground">Aucun projet chargé</div>;
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════════
-  // ═══ SHARED COMPONENTS ═══
-  // ═══════════════════════════════════════════════════════════════════════════════
+  const hasData = voltage24hData.length > 0 && voltage24hData.some(d => d.V_continu > 0);
 
+  // ═══ SHARED COMPONENTS ═══
   const VoltageDistanceTooltip = ({ active, payload }: any) => {
     if (!active || !payload?.length) return null;
     const point = payload[0]?.payload;
@@ -794,362 +783,187 @@ export const LaboFoisonnementTab = () => {
     );
   };
 
-  // ═══════════════════════════════════════════════════════════════════════════════
-  // ═══ NIVEAU 1 — RAPIDE ═══
-  // ═══════════════════════════════════════════════════════════════════════════════
-
-  const renderRapidView = () => (
-    <div className="space-y-4 p-4">
-      {/* Configuration Rapide */}
-      <Card className="bg-card/50 backdrop-blur border-violet-500/30">
-        <CardHeader className="pb-2 pt-3 px-4">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <FlaskConical className="h-4 w-4 text-violet-500" />
-            Configuration Rapide
-            {isSimulationActive && totalEquipment > 0 && (
-              <div className="flex gap-1 ml-auto">
-                <Badge variant="secondary" className="text-[10px]">{srg2Count} SRG2</Badge>
-                <Badge variant="secondary" className="text-[10px]">{compensatorCount} Comp.</Badge>
-              </div>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-4 pb-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Saison */}
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Saison</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <Button size="sm" variant={season === 'winter' ? 'default' : 'outline'} onClick={() => setSeason('winter')}>
-                  ❄️ Hiver
-                </Button>
-                <Button size="sm" variant={season === 'summer' ? 'default' : 'outline'} onClick={() => setSeason('summer')}>
-                  ☀️ Été
-                </Button>
-              </div>
-            </div>
-            {/* Météo */}
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Météo</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <Button size="sm" variant={weather === 'sunny' ? 'default' : 'outline'} onClick={() => setWeather('sunny')}>
-                  <Sun className="h-3.5 w-3.5 mr-1" /> Soleil
-                </Button>
-                <Button size="sm" variant={weather === 'gray' ? 'default' : 'outline'} onClick={() => setWeather('gray')}>
-                  <Cloud className="h-3.5 w-3.5 mr-1" /> Gris
-                </Button>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Résultats */}
-      {voltage24hData.length > 0 && voltage24hData.some(d => d.V_continu > 0) && (
-        <>
-          {/* Alerte violations */}
-          {criticalPointsAnalysis.summary.totalViolations > 0 && (
-            <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-3">
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
-                <div className="space-y-1">
-                  <div className="text-sm font-medium text-destructive">
-                    {criticalPointsAnalysis.summary.totalViolations} violation(s) détectée(s)
-                  </div>
-                  <div className="flex gap-2">
-                    {criticalPointsAnalysis.summary.warningCount > 0 && (
-                      <Badge variant="outline" className="text-[10px] border-orange-500/50 text-orange-500">
-                        {criticalPointsAnalysis.summary.warningCount} ±5%
-                      </Badge>
-                    )}
-                    {criticalPointsAnalysis.summary.criticalCount > 0 && (
-                      <Badge variant="destructive" className="text-[10px]">
-                        {criticalPointsAnalysis.summary.criticalCount} ±10%
-                      </Badge>
-                    )}
-                  </div>
-                  {criticalPointsAnalysis.criticalHours.length > 0 && (
-                    <div className="text-xs text-muted-foreground">
-                      Heures critiques : {criticalPointsAnalysis.criticalHours.join('h, ')}h
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {criticalPointsAnalysis.summary.totalViolations === 0 && (
-            <div className="rounded-lg border border-emerald-500/50 bg-emerald-500/5 p-3">
-              <div className="flex items-center gap-2 text-sm text-emerald-600">
-                ✅ Aucune violation détectée — Réseau conforme EN 50160
-              </div>
-            </div>
-          )}
-
-          {/* Graphique Tension 24h avec zones */}
-          <Card className="bg-card/50 backdrop-blur border-violet-500/30">
-            <CardHeader className="pb-2 pt-3 px-4">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Zap className="h-4 w-4 text-violet-500" />
-                Tension 24h — Vue Globale
-                <Badge variant="outline" className="text-[10px]">
-                  {selectedNode?.name || selectedNodeId} • {season === 'winter' ? '❄️' : '☀️'} • {weather === 'sunny' ? '☀️' : '☁️'}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={voltage24hData}>
-                  <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                  <YAxis domain={[voltageRange.min, voltageRange.max]} tick={{ fontSize: 10 }} unit=" V" />
-                  <Tooltip
-                    contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
-                    formatter={(value: number, name: string) => [`${value.toFixed(1)} V`, name]}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  {/* Zones de danger */}
-                  <ReferenceArea y1={218.5} y2={241.5} fill="hsl(var(--muted))" fillOpacity={0.3} />
-                  <ReferenceLine y={207} stroke="hsl(var(--destructive))" strokeDasharray="5 5" label={{ value: '-10%', fontSize: 9, fill: 'hsl(var(--destructive))' }} />
-                  <ReferenceLine y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" label={{ value: '+10%', fontSize: 9, fill: 'hsl(var(--destructive))' }} />
-                  <ReferenceLine y={218.5} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.5} />
-                  <ReferenceLine y={241.5} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.5} />
-                  <ReferenceLine y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} label={{ value: '230V', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
-                  <Line type="monotone" dataKey="V_busbar" name="Busbar" stroke="hsl(280, 70%, 50%)" strokeWidth={2} dot={false} strokeDasharray="6 3" />
-                  <Line type="monotone" dataKey="V_A" name="Phase A" stroke="hsl(0, 75%, 55%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
-                  <Line type="monotone" dataKey="V_B" name="Phase B" stroke="hsl(142, 76%, 36%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
-                  <Line type="monotone" dataKey="V_C" name="Phase C" stroke="hsl(217, 91%, 60%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
-                  <Line type="monotone" dataKey="V_continu" name="V moyen" stroke="hsl(270, 70%, 60%)" strokeWidth={2.5} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* Navigation vers Custom */}
-          <div className="flex justify-end">
-            <Button onClick={handleNavigateToCustom} className="gap-2">
-              Personnaliser <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </>
-      )}
-
-      {(!voltage24hData.length || !voltage24hData.some(d => d.V_continu > 0)) && (
-        <Card className="bg-card/50 backdrop-blur border-violet-500/30">
-          <CardContent className="py-12 text-center text-muted-foreground text-sm">
-            {!selectedNodeId ? 'Sélectionnez un nœud pour lancer la simulation' :
-              'Aucun client lié au réseau. Importez des clients et liez-les aux nœuds.'}
-          </CardContent>
-        </Card>
-      )}
-    </div>
+  // Shared reference lines for distance charts
+  const renderDistanceReferenceLines = (yAxisId: string, busbarVoltage: number) => (
+    <>
+      <ReferenceLine yAxisId={yAxisId} y={211.6} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />
+      <ReferenceLine yAxisId={yAxisId} y={248.4} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />
+      <ReferenceLine yAxisId={yAxisId} y={207} stroke="hsl(0, 72%, 51%)" strokeWidth={1.5} />
+      <ReferenceLine yAxisId={yAxisId} y={253} stroke="hsl(0, 72%, 51%)" strokeWidth={1.5} />
+      <ReferenceLine yAxisId={yAxisId} y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} label={{ value: '230V', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
+      <ReferenceLine yAxisId={yAxisId} y={busbarVoltage} stroke="hsl(280, 70%, 50%)" strokeDasharray="6 3" strokeWidth={1.5}
+        label={{ value: `Busbar ${busbarVoltage.toFixed(1)}V`, fontSize: 9, fill: 'hsl(280, 70%, 50%)' }} />
+    </>
   );
 
   // ═══════════════════════════════════════════════════════════════════════════════
-  // ═══ NIVEAU 2 — PERSONNALISÉ ═══
+  // ═══ UNIFIED RENDER ═══
   // ═══════════════════════════════════════════════════════════════════════════════
 
-  const renderCustomView = () => (
-    <div className="space-y-4 p-4">
-      {/* Breadcrumb */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <button onClick={() => setViewMode('rapid')} className="hover:text-foreground transition-colors">Rapide</button>
-          <span>›</span>
-          <span className="text-foreground font-medium">Personnalisé</span>
-        </div>
-        <Button variant="ghost" size="sm" onClick={() => setViewMode('rapid')} className="text-xs gap-1">
-          <ChevronLeft className="h-3 w-3" /> Retour
-        </Button>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Col 1: Paramètres */}
-        <Card className="bg-card/50 backdrop-blur border-violet-500/30">
-          <CardHeader className="pb-2 pt-3 px-4">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Settings className="h-4 w-4 text-violet-500" />
-              Paramètres
-              <Badge variant="outline" className="text-[10px] border-violet-500/50 text-violet-500 ml-auto">LABO</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4 space-y-4">
-            {/* Node selector */}
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Nœud analysé</Label>
-              <div className="flex gap-2">
-                <Select value={selectedNodeId || ''} onValueChange={v => setDailyProfileOptions({ selectedNodeId: v })}>
-                  <SelectTrigger className="flex-1"><SelectValue placeholder="Sélectionner un nœud" /></SelectTrigger>
-                  <SelectContent>
-                    {nodes.map(n => <SelectItem key={n.id} value={n.id}>{n.name || n.id}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Button
-                  variant={nodeSelectionMode === 'profil24h' ? 'default' : 'outline'}
-                  size="icon"
-                  onClick={() => startNodeSelection('profil24h')}
-                  className="shrink-0"
-                >
-                  <MapPin className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-
-            {/* Season + Weather */}
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Saison</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <Button size="sm" variant={season === 'winter' ? 'default' : 'outline'} onClick={() => setSeason('winter')}>❄️ Hiver</Button>
-                <Button size="sm" variant={season === 'summer' ? 'default' : 'outline'} onClick={() => setSeason('summer')}>☀️ Été</Button>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Météo PV</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <Button size="sm" variant={weather === 'sunny' ? 'default' : 'outline'} onClick={() => setWeather('sunny')}><Sun className="h-3.5 w-3.5 mr-1" /> Soleil</Button>
-                <Button size="sm" variant={weather === 'gray' ? 'default' : 'outline'} onClick={() => setWeather('gray')}><Cloud className="h-3.5 w-3.5 mr-1" /> Gris</Button>
-              </div>
-            </div>
-
-            {/* Profile editor button */}
-            <div className="space-y-2 border-t border-border/50 pt-3">
-              <Button size="sm" variant="outline" className="w-full gap-1" onClick={() => setEditorOpen(true)}>
-                <Settings className="h-3.5 w-3.5" /> Modifier les profils
+  return (
+    <>
+      <div className="flex flex-col h-full">
+        {/* ─── STICKY CONTROL BAR ─── */}
+        <div className="sticky top-0 z-10 bg-card/90 backdrop-blur border-b border-border/50 px-3 py-2 space-y-1.5">
+          {/* Row 1: Node + Season + Weather + Cluster + Simulation */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <Select value={selectedNodeId || ''} onValueChange={v => setDailyProfileOptions({ selectedNodeId: v })}>
+                <SelectTrigger className="h-7 text-xs w-40"><SelectValue placeholder="Nœud…" /></SelectTrigger>
+                <SelectContent>
+                  {nodes.map(n => <SelectItem key={n.id} value={n.id} className="text-xs">{n.name || n.id.slice(0,8)}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Button variant={nodeSelectionMode === 'profil24h' ? 'default' : 'ghost'} size="icon" className="h-7 w-7" onClick={() => startNodeSelection('profil24h')}>
+                <MapPin className="h-3.5 w-3.5" />
               </Button>
             </div>
 
+            <div className="h-4 w-px bg-border/50" />
+
+            {/* Season toggle */}
+            <div className="flex items-center gap-0.5 bg-muted/50 rounded-md p-0.5">
+              <Button size="sm" variant={season === 'winter' ? 'default' : 'ghost'} className="h-6 px-2 text-[11px]" onClick={() => setSeason('winter')}>❄️</Button>
+              <Button size="sm" variant={season === 'summer' ? 'default' : 'ghost'} className="h-6 px-2 text-[11px]" onClick={() => setSeason('summer')}>☀️</Button>
+            </div>
+
+            {/* Weather toggle */}
+            <div className="flex items-center gap-0.5 bg-muted/50 rounded-md p-0.5">
+              <Button size="sm" variant={weather === 'sunny' ? 'default' : 'ghost'} className="h-6 px-2 text-[11px]" onClick={() => setWeather('sunny')}><Sun className="h-3 w-3" /></Button>
+              <Button size="sm" variant={weather === 'gray' ? 'default' : 'ghost'} className="h-6 px-2 text-[11px]" onClick={() => setWeather('gray')}><Cloud className="h-3 w-3" /></Button>
+            </div>
+
+            <div className="h-4 w-px bg-border/50" />
+
+            {/* Cluster dropdown */}
+            <Select value={selectedClusterId} onValueChange={v => setDailyProfileOptions({ selectedClusterId: v })}>
+              <SelectTrigger className="h-7 text-xs w-36"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {clusterProfiles.map(cp => (
+                  <SelectItem key={cp.id} value={cp.id} className="text-xs">{cp.icon} {cp.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
             {/* Simulation toggle */}
             {hasAnyEquipment && (
-              <div className="space-y-2 border-t border-border/50 pt-3">
-                <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                  <FlaskConical className="h-3 w-3" /> Mode simulation
-                </Label>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs">Activer</span>
-                  <Switch checked={isSimulationActive} onCheckedChange={toggleSimulationActive} disabled={!hasAnyEquipment} className="data-[state=checked]:bg-success" />
-                </div>
+              <>
+                <div className="h-4 w-px bg-border/50" />
                 <div className="flex items-center gap-1.5">
-                  <Badge variant={isSimulationActive ? 'success' : 'outline'} className="text-[10px]">
-                    {isSimulationActive ? '✓ Active' : '✗ Inactive'}
-                  </Badge>
-                  {totalEquipment > 0 && <Badge variant="secondary" className="text-[10px]">{totalEquipment} éq.</Badge>}
+                  <Switch checked={isSimulationActive} onCheckedChange={toggleSimulationActive} className="data-[state=checked]:bg-emerald-600 scale-75" />
+                  <span className="text-[10px] text-muted-foreground">Simu</span>
+                  {isSimulationActive && totalEquipment > 0 && (
+                    <Badge variant="secondary" className="text-[9px] h-4 px-1">{totalEquipment} éq.</Badge>
+                  )}
                 </div>
-              </div>
+              </>
             )}
+          </div>
 
-            {/* Cluster */}
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Cluster</Label>
-              <div className="grid grid-cols-2 gap-1.5">
-                {clusterProfiles.map(cp => (
-                  <Button key={cp.id} size="sm" variant={selectedClusterId === cp.id ? 'default' : 'outline'}
-                    onClick={() => setDailyProfileOptions({ selectedClusterId: cp.id })}
-                    className="text-xs h-auto py-1.5 px-2 flex flex-col items-start gap-0.5">
-                    <span className="flex items-center gap-1"><span>{cp.icon}</span> {cp.name}</span>
-                    <span className="text-[9px] text-muted-foreground opacity-70">→ {CLUSTER_MAP[cp.id]} (a={diversityFactors[CLUSTER_MAP[cp.id]]})</span>
-                  </Button>
+          {/* Row 2: VE + PAC + Actions */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* VE inline */}
+            <div className="flex items-center gap-1.5 text-[10px]">
+              <Zap className="h-3 w-3 text-amber-500" />
+              <span className="text-muted-foreground">VE</span>
+              <span className="font-mono w-7 text-right">{Math.round(evPenetration * 100)}%</span>
+              <Slider min={0} max={100} step={5} value={[Math.round(evPenetration * 100)]} onValueChange={([v]) => setEvPenetration(v / 100)} className="w-16" />
+              <div className="flex gap-0.5">
+                {([3.7, 11, 22] as const).map(p => (
+                  <Button key={p} size="sm" variant={evPower === p ? 'default' : 'ghost'} onClick={() => setEvPower(p)} className="text-[9px] h-5 px-1.5 min-w-0">{p}</Button>
                 ))}
               </div>
             </div>
 
-            {/* Formule continue */}
-            <div className="bg-muted/50 rounded-md p-3 space-y-3 text-xs">
-              <div className="flex items-center justify-between">
-                <div className="font-medium text-foreground">Formule continue</div>
-                {isManualOverride && (
-                  <Button variant="ghost" size="sm" className="h-5 text-[10px] px-1.5" onClick={handleResetFormula}>Reset</Button>
+            <div className="h-4 w-px bg-border/50" />
+
+            {/* PAC inline */}
+            <div className="flex items-center gap-1.5 text-[10px]">
+              <span className="text-muted-foreground">🌡️ PAC</span>
+              <span className="font-mono w-7 text-right">{Math.round(pacPenetration * 100)}%</span>
+              <Slider min={0} max={100} step={5} value={[Math.round(pacPenetration * 100)]} onValueChange={([v]) => setPacPenetration(v / 100)} className="w-16" />
+              <span className="font-mono text-[9px]">{pacPower}kW</span>
+              <Slider min={1} max={9} step={0.5} value={[pacPower]} onValueChange={([v]) => setPacPower(v)} className="w-12" />
+            </div>
+
+            <div className="flex-1" />
+
+            {/* Actions */}
+            <div className="flex items-center gap-1">
+              <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] gap-1" onClick={() => setEditorOpen(true)}>
+                <Settings className="h-3 w-3" /> Profils
+              </Button>
+              <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] gap-1" onClick={handleExportCSV} disabled={voltageContinu.length === 0}>
+                <Download className="h-3 w-3" />
+              </Button>
+              <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] gap-1" onClick={handleSaveScenario} disabled={voltageContinu.length === 0}>
+                <Save className="h-3 w-3" />
+              </Button>
+              <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] gap-1" onClick={() => { setBaselineResults([]); }}>
+                <RotateCcw className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* ─── ALERTS ─── */}
+        {hasData && (
+          <div className="px-3 pt-2">
+            {criticalPointsAnalysis.summary.totalViolations > 0 ? (
+              <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 flex items-center gap-2 text-xs">
+                <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
+                <span className="font-medium text-destructive">{criticalPointsAnalysis.summary.totalViolations} violation(s)</span>
+                {criticalPointsAnalysis.summary.warningCount > 0 && (
+                  <Badge variant="outline" className="text-[9px] h-4 border-orange-500/50 text-orange-500">{criticalPointsAnalysis.summary.warningCount} ±5%</Badge>
+                )}
+                {criticalPointsAnalysis.summary.criticalCount > 0 && (
+                  <Badge variant="destructive" className="text-[9px] h-4">{criticalPointsAnalysis.summary.criticalCount} ±10%</Badge>
+                )}
+                {criticalPointsAnalysis.criticalHours.length > 0 && (
+                  <span className="text-muted-foreground ml-1">Heures: {criticalPointsAnalysis.criticalHours.join('h, ')}h</span>
                 )}
               </div>
-              <div className="font-mono text-muted-foreground">K(N) = [a + (1−a)/√N] / F<sub>ref</sub></div>
-              <div className="space-y-1">
-                <div className="flex justify-between items-center">
-                  <Label className="text-[10px] text-muted-foreground">Coeff. a</Label>
-                  <span className="font-mono text-[10px] text-foreground">{customA.toFixed(2)}</span>
-                </div>
-                <Slider min={0.05} max={0.50} step={0.01} value={[customA]} onValueChange={([v]) => { setCustomA(v); setIsManualOverride(true); }} />
-                <div className="flex justify-between text-[9px] text-muted-foreground"><span>0.05</span><span className="text-muted-foreground/60">défaut: {defaultA}</span><span>0.50</span></div>
-              </div>
-              <div className="space-y-1">
-                <div className="flex justify-between items-center">
-                  <Label className="text-[10px] text-muted-foreground">N clients résid.</Label>
-                  <span className="font-mono text-[10px] text-foreground">{customN}</span>
-                </div>
-                <Slider min={1} max={200} step={1} value={[customN]} onValueChange={([v]) => { setCustomN(v); setIsManualOverride(true); }} />
-                <div className="flex justify-between text-[9px] text-muted-foreground"><span>1</span><span className="text-muted-foreground/60">réseau: {nResidentialGlobal}</span><span>200</span></div>
-              </div>
-              <div className="border-t border-border pt-2 space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-violet-500 font-medium">Continu: {continuCoeff.toFixed(4)}</span>
-                  <span className="text-muted-foreground">Palier: {palierCoeff.toFixed(2)}</span>
-                </div>
-                {palierCoeff > 0 && (
-                  <div className={`font-medium ${continuCoeff > palierCoeff ? 'text-orange-500' : 'text-emerald-500'}`}>
-                    Δ = {((continuCoeff - palierCoeff) / palierCoeff * 100).toFixed(0)}%
-                  </div>
-                )}
-                {isManualOverride && <Badge variant="outline" className="text-[9px] border-orange-500/50 text-orange-500">Manuel</Badge>}
-              </div>
-            </div>
-
-            {/* VE */}
-            <div className="bg-muted/50 rounded-md p-3 space-y-3 text-xs">
-              <div className="font-medium text-foreground flex items-center gap-1"><Zap className="h-3 w-3 text-amber-500" /> Véhicules Électriques</div>
-              <div className="space-y-1">
-                <div className="flex justify-between items-center">
-                  <Label className="text-[10px] text-muted-foreground">Pénétration VE</Label>
-                  <span className="font-mono text-[10px] text-foreground">{Math.round(evPenetration * 100)}%</span>
-                </div>
-                <Slider min={0} max={100} step={5} value={[Math.round(evPenetration * 100)]} onValueChange={([v]) => setEvPenetration(v / 100)} />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground">Puissance borne</Label>
-                <div className="flex gap-1">
-                  {([3.7, 11, 22] as const).map(p => (
-                    <Button key={p} size="sm" variant={evPower === p ? 'default' : 'outline'} onClick={() => setEvPower(p)} className="text-xs h-6 flex-1">{p} kW</Button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* PAC */}
-            <div className="bg-muted/50 rounded-md p-3 space-y-3 text-xs">
-              <div className="font-medium text-foreground flex items-center gap-1">🌡️ Pompes à Chaleur</div>
-              <div className="space-y-1">
-                <div className="flex justify-between items-center">
-                  <Label className="text-[10px] text-muted-foreground">Pénétration PAC</Label>
-                  <span className="font-mono text-[10px] text-foreground">{Math.round(pacPenetration * 100)}%</span>
-                </div>
-                <Slider min={0} max={100} step={5} value={[Math.round(pacPenetration * 100)]} onValueChange={([v]) => setPacPenetration(v / 100)} />
-              </div>
-              <div className="space-y-1">
-                <div className="flex justify-between items-center">
-                  <Label className="text-[10px] text-muted-foreground">Puissance</Label>
-                  <span className="font-mono text-[10px] text-foreground">{pacPower} kW</span>
-                </div>
-                <Slider min={1} max={9} step={0.5} value={[pacPower]} onValueChange={([v]) => setPacPower(v)} />
-              </div>
-            </div>
-
-            {/* Synthèses */}
-            {peakSummary && (
-              <div className="bg-muted/50 rounded-md p-3 space-y-1.5 text-xs">
-                <div className="font-medium text-foreground">Synthèse puissances</div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Pic charge</span>
-                  <span className="font-mono">{peakSummary.peakLoad.toFixed(1)} kVA</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground flex items-center gap-1"><TrendingDown className="h-3 w-3" /> Pic net min</span>
-                  <span className="font-mono">{peakSummary.peakInjection.toFixed(1)} kVA</span>
-                </div>
+            ) : (
+              <div className="rounded-md border border-emerald-500/40 bg-emerald-500/5 px-3 py-2 flex items-center gap-2 text-xs text-emerald-600">
+                ✅ Réseau conforme EN 50160
               </div>
             )}
+          </div>
+        )}
 
-            {voltage24hData.length > 0 && voltage24hData.some(d => d.V_continu > 0) && (
-              <div className="bg-muted/50 rounded-md p-3 space-y-1.5 text-xs">
-                <div className="font-medium text-foreground flex items-center gap-1">
-                  <Zap className="h-3 w-3 text-violet-500" /> Synthèse tensions
-                </div>
+        {/* ─── MAIN CONTENT: Sidebar + Charts ─── */}
+        <div className="flex-1 overflow-auto px-3 pt-2 pb-4">
+          {!hasData && !selectedNodeId && (
+            <div className="py-12 text-center text-muted-foreground text-sm">
+              Sélectionnez un nœud pour lancer l'analyse
+            </div>
+          )}
+          {!hasData && selectedNodeId && (
+            <div className="py-12 text-center text-muted-foreground text-sm">
+              Aucun client lié au réseau. Importez des clients et liez-les aux nœuds.
+            </div>
+          )}
+
+          {hasData && (
+            <div className="flex gap-3 mt-1">
+              {/* ─── SIDEBAR SYNTHESIS ─── */}
+              <div className="w-56 shrink-0 space-y-2">
+                {/* Puissances */}
+                {peakSummary && (
+                  <div className="bg-muted/40 rounded-md p-2.5 space-y-1 text-xs">
+                    <div className="font-medium text-foreground text-[11px]">Puissances</div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Pic</span>
+                      <span className="font-mono">{peakSummary.peakLoad.toFixed(1)} kVA</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground flex items-center gap-1"><TrendingDown className="h-3 w-3" /> Net min</span>
+                      <span className="font-mono">{peakSummary.peakInjection.toFixed(1)} kVA</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tensions */}
                 {(() => {
                   const allPhaseV = voltage24hData.flatMap(d => [d.V_A, d.V_B, d.V_C]).filter(v => v > 0);
                   const minV = allPhaseV.length > 0 ? Math.min(...allPhaseV) : 0;
@@ -1158,470 +972,413 @@ export const LaboFoisonnementTab = () => {
                   const vB = voltage24hData.map(d => d.V_B).filter(v => v > 0);
                   const vC = voltage24hData.map(d => d.V_C).filter(v => v > 0);
                   return (
-                    <>
-                      <div className="flex justify-between"><span className="text-violet-500">V min (3φ)</span><span className={`font-mono ${minV < 207 ? 'text-destructive' : minV < 218.5 ? 'text-orange-500' : ''}`}>{minV.toFixed(1)} V</span></div>
-                      <div className="flex justify-between"><span className="text-violet-500">V max (3φ)</span><span className="font-mono">{maxV.toFixed(1)} V</span></div>
-                      <div className="border-t border-border/30 pt-1 mt-1 space-y-0.5">
-                        <div className="flex justify-between"><span style={{ color: 'hsl(0, 75%, 55%)' }}>A</span><span className="font-mono">{vA.length > 0 ? Math.min(...vA).toFixed(1) : '—'} … {vA.length > 0 ? Math.max(...vA).toFixed(1) : '—'} V</span></div>
-                        <div className="flex justify-between"><span style={{ color: 'hsl(142, 76%, 36%)' }}>B</span><span className="font-mono">{vB.length > 0 ? Math.min(...vB).toFixed(1) : '—'} … {vB.length > 0 ? Math.max(...vB).toFixed(1) : '—'} V</span></div>
-                        <div className="flex justify-between"><span style={{ color: 'hsl(217, 91%, 60%)' }}>C</span><span className="font-mono">{vC.length > 0 ? Math.min(...vC).toFixed(1) : '—'} … {vC.length > 0 ? Math.max(...vC).toFixed(1) : '—'} V</span></div>
+                    <div className="bg-muted/40 rounded-md p-2.5 space-y-1 text-xs">
+                      <div className="font-medium text-foreground text-[11px] flex items-center gap-1">
+                        <Zap className="h-3 w-3 text-violet-500" /> Tensions
                       </div>
-                    </>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">V min</span>
+                        <span className={`font-mono ${minV < 207 ? 'text-destructive' : minV < 218.5 ? 'text-orange-500' : ''}`}>{minV.toFixed(1)} V</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">V max</span>
+                        <span className="font-mono">{maxV.toFixed(1)} V</span>
+                      </div>
+                      <div className="border-t border-border/30 pt-1 space-y-0.5">
+                        <div className="flex justify-between"><span style={{ color: 'hsl(0, 75%, 55%)' }}>A</span><span className="font-mono text-[10px]">{vA.length > 0 ? Math.min(...vA).toFixed(1) : '—'}…{vA.length > 0 ? Math.max(...vA).toFixed(1) : '—'}</span></div>
+                        <div className="flex justify-between"><span style={{ color: 'hsl(142, 76%, 36%)' }}>B</span><span className="font-mono text-[10px]">{vB.length > 0 ? Math.min(...vB).toFixed(1) : '—'}…{vB.length > 0 ? Math.max(...vB).toFixed(1) : '—'}</span></div>
+                        <div className="flex justify-between"><span style={{ color: 'hsl(217, 91%, 60%)' }}>C</span><span className="font-mono text-[10px]">{vC.length > 0 ? Math.min(...vC).toFixed(1) : '—'}…{vC.length > 0 ? Math.max(...vC).toFixed(1) : '—'}</span></div>
+                      </div>
+                    </div>
                   );
                 })()}
-              </div>
-            )}
-          </CardContent>
-        </Card>
 
-        {/* Col 2-3: Graphiques */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Puissance 24h */}
-          {powerData.length > 0 ? (
-            <Card className="bg-card/50 backdrop-blur border-violet-500/30">
-              <CardHeader className="pb-2 pt-3 px-4">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  Puissance nodale 24h — Moteur continu f(N)
-                  <Badge variant="outline" className="text-[10px]">
-                    {selectedNode?.name || selectedNodeId} • {season === 'winter' ? '❄️ Hiver' : '☀️ Été'} • {weather === 'sunny' ? '☀️' : '☁️'}
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pb-4">
-                <ResponsiveContainer width="100%" height={250}>
-                  <LineChart data={powerData}>
-                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                    <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 10 }} unit=" kVA" />
-                    <Tooltip contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }} formatter={(value: number, name: string) => [`${value.toFixed(2)} kVA`, name]} />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Line type="monotone" dataKey="P_charge" name="P charge (rés.+ind.)" stroke="hsl(217, 91%, 60%)" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="P_pv" name="P PV" stroke="hsl(142, 76%, 36%)" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="P_ev" name="P VE" stroke="hsl(35, 95%, 55%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
-                    <Line type="monotone" dataKey="P_pac" name="P PAC" stroke="hsl(330, 81%, 60%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
-                    <Line type="monotone" dataKey="P_net" name="P net" stroke="hsl(var(--destructive))" strokeWidth={2.5} dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="bg-card/50 backdrop-blur border-violet-500/30">
-              <CardContent className="py-12 text-center text-muted-foreground text-sm">
-                {!selectedNodeId ? 'Sélectionnez un nœud pour lancer la simulation' :
-                  'Aucun client lié au réseau. Importez des clients et liez-les aux nœuds.'}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Tension 24h */}
-          {voltage24hData.length > 0 && voltage24hData.some(d => d.V_continu > 0) && (
-            <Card className="bg-card/50 backdrop-blur border-violet-500/30">
-              <CardHeader className="pb-2 pt-3 px-4">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Zap className="h-4 w-4 text-violet-500" />
-                  Tension nodale 24h — Continu f(N) = {continuCoeff.toFixed(4)}
-                  <Badge variant="outline" className="text-[10px] border-violet-500/50 text-violet-500">coeff={continuCoeff.toFixed(4)}</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pb-4">
-                <ResponsiveContainer width="100%" height={280}>
-                  <LineChart data={voltage24hData}>
-                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                    <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                    <YAxis domain={[voltageRange.min, voltageRange.max]} tick={{ fontSize: 10 }} unit=" V" />
-                    <Tooltip contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }} formatter={(value: number, name: string) => [`${value.toFixed(1)} V`, name]} />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <ReferenceArea y1={218.5} y2={241.5} fill="hsl(var(--muted))" fillOpacity={0.3} />
-                    <ReferenceLine y={207} stroke="hsl(var(--destructive))" strokeDasharray="5 5" label={{ value: '-10%', fontSize: 9, fill: 'hsl(var(--destructive))' }} />
-                    <ReferenceLine y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" label={{ value: '+10%', fontSize: 9, fill: 'hsl(var(--destructive))' }} />
-                    <ReferenceLine y={218.5} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.5} />
-                    <ReferenceLine y={241.5} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.5} />
-                    <ReferenceLine y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} label={{ value: '230V', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
-                    <Line type="monotone" dataKey="V_busbar" name="Busbar" stroke="hsl(280, 70%, 50%)" strokeWidth={2} dot={false} strokeDasharray="6 3" />
-                    <Line type="monotone" dataKey="V_A" name="Phase A" stroke="hsl(0, 75%, 55%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
-                    <Line type="monotone" dataKey="V_B" name="Phase B" stroke="hsl(142, 76%, 36%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
-                    <Line type="monotone" dataKey="V_C" name="Phase C" stroke="hsl(217, 91%, 60%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
-                    <Line type="monotone" dataKey="V_continu" name="V moyen" stroke="hsl(270, 70%, 60%)" strokeWidth={2.5} dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Comparaison Avant/Après */}
-          {baselineDelta && (
-            <Card className="bg-card/50 backdrop-blur border-amber-500/30">
-              <CardHeader className="pb-2 pt-3 px-4">
-                <CardTitle className="text-sm font-medium">Comparaison vs Configuration initiale</CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pb-4">
-                <div className="grid grid-cols-4 gap-3 text-center">
-                  <div className="bg-muted/50 rounded-md p-2">
-                    <div className="text-[10px] text-muted-foreground">Δ V min</div>
-                    <div className={`text-sm font-mono font-medium ${baselineDelta.deltaVMin < 0 ? 'text-destructive' : 'text-emerald-500'}`}>
-                      {baselineDelta.deltaVMin > 0 ? '+' : ''}{baselineDelta.deltaVMin}V
-                    </div>
+                {/* Foisonnement K(N) */}
+                <div className="bg-muted/40 rounded-md p-2.5 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-foreground text-[11px]">Foisonnement K(N)</span>
+                    {isManualOverride && (
+                      <Button variant="ghost" size="sm" className="h-4 text-[9px] px-1" onClick={handleResetFormula}><RotateCcw className="h-2.5 w-2.5" /></Button>
+                    )}
                   </div>
-                  <div className="bg-muted/50 rounded-md p-2">
-                    <div className="text-[10px] text-muted-foreground">Δ V max</div>
-                    <div className={`text-sm font-mono font-medium ${baselineDelta.deltaVMax > 0 ? 'text-destructive' : 'text-emerald-500'}`}>
-                      {baselineDelta.deltaVMax > 0 ? '+' : ''}{baselineDelta.deltaVMax}V
+                  <div className="font-mono text-[9px] text-muted-foreground">K = [a + (1−a)/√N] / F<sub>ref</sub></div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] text-muted-foreground">a</span>
+                      <span className="font-mono text-[10px]">{customA.toFixed(2)}</span>
                     </div>
+                    <Slider min={0.05} max={0.50} step={0.01} value={[customA]} onValueChange={([v]) => { setCustomA(v); setIsManualOverride(true); }} />
                   </div>
-                  <div className="bg-muted/50 rounded-md p-2">
-                    <div className="text-[10px] text-muted-foreground">Δ Viol. ±5%</div>
-                    <div className={`text-sm font-mono font-medium ${baselineDelta.deltaViolations5 > 0 ? 'text-destructive' : baselineDelta.deltaViolations5 < 0 ? 'text-emerald-500' : ''}`}>
-                      {baselineDelta.deltaViolations5 > 0 ? '+' : ''}{baselineDelta.deltaViolations5}
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] text-muted-foreground">N</span>
+                      <span className="font-mono text-[10px]">{customN}</span>
                     </div>
+                    <Slider min={1} max={200} step={1} value={[customN]} onValueChange={([v]) => { setCustomN(v); setIsManualOverride(true); }} />
                   </div>
-                  <div className="bg-muted/50 rounded-md p-2">
-                    <div className="text-[10px] text-muted-foreground">Δ Viol. ±10%</div>
-                    <div className={`text-sm font-mono font-medium ${baselineDelta.deltaViolations10 > 0 ? 'text-destructive' : baselineDelta.deltaViolations10 < 0 ? 'text-emerald-500' : ''}`}>
-                      {baselineDelta.deltaViolations10 > 0 ? '+' : ''}{baselineDelta.deltaViolations10}
+                  <div className="border-t border-border/30 pt-1.5 space-y-0.5">
+                    <div className="flex justify-between">
+                      <span className="text-violet-500 font-medium">{continuCoeff.toFixed(4)}</span>
+                      <span className="text-muted-foreground text-[10px]">palier: {palierCoeff.toFixed(2)}</span>
                     </div>
+                    {palierCoeff > 0 && (
+                      <div className={`text-[10px] font-medium ${continuCoeff > palierCoeff ? 'text-orange-500' : 'text-emerald-500'}`}>
+                        Δ = {((continuCoeff - palierCoeff) / palierCoeff * 100).toFixed(0)}%
+                      </div>
+                    )}
+                    {isManualOverride && <Badge variant="outline" className="text-[8px] border-orange-500/50 text-orange-500 h-3.5">Manuel</Badge>}
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+
+                {/* Comparaison baseline */}
+                {baselineDelta ? (
+                  <div className="bg-muted/40 rounded-md p-2.5 space-y-1.5 text-xs">
+                    <div className="font-medium text-foreground text-[11px]">Δ Baseline</div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <div className="text-center">
+                        <div className="text-[9px] text-muted-foreground">ΔV min</div>
+                        <div className={`font-mono text-[11px] font-medium ${baselineDelta.deltaVMin < 0 ? 'text-destructive' : 'text-emerald-500'}`}>
+                          {baselineDelta.deltaVMin > 0 ? '+' : ''}{baselineDelta.deltaVMin}V
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-[9px] text-muted-foreground">ΔV max</div>
+                        <div className={`font-mono text-[11px] font-medium ${baselineDelta.deltaVMax > 0 ? 'text-destructive' : 'text-emerald-500'}`}>
+                          {baselineDelta.deltaVMax > 0 ? '+' : ''}{baselineDelta.deltaVMax}V
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-[9px] text-muted-foreground">Δ ±5%</div>
+                        <div className={`font-mono text-[11px] font-medium ${baselineDelta.deltaViolations5 > 0 ? 'text-destructive' : baselineDelta.deltaViolations5 < 0 ? 'text-emerald-500' : ''}`}>
+                          {baselineDelta.deltaViolations5 > 0 ? '+' : ''}{baselineDelta.deltaViolations5}
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-[9px] text-muted-foreground">Δ ±10%</div>
+                        <div className={`font-mono text-[11px] font-medium ${baselineDelta.deltaViolations10 > 0 ? 'text-destructive' : baselineDelta.deltaViolations10 < 0 ? 'text-emerald-500' : ''}`}>
+                          {baselineDelta.deltaViolations10 > 0 ? '+' : ''}{baselineDelta.deltaViolations10}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <Button size="sm" variant="outline" className="w-full text-[10px] h-7 gap-1" onClick={handleSetBaseline} disabled={voltageContinu.length === 0}>
+                    <SlidersHorizontal className="h-3 w-3" /> Fixer comme baseline
+                  </Button>
+                )}
+
+                {/* Saved scenarios */}
+                {savedScenarios.length > 0 && (
+                  <Collapsible open={scenariosOpen} onOpenChange={setScenariosOpen}>
+                    <CollapsibleTrigger className="flex items-center justify-between w-full text-[11px] text-muted-foreground hover:text-foreground transition-colors py-1">
+                      <span>Scénarios ({savedScenarios.length})</span>
+                      <ChevronDown className={`h-3 w-3 transition-transform ${scenariosOpen ? 'rotate-180' : ''}`} />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="space-y-0.5 mt-1">
+                        {savedScenarios.slice(0, 8).map(s => (
+                          <div key={s.id} className="flex items-center justify-between bg-muted/30 rounded px-2 py-1 text-[10px]">
+                            <span className="truncate">{s.name}</span>
+                            <span className="text-muted-foreground shrink-0 ml-1">{new Date(s.date).toLocaleDateString('fr-FR')}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
+              </div>
+
+              {/* ─── MAIN CHARTS AREA ─── */}
+              <div className="flex-1 min-w-0 space-y-3">
+                {/* Power 24h */}
+                <div className="bg-card/50 backdrop-blur rounded-lg border border-border/50 p-3">
+                  <div className="text-[11px] font-medium text-foreground mb-1 flex items-center gap-2">
+                    Puissance nodale 24h
+                    <Badge variant="outline" className="text-[9px] h-4">{selectedNode?.name || selectedNodeId?.slice(0,6)} • {season === 'winter' ? '❄️' : '☀️'} • {weather === 'sunny' ? '☀️' : '☁️'}</Badge>
+                  </div>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={powerData}>
+                      <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                      <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} unit=" kVA" />
+                      <Tooltip contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }} formatter={(value: number, name: string) => [`${value.toFixed(2)} kVA`, name]} />
+                      <Legend wrapperStyle={{ fontSize: 10 }} />
+                      <Line type="monotone" dataKey="P_charge" name="P charge" stroke="hsl(217, 91%, 60%)" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="P_pv" name="P PV" stroke="hsl(142, 76%, 36%)" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="P_ev" name="P VE" stroke="hsl(35, 95%, 55%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                      <Line type="monotone" dataKey="P_pac" name="P PAC" stroke="hsl(330, 81%, 60%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                      <Line type="monotone" dataKey="P_net" name="P net" stroke="hsl(var(--destructive))" strokeWidth={2.5} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Voltage 24h */}
+                <div className="bg-card/50 backdrop-blur rounded-lg border border-border/50 p-3">
+                  <div className="text-[11px] font-medium text-foreground mb-1 flex items-center gap-2">
+                    <Zap className="h-3.5 w-3.5 text-violet-500" />
+                    Tension nodale 24h
+                    <Badge variant="outline" className="text-[9px] h-4 border-violet-500/50 text-violet-500">K={continuCoeff.toFixed(4)}</Badge>
+                  </div>
+                  <ResponsiveContainer width="100%" height={240}>
+                    <LineChart data={voltage24hData}>
+                      <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                      <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                      <YAxis domain={[voltageRange.min, voltageRange.max]} tick={{ fontSize: 10 }} unit=" V" />
+                      <Tooltip contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }} formatter={(value: number, name: string) => [`${value.toFixed(1)} V`, name]} />
+                      <Legend wrapperStyle={{ fontSize: 10 }} />
+                      <ReferenceArea y1={218.5} y2={241.5} fill="hsl(var(--muted))" fillOpacity={0.3} />
+                      <ReferenceLine y={207} stroke="hsl(var(--destructive))" strokeDasharray="5 5" label={{ value: '-10%', fontSize: 9, fill: 'hsl(var(--destructive))' }} />
+                      <ReferenceLine y={253} stroke="hsl(var(--destructive))" strokeDasharray="5 5" label={{ value: '+10%', fontSize: 9, fill: 'hsl(var(--destructive))' }} />
+                      <ReferenceLine y={218.5} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.5} />
+                      <ReferenceLine y={241.5} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.5} />
+                      <ReferenceLine y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} label={{ value: '230V', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
+                      <Line type="monotone" dataKey="V_busbar" name="Busbar" stroke="hsl(280, 70%, 50%)" strokeWidth={2} dot={false} strokeDasharray="6 3" />
+                      <Line type="monotone" dataKey="V_A" name="Phase A" stroke="hsl(0, 75%, 55%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                      <Line type="monotone" dataKey="V_B" name="Phase B" stroke="hsl(142, 76%, 36%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                      <Line type="monotone" dataKey="V_C" name="Phase C" stroke="hsl(217, 91%, 60%)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                      <Line type="monotone" dataKey="V_continu" name="V moyen" stroke="hsl(270, 70%, 60%)" strokeWidth={2.5} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Tension vs Distance — Tabbed */}
+                {voltageDistanceData && voltageDistanceData.minBranches.length > 0 && (
+                  <div className="bg-card/50 backdrop-blur rounded-lg border border-border/50 p-3">
+                    {/* Options bar */}
+                    <div className="flex items-center gap-3 mb-2 flex-wrap">
+                      <span className="text-[11px] font-medium flex items-center gap-1">
+                        <Ruler className="h-3.5 w-3.5 text-blue-500" /> Tension vs Distance
+                      </span>
+                      <div className="flex items-center gap-3 text-[10px] ml-auto">
+                        <label className="flex items-center gap-1 cursor-pointer">
+                          <Checkbox checked={showPerPhaseDistance} onCheckedChange={(c) => setShowPerPhaseDistance(c === true)} className="h-3 w-3" />
+                          <span className="text-muted-foreground">Par phase</span>
+                        </label>
+                        <label className="flex items-center gap-1 cursor-pointer">
+                          <Checkbox checked={showNeutralCurrent} onCheckedChange={(c) => setShowNeutralCurrent(c === true)} className="h-3 w-3" />
+                          <span className="text-muted-foreground">I<sub>N</sub></span>
+                        </label>
+                        {clientPointsData && (
+                          <label className="flex items-center gap-1 cursor-pointer">
+                            <Checkbox checked={showClientPoints} onCheckedChange={(c) => setShowClientPoints(c === true)} className="h-3 w-3" />
+                            <span className="text-muted-foreground"><Users className="h-2.5 w-2.5 inline" /> Clients</span>
+                          </label>
+                        )}
+                      </div>
+                    </div>
+
+                    <Tabs value={distanceTab} onValueChange={setDistanceTab}>
+                      <TabsList className="h-7 bg-muted/50">
+                        <TabsTrigger value="charge" className="text-[10px] h-5 px-2 data-[state=active]:text-blue-600">
+                          Charge ({voltageDistanceData.minHour}h)
+                        </TabsTrigger>
+                        <TabsTrigger value="injection" className="text-[10px] h-5 px-2 data-[state=active]:text-emerald-600">
+                          Injection ({voltageDistanceData.maxHour}h)
+                        </TabsTrigger>
+                        <TabsTrigger value="hourly" className="text-[10px] h-5 px-2 data-[state=active]:text-amber-600">
+                          Horaire ({clockHour}h)
+                        </TabsTrigger>
+                      </TabsList>
+
+                      {/* CHARGE TAB */}
+                      <TabsContent value="charge" className="mt-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <Badge variant="outline" className="text-[9px] h-4 border-blue-500/50 text-blue-500">
+                            Vmin {voltageDistanceData.minV.toFixed(1)}V • Busbar {voltageDistanceData.busbarVoltageCharge.toFixed(1)}V
+                          </Badge>
+                          <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setFullscreenChargeOpen(true)}><Maximize2 className="h-3 w-3" /></Button>
+                        </div>
+                        <ResponsiveContainer width="100%" height={250}>
+                          <LineChart>
+                            <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                            <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 10 }} label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 10 }} />
+                            <YAxis yAxisId="left" domain={voltageDistanceData.domainCharge} tick={{ fontSize: 10 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
+                            {showNeutralCurrent && <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} unit=" A" />}
+                            <Tooltip content={VoltageDistanceTooltip} />
+                            <Legend wrapperStyle={{ fontSize: 10 }} />
+                            {renderDistanceReferenceLines('left', voltageDistanceData.busbarVoltageCharge)}
+                            {voltageDistanceData.minBranches.map((branch) => (
+                              <Line key={`min-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltageWorstCharge > 0 && isFinite(p.voltageWorstCharge))}
+                                type="monotone" dataKey="voltageWorstCharge" name={branch.label}
+                                stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                            ))}
+                            {showPerPhaseDistance && voltageDistanceData.minBranches.flatMap((branch) => [
+                              <Line key={`min-A-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_A > 0)} type="monotone" dataKey="voltage_A" name={`${branch.label} A`} stroke="hsl(0, 75%, 55%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+                              <Line key={`min-B-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_B > 0)} type="monotone" dataKey="voltage_B" name={`${branch.label} B`} stroke="hsl(142, 76%, 36%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+                              <Line key={`min-C-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_C > 0)} type="monotone" dataKey="voltage_C" name={`${branch.label} C`} stroke="hsl(217, 91%, 60%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+                            ])}
+                            {showNeutralCurrent && voltageDistanceData.minBranches.map((branch) => (
+                              <Line key={`min-IN-${branch.branchId}`} yAxisId="right" data={branch.points} type="monotone" dataKey="I_neutral" name={`I_N ${branch.label}`} stroke="hsl(35, 95%, 55%)" strokeWidth={1.5} dot={{ r: 2 }} strokeDasharray="6 3" />
+                            ))}
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </TabsContent>
+
+                      {/* INJECTION TAB */}
+                      <TabsContent value="injection" className="mt-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <Badge variant="outline" className="text-[9px] h-4 border-emerald-500/50 text-emerald-500">
+                            Vmax {voltageDistanceData.maxV.toFixed(1)}V • Busbar {voltageDistanceData.busbarVoltageInjection.toFixed(1)}V
+                          </Badge>
+                          <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setFullscreenInjectionOpen(true)}><Maximize2 className="h-3 w-3" /></Button>
+                        </div>
+                        <ResponsiveContainer width="100%" height={250}>
+                          <LineChart>
+                            <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                            <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 10 }} label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 10 }} />
+                            <YAxis yAxisId="left" domain={voltageDistanceData.domainInjection} tick={{ fontSize: 10 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
+                            {showNeutralCurrent && <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} unit=" A" />}
+                            <Tooltip content={VoltageDistanceTooltip} />
+                            <Legend wrapperStyle={{ fontSize: 10 }} />
+                            {renderDistanceReferenceLines('left', voltageDistanceData.busbarVoltageInjection)}
+                            {voltageDistanceData.maxBranches.map((branch) => (
+                              <Line key={`max-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltageWorstInjection > 0)}
+                                type="monotone" dataKey="voltageWorstInjection" name={branch.label}
+                                stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                            ))}
+                            {showPerPhaseDistance && voltageDistanceData.maxBranches.flatMap((branch) => [
+                              <Line key={`max-A-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_A > 0)} type="monotone" dataKey="voltage_A" name={`${branch.label} A`} stroke="hsl(0, 75%, 55%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+                              <Line key={`max-B-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_B > 0)} type="monotone" dataKey="voltage_B" name={`${branch.label} B`} stroke="hsl(142, 76%, 36%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+                              <Line key={`max-C-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_C > 0)} type="monotone" dataKey="voltage_C" name={`${branch.label} C`} stroke="hsl(217, 91%, 60%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+                            ])}
+                            {showNeutralCurrent && voltageDistanceData.maxBranches.map((branch) => (
+                              <Line key={`max-IN-${branch.branchId}`} yAxisId="right" data={branch.points} type="monotone" dataKey="I_neutral" name={`I_N ${branch.label}`} stroke="hsl(35, 95%, 55%)" strokeWidth={1.5} dot={{ r: 2 }} strokeDasharray="6 3" />
+                            ))}
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </TabsContent>
+
+                      {/* HOURLY TAB */}
+                      <TabsContent value="hourly" className="mt-2">
+                        {rawContinu.length > 0 && networkPaths.length > 0 && (() => {
+                          const getCableNeutralCurrentHourly = (results: CalculationResult[], hour: number, nodeA: string, nodeB: string): number => {
+                            const r = results[hour];
+                            if (!r?.cables) return 0;
+                            const cable = r.cables.find(c => (c.nodeAId === nodeA && c.nodeBId === nodeB) || (c.nodeAId === nodeB && c.nodeBId === nodeA));
+                            return cable?.currentsPerPhase_A?.N ?? 0;
+                          };
+
+                          const hourlyBranches = networkPaths.map((branch, idx) => ({
+                            ...branch,
+                            points: branch.points.map((p, pi) => {
+                              const perPhase = getNodeVoltagePerPhase(rawContinu, p.nodeId, clockHour);
+                              const I_neutral = pi > 0 ? getCableNeutralCurrentHourly(rawContinu, clockHour, branch.points[pi - 1].nodeId, p.nodeId) : 0;
+                              return { ...p, voltage: perPhase.avg, voltage_A: perPhase.A, voltage_B: perPhase.B, voltage_C: perPhase.C, I_neutral: +I_neutral.toFixed(2) };
+                            }),
+                            color: BRANCH_COLORS[idx % BRANCH_COLORS.length],
+                          }));
+
+                          const allVoltages = hourlyBranches.flatMap(b => b.points.flatMap(p => [p.voltage, p.voltage_A, p.voltage_B, p.voltage_C])).filter(v => v > 0);
+                          const minV = allVoltages.length > 0 ? Math.min(...allVoltages) : 220;
+                          const maxV = allVoltages.length > 0 ? Math.max(...allVoltages) : 240;
+                          const hourFois = voltageContinu[clockHour]?.chargesResidentialFoisonnement;
+                          const busbarVoltageHourly = (rawContinu[clockHour]?.virtualBusbar?.voltage_V ?? 230) * busbarScale;
+
+                          return (
+                            <>
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline" className="text-[9px] h-4 border-amber-500/50 text-amber-500">{clockHour}h • Busbar {busbarVoltageHourly.toFixed(1)}V</Badge>
+                                  {hourFois !== undefined && <Badge variant="secondary" className="text-[9px] h-4">fois. {hourFois.toFixed(1)}%</Badge>}
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setFullscreenHourlyOpen(true)}><Maximize2 className="h-3 w-3" /></Button>
+                              </div>
+                              <div className="flex items-start gap-3">
+                                <div className="shrink-0 pt-2">
+                                  <ClockDial hour={clockHour} onChange={setClockHour} size={110} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <ResponsiveContainer width="100%" height={250}>
+                                    <LineChart>
+                                      <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                                      <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 10 }} label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 10 }} />
+                                      <YAxis yAxisId="left" domain={[Math.floor(minV - 5), Math.ceil(maxV + 5)]} tick={{ fontSize: 10 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
+                                      {showNeutralCurrent && <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} unit=" A" />}
+                                      <Tooltip content={VoltageDistanceTooltip} />
+                                      <Legend wrapperStyle={{ fontSize: 10 }} />
+                                      {renderDistanceReferenceLines('left', busbarVoltageHourly)}
+                                      {hourlyBranches.map((branch) => (
+                                        <Line key={`hourly-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
+                                          type="monotone" dataKey="voltage" name={branch.label}
+                                          stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                                      ))}
+                                      {showPerPhaseDistance && hourlyBranches.flatMap((branch) => [
+                                        <Line key={`hourly-A-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_A > 0)} type="monotone" dataKey="voltage_A" name={`${branch.label} A`} stroke="hsl(0, 75%, 55%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+                                        <Line key={`hourly-B-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_B > 0)} type="monotone" dataKey="voltage_B" name={`${branch.label} B`} stroke="hsl(142, 76%, 36%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+                                        <Line key={`hourly-C-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_C > 0)} type="monotone" dataKey="voltage_C" name={`${branch.label} C`} stroke="hsl(217, 91%, 60%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
+                                      ])}
+                                      {showNeutralCurrent && hourlyBranches.map((branch) => (
+                                        <Line key={`hourly-IN-${branch.branchId}`} yAxisId="right" data={branch.points} type="monotone" dataKey="I_neutral" name={`I_N ${branch.label}`} stroke="hsl(35, 95%, 55%)" strokeWidth={1.5} dot={{ r: 2 }} strokeDasharray="6 3" />
+                                      ))}
+                                    </LineChart>
+                                  </ResponsiveContainer>
+                                </div>
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </TabsContent>
+                    </Tabs>
+                  </div>
+                )}
+
+                {/* Hourly detail table — collapsible */}
+                {powerData.length > 0 && (
+                  <Collapsible open={tableOpen} onOpenChange={setTableOpen}>
+                    <CollapsibleTrigger className="flex items-center gap-2 w-full text-[11px] text-muted-foreground hover:text-foreground transition-colors py-1 px-1">
+                      <ChevronDown className={`h-3 w-3 transition-transform ${tableOpen ? 'rotate-180' : ''}`} />
+                      <span>Tableau horaire détaillé</span>
+                      <Badge variant="outline" className="text-[8px] h-3.5">K={continuCoeff.toFixed(4)}</Badge>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="bg-card/50 backdrop-blur rounded-lg border border-border/50 p-3 mt-1">
+                        <ScrollArea className="h-[280px]">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b border-border/50">
+                                <th className="text-left py-1 px-2 text-muted-foreground font-medium">H</th>
+                                <th className="text-right py-1 px-2 text-muted-foreground font-medium">Fois.%</th>
+                                <th className="text-right py-1 px-2 text-muted-foreground font-medium">P ch.</th>
+                                <th className="text-right py-1 px-2 text-muted-foreground font-medium">P PV</th>
+                                <th className="text-right py-1 px-2 text-muted-foreground font-medium">P net</th>
+                                <th className="text-right py-1 px-2 font-medium" style={{ color: 'hsl(0, 75%, 55%)' }}>A</th>
+                                <th className="text-right py-1 px-2 font-medium" style={{ color: 'hsl(142, 76%, 36%)' }}>B</th>
+                                <th className="text-right py-1 px-2 font-medium" style={{ color: 'hsl(217, 91%, 60%)' }}>C</th>
+                                <th className="text-right py-1 px-2 text-violet-500 font-medium">Moy</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {powerData.map((row, i) => {
+                                const vData = voltage24hData[i];
+                                const minPhase = vData ? Math.min(vData.V_A, vData.V_B, vData.V_C) : 0;
+                                return (
+                                  <tr key={row.hour} className="border-b border-border/20">
+                                    <td className="py-0.5 px-2 font-mono">{row.label}</td>
+                                    <td className="py-0.5 px-2 text-right font-mono">{row.foisonnement.toFixed(1)}</td>
+                                    <td className="py-0.5 px-2 text-right font-mono">{row.P_charge}</td>
+                                    <td className="py-0.5 px-2 text-right font-mono">{row.P_pv}</td>
+                                    <td className={`py-0.5 px-2 text-right font-mono ${row.P_net < 0 ? 'text-emerald-500' : ''}`}>{row.P_net}</td>
+                                    <td className={`py-0.5 px-2 text-right font-mono ${vData && vData.V_A < 218.5 ? 'text-orange-500' : ''}`}>{vData && vData.V_A > 0 ? vData.V_A.toFixed(1) : '—'}</td>
+                                    <td className={`py-0.5 px-2 text-right font-mono ${vData && vData.V_B < 218.5 ? 'text-orange-500' : ''}`}>{vData && vData.V_B > 0 ? vData.V_B.toFixed(1) : '—'}</td>
+                                    <td className={`py-0.5 px-2 text-right font-mono ${vData && vData.V_C < 218.5 ? 'text-orange-500' : ''}`}>{vData && vData.V_C > 0 ? vData.V_C.toFixed(1) : '—'}</td>
+                                    <td className={`py-0.5 px-2 text-right font-mono text-violet-500 ${vData && minPhase < 218.5 ? 'text-orange-500' : ''}`}>{vData && vData.V_continu > 0 ? vData.V_continu.toFixed(1) : '—'}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </ScrollArea>
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Navigation */}
-      <div className="flex justify-between">
-        <Button variant="outline" onClick={() => setViewMode('rapid')} className="gap-1">
-          <ChevronLeft className="h-4 w-4" /> Rapide
-        </Button>
-        <Button onClick={() => setViewMode('expert')} className="gap-1">
-          Mode Expert <ChevronRight className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
-  );
-
-  // ═══════════════════════════════════════════════════════════════════════════════
-  // ═══ NIVEAU 3 — EXPERT ═══
-  // ═══════════════════════════════════════════════════════════════════════════════
-
-  const renderExpertView = () => (
-    <div className="space-y-4 p-4">
-      {/* Breadcrumb */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <button onClick={() => setViewMode('rapid')} className="hover:text-foreground transition-colors">Rapide</button>
-          <span>›</span>
-          <button onClick={() => setViewMode('custom')} className="hover:text-foreground transition-colors">Personnalisé</button>
-          <span>›</span>
-          <span className="text-foreground font-medium">Expert</span>
-        </div>
-        <Button variant="ghost" size="sm" onClick={() => setViewMode('custom')} className="text-xs gap-1">
-          <ChevronLeft className="h-3 w-3" /> Retour
-        </Button>
-      </div>
-
-      {/* Tension vs Distance charts */}
-      {voltageDistanceData && voltageDistanceData.minBranches.length > 0 && (
-        <>
-          {/* Toggle options */}
-          <div className="flex flex-wrap items-center gap-4 px-1">
-            <div className="flex items-center gap-2">
-              <Checkbox id="showPerPhaseDistance" checked={showPerPhaseDistance} onCheckedChange={(checked) => setShowPerPhaseDistance(checked === true)} />
-              <Label htmlFor="showPerPhaseDistance" className="text-xs text-muted-foreground cursor-pointer">Tensions par phase (A, B, C)</Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Checkbox id="showNeutralCurrent" checked={showNeutralCurrent} onCheckedChange={(checked) => setShowNeutralCurrent(checked === true)} />
-              <Label htmlFor="showNeutralCurrent" className="text-xs text-muted-foreground cursor-pointer">Courant neutre I<sub>N</sub></Label>
-            </div>
-            {clientPointsData && (
-              <div className="flex items-center gap-2">
-                <Checkbox id="showClientPoints" checked={showClientPoints} onCheckedChange={(checked) => setShowClientPoints(checked === true)} />
-                <Label htmlFor="showClientPoints" className="text-xs text-muted-foreground cursor-pointer"><Users className="h-3 w-3 inline mr-1" />Raccordements clients</Label>
-              </div>
-            )}
-          </div>
-
-          {/* Pire cas charge */}
-          <Card className="bg-card/50 backdrop-blur border-violet-500/30">
-            <CardHeader className="pb-2 pt-3 px-4">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Ruler className="h-4 w-4 text-blue-500" />
-                Tension vs Distance — Pire cas charge
-                <Badge variant="outline" className="text-[10px] border-blue-500/50 text-blue-500">
-                  {voltageDistanceData.minHour}h • Vmin {voltageDistanceData.minV.toFixed(1)}V • Busbar {voltageDistanceData.busbarVoltageCharge.toFixed(1)}V
-                </Badge>
-                <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto" onClick={() => setFullscreenChargeOpen(true)}>
-                  <Maximize2 className="h-3.5 w-3.5" />
-                </Button>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <ResponsiveContainer width="100%" height={280}>
-                <LineChart>
-                  <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                  <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 10 }} label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 10 }} />
-                  <YAxis yAxisId="left" domain={voltageDistanceData.domainCharge} tick={{ fontSize: 10 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
-                  {showNeutralCurrent && <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} unit=" A" label={{ value: 'I neutre (A)', angle: 90, position: 'insideRight', offset: 10, fontSize: 10 }} />}
-                  <Tooltip contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }} content={VoltageDistanceTooltip} />
-                  <Legend wrapperStyle={{ fontSize: 10 }} />
-                  <ReferenceLine yAxisId="left" y={211.6} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />
-                  <ReferenceLine yAxisId="left" y={248.4} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />
-                  <ReferenceLine yAxisId="left" y={207} stroke="hsl(0, 72%, 51%)" strokeWidth={1.5} />
-                  <ReferenceLine yAxisId="left" y={253} stroke="hsl(0, 72%, 51%)" strokeWidth={1.5} />
-                  <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} label={{ value: '230V', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
-                  <ReferenceLine yAxisId="left" y={voltageDistanceData.busbarVoltageCharge} stroke="hsl(280, 70%, 50%)" strokeDasharray="6 3" strokeWidth={1.5}
-                    label={{ value: `Busbar ${voltageDistanceData.busbarVoltageCharge.toFixed(1)}V`, fontSize: 9, fill: 'hsl(280, 70%, 50%)' }} />
-                  {voltageDistanceData.minBranches.map((branch) => (
-                    <Line key={`min-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltageWorstCharge > 0 && isFinite(p.voltageWorstCharge))}
-                      type="monotone" dataKey="voltageWorstCharge" name={branch.label}
-                      stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                  ))}
-                  {showPerPhaseDistance && voltageDistanceData.minBranches.flatMap((branch) => [
-                    <Line key={`min-A-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_A > 0)} type="monotone" dataKey="voltage_A" name={`${branch.label} A`} stroke="hsl(0, 75%, 55%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
-                    <Line key={`min-B-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_B > 0)} type="monotone" dataKey="voltage_B" name={`${branch.label} B`} stroke="hsl(142, 76%, 36%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
-                    <Line key={`min-C-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_C > 0)} type="monotone" dataKey="voltage_C" name={`${branch.label} C`} stroke="hsl(217, 91%, 60%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
-                  ])}
-                  {showNeutralCurrent && voltageDistanceData.minBranches.map((branch) => (
-                    <Line key={`min-IN-${branch.branchId}`} yAxisId="right" data={branch.points} type="monotone" dataKey="I_neutral" name={`I_N ${branch.label}`} stroke="hsl(35, 95%, 55%)" strokeWidth={1.5} dot={{ r: 2 }} strokeDasharray="6 3" />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* Pire cas injection */}
-          <Card className="bg-card/50 backdrop-blur border-violet-500/30">
-            <CardHeader className="pb-2 pt-3 px-4">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Ruler className="h-4 w-4 text-emerald-500" />
-                Tension vs Distance — Pire cas injection
-                <Badge variant="outline" className="text-[10px] border-emerald-500/50 text-emerald-500">
-                  {voltageDistanceData.maxHour}h • Vmax {voltageDistanceData.maxV.toFixed(1)}V • Busbar {voltageDistanceData.busbarVoltageInjection.toFixed(1)}V
-                </Badge>
-                <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto" onClick={() => setFullscreenInjectionOpen(true)}>
-                  <Maximize2 className="h-3.5 w-3.5" />
-                </Button>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <ResponsiveContainer width="100%" height={280}>
-                <LineChart>
-                  <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                  <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 10 }} label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 10 }} />
-                  <YAxis yAxisId="left" domain={voltageDistanceData.domainInjection} tick={{ fontSize: 10 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
-                  {showNeutralCurrent && <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} unit=" A" label={{ value: 'I neutre (A)', angle: 90, position: 'insideRight', offset: 10, fontSize: 10 }} />}
-                  <Tooltip contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }} content={VoltageDistanceTooltip} />
-                  <Legend wrapperStyle={{ fontSize: 10 }} />
-                  <ReferenceLine yAxisId="left" y={211.6} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />
-                  <ReferenceLine yAxisId="left" y={248.4} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />
-                  <ReferenceLine yAxisId="left" y={207} stroke="hsl(0, 72%, 51%)" strokeWidth={1.5} />
-                  <ReferenceLine yAxisId="left" y={253} stroke="hsl(0, 72%, 51%)" strokeWidth={1.5} />
-                  <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} label={{ value: '230V', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
-                  <ReferenceLine yAxisId="left" y={voltageDistanceData.busbarVoltageInjection} stroke="hsl(280, 70%, 50%)" strokeDasharray="6 3" strokeWidth={1.5}
-                    label={{ value: `Busbar ${voltageDistanceData.busbarVoltageInjection.toFixed(1)}V`, fontSize: 9, fill: 'hsl(280, 70%, 50%)' }} />
-                  {voltageDistanceData.maxBranches.map((branch) => (
-                    <Line key={`max-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltageWorstInjection > 0)}
-                      type="monotone" dataKey="voltageWorstInjection" name={branch.label}
-                      stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                  ))}
-                  {showPerPhaseDistance && voltageDistanceData.maxBranches.flatMap((branch) => [
-                    <Line key={`max-A-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_A > 0)} type="monotone" dataKey="voltage_A" name={`${branch.label} A`} stroke="hsl(0, 75%, 55%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
-                    <Line key={`max-B-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_B > 0)} type="monotone" dataKey="voltage_B" name={`${branch.label} B`} stroke="hsl(142, 76%, 36%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
-                    <Line key={`max-C-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_C > 0)} type="monotone" dataKey="voltage_C" name={`${branch.label} C`} stroke="hsl(217, 91%, 60%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
-                  ])}
-                  {showNeutralCurrent && voltageDistanceData.maxBranches.map((branch) => (
-                    <Line key={`max-IN-${branch.branchId}`} yAxisId="right" data={branch.points} type="monotone" dataKey="I_neutral" name={`I_N ${branch.label}`} stroke="hsl(35, 95%, 55%)" strokeWidth={1.5} dot={{ r: 2 }} strokeDasharray="6 3" />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* Profil horaire avec ClockDial */}
-          {rawContinu.length > 0 && networkPaths.length > 0 && (() => {
-            const getCableNeutralCurrentHourly = (results: CalculationResult[], hour: number, nodeA: string, nodeB: string): number => {
-              const r = results[hour];
-              if (!r?.cables) return 0;
-              const cable = r.cables.find(c => (c.nodeAId === nodeA && c.nodeBId === nodeB) || (c.nodeAId === nodeB && c.nodeBId === nodeA));
-              return cable?.currentsPerPhase_A?.N ?? 0;
-            };
-
-            const hourlyBranches = networkPaths.map((branch, idx) => ({
-              ...branch,
-              points: branch.points.map((p, pi) => {
-                const perPhase = getNodeVoltagePerPhase(rawContinu, p.nodeId, clockHour);
-                const I_neutral = pi > 0 ? getCableNeutralCurrentHourly(rawContinu, clockHour, branch.points[pi - 1].nodeId, p.nodeId) : 0;
-                return { ...p, voltage: perPhase.avg, voltage_A: perPhase.A, voltage_B: perPhase.B, voltage_C: perPhase.C, I_neutral: +I_neutral.toFixed(2) };
-              }),
-              color: BRANCH_COLORS[idx % BRANCH_COLORS.length],
-            }));
-
-            const allVoltages = hourlyBranches.flatMap(b => b.points.flatMap(p => [p.voltage, p.voltage_A, p.voltage_B, p.voltage_C])).filter(v => v > 0);
-            const minV = allVoltages.length > 0 ? Math.min(...allVoltages) : 220;
-            const maxV = allVoltages.length > 0 ? Math.max(...allVoltages) : 240;
-            const hourFois = voltageContinu[clockHour]?.chargesResidentialFoisonnement;
-            const busbarVoltageHourly = rawContinu[clockHour]?.virtualBusbar?.voltage_V ?? 230;
-
-            return (
-              <Card className="bg-card/50 backdrop-blur border-amber-500/30">
-                <CardHeader className="pb-2 pt-3 px-4">
-                  <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-amber-500" />
-                    Tension vs Distance — Profil horaire
-                    <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-500">{clockHour}h • Busbar {busbarVoltageHourly.toFixed(1)}V</Badge>
-                    {hourFois !== undefined && <Badge variant="secondary" className="text-[10px]">fois. {hourFois.toFixed(1)}%</Badge>}
-                    <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto" onClick={() => setFullscreenHourlyOpen(true)}><Maximize2 className="h-3.5 w-3.5" /></Button>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="px-4 pb-4">
-                  <div className="flex items-start gap-4">
-                    <div className="shrink-0 flex flex-col items-center pt-4">
-                      <ClockDial hour={clockHour} onChange={setClockHour} size={130} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <ResponsiveContainer width="100%" height={300}>
-                        <LineChart>
-                          <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                          <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 10 }} label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 10 }} />
-                          <YAxis yAxisId="left" domain={[Math.floor(minV - 5), Math.ceil(maxV + 5)]} tick={{ fontSize: 10 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
-                          {showNeutralCurrent && <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} unit=" A" label={{ value: 'I neutre (A)', angle: 90, position: 'insideRight', offset: 10, fontSize: 10 }} />}
-                          <Tooltip contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }} content={VoltageDistanceTooltip} />
-                          <Legend wrapperStyle={{ fontSize: 10 }} />
-                          <ReferenceLine yAxisId="left" y={211.6} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />
-                          <ReferenceLine yAxisId="left" y={248.4} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />
-                          <ReferenceLine yAxisId="left" y={207} stroke="hsl(0, 72%, 51%)" strokeWidth={1.5} />
-                          <ReferenceLine yAxisId="left" y={253} stroke="hsl(0, 72%, 51%)" strokeWidth={1.5} />
-                          <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} label={{ value: '230V', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
-                          <ReferenceLine yAxisId="left" y={busbarVoltageHourly} stroke="hsl(280, 70%, 50%)" strokeDasharray="6 3" strokeWidth={1.5}
-                            label={{ value: `Busbar ${busbarVoltageHourly.toFixed(1)}V`, fontSize: 9, fill: 'hsl(280, 70%, 50%)' }} />
-                          {hourlyBranches.map((branch) => (
-                            <Line key={`hourly-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage > 0)}
-                              type="monotone" dataKey="voltage" name={branch.label}
-                              stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                          ))}
-                          {showPerPhaseDistance && hourlyBranches.flatMap((branch) => [
-                            <Line key={`hourly-A-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_A > 0)} type="monotone" dataKey="voltage_A" name={`${branch.label} A`} stroke="hsl(0, 75%, 55%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
-                            <Line key={`hourly-B-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_B > 0)} type="monotone" dataKey="voltage_B" name={`${branch.label} B`} stroke="hsl(142, 76%, 36%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
-                            <Line key={`hourly-C-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltage_C > 0)} type="monotone" dataKey="voltage_C" name={`${branch.label} C`} stroke="hsl(217, 91%, 60%)" strokeWidth={1} dot={false} strokeDasharray="4 2" legendType="none" />,
-                          ])}
-                          {showNeutralCurrent && hourlyBranches.map((branch) => (
-                            <Line key={`hourly-IN-${branch.branchId}`} yAxisId="right" data={branch.points} type="monotone" dataKey="I_neutral" name={`I_N ${branch.label}`} stroke="hsl(35, 95%, 55%)" strokeWidth={1.5} dot={{ r: 2 }} strokeDasharray="6 3" />
-                          ))}
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })()}
-        </>
-      )}
-
-      {/* Tableau horaire détaillé */}
-      {powerData.length > 0 && (
-        <Card className="bg-card/50 backdrop-blur border-violet-500/30">
-          <CardHeader className="pb-2 pt-3 px-4">
-            <CardTitle className="text-sm font-medium">
-              Détail horaire — Continu (coeff={continuCoeff.toFixed(4)})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            <ScrollArea className="h-[300px]">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-border/50">
-                    <th className="text-left py-1.5 px-2 text-muted-foreground font-medium">Heure</th>
-                    <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">Fois. %</th>
-                    <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">P charge</th>
-                    <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">P PV</th>
-                    <th className="text-right py-1.5 px-2 text-muted-foreground font-medium">P net</th>
-                    <th className="text-right py-1.5 px-2 font-medium" style={{ color: 'hsl(0, 75%, 55%)' }}>V_A</th>
-                    <th className="text-right py-1.5 px-2 font-medium" style={{ color: 'hsl(142, 76%, 36%)' }}>V_B</th>
-                    <th className="text-right py-1.5 px-2 font-medium" style={{ color: 'hsl(217, 91%, 60%)' }}>V_C</th>
-                    <th className="text-right py-1.5 px-2 text-violet-500 font-medium">V moy</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {powerData.map((row, i) => {
-                    const vData = voltage24hData[i];
-                    const minPhase = vData ? Math.min(vData.V_A, vData.V_B, vData.V_C) : 0;
-                    return (
-                      <tr key={row.hour} className="border-b border-border/20">
-                        <td className="py-1 px-2 font-mono">{row.label}</td>
-                        <td className="py-1 px-2 text-right font-mono">{row.foisonnement.toFixed(1)}</td>
-                        <td className="py-1 px-2 text-right font-mono">{row.P_charge}</td>
-                        <td className="py-1 px-2 text-right font-mono">{row.P_pv}</td>
-                        <td className={`py-1 px-2 text-right font-mono ${row.P_net < 0 ? 'text-emerald-500' : ''}`}>{row.P_net}</td>
-                        <td className={`py-1 px-2 text-right font-mono ${vData && vData.V_A < 218.5 ? 'text-orange-500' : ''}`}>{vData && vData.V_A > 0 ? vData.V_A.toFixed(1) : '—'}</td>
-                        <td className={`py-1 px-2 text-right font-mono ${vData && vData.V_B < 218.5 ? 'text-orange-500' : ''}`}>{vData && vData.V_B > 0 ? vData.V_B.toFixed(1) : '—'}</td>
-                        <td className={`py-1 px-2 text-right font-mono ${vData && vData.V_C < 218.5 ? 'text-orange-500' : ''}`}>{vData && vData.V_C > 0 ? vData.V_C.toFixed(1) : '—'}</td>
-                        <td className={`py-1 px-2 text-right font-mono text-violet-500 ${vData && minPhase < 218.5 ? 'text-orange-500' : ''}`}>{vData && vData.V_continu > 0 ? vData.V_continu.toFixed(1) : '—'}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </ScrollArea>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Export & Scénarios */}
-      <Card className="bg-card/50 backdrop-blur border-violet-500/30">
-        <CardHeader className="pb-2 pt-3 px-4">
-          <CardTitle className="text-sm font-medium">Export & Scénarios</CardTitle>
-        </CardHeader>
-        <CardContent className="px-4 pb-4 space-y-3">
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" className="gap-1" onClick={handleExportCSV} disabled={voltageContinu.length === 0}>
-              <Download className="h-3.5 w-3.5" /> Exporter CSV
-            </Button>
-            <Button size="sm" variant="outline" className="gap-1" onClick={handleSaveScenario} disabled={voltageContinu.length === 0}>
-              <Save className="h-3.5 w-3.5" /> Sauvegarder
-            </Button>
-            <Button size="sm" variant="ghost" className="gap-1" onClick={() => { setBaselineResults([]); setViewMode('rapid'); }}>
-              <RotateCcw className="h-3.5 w-3.5" /> Réinitialiser
-            </Button>
-          </div>
-
-          {savedScenarios.length > 0 && (
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Scénarios sauvegardés ({savedScenarios.length})</Label>
-              <div className="space-y-1 max-h-[150px] overflow-y-auto">
-                {savedScenarios.slice(0, 10).map((scenario) => (
-                  <div key={scenario.id} className="flex items-center justify-between bg-muted/30 rounded px-2 py-1.5 text-xs">
-                    <span className="font-medium truncate">{scenario.name}</span>
-                    <span className="text-muted-foreground text-[10px] shrink-0 ml-2">
-                      {new Date(scenario.date).toLocaleDateString('fr-FR')}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Navigation */}
-      <div className="flex justify-start">
-        <Button variant="outline" onClick={() => setViewMode('custom')} className="gap-1">
-          <ChevronLeft className="h-4 w-4" /> Personnalisé
-        </Button>
-      </div>
-    </div>
-  );
-
-  // ═══════════════════════════════════════════════════════════════════════════════
-  // ═══ RENDER ═══
-  // ═══════════════════════════════════════════════════════════════════════════════
-
-  return (
-    <>
-      {viewMode === 'rapid' && renderRapidView()}
-      {viewMode === 'custom' && renderCustomView()}
-      {viewMode === 'expert' && renderExpertView()}
-
-      {/* Profile editor dialog — always mounted */}
+      {/* Profile editor dialog */}
       <ProfileVisualEditor
         open={editorOpen}
         onOpenChange={setEditorOpen}
@@ -1629,7 +1386,7 @@ export const LaboFoisonnementTab = () => {
         onSave={setDailyProfileCustomProfiles}
       />
 
-      {/* Fullscreen dialogs — always mounted */}
+      {/* Fullscreen dialogs */}
       {voltageDistanceData && (
         <>
           {/* Fullscreen charge */}
@@ -1647,18 +1404,12 @@ export const LaboFoisonnementTab = () => {
               <ResponsiveContainer width="100%" height={550}>
                 <LineChart>
                   <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                  <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 11 }} label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 11 }} />
+                  <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 11 }} />
                   <YAxis yAxisId="left" domain={voltageDistanceData.domainCharge} tick={{ fontSize: 11 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
-                  {showNeutralCurrent && <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} unit=" A" label={{ value: 'I neutre (A)', angle: 90, position: 'insideRight', offset: 10, fontSize: 11 }} />}
+                  {showNeutralCurrent && <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} unit=" A" />}
                   <Tooltip contentStyle={{ fontSize: 12, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <ReferenceLine yAxisId="left" y={211.6} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />
-                  <ReferenceLine yAxisId="left" y={248.4} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />
-                  <ReferenceLine yAxisId="left" y={207} stroke="hsl(0, 72%, 51%)" strokeWidth={1.5} />
-                  <ReferenceLine yAxisId="left" y={253} stroke="hsl(0, 72%, 51%)" strokeWidth={1.5} />
-                  <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} label={{ value: '230V', fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
-                  <ReferenceLine yAxisId="left" y={voltageDistanceData.busbarVoltageCharge} stroke="hsl(280, 70%, 50%)" strokeDasharray="6 3" strokeWidth={1.5}
-                    label={{ value: `Busbar ${voltageDistanceData.busbarVoltageCharge.toFixed(1)}V`, fontSize: 10, fill: 'hsl(280, 70%, 50%)' }} />
+                  {renderDistanceReferenceLines('left', voltageDistanceData.busbarVoltageCharge)}
                   {voltageDistanceData.minBranches.map((branch) => (
                     <Line key={`fs-min-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltageWorstCharge > 0 && isFinite(p.voltageWorstCharge))}
                       type="monotone" dataKey="voltageWorstCharge" name={branch.label} stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
@@ -1691,18 +1442,12 @@ export const LaboFoisonnementTab = () => {
               <ResponsiveContainer width="100%" height={550}>
                 <LineChart>
                   <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                  <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 11 }} label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 11 }} />
+                  <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 11 }} />
                   <YAxis yAxisId="left" domain={voltageDistanceData.domainInjection} tick={{ fontSize: 11 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
-                  {showNeutralCurrent && <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} unit=" A" label={{ value: 'I neutre (A)', angle: 90, position: 'insideRight', offset: 10, fontSize: 11 }} />}
+                  {showNeutralCurrent && <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} unit=" A" />}
                   <Tooltip contentStyle={{ fontSize: 12, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <ReferenceLine yAxisId="left" y={211.6} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />
-                  <ReferenceLine yAxisId="left" y={248.4} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />
-                  <ReferenceLine yAxisId="left" y={207} stroke="hsl(0, 72%, 51%)" strokeWidth={1.5} />
-                  <ReferenceLine yAxisId="left" y={253} stroke="hsl(0, 72%, 51%)" strokeWidth={1.5} />
-                  <ReferenceLine yAxisId="left" y={230} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 4" strokeOpacity={0.4} label={{ value: '230V', fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
-                  <ReferenceLine yAxisId="left" y={voltageDistanceData.busbarVoltageInjection} stroke="hsl(280, 70%, 50%)" strokeDasharray="6 3" strokeWidth={1.5}
-                    label={{ value: `Busbar ${voltageDistanceData.busbarVoltageInjection.toFixed(1)}V`, fontSize: 10, fill: 'hsl(280, 70%, 50%)' }} />
+                  {renderDistanceReferenceLines('left', voltageDistanceData.busbarVoltageInjection)}
                   {voltageDistanceData.maxBranches.map((branch) => (
                     <Line key={`fs-max-${branch.branchId}`} yAxisId="left" data={branch.points.filter(p => p.voltageWorstInjection > 0)}
                       type="monotone" dataKey="voltageWorstInjection" name={branch.label} stroke={branch.color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
@@ -1731,12 +1476,12 @@ export const LaboFoisonnementTab = () => {
                 </DialogTitle>
               </DialogHeader>
               <div className="flex items-center gap-3 mb-2">
-                <Label className="text-xs text-muted-foreground whitespace-nowrap">Câble branchement :</Label>
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">Câble :</Label>
                 <Select value={effectiveBranchementCableId} onValueChange={(v) => setSelectedBranchementCableId(v)}>
                   <SelectTrigger className="h-8 text-xs w-64"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {branchementCableTypes.map(c => (
-                      <SelectItem key={c.id} value={c.id} className="text-xs">{c.label} — R={c.R_ohm_per_km} Ω/km, {c.maxCurrent_A}A</SelectItem>
+                      <SelectItem key={c.id} value={c.id} className="text-xs">{c.label} — R={c.R_ohm_per_km} Ω/km</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -1753,7 +1498,7 @@ export const LaboFoisonnementTab = () => {
                 <ResponsiveContainer width="100%" height={380}>
                   <LineChart>
                     <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                    <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 10 }} label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 10 }} />
+                    <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 10 }} />
                     <YAxis yAxisId="left" domain={[Math.floor(Math.min(200, (voltageDistanceData?.minV ?? 220) - 5)), Math.ceil(Math.max(240, (voltageDistanceData?.minV ?? 230) + 10))]} tick={{ fontSize: 10 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
                     <Tooltip contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
                       content={({ active, payload }) => {
@@ -1812,7 +1557,7 @@ export const LaboFoisonnementTab = () => {
                 <ResponsiveContainer width="100%" height={380}>
                   <LineChart>
                     <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                    <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 10 }} label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 10 }} />
+                    <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 10 }} />
                     <YAxis yAxisId="left" domain={[Math.floor(Math.min(225, (voltageDistanceData?.maxV ?? 230) - 5)), Math.ceil(Math.max(245, (voltageDistanceData?.maxV ?? 235) + 5))]}
                       tick={{ fontSize: 10 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
                     <Tooltip contentStyle={{ fontSize: 11, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
@@ -1888,10 +1633,10 @@ export const LaboFoisonnementTab = () => {
               <ResponsiveContainer width="100%" height={550}>
                 <LineChart>
                   <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                  <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 11 }} label={{ value: 'Distance (m)', position: 'insideBottom', offset: -5, fontSize: 11 }} />
+                  <XAxis type="number" dataKey="distance_m" unit=" m" tick={{ fontSize: 11 }} />
                   <YAxis yAxisId="left" domain={(() => { const pts = networkPaths.flatMap(b => b.points.map(p => { const ph = getNodeVoltagePerPhase(rawContinu, p.nodeId, clockHour); return [ph.A, ph.B, ph.C].filter(v => v > 0); }).flat()); return pts.length > 0 ? [Math.floor(Math.min(...pts) - 5), Math.ceil(Math.max(...pts) + 5)] : [205, 255]; })()}
                     tick={{ fontSize: 11 }} tickFormatter={(v: number) => v.toFixed(1)} unit=" V" />
-                  {showNeutralCurrent && <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} unit=" A" label={{ value: 'I neutre (A)', angle: 90, position: 'insideRight', offset: 10, fontSize: 11 }} />}
+                  {showNeutralCurrent && <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} unit=" A" />}
                   <Tooltip contentStyle={{ fontSize: 12, backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <ReferenceLine yAxisId="left" y={211.6} stroke="hsl(0, 72%, 51%)" strokeDasharray="6 4" strokeWidth={1} />

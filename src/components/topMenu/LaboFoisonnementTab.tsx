@@ -831,9 +831,18 @@ export const LaboFoisonnementTab = () => {
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1.5">
               <Select value={selectedNodeId || ''} onValueChange={v => setDailyProfileOptions({ selectedNodeId: v })}>
-                <SelectTrigger className="h-7 text-xs w-40"><SelectValue placeholder="Nœud…" /></SelectTrigger>
+                <SelectTrigger className="h-7 text-xs w-48"><SelectValue placeholder="Nœud…" /></SelectTrigger>
                 <SelectContent>
-                  {nodes.map(n => <SelectItem key={n.id} value={n.id} className="text-xs">{n.name || n.id.slice(0,8)}</SelectItem>)}
+                  {nodes.map(n => (
+                    <SelectItem key={n.id} value={n.id} className="text-xs">
+                      {n.isSource ? (
+                        <span className="flex items-center gap-1.5">
+                          <Badge variant="outline" className="text-[8px] h-3.5 px-1 border-primary/50 text-primary">Source</Badge>
+                          {n.name || 'Busbar'} · {busbarDisplayVoltage.toFixed(0)}V
+                        </span>
+                      ) : (n.name || n.id.slice(0,8))}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Button variant={nodeSelectionMode === 'profil24h' ? 'default' : 'ghost'} size="icon" className="h-7 w-7" onClick={() => startNodeSelection('profil24h')}>

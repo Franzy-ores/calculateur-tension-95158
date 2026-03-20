@@ -275,7 +275,7 @@ function countViolations(results: HourlyVoltageResult[]): { violations5: number;
   let violations10 = 0;
 
   for (const result of results) {
-    const deviation = Math.abs((result.voltage - 230) / 230 * 100);
+    const deviation = Math.abs((result.voltageAvg_V - 230) / 230 * 100);
     if (deviation >= 10) {
       violations10++;
     } else if (deviation >= 5) {

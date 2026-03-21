@@ -312,7 +312,7 @@ export function findOptimalSRG2Node(
   console.log(`      - Puissance aval : ${bestCandidate.simulation.powerDownstream_kVA.toFixed(1)} kVA`);
   console.log(`      - Marge puissance : ${bestCandidate.simulation.powerMargin_percent.toFixed(0)}%`);
   console.log(`      - Viabilité : ${bestCandidate.simulation.futureProofYears} ans`);
-  console.log(`🎯 === FIN ANALYSE PLACEMENT OPTIMAL SRG2 ===\n`);
+  console.log(`🎯 ================================================\n`);
 
   return bestCandidate;
 }

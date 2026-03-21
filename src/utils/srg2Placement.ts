@@ -129,7 +129,17 @@ function analyzeSRG2Impact(
   };
 }
 
-function calculateSRG2PragmaticScore(analysis: SRG2PlacementResult['simulation']): number {
+function calculateSRG2PragmaticScore(analysis: SRG2PlacementResult['simulation'], downstreamNodeCount: number): number {
+  // Élimination directe : puissance aval > limite → score = 0
+  if (analysis.powerMargin_percent < 0) {
+    return 0;
+  }
+  
+  // Couverture minimale : SRG2 doit avoir ≥3 nœuds aval pour justifier l'investissement
+  if (downstreamNodeCount < 3) {
+    return Math.min(20, analysis.correctionRate_percent * 0.2); // Score très pénalisé
+  }
+
   const correctionScore =
     analysis.correctionRate_percent >= 95 ? 100 :
     analysis.correctionRate_percent >= 90 ? 80 :

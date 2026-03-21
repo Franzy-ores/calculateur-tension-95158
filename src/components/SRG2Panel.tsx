@@ -494,7 +494,7 @@ export const SRG2Panel = () => {
       </div>
 
       {/* Suggestion automatique du nœud optimal SRG2 */}
-      {optimalSRG2Analysis && (
+      {optimalSRG2Result && (
         <Card className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
           <CardHeader className="pb-2 pt-3 px-4">
             <div className="flex items-center justify-between">
@@ -514,66 +514,57 @@ export const SRG2Panel = () => {
           
           {showOptimalSuggestion && (
             <CardContent className="pt-0 pb-3 px-4">
-              {optimalSRG2Analysis.optimalNode ? (
+              {optimalSRG2Result.nodeId ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <Target className="h-4 w-4 text-blue-600" />
                     <span className="font-medium text-sm">
-                      {optimalSRG2Analysis.optimalNode.nodeName}
+                      {optimalSRG2Result.nodeName}
                     </span>
                     <Badge variant="outline" className="text-xs bg-blue-100 dark:bg-blue-900/50">
-                      Score: {optimalSRG2Analysis.optimalNode.score.toFixed(3)}
+                      Score: {optimalSRG2Result.score.toFixed(0)}/100
                     </Badge>
                   </div>
                   
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="bg-background/50 p-2 rounded">
-                      <div className="text-muted-foreground">Écart ΔU</div>
-                      <div className="font-medium">{optimalSRG2Analysis.optimalNode.deltaU_V.toFixed(1)} V</div>
+                      <div className="text-muted-foreground">Correction</div>
+                      <div className="font-medium">{optimalSRG2Result.simulation.correctionRate_percent.toFixed(0)}%</div>
                     </div>
                     <div className="bg-background/50 p-2 rounded">
-                      <div className="text-muted-foreground">Z amont</div>
-                      <div className="font-medium">{optimalSRG2Analysis.optimalNode.upstreamImpedance_Zph_Ohm.toFixed(3)} Ω</div>
+                      <div className="text-muted-foreground">Puissance aval</div>
+                      <div className="font-medium">{optimalSRG2Result.simulation.powerDownstream_kVA.toFixed(1)} kVA</div>
                     </div>
                     <div className="bg-background/50 p-2 rounded">
-                      <div className="text-muted-foreground">Position</div>
-                      <div className="font-medium">{(optimalSRG2Analysis.optimalNode.positionRatio * 100).toFixed(0)}% du départ</div>
+                      <div className="text-muted-foreground">Marge puissance</div>
+                      <div className="font-medium">{optimalSRG2Result.simulation.powerMargin_percent.toFixed(0)}%</div>
                     </div>
                     <div className="bg-background/50 p-2 rounded">
-                      <div className="text-muted-foreground">U moyen</div>
-                      <div className="font-medium">{optimalSRG2Analysis.optimalNode.Umean_V.toFixed(1)} V</div>
+                      <div className="text-muted-foreground">Viabilité</div>
+                      <div className="font-medium">{optimalSRG2Result.simulation.futureProofYears} ans</div>
                     </div>
                   </div>
+
+                  <Badge 
+                    variant={optimalSRG2Result.recommendation === 'install_srg2' ? 'default' : 'secondary'}
+                    className="text-xs"
+                  >
+                    {optimalSRG2Result.recommendation === 'install_srg2' ? '✅ Installation recommandée' : '⚠️ Renforcement réseau conseillé'}
+                  </Badge>
                   
                   <Button
                     size="sm"
                     className="w-full"
                     onClick={handleAddOptimalNode}
-                    disabled={simulationEquipment.srg2Devices?.some(d => d.nodeId === optimalSRG2Analysis.optimalNode?.nodeId)}
+                    disabled={simulationEquipment.srg2Devices?.some(d => d.nodeId === optimalSRG2Result.nodeId)}
                   >
                     <Plus className="h-3 w-3 mr-1" />
-                    Ajouter sur {optimalSRG2Analysis.optimalNode.nodeName}
+                    Ajouter sur {optimalSRG2Result.nodeName}
                   </Button>
-                  
-                  {optimalSRG2Analysis.candidates.length > 1 && (
-                    <div className="mt-2">
-                      <div className="text-xs text-muted-foreground mb-1">
-                        Autres candidats ({optimalSRG2Analysis.candidates.length - 1}):
-                      </div>
-                      <div className="space-y-1">
-                        {optimalSRG2Analysis.candidates.slice(1, 4).map((c, i) => (
-                          <div key={c.nodeId} className="text-xs flex items-center justify-between bg-background/30 p-1.5 rounded">
-                            <span>{i + 1}. {c.nodeName}</span>
-                            <span className="text-muted-foreground">score: {c.score.toFixed(3)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               ) : (
                 <div className="text-xs text-muted-foreground">
-                  {optimalSRG2Analysis.noResultReason}
+                  {optimalSRG2Result.reasoning}
                 </div>
               )}
             </CardContent>

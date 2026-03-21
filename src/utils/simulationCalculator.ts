@@ -2648,6 +2648,10 @@ export class SimulationCalculator extends ElectricalCalculator {
       console.error(`❌ SRG2 ${srg2Device.id}: Aucun câble trouvé pour le nœud ${srg2Device.nodeId}`);
       return;
     }
+
+    console.log(`\n🔧 [PLACEMENT SRG2] Nœud ${srg2Device.nodeId}`);
+    console.log(`   Câble: ${targetCable.id} (${targetCable.nodeAId} → ${targetCable.nodeBId})`);
+    console.log(`   Coefficients: A=${coefficients.A}%, B=${coefficients.B}%, C=${coefficients.C}%`);
     
     const Vnom = 230;
     const serieVoltages = {

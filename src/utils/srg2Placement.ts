@@ -303,8 +303,16 @@ export function findOptimalSRG2Node(
     };
   }
 
-  console.log(`\n🎯 Meilleur emplacement SRG2 : "${bestCandidate.nodeName}" (score: ${bestCandidate.score.toFixed(0)}/100)`);
-  console.log('🎯 === FIN ANALYSE PLACEMENT OPTIMAL SRG2 ===\n');
+  console.log(`\n🎯 === RÉSULTAT FINAL PLACEMENT SRG2 ===`);
+  console.log(`   Nœud sélectionné : "${bestCandidate.nodeName}" (ID: ${bestCandidate.nodeId})`);
+  console.log(`   Score : ${bestCandidate.score.toFixed(0)}/100`);
+  console.log(`   Recommandation : ${bestCandidate.recommendation}`);
+  console.log(`   Métriques:`);
+  console.log(`      - Correction : ${bestCandidate.simulation.correctionRate_percent.toFixed(0)}%`);
+  console.log(`      - Puissance aval : ${bestCandidate.simulation.powerDownstream_kVA.toFixed(1)} kVA`);
+  console.log(`      - Marge puissance : ${bestCandidate.simulation.powerMargin_percent.toFixed(0)}%`);
+  console.log(`      - Viabilité : ${bestCandidate.simulation.futureProofYears} ans`);
+  console.log(`🎯 === FIN ANALYSE PLACEMENT OPTIMAL SRG2 ===\n`);
 
   return bestCandidate;
 }

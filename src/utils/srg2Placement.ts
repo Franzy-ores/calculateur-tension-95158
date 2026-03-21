@@ -15,9 +15,47 @@ export interface SRG2PlacementResult {
     powerMargin_percent: number;
     futureProofYears: number;
   };
+  scenarioDetails?: {
+    midiSolaire: SRG2PlacementResult['simulation'] & { score: number };
+    pointeSansPV: SRG2PlacementResult['simulation'] & { score: number };
+  };
   recommendation: 'install_srg2' | 'reinforce_network';
   reasoning: string;
 }
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// SCÉNARIOS DE PLACEMENT
+// Un SRG2 doit fonctionner dans les 2 cas extrêmes :
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+interface PlacementScenario {
+  name: string;
+  foisonnementCharges: number;
+  foisonnementProductions: number;
+  calculationScenario: CalculationScenario;
+  description: string;
+}
+
+const PLACEMENT_SCENARIOS: PlacementScenario[] = [
+  {
+    name: 'midi_solaire',
+    foisonnementCharges: 0,
+    foisonnementProductions: 100,
+    calculationScenario: 'PRODUCTION',
+    description: 'Midi solaire (0% charge, 100% production) → surtensions'
+  },
+  {
+    name: 'pointe_sans_pv',
+    foisonnementCharges: 12,
+    foisonnementProductions: 0,
+    calculationScenario: 'PRÉLÈVEMENT',
+    description: 'Pointe sans production (12% charge, 0% production) → sous-tensions'
+  }
+];
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// QUALIFICATION RÉSEAU
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function isNetworkSuitableForSRG2(
   project: Project,
@@ -66,6 +104,10 @@ function isNetworkSuitableForSRG2(
     metrics: { nonCompliantNodes: nonCompliantCount, totalNodes, maxVoltageDeviation_V: maxVoltageDeviation }
   };
 }
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ANALYSE D'IMPACT
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function analyzeSRG2Impact(
   baseline: CalculationResult,
@@ -118,12 +160,10 @@ function analyzeSRG2Impact(
 
   const correctedCount = beforeIssues - afterIssues;
   
-  // Si pas de nœuds hors norme, évaluer par amélioration de tension (pas 100% par défaut)
   let correctionRate: number;
   if (beforeIssues > 0) {
     correctionRate = (correctedCount / beforeIssues) * 100;
   } else {
-    // Calculer l'amélioration de la tension max deviation par phase
     let baselineMaxDev = 0;
     let srg2MaxDev = 0;
     for (const nm of baselineMetrics) {
@@ -156,15 +196,17 @@ function analyzeSRG2Impact(
   };
 }
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// SCORING
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 function calculateSRG2PragmaticScore(analysis: SRG2PlacementResult['simulation'], downstreamNodeCount: number): number {
-  // Élimination directe : puissance aval > limite → score = 0
   if (analysis.powerMargin_percent < 0) {
     return 0;
   }
   
-  // Couverture minimale : SRG2 doit avoir ≥3 nœuds aval pour justifier l'investissement
   if (downstreamNodeCount < 3) {
-    return Math.min(20, analysis.correctionRate_percent * 0.2); // Score très pénalisé
+    return Math.min(20, analysis.correctionRate_percent * 0.2);
   }
 
   const correctionScore =
@@ -188,10 +230,35 @@ function calculateSRG2PragmaticScore(analysis: SRG2PlacementResult['simulation']
   return correctionScore * 0.6 + powerScore * 0.3 + futureScore * 0.1;
 }
 
-function generateSRG2Reasoning(analysis: SRG2PlacementResult['simulation'], node: Node): string {
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// RAISONNEMENT
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function generateSRG2Reasoning(
+  analysis: SRG2PlacementResult['simulation'],
+  node: Node,
+  scenarioDetails?: SRG2PlacementResult['scenarioDetails']
+): string {
   const { correctionRate_percent, remainingIssuesCount, powerMargin_percent, futureProofYears } = analysis;
 
-  let reasoning = `Simulation complète avec SRG2 installé sur nœud "${node.name}":\n\n`;
+  let reasoning = `Simulation multi-scénarios avec SRG2 installé sur nœud "${node.name}":\n\n`;
+
+  // Détails par scénario si disponibles
+  if (scenarioDetails) {
+    reasoning += `📊 SCÉNARIO 1 — Midi solaire (0% charge, 100% PV):\n`;
+    reasoning += `   Score: ${scenarioDetails.midiSolaire.score.toFixed(0)}/100`;
+    reasoning += ` | Correction: ${scenarioDetails.midiSolaire.correctionRate_percent.toFixed(0)}%`;
+    reasoning += ` | Marge: ${scenarioDetails.midiSolaire.powerMargin_percent.toFixed(0)}%\n`;
+    reasoning += `   Nœuds restants hors norme: ${scenarioDetails.midiSolaire.remainingIssuesCount}\n\n`;
+
+    reasoning += `📊 SCÉNARIO 2 — Pointe sans PV (12% charge, 0% PV):\n`;
+    reasoning += `   Score: ${scenarioDetails.pointeSansPV.score.toFixed(0)}/100`;
+    reasoning += ` | Correction: ${scenarioDetails.pointeSansPV.correctionRate_percent.toFixed(0)}%`;
+    reasoning += ` | Marge: ${scenarioDetails.pointeSansPV.powerMargin_percent.toFixed(0)}%\n`;
+    reasoning += `   Nœuds restants hors norme: ${scenarioDetails.pointeSansPV.remainingIssuesCount}\n\n`;
+
+    reasoning += `🎯 SCORE FINAL (pire cas): ${analysis.correctionRate_percent.toFixed(0)}% correction, ${powerMargin_percent.toFixed(0)}% marge\n\n`;
+  }
 
   if (correctionRate_percent >= 95) {
     reasoning += `✅ EXCELLENT : ${correctionRate_percent.toFixed(0)}% des problèmes de tension sont corrigés.\n`;
@@ -226,8 +293,89 @@ function generateSRG2Reasoning(analysis: SRG2PlacementResult['simulation'], node
   return reasoning;
 }
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// UTILITAIRES
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 /**
- * Trouve l'emplacement optimal pour un SRG2 via simulation exhaustive.
+ * Crée une copie du projet avec des foisonnements modifiés pour un scénario de placement.
+ */
+function createProjectForScenario(project: Project, scenario: PlacementScenario): Project {
+  return {
+    ...project,
+    foisonnementCharges: scenario.foisonnementCharges,
+    foisonnementChargesResidentiel: scenario.foisonnementCharges,
+    foisonnementChargesIndustriel: scenario.foisonnementCharges,
+    foisonnementProductions: scenario.foisonnementProductions,
+  };
+}
+
+/**
+ * Simule un SRG2 sur un nœud pour un scénario donné et retourne le résultat + score.
+ */
+function simulateNodeForScenario(
+  calculator: SimulationCalculator,
+  project: Project,
+  candidate: Node,
+  placementScenario: PlacementScenario,
+  srg2Config: SRG2Config,
+): { baseline: CalculationResult; withSRG2: CalculationResult; analysis: SRG2PlacementResult['simulation']; score: number } | null {
+  const scenarioProject = createProjectForScenario(project, placementScenario);
+  const scenario = placementScenario.calculationScenario;
+
+  // Baseline sans SRG2
+  const baselineCalc = new SimulationCalculator(
+    project.cosPhi,
+    project.cosPhiCharges,
+    project.cosPhiProductions
+  );
+  const emptyEquipment: SimulationEquipment = {
+    srg2Devices: [],
+    neutralCompensators: [],
+    cableUpgrades: [],
+  };
+  let baseline: CalculationResult;
+  try {
+    baseline = baselineCalc.calculateWithSimulation(scenarioProject, scenario, emptyEquipment);
+  } catch (error) {
+    console.warn(`   ⚠️ Échec baseline ${placementScenario.name}:`, error);
+    return null;
+  }
+
+  // Avec SRG2
+  const equipment: SimulationEquipment = {
+    srg2Devices: [srg2Config],
+    neutralCompensators: [],
+    cableUpgrades: [],
+  };
+  let withSRG2: CalculationResult;
+  try {
+    withSRG2 = calculator.calculateWithSimulation(scenarioProject, scenario, equipment);
+  } catch (error) {
+    console.warn(`   ⚠️ Échec simulation SRG2 ${placementScenario.name}:`, error);
+    return null;
+  }
+
+  const analysis = analyzeSRG2Impact(baseline, withSRG2, candidate, scenarioProject, scenario);
+  const downstreamNodes = findDownstreamNodesFromNode(project, candidate.id);
+  const score = calculateSRG2PragmaticScore(analysis, downstreamNodes.length);
+
+  return { baseline, withSRG2, analysis, score };
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ALGORITHME PRINCIPAL
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/**
+ * Trouve l'emplacement optimal pour un SRG2 via simulation exhaustive MULTI-SCÉNARIOS.
+ * 
+ * Chaque nœud candidat est testé contre 2 scénarios extrêmes :
+ * 1. Midi solaire (0% charge, 100% PV) → détecte les surtensions
+ * 2. Pointe sans PV (12% charge, 0% PV) → détecte les sous-tensions
+ * 
+ * Le score final est le MINIMUM des 2 scénarios (pire cas).
+ * Un SRG2 doit fonctionner dans les deux cas pour être recommandé.
  */
 export function findOptimalSRG2Node(
   project: Project,
@@ -235,44 +383,84 @@ export function findOptimalSRG2Node(
   scenario: CalculationScenario,
   onProgress?: (current: number, total: number) => void
 ): SRG2PlacementResult {
-  console.log('🎯 === DÉBUT ANALYSE PLACEMENT OPTIMAL SRG2 ===');
+  console.log('🎯 === DÉBUT ANALYSE PLACEMENT OPTIMAL SRG2 (MULTI-SCÉNARIOS) ===');
+  console.log(`   Scénarios testés:`);
+  PLACEMENT_SCENARIOS.forEach(s => console.log(`   - ${s.description}`));
 
-  const suitability = isNetworkSuitableForSRG2(project, baselineResult);
+  // Qualification réseau sur le scénario le plus critique
+  // On teste les 2 scénarios pour la qualification
+  let worstSuitability: ReturnType<typeof isNetworkSuitableForSRG2> | null = null;
 
-  if (!suitability.suitable) {
-    console.log('❌ Réseau non compatible SRG2:', suitability.reason);
+  for (const ps of PLACEMENT_SCENARIOS) {
+    const scenarioProject = createProjectForScenario(project, ps);
+    const calc = new SimulationCalculator(project.cosPhi, project.cosPhiCharges, project.cosPhiProductions);
+    const emptyEquipment: SimulationEquipment = { srg2Devices: [], neutralCompensators: [], cableUpgrades: [] };
+    
+    let scenarioBaseline: CalculationResult;
+    try {
+      scenarioBaseline = calc.calculateWithSimulation(scenarioProject, ps.calculationScenario, emptyEquipment);
+    } catch {
+      console.warn(`   ⚠️ Échec baseline qualification pour ${ps.name}`);
+      continue;
+    }
+
+    const suitability = isNetworkSuitableForSRG2(scenarioProject, scenarioBaseline);
+    console.log(`   📋 Qualification ${ps.name}: ${suitability.suitable ? '✅' : '❌'} (${suitability.metrics.nonCompliantNodes} nœuds hors norme, max déviation ${suitability.metrics.maxVoltageDeviation_V.toFixed(1)}V)`);
+
+    // Si un scénario dit "non compatible" avec écart > 30V, c'est éliminatoire
+    if (!suitability.suitable && suitability.metrics.maxVoltageDeviation_V > 30) {
+      console.log(`❌ Réseau non compatible SRG2 (${ps.name}):`, suitability.reason);
+      return {
+        nodeId: null,
+        nodeName: 'N/A',
+        score: 0,
+        simulation: {
+          correctedNodesCount: 0,
+          remainingIssuesCount: suitability.metrics.nonCompliantNodes,
+          correctionRate_percent: 0,
+          powerDownstream_kVA: 0,
+          powerMargin_percent: 0,
+          futureProofYears: 0
+        },
+        recommendation: 'reinforce_network',
+        reasoning: `[${ps.description}] ${suitability.reason}`
+      };
+    }
+
+    if (!worstSuitability || suitability.metrics.nonCompliantNodes > worstSuitability.metrics.nonCompliantNodes) {
+      worstSuitability = suitability;
+    }
+  }
+
+  if (worstSuitability && !worstSuitability.suitable) {
+    console.log('❌ Réseau non compatible SRG2:', worstSuitability.reason);
     return {
       nodeId: null,
       nodeName: 'N/A',
       score: 0,
       simulation: {
         correctedNodesCount: 0,
-        remainingIssuesCount: suitability.metrics.nonCompliantNodes,
+        remainingIssuesCount: worstSuitability.metrics.nonCompliantNodes,
         correctionRate_percent: 0,
         powerDownstream_kVA: 0,
         powerMargin_percent: 0,
         futureProofYears: 0
       },
       recommendation: 'reinforce_network',
-      reasoning: suitability.reason
+      reasoning: worstSuitability.reason
     };
   }
 
-  console.log(`✅ Réseau compatible SRG2 (${suitability.metrics.nonCompliantNodes} nœuds hors norme)`);
+  console.log(`✅ Réseau compatible SRG2 sur les 2 scénarios`);
 
   const candidates = project.nodes.filter(n => !n.isSource);
 
-  // === DIAGNOSTIC: Vérifier le nombre de nœuds aval et la puissance ===
+  // === DIAGNOSTIC: Top 10 candidats ===
   console.log('\n📊 DIAGNOSTIC PLACEMENT SRG2: Top 10 candidats\n');
   for (const candidate of candidates.slice(0, 10)) {
     const downstreamNodes = findDownstreamNodesFromNode(project, candidate.id);
     const downstreamPower = calculateDownstreamPower(downstreamNodes, project);
-    const powerLimit = scenario === 'PRODUCTION' ? 85 : 110;
-    const margin = downstreamPower > 0 ? ((powerLimit - downstreamPower) / powerLimit * 100) : 100;
-    console.log(`  ${candidate.name}:`);
-    console.log(`    - Nœuds aval: ${downstreamNodes.length}`);
-    console.log(`    - Puissance aval: ${downstreamPower.toFixed(1)} kVA`);
-    console.log(`    - Marge: ${margin.toFixed(0)}% ${margin < 40 ? '⚠️ INSUFFISANT' : '✅'}`);
+    console.log(`  ${candidate.name}: ${downstreamNodes.length} nœuds aval, ${downstreamPower.toFixed(1)} kVA`);
   }
   console.log('');
 
@@ -303,42 +491,67 @@ export function findOptimalSRG2Node(
       enabled: true,
     } as SRG2Config;
 
-    const equipment: SimulationEquipment = {
-      srg2Devices: [srg2Config],
-      neutralCompensators: [],
-      cableUpgrades: [],
-    };
+    // ━━━ Simuler les 2 scénarios ━━━
+    const scenarioResults: Array<{
+      name: string;
+      analysis: SRG2PlacementResult['simulation'];
+      score: number;
+    }> = [];
 
-    let resultWithSRG2: CalculationResult;
-    try {
-      const simResult = calculator.calculateWithSimulation(project, scenario, equipment);
-      resultWithSRG2 = simResult;
-    } catch (error) {
-      console.warn(`⚠️ Échec simulation SRG2 sur nœud ${candidate.id}:`, error);
+    let allScenariosOK = true;
+
+    for (const ps of PLACEMENT_SCENARIOS) {
+      console.log(`   📋 Scénario: ${ps.description}`);
+      
+      const result = simulateNodeForScenario(calculator, project, candidate, ps, srg2Config);
+      
+      if (!result) {
+        allScenariosOK = false;
+        break;
+      }
+
+      console.log(`      Score: ${result.score.toFixed(1)}/100 | Correction: ${result.analysis.correctionRate_percent.toFixed(0)}% | Marge: ${result.analysis.powerMargin_percent.toFixed(0)}%`);
+
+      scenarioResults.push({
+        name: ps.name,
+        analysis: result.analysis,
+        score: result.score,
+      });
+    }
+
+    if (!allScenariosOK || scenarioResults.length < 2) {
+      console.warn(`   ⚠️ Nœud ${candidate.name} : un scénario a échoué, ignoré`);
       continue;
     }
 
-    const analysis = analyzeSRG2Impact(baselineResult, resultWithSRG2, candidate, project, scenario);
-    const downstreamNodes = findDownstreamNodesFromNode(project, candidate.id);
-    const score = calculateSRG2PragmaticScore(analysis, downstreamNodes.length);
+    // Score final = MINIMUM des 2 scénarios (pire cas)
+    const midiResult = scenarioResults.find(r => r.name === 'midi_solaire')!;
+    const pointeResult = scenarioResults.find(r => r.name === 'pointe_sans_pv')!;
+    const worstScore = Math.min(midiResult.score, pointeResult.score);
+    const worstAnalysis = midiResult.score <= pointeResult.score ? midiResult.analysis : pointeResult.analysis;
 
-    console.log(`   📊 Score : ${score.toFixed(1)}/100`);
-    console.log(`      - Correction : ${analysis.correctionRate_percent.toFixed(0)}%`);
-    console.log(`      - Marge puissance : ${analysis.powerMargin_percent.toFixed(0)}%`);
-    console.log(`      - Puissance aval : ${analysis.powerDownstream_kVA.toFixed(1)} kVA`);
-    console.log(`      - Viabilité : ${analysis.futureProofYears} ans`);
+    console.log(`   🎯 Score final (pire cas): ${worstScore.toFixed(1)}/100`);
+    console.log(`      - Midi solaire: ${midiResult.score.toFixed(1)}/100`);
+    console.log(`      - Pointe sans PV: ${pointeResult.score.toFixed(1)}/100`);
 
-    if (score > bestScore) {
-      bestScore = score;
+    if (worstScore > bestScore) {
+      bestScore = worstScore;
+
+      const scenarioDetails = {
+        midiSolaire: { ...midiResult.analysis, score: midiResult.score },
+        pointeSansPV: { ...pointeResult.analysis, score: pointeResult.score },
+      };
+
       bestCandidate = {
         nodeId: candidate.id,
         nodeName: candidate.name,
-        score,
-        simulation: analysis,
-        recommendation: (analysis.correctionRate_percent >= 95 && analysis.powerMargin_percent >= 40)
+        score: worstScore,
+        simulation: worstAnalysis,
+        scenarioDetails,
+        recommendation: (worstAnalysis.correctionRate_percent >= 95 && worstAnalysis.powerMargin_percent >= 40)
           ? 'install_srg2'
           : 'reinforce_network',
-        reasoning: generateSRG2Reasoning(analysis, candidate)
+        reasoning: generateSRG2Reasoning(worstAnalysis, candidate, scenarioDetails)
       };
     }
   }
@@ -351,26 +564,26 @@ export function findOptimalSRG2Node(
       score: 0,
       simulation: {
         correctedNodesCount: 0,
-        remainingIssuesCount: suitability.metrics.nonCompliantNodes,
+        remainingIssuesCount: 0,
         correctionRate_percent: 0,
         powerDownstream_kVA: 0,
         powerMargin_percent: 0,
         futureProofYears: 0
       },
       recommendation: 'reinforce_network',
-      reasoning: 'Aucun emplacement ne permet de corriger ≥95% des problèmes de tension avec une marge de puissance ≥40%.'
+      reasoning: 'Aucun emplacement ne permet de corriger ≥95% des problèmes dans les 2 scénarios (midi solaire + pointe sans PV).'
     };
   }
 
-  console.log(`\n🎯 === RÉSULTAT FINAL PLACEMENT SRG2 ===`);
+  console.log(`\n🎯 === RÉSULTAT FINAL PLACEMENT SRG2 (MULTI-SCÉNARIOS) ===`);
   console.log(`   Nœud sélectionné : "${bestCandidate.nodeName}" (ID: ${bestCandidate.nodeId})`);
-  console.log(`   Score : ${bestCandidate.score.toFixed(0)}/100`);
+  console.log(`   Score (pire cas) : ${bestCandidate.score.toFixed(0)}/100`);
   console.log(`   Recommandation : ${bestCandidate.recommendation}`);
-  console.log(`   Métriques:`);
-  console.log(`      - Correction : ${bestCandidate.simulation.correctionRate_percent.toFixed(0)}%`);
-  console.log(`      - Puissance aval : ${bestCandidate.simulation.powerDownstream_kVA.toFixed(1)} kVA`);
-  console.log(`      - Marge puissance : ${bestCandidate.simulation.powerMargin_percent.toFixed(0)}%`);
-  console.log(`      - Viabilité : ${bestCandidate.simulation.futureProofYears} ans`);
+  if (bestCandidate.scenarioDetails) {
+    console.log(`   Détails:`);
+    console.log(`      Midi solaire : ${bestCandidate.scenarioDetails.midiSolaire.score.toFixed(0)}/100 (correction ${bestCandidate.scenarioDetails.midiSolaire.correctionRate_percent.toFixed(0)}%, marge ${bestCandidate.scenarioDetails.midiSolaire.powerMargin_percent.toFixed(0)}%)`);
+    console.log(`      Pointe sans PV : ${bestCandidate.scenarioDetails.pointeSansPV.score.toFixed(0)}/100 (correction ${bestCandidate.scenarioDetails.pointeSansPV.correctionRate_percent.toFixed(0)}%, marge ${bestCandidate.scenarioDetails.pointeSansPV.powerMargin_percent.toFixed(0)}%)`);
+  }
   console.log(`🎯 ================================================\n`);
 
   return bestCandidate;

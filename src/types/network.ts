@@ -150,6 +150,8 @@ export interface CableType {
   maxCurrent_A?: number; // Ampacité (I_iz) optionnelle si disponible
   // 🔧 FIX GRD — Type d'isolation pour limites thermiques IEC 60287
   insulationType?: 'PVC' | 'XLPE' | 'PR';
+  // Coefficient de couplage mutuel phase-neutre (default 0.3 pour câbles multipolaires)
+  mutualCouplingFactor?: number;
 }
 
 export interface ClientCharge {

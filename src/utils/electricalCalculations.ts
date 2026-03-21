@@ -1385,9 +1385,27 @@ export class ElectricalCalculator {
               // Aucun nœud n'a de tension imposée artificiellement
               // ============================================================================
               
-              // Calculer tension selon Kirchhoff : V_v = V_u - Z * I_uv + V_série
+              // Calculer tension selon Kirchhoff : V_v = V_u - Z * I_uv - Z_coupling * I_N + V_série
               // La tension série V_série est injectée par le SRG2 (si présent sur cette branche)
               let Vv = sub(Vu, mul(Z, Iuv));
+              
+              // ✅ COUPLAGE MUTUEL PHASE-NEUTRE: Ajouter l'effet du courant neutre
+              if (I_neutral_branches) {
+                const I_N = I_neutral_branches.get(cab.id);
+                if (I_N && abs(I_N) > 0.01) {
+                  const ct = cableTypeById.get(cab.typeId);
+                  const mutualFactor = (ct as any)?.mutualCouplingFactor ?? 0.3;
+                  const length_m_raw = this.calculateLengthMeters(cab.coordinates || []);
+                  const length_m = applySagCorrection(length_m_raw, cab.pose);
+                  const L_km = length_m / 1000;
+                  // Z_coupling = mutualFactor * Z_neutral(R0, X0) per km * length
+                  const Z_coupling = C(
+                    (ct?.R0_ohm_per_km || 0) * L_km * mutualFactor,
+                    (ct?.X0_ohm_per_km || 0) * L_km * mutualFactor
+                  );
+                  Vv = sub(Vv, mul(Z_coupling, I_N));
+                }
+              }
               
               // ✅ SRG2 INJECTION SÉRIE: Ajouter la tension série si présente
               if (cab.serieVoltagePerPhase) {

@@ -95,7 +95,7 @@ export const NodePhaseDisplay = ({ nodeId }: NodePhaseDisplayProps) => {
         </div>
       </div>
 
-      {/* Composantes de séquence (400V uniquement) */}
+      {/* Composantes de séquence (400V et 230V) */}
       {sequenceComponents && (
         <div className="border-t border-border pt-1 mt-1 space-y-0.5">
           <div className="font-medium text-foreground">Séquences:</div>

@@ -1836,8 +1836,8 @@ export class ElectricalCalculator {
         let V_neutral_iter = new Map<string, Complex>(
           nodes.map(n => [n.id, C(0, 0)])
         );
-        const MAX_NEUTRAL_PASSES = 3;
-        const NEUTRAL_CONVERGENCE_V = 0.1;
+        const MAX_NEUTRAL_PASSES = 8;
+        const NEUTRAL_CONVERGENCE_V = 0.01;
 
         for (let neutralPass = 0; neutralPass < MAX_NEUTRAL_PASSES; neutralPass++) {
           const { V_neutral: V_neutral_new } = this.computeNeutralVoltages(

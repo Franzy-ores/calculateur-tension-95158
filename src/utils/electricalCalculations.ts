@@ -2344,37 +2344,58 @@ export class ElectricalCalculator {
         const nodeCompliance: 'normal' | 'warning' | 'critical' = phaseCompliances.includes('critical') ? 'critical' :
                               phaseCompliances.includes('warning') ? 'warning' : 'normal';
         
-        // ── Composantes de séquence (400V étoile uniquement) ──────────────
+        // ── Composantes de séquence (400V étoile ET 230V delta) ──────────────
         let sequenceComponents: undefined | {
           U0_mag: number; U1_mag: number; U2_mag: number;
           U0_angle_deg: number; U1_angle_deg: number; U2_angle_deg: number;
           ku_percent: number;
         };
 
-        if (is400V) {
-          // Reconstruct raw (pre-neutral-correction) phasors for Fortescue
-          const Vn_seq = V_neutral_refined_final?.get(n.id) || C(0, 0);
-          const Va_seq = n.id === source.id ? Va : add(Va, Vn_seq);
-          const Vb_seq = n.id === source.id ? Vb : add(Vb, Vn_seq);
-          const Vc_seq = n.id === source.id ? Vc : add(Vc, Vn_seq);
+        {
+          // Construire les tensions phase équivalentes pour Fortescue
+          let Va_seq: Complex, Vb_seq: Complex, Vc_seq: Complex;
 
-          const a_re = Math.cos(2 * Math.PI / 3);
-          const a_im = Math.sin(2 * Math.PI / 3);
-          const a2_re = Math.cos(4 * Math.PI / 3);
-          const a2_im = Math.sin(4 * Math.PI / 3);
+          if (is400V) {
+            // 400V étoile : reconstruire phaseurs phase-terre (Va + Vn)
+            const Vn_seq = V_neutral_refined_final?.get(n.id) || C(0, 0);
+            Va_seq = n.id === source.id ? Va : add(Va, Vn_seq);
+            Vb_seq = n.id === source.id ? Vb : add(Vb, Vn_seq);
+            Vc_seq = n.id === source.id ? Vc : add(Vc, Vn_seq);
+          } else {
+            // 230V delta : Va, Vb, Vc sont des tensions internes phase-neutre virtuel (~133V)
+            // Reconstruire les tensions ligne-ligne physiques
+            const Vab = sub(Va, Vb);  // V_AB
+            const Vbc = sub(Vb, Vc);  // V_BC
+            const Vca = sub(Vc, Va);  // V_CA
 
-          const aVb  = { re: a_re * Vb_seq.re - a_im * Vb_seq.im, im: a_re * Vb_seq.im + a_im * Vb_seq.re };
-          const a2Vc = { re: a2_re * Vc_seq.re - a2_im * Vc_seq.im, im: a2_re * Vc_seq.im + a2_im * Vc_seq.re };
-          const a2Vb = { re: a2_re * Vb_seq.re - a2_im * Vb_seq.im, im: a2_re * Vb_seq.im + a2_im * Vb_seq.re };
-          const aVc  = { re: a_re * Vc_seq.re - a_im * Vc_seq.im, im: a_re * Vc_seq.im + a_im * Vc_seq.re };
+            // Convertir en tensions phase équivalentes via rotation -30° et /√3
+            // Va_eq = Vab / √3 * e^(-j*π/6)
+            const inv_sqrt3 = 1 / Math.sqrt(3);
+            const rot_minus30 = C(Math.cos(-Math.PI / 6), Math.sin(-Math.PI / 6)); // e^(-jπ/6)
 
-          const U0 = { re: (Va_seq.re + Vb_seq.re + Vc_seq.re) / 3, im: (Va_seq.im + Vb_seq.im + Vc_seq.im) / 3 };
-          const U1 = { re: (Va_seq.re + aVb.re + a2Vc.re) / 3, im: (Va_seq.im + aVb.im + a2Vc.im) / 3 };
-          const U2 = { re: (Va_seq.re + a2Vb.re + aVc.re) / 3, im: (Va_seq.im + a2Vb.im + aVc.im) / 3 };
+            Va_seq = mul(scale(Vab, inv_sqrt3), rot_minus30);
+            Vb_seq = mul(scale(Vbc, inv_sqrt3), rot_minus30);
+            Vc_seq = mul(scale(Vca, inv_sqrt3), rot_minus30);
+          }
+
+          // Transformation de Fortescue : U1, U2, U0
+          const a_op  = C(Math.cos(2 * Math.PI / 3), Math.sin(2 * Math.PI / 3));   // a = e^(j2π/3)
+          const a2_op = C(Math.cos(4 * Math.PI / 3), Math.sin(4 * Math.PI / 3));   // a² = e^(j4π/3)
+
+          const aVb  = mul(a_op, Vb_seq);
+          const a2Vc = mul(a2_op, Vc_seq);
+          const a2Vb = mul(a2_op, Vb_seq);
+          const aVc  = mul(a_op, Vc_seq);
+
+          const U0 = scale(add(add(Va_seq, Vb_seq), Vc_seq), 1 / 3);
+          const U1 = scale(add(add(Va_seq, aVb), a2Vc), 1 / 3);
+          const U2 = scale(add(add(Va_seq, a2Vb), aVc), 1 / 3);
 
           const U0_mag = Math.hypot(U0.re, U0.im);
           const U1_mag = Math.hypot(U1.re, U1.im);
           const U2_mag = Math.hypot(U2.re, U2.im);
+
+          const ku_percent = U1_mag > 0.1 ? +(U2_mag / U1_mag * 100).toFixed(3) : 0;
 
           sequenceComponents = {
             U0_mag: +U0_mag.toFixed(2),
@@ -2383,14 +2404,28 @@ export class ElectricalCalculator {
             U0_angle_deg: +(Math.atan2(U0.im, U0.re) * 180 / Math.PI).toFixed(2),
             U1_angle_deg: +(Math.atan2(U1.im, U1.re) * 180 / Math.PI).toFixed(2),
             U2_angle_deg: +(Math.atan2(U2.im, U2.re) * 180 / Math.PI).toFixed(2),
-            ku_percent: U1_mag > 0.1 ? +(U2_mag / U1_mag * 100).toFixed(3) : 0
+            ku_percent
           };
+
+          // Contrôle de cohérence : si écart max entre phases > 5%, ku doit être > 2%
+          const maxPhaseV = Math.max(Va_display, Vb_display, Vc_display);
+          const minPhaseV = Math.min(Va_display, Vb_display, Vc_display);
+          const avgPhaseV = (Va_display + Vb_display + Vc_display) / 3;
+          const phaseSpread_percent = avgPhaseV > 0 ? ((maxPhaseV - minPhaseV) / avgPhaseV) * 100 : 0;
+
+          if (phaseSpread_percent > 5 && ku_percent < 2) {
+            console.warn(
+              `⚠️ [Fortescue] Incohérence nœud ${n.name || n.id}: ` +
+              `écart phases=${phaseSpread_percent.toFixed(1)}% mais ku=${ku_percent}% — vérifier le modèle`
+            );
+          }
 
           console.log(
             `🔬 Séquences ${n.name || n.id}: ` +
-            `Va=${abs(Va_seq).toFixed(1)}∠${(Math.atan2(Va_seq.im, Va_seq.re) * 180 / Math.PI).toFixed(1)}° ` +
+            `|Va|=${abs(Va_seq).toFixed(1)}V |Vb|=${abs(Vb_seq).toFixed(1)}V |Vc|=${abs(Vc_seq).toFixed(1)}V ` +
             `U1=${U1_mag.toFixed(1)}V U2=${U2_mag.toFixed(1)}V U0=${U0_mag.toFixed(1)}V ` +
-            `ku=${sequenceComponents.ku_percent}% ${sequenceComponents.ku_percent > 2 ? '⚠️' : '✅'}`
+            `ku=${ku_percent}% ${ku_percent > 2 ? '⚠️' : '✅'}` +
+            (!is400V ? ' [230V delta→phase-eq]' : '')
           );
         }
 

@@ -89,7 +89,28 @@ function analyzeSRG2Impact(
   }
 
   const correctedCount = beforeIssues - afterIssues;
-  const correctionRate = beforeIssues > 0 ? (correctedCount / beforeIssues) * 100 : 100;
+  
+  // Si pas de nœuds hors norme, évaluer par amélioration de tension (pas 100% par défaut)
+  let correctionRate: number;
+  if (beforeIssues > 0) {
+    correctionRate = (correctedCount / beforeIssues) * 100;
+  } else {
+    // Calculer l'amélioration de la tension max deviation
+    let baselineMaxDev = 0;
+    let srg2MaxDev = 0;
+    for (const nm of baselineMetrics) {
+      const avgV = (nm.voltagesPerPhase.A + nm.voltagesPerPhase.B + nm.voltagesPerPhase.C) / 3;
+      baselineMaxDev = Math.max(baselineMaxDev, Math.abs(avgV - 230));
+    }
+    for (const nm of srg2Metrics) {
+      const avgV = (nm.voltagesPerPhase.A + nm.voltagesPerPhase.B + nm.voltagesPerPhase.C) / 3;
+      srg2MaxDev = Math.max(srg2MaxDev, Math.abs(avgV - 230));
+    }
+    // Score basé sur l'amélioration relative de la déviation max
+    correctionRate = baselineMaxDev > 0.1 
+      ? Math.min(100, ((baselineMaxDev - srg2MaxDev) / baselineMaxDev) * 100)
+      : 50; // Score neutre si tension déjà parfaite
+  }
 
   const downstreamNodes = findDownstreamNodesFromNode(project, srg2Node.id);
   const totalPower_kVA = calculateDownstreamPower(downstreamNodes, project);

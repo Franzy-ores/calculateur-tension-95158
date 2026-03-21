@@ -10,7 +10,8 @@ import { useNetworkStore } from "@/store/networkStore";
 import { SRG2Config } from "@/types/srg2";
 import { NodeSelector } from "@/components/NodeSelector";
 import { getLinkedClientsForNode } from "@/utils/clientsUtils";
-import { findOptimalSRG2Node, OptimalSRG2Analysis } from "@/utils/optimalSrg2Finder";
+import { findOptimalSRG2Node, SRG2PlacementResult } from "@/utils/srg2Placement";
+import { findDownstreamNodesFromNode } from "@/utils/networkAnalysis";
 import { 
   Zap, 
   Plug,

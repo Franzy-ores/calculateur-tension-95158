@@ -263,7 +263,11 @@ export function findOptimalSRG2Node(
     const analysis = analyzeSRG2Impact(baselineResult, resultWithSRG2, candidate, project, scenario);
     const score = calculateSRG2PragmaticScore(analysis);
 
-    console.log(`   📊 Score : ${score.toFixed(1)}/100 (corr: ${analysis.correctionRate_percent.toFixed(0)}%, marge: ${analysis.powerMargin_percent.toFixed(0)}%, viab: ${analysis.futureProofYears}ans)`);
+    console.log(`   📊 Score : ${score.toFixed(1)}/100`);
+    console.log(`      - Correction : ${analysis.correctionRate_percent.toFixed(0)}%`);
+    console.log(`      - Marge puissance : ${analysis.powerMargin_percent.toFixed(0)}%`);
+    console.log(`      - Puissance aval : ${analysis.powerDownstream_kVA.toFixed(1)} kVA`);
+    console.log(`      - Viabilité : ${analysis.futureProofYears} ans`);
 
     if (score > bestScore) {
       bestScore = score;

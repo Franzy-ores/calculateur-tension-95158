@@ -34,11 +34,12 @@ function isNetworkSuitableForSRG2(
   let maxVoltageDeviation = 0;
 
   for (const nm of nodeMetrics) {
-    const avgV = (nm.voltagesPerPhase.A + nm.voltagesPerPhase.B + nm.voltagesPerPhase.C) / 3;
-    if (avgV < 207 || avgV > 253) {
+    const phases = [nm.voltagesPerPhase.A, nm.voltagesPerPhase.B, nm.voltagesPerPhase.C];
+    const hasIssue = phases.some(V => V < 207 || V > 253);
+    if (hasIssue) {
       nonCompliantCount++;
-      const deviation = avgV < 230 ? (230 - avgV) : (avgV - 230);
-      maxVoltageDeviation = Math.max(maxVoltageDeviation, deviation);
+      const maxDeviation = Math.max(...phases.map(V => Math.abs(V - 230)));
+      maxVoltageDeviation = Math.max(maxVoltageDeviation, maxDeviation);
     }
   }
 
@@ -77,16 +78,43 @@ function analyzeSRG2Impact(
   const srg2Metrics = withSRG2.nodeMetricsPerPhase || [];
 
   let beforeIssues = 0;
+  const beforeIssuesList: string[] = [];
   for (const nm of baselineMetrics) {
-    const avgV = (nm.voltagesPerPhase.A + nm.voltagesPerPhase.B + nm.voltagesPerPhase.C) / 3;
-    if (avgV < 207 || avgV > 253) beforeIssues++;
+    const phases = [
+      { name: 'A', V: nm.voltagesPerPhase.A },
+      { name: 'B', V: nm.voltagesPerPhase.B },
+      { name: 'C', V: nm.voltagesPerPhase.C }
+    ];
+    const phasesHorsNorme = phases.filter(p => p.V < 207 || p.V > 253);
+    if (phasesHorsNorme.length > 0) {
+      beforeIssues++;
+      beforeIssuesList.push(
+        `${nm.nodeId}: ${phasesHorsNorme.map(p => `${p.name}=${p.V.toFixed(1)}V`).join(', ')}`
+      );
+    }
   }
 
   let afterIssues = 0;
+  const afterIssuesList: string[] = [];
   for (const nm of srg2Metrics) {
-    const avgV = (nm.voltagesPerPhase.A + nm.voltagesPerPhase.B + nm.voltagesPerPhase.C) / 3;
-    if (avgV < 207 || avgV > 253) afterIssues++;
+    const phases = [
+      { name: 'A', V: nm.voltagesPerPhase.A },
+      { name: 'B', V: nm.voltagesPerPhase.B },
+      { name: 'C', V: nm.voltagesPerPhase.C }
+    ];
+    const phasesHorsNorme = phases.filter(p => p.V < 207 || p.V > 253);
+    if (phasesHorsNorme.length > 0) {
+      afterIssues++;
+      afterIssuesList.push(
+        `${nm.nodeId}: ${phasesHorsNorme.map(p => `${p.name}=${p.V.toFixed(1)}V`).join(', ')}`
+      );
+    }
   }
+
+  console.log(`   🔴 AVANT SRG2 : ${beforeIssues} nœud(s) hors norme [207-253V]`);
+  beforeIssuesList.forEach(s => console.log(`      - ${s}`));
+  console.log(`   🟢 APRÈS SRG2 : ${afterIssues} nœud(s) hors norme`);
+  afterIssuesList.forEach(s => console.log(`      - ${s}`));
 
   const correctedCount = beforeIssues - afterIssues;
   
@@ -95,21 +123,20 @@ function analyzeSRG2Impact(
   if (beforeIssues > 0) {
     correctionRate = (correctedCount / beforeIssues) * 100;
   } else {
-    // Calculer l'amélioration de la tension max deviation
+    // Calculer l'amélioration de la tension max deviation par phase
     let baselineMaxDev = 0;
     let srg2MaxDev = 0;
     for (const nm of baselineMetrics) {
-      const avgV = (nm.voltagesPerPhase.A + nm.voltagesPerPhase.B + nm.voltagesPerPhase.C) / 3;
-      baselineMaxDev = Math.max(baselineMaxDev, Math.abs(avgV - 230));
+      const phases = [nm.voltagesPerPhase.A, nm.voltagesPerPhase.B, nm.voltagesPerPhase.C];
+      baselineMaxDev = Math.max(baselineMaxDev, ...phases.map(V => Math.abs(V - 230)));
     }
     for (const nm of srg2Metrics) {
-      const avgV = (nm.voltagesPerPhase.A + nm.voltagesPerPhase.B + nm.voltagesPerPhase.C) / 3;
-      srg2MaxDev = Math.max(srg2MaxDev, Math.abs(avgV - 230));
+      const phases = [nm.voltagesPerPhase.A, nm.voltagesPerPhase.B, nm.voltagesPerPhase.C];
+      srg2MaxDev = Math.max(srg2MaxDev, ...phases.map(V => Math.abs(V - 230)));
     }
-    // Score basé sur l'amélioration relative de la déviation max
     correctionRate = baselineMaxDev > 0.1 
       ? Math.min(100, ((baselineMaxDev - srg2MaxDev) / baselineMaxDev) * 100)
-      : 50; // Score neutre si tension déjà parfaite
+      : 50;
   }
 
   const downstreamNodes = findDownstreamNodesFromNode(project, srg2Node.id);

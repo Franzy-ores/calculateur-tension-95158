@@ -292,7 +292,8 @@ export function findOptimalSRG2Node(
     }
 
     const analysis = analyzeSRG2Impact(baselineResult, resultWithSRG2, candidate, project, scenario);
-    const score = calculateSRG2PragmaticScore(analysis);
+    const downstreamNodes = findDownstreamNodesFromNode(project, candidate.id);
+    const score = calculateSRG2PragmaticScore(analysis, downstreamNodes.length);
 
     console.log(`   📊 Score : ${score.toFixed(1)}/100`);
     console.log(`      - Correction : ${analysis.correctionRate_percent.toFixed(0)}%`);

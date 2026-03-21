@@ -1,59 +1,68 @@
 
 
-# Diagnostic: Choix incorrect du noeud SRG2
+# Correction : ku sous-estime — ameliorer le couplage inter-phases
 
-## Problemes identifies
+## Diagnostic
 
-### 1. DEUX algorithmes concurrents avec la meme signature
+Le ku% est sous-estime car les tensions d'entree de Fortescue sont "trop equilibrees". La racine est double :
 
-Il existe **deux** fonctions `findOptimalSRG2Node` dans le projet:
-
-- **`optimalSrg2Finder.ts`** (ancien) — algorithme impedance: `score = deltaU * Z_upstream` (minimiser). Utilise par `SRG2Panel.tsx` pour suggerer le noeud optimal quand l'utilisateur clique "Suggestion optimale".
-
-- **`srg2Placement.ts`** (nouveau) — algorithme simulation exhaustive avec scoring pragmatique (correction/marge/viabilite). Utilise par `SimulationPanel.tsx` > onglet Analyse.
-
-Le `SRG2Panel.tsx` (ligne 13) importe depuis `optimalSrg2Finder.ts`, pas depuis le nouveau `srg2Placement.ts`.
-
-### 2. `SRG2Panel.tsx` a son propre `findDownstreamNodes` NON-DIRECTIONNEL (ligne 73-97)
-
-Cette version locale parcourt le graphe dans toutes les directions (pas de filtre par distance a la source). Elle est utilisee pour calculer la puissance aval affichee dans le panneau SRG2. Elle peut remonter vers la source et compter tous les noeuds du reseau comme "aval".
-
-### 3. L'ancien algorithme (`optimalSrg2Finder.ts`) ne verifie PAS la puissance aval
-
-Il se base uniquement sur `deltaU * Z_upstream`. Un noeud avec un faible desequilibre mais trop proche de la source (noeud 2) peut etre selectionne car son score est bas, sans verifier que la puissance qui le traverse depasse la capacite du SRG2.
-
-### 4. Le nouveau algorithme (`srg2Placement.ts`) a un bug de correction rate
-
-Ligne 92: `correctionRate = beforeIssues > 0 ? ... : 100`. Si le reseau n'a pas de noeuds hors norme (ex: tensions entre 207-253V), TOUS les candidats obtiennent 100% de correction, et le score est domine par la marge de puissance — ce qui favorise les noeuds en bout de reseau (feuilles) au lieu des noeuds intermediaires.
+1. **BFS independant** : chaque phase ignore l'effet des courants des autres phases sur la chute de tension (pas de matrice d'impedance mutuelle)
+2. **Couplage neutre limite** : 3 iterations max pour la boucle `neutral → S_correction → BFS → neutral`
 
 ## Corrections proposees
 
-### A. Unifier sur le nouvel algorithme dans SRG2Panel
+### A. Augmenter les iterations de couplage neutre (impact immediat)
 
-- **`SRG2Panel.tsx`**: Remplacer l'import de `optimalSrg2Finder.ts` par `srg2Placement.ts`
-- Adapter l'appel (le nouveau prend `scenario` en plus)
-- Supprimer la fonction locale `findDownstreamNodes` non-directionnelle et utiliser `findDownstreamNodesFromNode` de `networkAnalysis.ts`
+**Fichier** : `src/utils/electricalCalculations.ts`, lignes 1839-1840
 
-### B. Corriger le scoring du nouveau algorithme
+- `MAX_NEUTRAL_PASSES` : 3 → **8**
+- `NEUTRAL_CONVERGENCE_V` : 0.1 → **0.01**
 
-Dans `srg2Placement.ts`, `analyzeSRG2Impact`:
-- Si `beforeIssues === 0`: le score de correction doit etre determine par **l'amelioration de tension** (reduction du delta V max), pas un 100% par defaut
-- Ajouter un critere de **couverture minimale**: le SRG2 doit avoir au moins X noeuds en aval pour justifier l'investissement (ex: `downstreamNodes.length >= 3`)
-- Si puissance aval > limite → score = 0 (elimination directe, pas de score positif avec marge negative)
+Cela permet une meilleure convergence de la retroaction neutre ↔ courants de charge, capturant plus d'asymetrie dans les tensions de phase. Cout : quelques ms de calcul supplementaires.
 
-### C. Supprimer `optimalSrg2Finder.ts` (code mort apres unification)
+### B. Modeliser le couplage mutuel dans le BFS (impact structural)
 
-Ce fichier n'aura plus de consommateur apres la correction A.
+**Fichier** : `src/utils/electricalCalculations.ts`, dans `runBFSForPhase()`
+
+Dans le forward sweep (ligne 1380), la tension au noeud enfant est :
+```
+V(child) = V(parent) - Z_self * I_phase
+```
+
+Ajouter le terme de couplage neutre au forward sweep :
+```
+V(child) = V(parent) - Z_self * I_phase - Z_mutual_neutral * I_neutral
+```
+
+Ou `I_neutral = Ia + Ib + Ic` (somme des courants de branche) et `Z_mutual_neutral` est l'impedance de couplage phase-neutre (typiquement ~0.3 × Z_neutral pour cables multipolaires).
+
+Cela necessite de passer les courants des 3 phases a chaque BFS, ou mieux, de calculer I_neutral apres le backward sweep et l'injecter dans le forward sweep. Implementation :
+
+1. Apres le backward sweep de chaque phase, calculer `I_N(cable) = I_A + I_B + I_C` pour chaque cable
+2. Dans le forward sweep, ajouter `- Z_coupling * I_N` a la chute de tension
+
+**Fichier modifie** : `electricalCalculations.ts` uniquement
+
+- Modifier `runBFSForPhase` pour accepter un parametre optionnel `I_neutral_branches: Map<string, Complex>` et un coefficient de couplage
+- Apres la premiere passe (3 BFS independants), calculer I_N par cable, puis relancer les 3 BFS avec le couplage
+- Integrer cette boucle dans la boucle existante de couplage neutre
+
+### C. Coefficient de couplage realiste
+
+Le couplage phase-neutre depend de la geometrie du cable :
+- Cables multipolaires (ex: NF C 33-210) : `k_coupling ≈ 0.3 × Z_neutral`
+- Cables unipolaires en nappe : `k_coupling ≈ 0.15 × Z_neutral`
+
+Ajouter un champ optionnel `mutualCouplingFactor` au type `CableType` (default 0.3).
+
+## Plan d'implementation
+
+1. **Correction A** (rapide, ~5 lignes) : augmenter iterations neutre
+2. **Correction B** (structural, ~50 lignes) : ajouter couplage mutuel dans le forward sweep
+3. **Validation** : comparer ku% avant/apres sur le reseau de reference
 
 ## Fichiers modifies
 
-1. `src/components/SRG2Panel.tsx` — import + logique downstream
-2. `src/utils/srg2Placement.ts` — scoring et couverture
-3. `src/utils/optimalSrg2Finder.ts` — suppression (ou conservation comme reference)
-
-## Impact
-
-- Le noeud SRG2 propose sera desormais base sur la simulation reelle (correction + marge + viabilite)
-- Les noeuds trop proches de la source seront elimines par la marge de puissance negative
-- Les noeuds feuilles seront penalises par le manque de couverture
+- `src/utils/electricalCalculations.ts` : corrections A et B
+- `src/types/network.ts` : ajout optionnel `mutualCouplingFactor` dans `CableType`
 

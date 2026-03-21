@@ -1295,7 +1295,7 @@ export class ElectricalCalculator {
         addExtra((n as any).productions || [], -1);
       }
 
-      const runBFSForPhase = (angleDeg: number, S_map: Map<string, Complex>, phaseLabel: 'A'|'B'|'C', V0_shift?: Complex) => {
+      const runBFSForPhase = (angleDeg: number, S_map: Map<string, Complex>, phaseLabel: 'A'|'B'|'C', V0_shift?: Complex, I_neutral_branches?: Map<string, Complex>) => {
         const V_node_phase = new Map<string, Complex>();
         const I_branch_phase = new Map<string, Complex>();
         const I_inj_node_phase = new Map<string, Complex>();

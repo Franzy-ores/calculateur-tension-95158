@@ -34,11 +34,12 @@ function isNetworkSuitableForSRG2(
   let maxVoltageDeviation = 0;
 
   for (const nm of nodeMetrics) {
-    const avgV = (nm.voltagesPerPhase.A + nm.voltagesPerPhase.B + nm.voltagesPerPhase.C) / 3;
-    if (avgV < 207 || avgV > 253) {
+    const phases = [nm.voltagesPerPhase.A, nm.voltagesPerPhase.B, nm.voltagesPerPhase.C];
+    const hasIssue = phases.some(V => V < 207 || V > 253);
+    if (hasIssue) {
       nonCompliantCount++;
-      const deviation = avgV < 230 ? (230 - avgV) : (avgV - 230);
-      maxVoltageDeviation = Math.max(maxVoltageDeviation, deviation);
+      const maxDeviation = Math.max(...phases.map(V => Math.abs(V - 230)));
+      maxVoltageDeviation = Math.max(maxVoltageDeviation, maxDeviation);
     }
   }
 

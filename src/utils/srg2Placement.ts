@@ -89,7 +89,28 @@ function analyzeSRG2Impact(
   }
 
   const correctedCount = beforeIssues - afterIssues;
-  const correctionRate = beforeIssues > 0 ? (correctedCount / beforeIssues) * 100 : 100;
+  
+  // Si pas de nœuds hors norme, évaluer par amélioration de tension (pas 100% par défaut)
+  let correctionRate: number;
+  if (beforeIssues > 0) {
+    correctionRate = (correctedCount / beforeIssues) * 100;
+  } else {
+    // Calculer l'amélioration de la tension max deviation
+    let baselineMaxDev = 0;
+    let srg2MaxDev = 0;
+    for (const nm of baselineMetrics) {
+      const avgV = (nm.voltagesPerPhase.A + nm.voltagesPerPhase.B + nm.voltagesPerPhase.C) / 3;
+      baselineMaxDev = Math.max(baselineMaxDev, Math.abs(avgV - 230));
+    }
+    for (const nm of srg2Metrics) {
+      const avgV = (nm.voltagesPerPhase.A + nm.voltagesPerPhase.B + nm.voltagesPerPhase.C) / 3;
+      srg2MaxDev = Math.max(srg2MaxDev, Math.abs(avgV - 230));
+    }
+    // Score basé sur l'amélioration relative de la déviation max
+    correctionRate = baselineMaxDev > 0.1 
+      ? Math.min(100, ((baselineMaxDev - srg2MaxDev) / baselineMaxDev) * 100)
+      : 50; // Score neutre si tension déjà parfaite
+  }
 
   const downstreamNodes = findDownstreamNodesFromNode(project, srg2Node.id);
   const totalPower_kVA = calculateDownstreamPower(downstreamNodes, project);
@@ -108,7 +129,17 @@ function analyzeSRG2Impact(
   };
 }
 
-function calculateSRG2PragmaticScore(analysis: SRG2PlacementResult['simulation']): number {
+function calculateSRG2PragmaticScore(analysis: SRG2PlacementResult['simulation'], downstreamNodeCount: number): number {
+  // Élimination directe : puissance aval > limite → score = 0
+  if (analysis.powerMargin_percent < 0) {
+    return 0;
+  }
+  
+  // Couverture minimale : SRG2 doit avoir ≥3 nœuds aval pour justifier l'investissement
+  if (downstreamNodeCount < 3) {
+    return Math.min(20, analysis.correctionRate_percent * 0.2); // Score très pénalisé
+  }
+
   const correctionScore =
     analysis.correctionRate_percent >= 95 ? 100 :
     analysis.correctionRate_percent >= 90 ? 80 :
@@ -261,7 +292,8 @@ export function findOptimalSRG2Node(
     }
 
     const analysis = analyzeSRG2Impact(baselineResult, resultWithSRG2, candidate, project, scenario);
-    const score = calculateSRG2PragmaticScore(analysis);
+    const downstreamNodes = findDownstreamNodesFromNode(project, candidate.id);
+    const score = calculateSRG2PragmaticScore(analysis, downstreamNodes.length);
 
     console.log(`   📊 Score : ${score.toFixed(1)}/100`);
     console.log(`      - Correction : ${analysis.correctionRate_percent.toFixed(0)}%`);

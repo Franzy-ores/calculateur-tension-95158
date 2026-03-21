@@ -10,7 +10,8 @@ import { useNetworkStore } from "@/store/networkStore";
 import { SRG2Config } from "@/types/srg2";
 import { NodeSelector } from "@/components/NodeSelector";
 import { getLinkedClientsForNode } from "@/utils/clientsUtils";
-import { findOptimalSRG2Node, OptimalSRG2Analysis } from "@/utils/optimalSrg2Finder";
+import { findOptimalSRG2Node, SRG2PlacementResult } from "@/utils/srg2Placement";
+import { findDownstreamNodesFromNode } from "@/utils/networkAnalysis";
 import { 
   Zap, 
   Plug,
@@ -46,18 +47,18 @@ export const SRG2Panel = () => {
 
   const nodes = currentProject.nodes.filter(n => !n.isSource);
   
-  // Calcul du nœud optimal pour SRG2
+  // Calcul du nœud optimal pour SRG2 (nouvel algorithme unifié)
   const baseline = simulationResults[selectedScenario]?.baselineResult;
-  const optimalSRG2Analysis = useMemo<OptimalSRG2Analysis | null>(() => {
+  const optimalSRG2Result = useMemo<SRG2PlacementResult | null>(() => {
     const baseResult = baseline || calculationResults[selectedScenario];
     if (!baseResult || !currentProject) return null;
     
-    return findOptimalSRG2Node(currentProject, baseResult);
+    return findOptimalSRG2Node(currentProject, baseResult, selectedScenario);
   }, [currentProject, baseline, calculationResults, selectedScenario]);
   
   const handleAddOptimalNode = () => {
-    if (optimalSRG2Analysis?.optimalNode) {
-      const nodeId = optimalSRG2Analysis.optimalNode.nodeId;
+    if (optimalSRG2Result?.nodeId) {
+      const nodeId = optimalSRG2Result.nodeId;
       const usedNodeIds = simulationEquipment.srg2Devices?.map(d => d.nodeId) || [];
       if (usedNodeIds.includes(nodeId)) {
         toast.error('Un SRG2 existe déjà sur ce nœud');
@@ -65,35 +66,13 @@ export const SRG2Panel = () => {
       }
       addSRG2Device(nodeId);
       setShowOptimalSuggestion(false);
-      toast.success(`SRG2 ajouté sur ${optimalSRG2Analysis.optimalNode.nodeName}`);
+      toast.success(`SRG2 ajouté sur ${optimalSRG2Result.nodeName}`);
     }
   };
 
-  // Fonction pour trouver tous les nœuds en aval d'un nœud donné (incluant le nœud lui-même)
-  const findDownstreamNodes = (startNodeId: string): string[] => {
-    const downstream: string[] = [startNodeId]; // Inclure le nœud de départ
-    const visited = new Set<string>([startNodeId]);
-    const queue: string[] = [startNodeId];
-    
-    while (queue.length > 0) {
-      const currentId = queue.shift()!;
-      
-      const connectedCables = currentProject.cables.filter(
-        c => c.nodeAId === currentId || c.nodeBId === currentId
-      );
-      
-      for (const cable of connectedCables) {
-        const nextNodeId = cable.nodeAId === currentId ? cable.nodeBId : cable.nodeAId;
-        
-        if (!visited.has(nextNodeId)) {
-          visited.add(nextNodeId);
-          downstream.push(nextNodeId);
-          queue.push(nextNodeId);
-        }
-      }
-    }
-    
-    return downstream;
+  // Utiliser la version directionnelle de findDownstreamNodes
+  const getDownstreamNodes = (startNodeId: string): string[] => {
+    return [startNodeId, ...findDownstreamNodesFromNode(currentProject, startNodeId)];
   };
 
   // Limites fixes SRG2
@@ -102,7 +81,7 @@ export const SRG2Panel = () => {
 
   // Fonction pour calculer les puissances foisonnées en aval avec différenciation résidentiel/industriel
   const calculateDownstreamPowers = (srg2: SRG2Config) => {
-    const downstreamNodeIds = findDownstreamNodes(srg2.nodeId);
+    const downstreamNodeIds = getDownstreamNodes(srg2.nodeId);
     
     let totalChargeKVA = 0;
     let totalProductionKVA = 0;
@@ -515,7 +494,7 @@ export const SRG2Panel = () => {
       </div>
 
       {/* Suggestion automatique du nœud optimal SRG2 */}
-      {optimalSRG2Analysis && (
+      {optimalSRG2Result && (
         <Card className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
           <CardHeader className="pb-2 pt-3 px-4">
             <div className="flex items-center justify-between">
@@ -535,66 +514,57 @@ export const SRG2Panel = () => {
           
           {showOptimalSuggestion && (
             <CardContent className="pt-0 pb-3 px-4">
-              {optimalSRG2Analysis.optimalNode ? (
+              {optimalSRG2Result.nodeId ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <Target className="h-4 w-4 text-blue-600" />
                     <span className="font-medium text-sm">
-                      {optimalSRG2Analysis.optimalNode.nodeName}
+                      {optimalSRG2Result.nodeName}
                     </span>
                     <Badge variant="outline" className="text-xs bg-blue-100 dark:bg-blue-900/50">
-                      Score: {optimalSRG2Analysis.optimalNode.score.toFixed(3)}
+                      Score: {optimalSRG2Result.score.toFixed(0)}/100
                     </Badge>
                   </div>
                   
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="bg-background/50 p-2 rounded">
-                      <div className="text-muted-foreground">Écart ΔU</div>
-                      <div className="font-medium">{optimalSRG2Analysis.optimalNode.deltaU_V.toFixed(1)} V</div>
+                      <div className="text-muted-foreground">Correction</div>
+                      <div className="font-medium">{optimalSRG2Result.simulation.correctionRate_percent.toFixed(0)}%</div>
                     </div>
                     <div className="bg-background/50 p-2 rounded">
-                      <div className="text-muted-foreground">Z amont</div>
-                      <div className="font-medium">{optimalSRG2Analysis.optimalNode.upstreamImpedance_Zph_Ohm.toFixed(3)} Ω</div>
+                      <div className="text-muted-foreground">Puissance aval</div>
+                      <div className="font-medium">{optimalSRG2Result.simulation.powerDownstream_kVA.toFixed(1)} kVA</div>
                     </div>
                     <div className="bg-background/50 p-2 rounded">
-                      <div className="text-muted-foreground">Position</div>
-                      <div className="font-medium">{(optimalSRG2Analysis.optimalNode.positionRatio * 100).toFixed(0)}% du départ</div>
+                      <div className="text-muted-foreground">Marge puissance</div>
+                      <div className="font-medium">{optimalSRG2Result.simulation.powerMargin_percent.toFixed(0)}%</div>
                     </div>
                     <div className="bg-background/50 p-2 rounded">
-                      <div className="text-muted-foreground">U moyen</div>
-                      <div className="font-medium">{optimalSRG2Analysis.optimalNode.Umean_V.toFixed(1)} V</div>
+                      <div className="text-muted-foreground">Viabilité</div>
+                      <div className="font-medium">{optimalSRG2Result.simulation.futureProofYears} ans</div>
                     </div>
                   </div>
+
+                  <Badge 
+                    variant={optimalSRG2Result.recommendation === 'install_srg2' ? 'default' : 'secondary'}
+                    className="text-xs"
+                  >
+                    {optimalSRG2Result.recommendation === 'install_srg2' ? '✅ Installation recommandée' : '⚠️ Renforcement réseau conseillé'}
+                  </Badge>
                   
                   <Button
                     size="sm"
                     className="w-full"
                     onClick={handleAddOptimalNode}
-                    disabled={simulationEquipment.srg2Devices?.some(d => d.nodeId === optimalSRG2Analysis.optimalNode?.nodeId)}
+                    disabled={simulationEquipment.srg2Devices?.some(d => d.nodeId === optimalSRG2Result.nodeId)}
                   >
                     <Plus className="h-3 w-3 mr-1" />
-                    Ajouter sur {optimalSRG2Analysis.optimalNode.nodeName}
+                    Ajouter sur {optimalSRG2Result.nodeName}
                   </Button>
-                  
-                  {optimalSRG2Analysis.candidates.length > 1 && (
-                    <div className="mt-2">
-                      <div className="text-xs text-muted-foreground mb-1">
-                        Autres candidats ({optimalSRG2Analysis.candidates.length - 1}):
-                      </div>
-                      <div className="space-y-1">
-                        {optimalSRG2Analysis.candidates.slice(1, 4).map((c, i) => (
-                          <div key={c.nodeId} className="text-xs flex items-center justify-between bg-background/30 p-1.5 rounded">
-                            <span>{i + 1}. {c.nodeName}</span>
-                            <span className="text-muted-foreground">score: {c.score.toFixed(3)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               ) : (
                 <div className="text-xs text-muted-foreground">
-                  {optimalSRG2Analysis.noResultReason}
+                  {optimalSRG2Result.reasoning}
                 </div>
               )}
             </CardContent>

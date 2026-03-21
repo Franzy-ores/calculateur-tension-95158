@@ -81,7 +81,7 @@ export const SRG2Panel = () => {
 
   // Fonction pour calculer les puissances foisonnées en aval avec différenciation résidentiel/industriel
   const calculateDownstreamPowers = (srg2: SRG2Config) => {
-    const downstreamNodeIds = findDownstreamNodes(srg2.nodeId);
+    const downstreamNodeIds = getDownstreamNodes(srg2.nodeId);
     
     let totalChargeKVA = 0;
     let totalProductionKVA = 0;

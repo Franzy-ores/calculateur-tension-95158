@@ -47,18 +47,18 @@ export const SRG2Panel = () => {
 
   const nodes = currentProject.nodes.filter(n => !n.isSource);
   
-  // Calcul du nœud optimal pour SRG2
+  // Calcul du nœud optimal pour SRG2 (nouvel algorithme unifié)
   const baseline = simulationResults[selectedScenario]?.baselineResult;
-  const optimalSRG2Analysis = useMemo<OptimalSRG2Analysis | null>(() => {
+  const optimalSRG2Result = useMemo<SRG2PlacementResult | null>(() => {
     const baseResult = baseline || calculationResults[selectedScenario];
     if (!baseResult || !currentProject) return null;
     
-    return findOptimalSRG2Node(currentProject, baseResult);
+    return findOptimalSRG2Node(currentProject, baseResult, selectedScenario);
   }, [currentProject, baseline, calculationResults, selectedScenario]);
   
   const handleAddOptimalNode = () => {
-    if (optimalSRG2Analysis?.optimalNode) {
-      const nodeId = optimalSRG2Analysis.optimalNode.nodeId;
+    if (optimalSRG2Result?.nodeId) {
+      const nodeId = optimalSRG2Result.nodeId;
       const usedNodeIds = simulationEquipment.srg2Devices?.map(d => d.nodeId) || [];
       if (usedNodeIds.includes(nodeId)) {
         toast.error('Un SRG2 existe déjà sur ce nœud');
@@ -66,35 +66,13 @@ export const SRG2Panel = () => {
       }
       addSRG2Device(nodeId);
       setShowOptimalSuggestion(false);
-      toast.success(`SRG2 ajouté sur ${optimalSRG2Analysis.optimalNode.nodeName}`);
+      toast.success(`SRG2 ajouté sur ${optimalSRG2Result.nodeName}`);
     }
   };
 
-  // Fonction pour trouver tous les nœuds en aval d'un nœud donné (incluant le nœud lui-même)
-  const findDownstreamNodes = (startNodeId: string): string[] => {
-    const downstream: string[] = [startNodeId]; // Inclure le nœud de départ
-    const visited = new Set<string>([startNodeId]);
-    const queue: string[] = [startNodeId];
-    
-    while (queue.length > 0) {
-      const currentId = queue.shift()!;
-      
-      const connectedCables = currentProject.cables.filter(
-        c => c.nodeAId === currentId || c.nodeBId === currentId
-      );
-      
-      for (const cable of connectedCables) {
-        const nextNodeId = cable.nodeAId === currentId ? cable.nodeBId : cable.nodeAId;
-        
-        if (!visited.has(nextNodeId)) {
-          visited.add(nextNodeId);
-          downstream.push(nextNodeId);
-          queue.push(nextNodeId);
-        }
-      }
-    }
-    
-    return downstream;
+  // Utiliser la version directionnelle de findDownstreamNodes
+  const getDownstreamNodes = (startNodeId: string): string[] => {
+    return [startNodeId, ...findDownstreamNodesFromNode(currentProject, startNodeId)];
   };
 
   // Limites fixes SRG2

@@ -231,7 +231,7 @@ export function findOptimalSRG2Node(
     const candidate = candidates[i];
     onProgress?.(i + 1, candidates.length);
 
-    console.log(`\n🔍 Test SRG2 nœud "${candidate.name}" (${candidate.id})`);
+    console.log(`\n🔍 [SRG2 PLACEMENT] Test nœud "${candidate.name}" (ID: ${candidate.id})`);
 
     const defaultConfig = project.voltageSystem === 'TÉTRAPHASÉ_400V'
       ? DEFAULT_SRG2_400_CONFIG
@@ -312,7 +312,7 @@ export function findOptimalSRG2Node(
   console.log(`      - Puissance aval : ${bestCandidate.simulation.powerDownstream_kVA.toFixed(1)} kVA`);
   console.log(`      - Marge puissance : ${bestCandidate.simulation.powerMargin_percent.toFixed(0)}%`);
   console.log(`      - Viabilité : ${bestCandidate.simulation.futureProofYears} ans`);
-  console.log(`🎯 === FIN ANALYSE PLACEMENT OPTIMAL SRG2 ===\n`);
+  console.log(`🎯 ================================================\n`);
 
   return bestCandidate;
 }

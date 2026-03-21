@@ -1888,9 +1888,18 @@ export class ElectricalCalculator {
             S_B_final = S_B_corr;
             S_C_final = S_C_corr;
 
-            phaseA = runBFSForPhase(0, S_A_corr, 'A');
-            phaseB = runBFSForPhase(-120, S_B_corr, 'B');
-            phaseC = runBFSForPhase(120, S_C_corr, 'C');
+            // ✅ COUPLAGE MUTUEL: Calculer I_neutral par câble à partir des 3 phases
+            const I_neutral_branches = new Map<string, Complex>();
+            for (const [childId, cab] of parentCableOfChild.entries()) {
+              const Ia = phaseA.I_branch_phase.get(cab.id) || C(0, 0);
+              const Ib = phaseB.I_branch_phase.get(cab.id) || C(0, 0);
+              const Ic = phaseC.I_branch_phase.get(cab.id) || C(0, 0);
+              I_neutral_branches.set(cab.id, add(add(Ia, Ib), Ic));
+            }
+
+            phaseA = runBFSForPhase(0, S_A_corr, 'A', undefined, I_neutral_branches);
+            phaseB = runBFSForPhase(-120, S_B_corr, 'B', undefined, I_neutral_branches);
+            phaseC = runBFSForPhase(120, S_C_corr, 'C', undefined, I_neutral_branches);
 
             console.log(`🔄 Neutral pass ${neutralPass + 1}/${MAX_NEUTRAL_PASSES}: maxΔV_n=${maxDelta.toFixed(3)}V`);
           }

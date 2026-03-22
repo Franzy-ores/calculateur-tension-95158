@@ -1033,30 +1033,57 @@ export const LaboFoisonnementTab = () => {
                 <Badge variant="destructive" className="text-[9px] h-4">+{transformerOverload.delta.toFixed(1)} kVA</Badge>
               </div>
             )}
-            {/* Alertes tension */}
-            {hasData && (
-              <>
-                {criticalPointsAnalysis.summary.totalViolations > 0 ? (
-                  <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 flex items-center gap-2 text-xs">
+            {/* Alertes tension — conformité réseau global */}
+            {hasData && (() => {
+              const networkConform =
+                criticalPointsAnalysis.summary.totalViolations === 0 &&
+                networkWideAnalysis.maxV <= 253 &&
+                networkWideAnalysis.minV >= 207;
+
+              const maxVNode = currentProject?.nodes.find(n => n.id === networkWideAnalysis.maxVNodeId);
+              const minVNode = currentProject?.nodes.find(n => n.id === networkWideAnalysis.minVNodeId);
+
+              if (networkConform) {
+                return (
+                  <div className="rounded-md border border-emerald-500/40 bg-emerald-500/5 px-3 py-2 flex items-center gap-2 text-xs text-emerald-600">
+                    ✅ Réseau conforme EN 50160 — tous nœuds vérifiés
+                  </div>
+                );
+              }
+
+              return (
+                <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs space-y-1">
+                  <div className="flex items-center gap-2">
                     <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
-                    <span className="font-medium text-destructive">{criticalPointsAnalysis.summary.totalViolations} violation(s)</span>
+                    <span className="font-medium text-destructive">Non conforme EN 50160</span>
                     {criticalPointsAnalysis.summary.warningCount > 0 && (
                       <Badge variant="outline" className="text-[9px] h-4 border-orange-500/50 text-orange-500">{criticalPointsAnalysis.summary.warningCount} ±5%</Badge>
                     )}
                     {criticalPointsAnalysis.summary.criticalCount > 0 && (
                       <Badge variant="destructive" className="text-[9px] h-4">{criticalPointsAnalysis.summary.criticalCount} ±10%</Badge>
                     )}
-                    {criticalPointsAnalysis.criticalHours.length > 0 && (
-                      <span className="text-muted-foreground ml-1">Heures: {criticalPointsAnalysis.criticalHours.join('h, ')}h</span>
-                    )}
                   </div>
-                ) : (
-                  <div className="rounded-md border border-emerald-500/40 bg-emerald-500/5 px-3 py-2 flex items-center gap-2 text-xs text-emerald-600">
-                    ✅ Réseau conforme EN 50160
-                  </div>
-                )}
-              </>
-            )}
+                  {networkWideAnalysis.maxV > 253 && (
+                    <div className="flex items-center gap-1.5 text-destructive pl-5">
+                      <TrendingUp className="h-3 w-3 shrink-0" />
+                      <span>Surtension {networkWideAnalysis.maxV.toFixed(1)}V — {maxVNode?.name || networkWideAnalysis.maxVNodeId.slice(0, 8)} à {networkWideAnalysis.maxVHour}h</span>
+                      <Badge variant="destructive" className="text-[8px] h-3.5 ml-1">⚡ Trip onduleur probable</Badge>
+                    </div>
+                  )}
+                  {networkWideAnalysis.minV < 207 && (
+                    <div className="flex items-center gap-1.5 text-destructive pl-5">
+                      <TrendingDown className="h-3 w-3 shrink-0" />
+                      <span>Sous-tension {networkWideAnalysis.minV.toFixed(1)}V — {minVNode?.name || networkWideAnalysis.minVNodeId.slice(0, 8)} à {networkWideAnalysis.minVHour}h</span>
+                    </div>
+                  )}
+                  {networkWideAnalysis.pvBlockedKW > 0 && networkWideAnalysis.maxV > 253 && (
+                    <div className="text-muted-foreground pl-5 text-[10px]">
+                      Production PV concernée : ~{networkWideAnalysis.pvBlockedKW.toFixed(1)} kVA à cette heure
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 

@@ -993,6 +993,12 @@ export const LaboFoisonnementTab = () => {
               />
               <span className="text-muted-foreground">kW</span>
               <span className="text-muted-foreground font-mono text-[9px]">→ {(nResidential * pacPenetration * pacPower).toFixed(1)}kW</span>
+              <TooltipProvider delayDuration={200}>
+                <UITooltip>
+                  <TooltipTrigger asChild><span className="text-orange-500 cursor-help text-[9px]">⚠️</span></TooltipTrigger>
+                  <TooltipContent side="top"><p className="text-xs max-w-48">Valeur non foisonnée — coefficients VE/PAC à définir</p></TooltipContent>
+                </UITooltip>
+              </TooltipProvider>
             </div>
 
             <div className="flex-1" />

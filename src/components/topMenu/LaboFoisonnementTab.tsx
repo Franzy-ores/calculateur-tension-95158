@@ -368,6 +368,62 @@ export const LaboFoisonnementTab = () => {
     return detectCriticalPoints(voltageContinu, 230);
   }, [voltageContinu]);
 
+  // ─── Network-wide analysis (all nodes) ───────────────────────────────────────
+  const networkWideAnalysis = useMemo(() => {
+    const empty = {
+      maxV: 0, maxVNodeId: '', maxVHour: 0,
+      minV: 999, minVNodeId: '', minVHour: 0,
+      nodesOverVmax: 0, nodesUnderVmin: 0,
+      pvBlockedKW: 0,
+    };
+    if (!currentProject || rawProdPure.length === 0 || rawConsoPure.length === 0) return empty;
+
+    const nonSourceNodes = currentProject.nodes.filter(n => !n.isSource);
+    let maxV = 0, maxVNodeId = '', maxVHour = 0;
+    let minV = 999, minVNodeId = '', minVHour = 0;
+    let nodesOverVmax = 0, nodesUnderVmin = 0;
+
+    // Scan injection run (surtensions)
+    for (let h = 0; h < rawProdPure.length; h++) {
+      const r = rawProdPure[h];
+      if (!r?.nodeMetricsPerPhase) continue;
+      for (const node of nonSourceNodes) {
+        const nm = r.nodeMetricsPerPhase.find(m => m.nodeId === node.id);
+        if (!nm?.voltagesPerPhase) continue;
+        const phases = [nm.voltagesPerPhase.A, nm.voltagesPerPhase.B, nm.voltagesPerPhase.C];
+        for (const V of phases) {
+          if (V <= 0) continue;
+          if (V > maxV) { maxV = V; maxVNodeId = node.id; maxVHour = h; }
+          if (V > 253) nodesOverVmax++;
+        }
+      }
+    }
+
+    // Scan charge run (sous-tensions)
+    for (let h = 0; h < rawConsoPure.length; h++) {
+      const r = rawConsoPure[h];
+      if (!r?.nodeMetricsPerPhase) continue;
+      for (const node of nonSourceNodes) {
+        const nm = r.nodeMetricsPerPhase.find(m => m.nodeId === node.id);
+        if (!nm?.voltagesPerPhase) continue;
+        const phases = [nm.voltagesPerPhase.A, nm.voltagesPerPhase.B, nm.voltagesPerPhase.C];
+        for (const V of phases) {
+          if (V <= 0) continue;
+          if (V < minV) { minV = V; minVNodeId = node.id; minVHour = h; }
+          if (V < 207) nodesUnderVmin++;
+        }
+      }
+    }
+
+    // PV power at maxV hour
+    let pvBlockedKW = 0;
+    if (maxVHour < rawProdPure.length) {
+      pvBlockedKW = rawProdPure[maxVHour]?.totalProductions_kVA ?? 0;
+    }
+
+    return { maxV, maxVNodeId, maxVHour, minV, minVNodeId, minVHour, nodesOverVmax, nodesUnderVmin, pvBlockedKW };
+  }, [currentProject, rawProdPure, rawConsoPure]);
+
   // ─── Power chart data ────────────────────────────────────────────────────────
   const powerData = useMemo(() => {
     if (voltageContinu.length === 0) return [];

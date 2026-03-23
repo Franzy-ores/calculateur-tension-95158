@@ -2436,11 +2436,12 @@ export class ElectricalCalculator {
           let Va_seq: Complex, Vb_seq: Complex, Vc_seq: Complex;
 
           if (is400V) {
-            // 400V étoile : reconstruire phaseurs phase-terre (Va + Vn)
-            const Vn_seq = V_neutral_refined_final?.get(n.id) || C(0, 0);
-            Va_seq = n.id === source.id ? Va : add(Va, Vn_seq);
-            Vb_seq = n.id === source.id ? Vb : add(Vb, Vn_seq);
-            Vc_seq = n.id === source.id ? Vc : add(Vc, Vn_seq);
+            // 400V étoile : Va, Vb, Vc sont déjà phase-neutre (issues du BFS)
+            // NE PAS ajouter Vn — Fortescue doit recevoir les tensions phase-neutre
+            // pour détecter correctement le déséquilibre (U2/U1)
+            Va_seq = Va;
+            Vb_seq = Vb;
+            Vc_seq = Vc;
           } else {
             // 230V delta : Va, Vb, Vc sont des tensions internes phase-neutre virtuel (~133V)
             // Reconstruire les tensions ligne-ligne physiques

@@ -1,68 +1,39 @@
 
 
-# Correction : ku sous-estime — ameliorer le couplage inter-phases
+# Fix: Amperage incohérent dans la ligne TOTAL du tableau récapitulatif
 
-## Diagnostic
+## Probleme
 
-Le ku% est sous-estime car les tensions d'entree de Fortescue sont "trop equilibrees". La racine est double :
+La ligne **TOTAL** du tableau récapitulatif par couplage additionne les courants des 3 phases (`Math.abs(data.courantTotal)` pour A+B+C, ligne 480). Cela donne 436A pour 100 kVA, alors que le courant par phase est correct (~145A chacun).
 
-1. **BFS independant** : chaque phase ignore l'effet des courants des autres phases sur la chute de tension (pas de matrice d'impedance mutuelle)
-2. **Couplage neutre limite** : 3 iterations max pour la boucle `neutral → S_correction → BFS → neutral`
+**Per-phase** : `I = (100.4 × 0.3333) × 1000 / 230 ≈ 145.5A` -- correct
+**Total affiché** : `145.5 × 3 = 436.5A` -- trompeur
 
-## Corrections proposees
+Le total arithmétique des courants de phase n'a pas de sens physique. Le courant total triphasé est `I_total = S × 1000 / (√3 × U_LL)` en 400V, ou `I_total = S × 1000 / (√3 × U_LL)` en 230V delta.
 
-### A. Augmenter les iterations de couplage neutre (impact immediat)
+De plus, la tension en ligne 113 est toujours 230V, ce qui est correct pour 400V étoile (phase-neutre) et 230V delta (tension entre conducteurs d'un couplage mono), mais la formule du courant TOTAL doit etre adaptée.
 
-**Fichier** : `src/utils/electricalCalculations.ts`, lignes 1839-1840
+## Correction
 
-- `MAX_NEUTRAL_PASSES` : 3 → **8**
-- `NEUTRAL_CONVERGENCE_V` : 0.1 → **0.01**
+**Fichier** : `src/components/PhaseDistributionDisplay.tsx`
 
-Cela permet une meilleure convergence de la retroaction neutre ↔ courants de charge, capturant plus d'asymetrie dans les tensions de phase. Cout : quelques ms de calcul supplementaires.
+### 1. Ligne TOTAL — courant triphasé correct (ligne ~480)
 
-### B. Modeliser le couplage mutuel dans le BFS (impact structural)
+Remplacer la somme `courantTotal += Math.abs(data.courantTotal)` par un calcul triphasé correct :
+- En 400V étoile : `I_ligne = S_total × 1000 / (√3 × 400)`
+- En 230V delta : `I_ligne = S_total × 1000 / (√3 × 230)`
 
-**Fichier** : `src/utils/electricalCalculations.ts`, dans `runBFSForPhase()`
+Formule : `I_total = (totalChargeFoisonne - totalProdFoisonne) × 1000 / (√3 × U_LL)`
 
-Dans le forward sweep (ligne 1380), la tension au noeud enfant est :
-```
-V(child) = V(parent) - Z_self * I_phase
-```
+Ou `U_LL` = 400 si TÉTRAPHASÉ_400V, 230 si TRIPHASÉ_230V.
 
-Ajouter le terme de couplage neutre au forward sweep :
-```
-V(child) = V(parent) - Z_self * I_phase - Z_mutual_neutral * I_neutral
-```
+### 2. Alternative plus simple : afficher le courant max par phase
 
-Ou `I_neutral = Ia + Ib + Ic` (somme des courants de branche) et `Z_mutual_neutral` est l'impedance de couplage phase-neutre (typiquement ~0.3 × Z_neutral pour cables multipolaires).
+Au lieu d'une somme, afficher `max(|I_A|, |I_B|, |I_C|)` dans la cellule TOTAL, avec un label adapté (ex: "I max"). C'est la valeur dimensionnante pour le disjoncteur.
 
-Cela necessite de passer les courants des 3 phases a chaque BFS, ou mieux, de calculer I_neutral apres le backward sweep et l'injecter dans le forward sweep. Implementation :
+Je recommande l'option 1 (courant triphasé correct) car c'est la convention standard.
 
-1. Apres le backward sweep de chaque phase, calculer `I_N(cable) = I_A + I_B + I_C` pour chaque cable
-2. Dans le forward sweep, ajouter `- Z_coupling * I_N` a la chute de tension
+## Fichier modifié
 
-**Fichier modifie** : `electricalCalculations.ts` uniquement
-
-- Modifier `runBFSForPhase` pour accepter un parametre optionnel `I_neutral_branches: Map<string, Complex>` et un coefficient de couplage
-- Apres la premiere passe (3 BFS independants), calculer I_N par cable, puis relancer les 3 BFS avec le couplage
-- Integrer cette boucle dans la boucle existante de couplage neutre
-
-### C. Coefficient de couplage realiste
-
-Le couplage phase-neutre depend de la geometrie du cable :
-- Cables multipolaires (ex: NF C 33-210) : `k_coupling ≈ 0.3 × Z_neutral`
-- Cables unipolaires en nappe : `k_coupling ≈ 0.15 × Z_neutral`
-
-Ajouter un champ optionnel `mutualCouplingFactor` au type `CableType` (default 0.3).
-
-## Plan d'implementation
-
-1. **Correction A** (rapide, ~5 lignes) : augmenter iterations neutre
-2. **Correction B** (structural, ~50 lignes) : ajouter couplage mutuel dans le forward sweep
-3. **Validation** : comparer ku% avant/apres sur le reseau de reference
-
-## Fichiers modifies
-
-- `src/utils/electricalCalculations.ts` : corrections A et B
-- `src/types/network.ts` : ajout optionnel `mutualCouplingFactor` dans `CableType`
+- `src/components/PhaseDistributionDisplay.tsx` : lignes 478-480 (calcul courant TOTAL)
 

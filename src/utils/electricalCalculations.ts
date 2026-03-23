@@ -1625,9 +1625,9 @@ export class ElectricalCalculator {
               const S_AC_net_kVA = ppLoads.charges['A-C'] - ppLoads.productions['A-C'];
 
               // Phase-phase voltages from current BFS iteration
-              const V_AB = sub(Va_safe, Vb_safe);
-              const V_BC = sub(Vb_safe, Vc_safe);
-              const V_AC = sub(Va_safe, Vc_safe);
+              const V_AB = sub(Va, Vb);
+              const V_BC = sub(Vb, Vc);
+              const V_AC = sub(Va, Vc);
 
               // Build complex S with cosφ: S = P + jQ (in VA)
               const buildS = (net_kVA: number): Complex => {

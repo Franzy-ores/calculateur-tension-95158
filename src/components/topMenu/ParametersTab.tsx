@@ -36,8 +36,14 @@ export const ParametersTab = () => {
     currentProject.clientLinks || []
   );
 
+  // Charges et productions manuelles sur nœuds (non-importées)
+  let chargesManuelles = 0;
+  let productionsManuelles = 0;
   let totalProductionsContractuelles = 0;
+
   connectedNodesData.forEach(node => {
+    chargesManuelles += node.clients.reduce((sum, c) => sum + c.S_kVA, 0);
+    productionsManuelles += node.productions.reduce((sum, p) => sum + p.S_kVA, 0);
     totalProductionsContractuelles += node.productions.reduce((sum, p) => sum + p.S_kVA, 0);
     const linkedClients = (currentProject.clientsImportes || []).filter(c => 
       (currentProject.clientLinks || []).some(link => link.clientId === c.id && link.nodeId === node.id)
@@ -53,6 +59,12 @@ export const ParametersTab = () => {
   const chargesIndustriellesFoisonnees = chargesIndustrielles * (foisonnementIndustriel / 100);
   const totalChargesFoisonnees = chargesResidentiellesFoisonnees + chargesIndustriellesFoisonnees;
   const productionsFoisonnees = totalProductionsContractuelles * (foisonnementProductions / 100);
+
+  // Ventilation foisonnée : manuelles vs importées (circuit)
+  const chargesManuellesFoisonnees = chargesManuelles * (foisonnementResidentiel / 100);
+  const chargesImporteesFoisonnees = totalChargesFoisonnees - chargesManuellesFoisonnees;
+  const productionsManuellesFoisonnees = productionsManuelles * (foisonnementProductions / 100);
+  const productionsImporteesFoisonnees = productionsFoisonnees - productionsManuellesFoisonnees;
 
   // Calcul des totaux "Clients Cabine" (tous les clients importés, liés et non liés)
   const clientsImportes = currentProject.clientsImportes || [];
@@ -219,14 +231,25 @@ export const ParametersTab = () => {
           <div className="flex flex-col items-end justify-center px-2 border-l border-border/50">
             <span className="text-[10px] text-muted-foreground">Circuit - Charges F.</span>
             <span className="text-sm font-bold text-primary">{totalChargesFoisonnees.toFixed(1)} kVA</span>
+            {(chargesManuellesFoisonnees > 0.01 || chargesImporteesFoisonnees > 0.01) && (
+              <span className="text-[9px] text-muted-foreground/70">
+                ↳ Clients: {chargesImporteesFoisonnees.toFixed(1)} | Nœuds: {chargesManuellesFoisonnees.toFixed(1)}
+              </span>
+            )}
             <span className="text-[10px] text-muted-foreground mt-0.5">Circuit - Prod. F.</span>
             <span className="text-sm font-bold text-yellow-500">{productionsFoisonnees.toFixed(1)} kVA</span>
+            {(productionsManuellesFoisonnees > 0.01 || productionsImporteesFoisonnees > 0.01) && (
+              <span className="text-[9px] text-muted-foreground/70">
+                ↳ Clients: {productionsImporteesFoisonnees.toFixed(1)} | Nœuds: {productionsManuellesFoisonnees.toFixed(1)}
+              </span>
+            )}
           </div>
 
           {/* Total Clients Cabine */}
           <div className="flex flex-col items-end justify-center px-2 border-l border-border/50">
             <span className="text-[10px] text-muted-foreground">Cabine - Charges F.</span>
             <span className="text-sm font-bold text-primary">{cabineChargesFoisonnees.toFixed(1)} kVA</span>
+            <span className="text-[9px] text-muted-foreground/70 italic">Clients importés uniquement</span>
             <span className="text-[10px] text-muted-foreground mt-0.5">Cabine - Prod. F.</span>
             <span className="text-sm font-bold text-yellow-500">{cabineProductionsFoisonnees.toFixed(1)} kVA</span>
             {isSurcharge && (

@@ -910,6 +910,9 @@ export class ElectricalCalculator {
     }
 
     // ===== TENSION DE RÉFÉRENCE POUR LES CALCULS =====
+    // ⚠️ SINGLE √3 CONVERSION POINT: V_LL → V_phase_internal
+    // All other √3 conversions are for display only (getDisplayLineScale)
+    // Delta display uses Va-Vb (no √3 needed). Do NOT add another ÷√3 elsewhere.
     // U_line_base : tension nominale du réseau (230V ou 400V) - utilisée pour Zbase et choix impédances
     // Vslack_phase : tension réelle mesurée aux bornes du transfo - point de départ des calculs de chute
     let Vslack_phase: number;
@@ -1310,6 +1313,8 @@ export class ElectricalCalculator {
         while (iter2 < ElectricalCalculator.MAX_ITERATIONS) {
           iter2++;
           const V_prev2 = new Map(V_node_phase);
+          // Store previous branch currents for dual convergence check
+          const I_prev_phase = new Map(I_branch_phase);
 
           I_branch_phase.clear();
           I_inj_node_phase.clear();
@@ -1317,6 +1322,10 @@ export class ElectricalCalculator {
           for (const n of nodes) {
             const Vn = V_node_phase.get(n.id) || Vslack_phase_ph;
             const Sph = S_map.get(n.id) || C(0, 0);
+            // Divergence detection: flag near-zero voltages instead of silent replacement
+            if (abs(Vn) < 1.0 && abs(Vn) > 0) {
+              console.warn(`⚠️ [BFS phase ${phaseLabel}] Near-zero voltage at node ${n.id}: |V|=${abs(Vn).toFixed(3)}V — possible divergence`);
+            }
             const Vsafe = abs(Vn) > ElectricalCalculator.MIN_VOLTAGE_SAFETY ? Vn : Vslack_phase_ph;
             let Iinj = conj(div(Sph, Vsafe));
             
@@ -1456,18 +1465,30 @@ export class ElectricalCalculator {
             }
           }
 
-          // Convergence per-phase (normalisation par tension locale de chaque noeud)
-          let allConverged = true;
+          // Dual convergence: voltage AND current must both converge
+          let voltageConverged = true;
           for (const [nid, Vn] of V_node_phase.entries()) {
             const Vp = V_prev2.get(nid) || Vslack_phase_ph;
             const d = abs(sub(Vn, Vp));
             const Vn_mag = abs(Vn) || 1;
             if (d / Vn_mag >= ElectricalCalculator.CONVERGENCE_TOLERANCE) {
-              allConverged = false;
+              voltageConverged = false;
               break;
             }
           }
-          if (allConverged) { converged2 = true; break; }
+          let currentConverged = true;
+          if (voltageConverged) {
+            for (const [cabId, I] of I_branch_phase.entries()) {
+              const Ip = I_prev_phase?.get(cabId);
+              if (Ip && abs(I) > 0.01) {
+                if (abs(sub(I, Ip)) / abs(I) >= ElectricalCalculator.CONVERGENCE_TOLERANCE) {
+                  currentConverged = false;
+                  break;
+                }
+              }
+            }
+          }
+          if (voltageConverged && currentConverged) { converged2 = true; break; }
         }
         if (!converged2) {
           console.warn(`⚠️ BFS phase ${angleDeg}° non convergé`);

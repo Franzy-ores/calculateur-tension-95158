@@ -36,8 +36,14 @@ export const ParametersTab = () => {
     currentProject.clientLinks || []
   );
 
+  // Charges et productions manuelles sur nœuds (non-importées)
+  let chargesManuelles = 0;
+  let productionsManuelles = 0;
   let totalProductionsContractuelles = 0;
+
   connectedNodesData.forEach(node => {
+    chargesManuelles += node.clients.reduce((sum, c) => sum + c.puissance, 0);
+    productionsManuelles += node.productions.reduce((sum, p) => sum + p.S_kVA, 0);
     totalProductionsContractuelles += node.productions.reduce((sum, p) => sum + p.S_kVA, 0);
     const linkedClients = (currentProject.clientsImportes || []).filter(c => 
       (currentProject.clientLinks || []).some(link => link.clientId === c.id && link.nodeId === node.id)
@@ -53,6 +59,12 @@ export const ParametersTab = () => {
   const chargesIndustriellesFoisonnees = chargesIndustrielles * (foisonnementIndustriel / 100);
   const totalChargesFoisonnees = chargesResidentiellesFoisonnees + chargesIndustriellesFoisonnees;
   const productionsFoisonnees = totalProductionsContractuelles * (foisonnementProductions / 100);
+
+  // Ventilation foisonnée : manuelles vs importées (circuit)
+  const chargesManuellesFoisonnees = chargesManuelles * (foisonnementResidentiel / 100);
+  const chargesImporteesFoisonnees = totalChargesFoisonnees - chargesManuellesFoisonnees;
+  const productionsManuellesFoisonnees = productionsManuelles * (foisonnementProductions / 100);
+  const productionsImporteesFoisonnees = productionsFoisonnees - productionsManuellesFoisonnees;
 
   // Calcul des totaux "Clients Cabine" (tous les clients importés, liés et non liés)
   const clientsImportes = currentProject.clientsImportes || [];

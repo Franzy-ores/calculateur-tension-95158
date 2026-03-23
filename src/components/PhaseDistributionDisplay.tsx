@@ -477,8 +477,12 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
                 totals.totalProdPhysique += data.totalProdPhysique;
                 totals.totalChargeFoisonne += data.totalChargeFoisonne;
                 totals.totalProdFoisonne += data.totalProdFoisonne;
-                totals.courantTotal += Math.abs(data.courantTotal);
               });
+
+              // Courant triphasé correct : I = S × 1000 / (√3 × U_LL)
+              const uLL = currentProject?.voltageSystem === 'TRIPHASÉ_230V' ? 230 : 400;
+              const netPowerKVA = totals.totalChargeFoisonne - totals.totalProdFoisonne;
+              totals.courantTotal = Math.abs(netPowerKVA * 1000 / (Math.sqrt(3) * uLL));
 
               return (
                 <tr className="border-t-2 border-border bg-muted/50 font-semibold">

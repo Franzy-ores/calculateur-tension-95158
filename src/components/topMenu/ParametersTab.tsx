@@ -231,14 +231,25 @@ export const ParametersTab = () => {
           <div className="flex flex-col items-end justify-center px-2 border-l border-border/50">
             <span className="text-[10px] text-muted-foreground">Circuit - Charges F.</span>
             <span className="text-sm font-bold text-primary">{totalChargesFoisonnees.toFixed(1)} kVA</span>
+            {(chargesManuellesFoisonnees > 0.01 || chargesImporteesFoisonnees > 0.01) && (
+              <span className="text-[9px] text-muted-foreground/70">
+                ↳ Clients: {chargesImporteesFoisonnees.toFixed(1)} | Nœuds: {chargesManuellesFoisonnees.toFixed(1)}
+              </span>
+            )}
             <span className="text-[10px] text-muted-foreground mt-0.5">Circuit - Prod. F.</span>
             <span className="text-sm font-bold text-yellow-500">{productionsFoisonnees.toFixed(1)} kVA</span>
+            {(productionsManuellesFoisonnees > 0.01 || productionsImporteesFoisonnees > 0.01) && (
+              <span className="text-[9px] text-muted-foreground/70">
+                ↳ Clients: {productionsImporteesFoisonnees.toFixed(1)} | Nœuds: {productionsManuellesFoisonnees.toFixed(1)}
+              </span>
+            )}
           </div>
 
           {/* Total Clients Cabine */}
           <div className="flex flex-col items-end justify-center px-2 border-l border-border/50">
             <span className="text-[10px] text-muted-foreground">Cabine - Charges F.</span>
             <span className="text-sm font-bold text-primary">{cabineChargesFoisonnees.toFixed(1)} kVA</span>
+            <span className="text-[9px] text-muted-foreground/70 italic">Clients importés uniquement</span>
             <span className="text-[10px] text-muted-foreground mt-0.5">Cabine - Prod. F.</span>
             <span className="text-sm font-bold text-yellow-500">{cabineProductionsFoisonnees.toFixed(1)} kVA</span>
             {isSurcharge && (

@@ -1573,14 +1573,37 @@ export class ElectricalCalculator {
             const Sb = S_B_m.get(u) || C(0, 0);
             const Sc = S_C_m.get(u) || C(0, 0);
 
-            // Raw nodal injection currents: I = conj(S / V)
-            const Va_safe = abs(Va) > ElectricalCalculator.MIN_VOLTAGE_SAFETY ? Va : Vsa;
-            const Vb_safe = abs(Vb) > ElectricalCalculator.MIN_VOLTAGE_SAFETY ? Vb : Vsb;
-            const Vc_safe = abs(Vc) > ElectricalCalculator.MIN_VOLTAGE_SAFETY ? Vc : Vsc;
+            // ── POLY LOADS: PROPER DELTA REPRESENTATION ──────────────
+            // Convert phase powers to delta coupling powers:
+            //   S_AB = (Sa + Sb) / 2, S_BC = (Sb + Sc) / 2, S_CA = (Sc + Sa) / 2
+            // Then compute currents from line-to-line voltages (physically correct).
+            // Divergence detection: warn on near-zero voltages
+            if (abs(Va) < 1.0 || abs(Vb) < 1.0 || abs(Vc) < 1.0) {
+              console.warn(`⚠️ [Delta BFS] Near-zero voltage at node ${u}: |Va|=${abs(Va).toFixed(3)}, |Vb|=${abs(Vb).toFixed(3)}, |Vc|=${abs(Vc).toFixed(3)}`);
+            }
 
-            let Ia_inj = conj(div(Sa, Va_safe));
-            let Ib_inj = conj(div(Sb, Vb_safe));
-            let Ic_inj = conj(div(Sc, Vc_safe));
+            const V_AB_poly = sub(Va, Vb);
+            const V_BC_poly = sub(Vb, Vc);
+            const V_CA_poly = sub(Vc, Va);
+
+            // Redistribute POLY S_maps into delta couplings
+            const S_AB_poly = scale(add(Sa, Sb), 0.5);
+            const S_BC_poly = scale(add(Sb, Sc), 0.5);
+            const S_CA_poly = scale(add(Sc, Sa), 0.5);
+
+            // Delta currents from line-to-line voltages: I_xy = conj(S_xy / V_xy)
+            const I_AB_poly = abs(V_AB_poly) > ElectricalCalculator.MIN_VOLTAGE_SAFETY
+              ? conj(div(S_AB_poly, V_AB_poly)) : C(0, 0);
+            const I_BC_poly = abs(V_BC_poly) > ElectricalCalculator.MIN_VOLTAGE_SAFETY
+              ? conj(div(S_BC_poly, V_BC_poly)) : C(0, 0);
+            const I_CA_poly = abs(V_CA_poly) > ElectricalCalculator.MIN_VOLTAGE_SAFETY
+              ? conj(div(S_CA_poly, V_CA_poly)) : C(0, 0);
+
+            // Kirchhoff line currents (inherently satisfy I_A+I_B+I_C=0):
+            // I_A = I_AB - I_CA, I_B = I_BC - I_AB, I_C = I_CA - I_BC
+            let Ia_inj = sub(I_AB_poly, I_CA_poly);
+            let Ib_inj = sub(I_BC_poly, I_AB_poly);
+            let Ic_inj = sub(I_CA_poly, I_BC_poly);
 
             // EQUI8 current injections (if present)
             if (equi8CurrentInjections?.has(u)) {

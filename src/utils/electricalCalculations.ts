@@ -1659,11 +1659,10 @@ export class ElectricalCalculator {
             }
             // ─────────────────────────────────────────────────────────
 
-            // ── KEY COUPLING STEP ────────────────────────────────────
-            // In a 3-wire network, I_A + I_B + I_C = 0 at every node.
-            // Remove the zero-sequence component to enforce this constraint.
-            // Note: MONO delta injections already satisfy I_A+I_B+I_C=0,
-            // but POLY loads from S_maps may have residual I_0.
+            // ── SAFETY I_0 REMOVAL ─────────────────────────────────
+            // Both POLY (delta representation) and MONO paths produce currents
+            // that inherently satisfy I_A+I_B+I_C=0. This step removes any
+            // residual numerical I_0 as a safety measure.
             const I_0 = scale(add(add(Ia_inj, Ib_inj), Ic_inj), 1 / 3);
             Ia_inj = sub(Ia_inj, I_0);
             Ib_inj = sub(Ib_inj, I_0);

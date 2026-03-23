@@ -1802,6 +1802,19 @@ export class ElectricalCalculator {
           console.warn('⚠️ [3-wire coupled BFS] Did not converge');
         }
 
+        // ── POST-BFS KCL VALIDATION ─────────────────────────────
+        // Verify I_A + I_B + I_C ≈ 0 on all branches (3-wire constraint)
+        for (const [cabId, Ia] of I_A_branch.entries()) {
+          const Ib = I_B_branch.get(cabId) || C(0, 0);
+          const Ic = I_C_branch.get(cabId) || C(0, 0);
+          const I_sum = abs(add(add(Ia, Ib), Ic));
+          const I_max = Math.max(abs(Ia), abs(Ib), abs(Ic));
+          if (I_max > 0.1 && I_sum / I_max > 0.01) {
+            console.warn(`⚠️ [KCL violation] Cable ${cabId}: |I_A+I_B+I_C|=${I_sum.toFixed(2)}A (${(I_sum/I_max*100).toFixed(1)}% of max phase)`);
+          }
+        }
+        // ─────────────────────────────────────────────────────────
+
         return {
           phaseA: { V_node_phase: V_A, I_branch_phase: I_A_branch },
           phaseB: { V_node_phase: V_B, I_branch_phase: I_B_branch },

@@ -910,6 +910,9 @@ export class ElectricalCalculator {
     }
 
     // ===== TENSION DE RÉFÉRENCE POUR LES CALCULS =====
+    // ⚠️ SINGLE √3 CONVERSION POINT: V_LL → V_phase_internal
+    // All other √3 conversions are for display only (getDisplayLineScale)
+    // Delta display uses Va-Vb (no √3 needed). Do NOT add another ÷√3 elsewhere.
     // U_line_base : tension nominale du réseau (230V ou 400V) - utilisée pour Zbase et choix impédances
     // Vslack_phase : tension réelle mesurée aux bornes du transfo - point de départ des calculs de chute
     let Vslack_phase: number;
@@ -1310,6 +1313,8 @@ export class ElectricalCalculator {
         while (iter2 < ElectricalCalculator.MAX_ITERATIONS) {
           iter2++;
           const V_prev2 = new Map(V_node_phase);
+          // Store previous branch currents for dual convergence check
+          const I_prev_phase = new Map(I_branch_phase);
 
           I_branch_phase.clear();
           I_inj_node_phase.clear();
@@ -1317,6 +1322,10 @@ export class ElectricalCalculator {
           for (const n of nodes) {
             const Vn = V_node_phase.get(n.id) || Vslack_phase_ph;
             const Sph = S_map.get(n.id) || C(0, 0);
+            // Divergence detection: flag near-zero voltages instead of silent replacement
+            if (abs(Vn) < 1.0 && abs(Vn) > 0) {
+              console.warn(`⚠️ [BFS phase ${phaseLabel}] Near-zero voltage at node ${n.id}: |V|=${abs(Vn).toFixed(3)}V — possible divergence`);
+            }
             const Vsafe = abs(Vn) > ElectricalCalculator.MIN_VOLTAGE_SAFETY ? Vn : Vslack_phase_ph;
             let Iinj = conj(div(Sph, Vsafe));
             
@@ -1456,18 +1465,30 @@ export class ElectricalCalculator {
             }
           }
 
-          // Convergence per-phase (normalisation par tension locale de chaque noeud)
-          let allConverged = true;
+          // Dual convergence: voltage AND current must both converge
+          let voltageConverged = true;
           for (const [nid, Vn] of V_node_phase.entries()) {
             const Vp = V_prev2.get(nid) || Vslack_phase_ph;
             const d = abs(sub(Vn, Vp));
             const Vn_mag = abs(Vn) || 1;
             if (d / Vn_mag >= ElectricalCalculator.CONVERGENCE_TOLERANCE) {
-              allConverged = false;
+              voltageConverged = false;
               break;
             }
           }
-          if (allConverged) { converged2 = true; break; }
+          let currentConverged = true;
+          if (voltageConverged) {
+            for (const [cabId, I] of I_branch_phase.entries()) {
+              const Ip = I_prev_phase?.get(cabId);
+              if (Ip && abs(I) > 0.01) {
+                if (abs(sub(I, Ip)) / abs(I) >= ElectricalCalculator.CONVERGENCE_TOLERANCE) {
+                  currentConverged = false;
+                  break;
+                }
+              }
+            }
+          }
+          if (voltageConverged && currentConverged) { converged2 = true; break; }
         }
         if (!converged2) {
           console.warn(`⚠️ BFS phase ${angleDeg}° non convergé`);
@@ -1531,10 +1552,13 @@ export class ElectricalCalculator {
 
         for (let iter = 0; iter < ElectricalCalculator.MAX_ITERATIONS; iter++) {
 
-          // Save previous voltages for convergence check
+          // Save previous voltages and currents for dual convergence check
           const V_A_prev = new Map(V_A);
           const V_B_prev = new Map(V_B);
           const V_C_prev = new Map(V_C);
+          const I_A_prev = new Map(I_A_branch);
+          const I_B_prev = new Map(I_B_branch);
+          const I_C_prev = new Map(I_C_branch);
 
           I_A_branch.clear();
           I_B_branch.clear();
@@ -1552,14 +1576,37 @@ export class ElectricalCalculator {
             const Sb = S_B_m.get(u) || C(0, 0);
             const Sc = S_C_m.get(u) || C(0, 0);
 
-            // Raw nodal injection currents: I = conj(S / V)
-            const Va_safe = abs(Va) > ElectricalCalculator.MIN_VOLTAGE_SAFETY ? Va : Vsa;
-            const Vb_safe = abs(Vb) > ElectricalCalculator.MIN_VOLTAGE_SAFETY ? Vb : Vsb;
-            const Vc_safe = abs(Vc) > ElectricalCalculator.MIN_VOLTAGE_SAFETY ? Vc : Vsc;
+            // ── POLY LOADS: PROPER DELTA REPRESENTATION ──────────────
+            // Convert phase powers to delta coupling powers:
+            //   S_AB = (Sa + Sb) / 2, S_BC = (Sb + Sc) / 2, S_CA = (Sc + Sa) / 2
+            // Then compute currents from line-to-line voltages (physically correct).
+            // Divergence detection: warn on near-zero voltages
+            if (abs(Va) < 1.0 || abs(Vb) < 1.0 || abs(Vc) < 1.0) {
+              console.warn(`⚠️ [Delta BFS] Near-zero voltage at node ${u}: |Va|=${abs(Va).toFixed(3)}, |Vb|=${abs(Vb).toFixed(3)}, |Vc|=${abs(Vc).toFixed(3)}`);
+            }
 
-            let Ia_inj = conj(div(Sa, Va_safe));
-            let Ib_inj = conj(div(Sb, Vb_safe));
-            let Ic_inj = conj(div(Sc, Vc_safe));
+            const V_AB_poly = sub(Va, Vb);
+            const V_BC_poly = sub(Vb, Vc);
+            const V_CA_poly = sub(Vc, Va);
+
+            // Redistribute POLY S_maps into delta couplings
+            const S_AB_poly = scale(add(Sa, Sb), 0.5);
+            const S_BC_poly = scale(add(Sb, Sc), 0.5);
+            const S_CA_poly = scale(add(Sc, Sa), 0.5);
+
+            // Delta currents from line-to-line voltages: I_xy = conj(S_xy / V_xy)
+            const I_AB_poly = abs(V_AB_poly) > ElectricalCalculator.MIN_VOLTAGE_SAFETY
+              ? conj(div(S_AB_poly, V_AB_poly)) : C(0, 0);
+            const I_BC_poly = abs(V_BC_poly) > ElectricalCalculator.MIN_VOLTAGE_SAFETY
+              ? conj(div(S_BC_poly, V_BC_poly)) : C(0, 0);
+            const I_CA_poly = abs(V_CA_poly) > ElectricalCalculator.MIN_VOLTAGE_SAFETY
+              ? conj(div(S_CA_poly, V_CA_poly)) : C(0, 0);
+
+            // Kirchhoff line currents (inherently satisfy I_A+I_B+I_C=0):
+            // I_A = I_AB - I_CA, I_B = I_BC - I_AB, I_C = I_CA - I_BC
+            let Ia_inj = sub(I_AB_poly, I_CA_poly);
+            let Ib_inj = sub(I_BC_poly, I_AB_poly);
+            let Ic_inj = sub(I_CA_poly, I_BC_poly);
 
             // EQUI8 current injections (if present)
             if (equi8CurrentInjections?.has(u)) {
@@ -1581,9 +1628,9 @@ export class ElectricalCalculator {
               const S_AC_net_kVA = ppLoads.charges['A-C'] - ppLoads.productions['A-C'];
 
               // Phase-phase voltages from current BFS iteration
-              const V_AB = sub(Va_safe, Vb_safe);
-              const V_BC = sub(Vb_safe, Vc_safe);
-              const V_AC = sub(Va_safe, Vc_safe);
+              const V_AB = sub(Va, Vb);
+              const V_BC = sub(Vb, Vc);
+              const V_AC = sub(Va, Vc);
 
               // Build complex S with cosφ: S = P + jQ (in VA)
               const buildS = (net_kVA: number): Complex => {
@@ -1615,11 +1662,10 @@ export class ElectricalCalculator {
             }
             // ─────────────────────────────────────────────────────────
 
-            // ── KEY COUPLING STEP ────────────────────────────────────
-            // In a 3-wire network, I_A + I_B + I_C = 0 at every node.
-            // Remove the zero-sequence component to enforce this constraint.
-            // Note: MONO delta injections already satisfy I_A+I_B+I_C=0,
-            // but POLY loads from S_maps may have residual I_0.
+            // ── SAFETY I_0 REMOVAL ─────────────────────────────────
+            // Both POLY (delta representation) and MONO paths produce currents
+            // that inherently satisfy I_A+I_B+I_C=0. This step removes any
+            // residual numerical I_0 as a safety measure.
             const I_0 = scale(add(add(Ia_inj, Ib_inj), Ic_inj), 1 / 3);
             Ia_inj = sub(Ia_inj, I_0);
             Ib_inj = sub(Ib_inj, I_0);
@@ -1713,18 +1759,39 @@ export class ElectricalCalculator {
           }
 
           // ── CONVERGENCE CHECK ─────────────────────────────────────
-          let allConverged = true;
+          // Dual convergence: voltage AND current
+          let voltageConverged = true;
           for (const n of nodes) {
             const dA = abs(sub(V_A.get(n.id) || Vsa, V_A_prev.get(n.id) || Vsa));
             const dB = abs(sub(V_B.get(n.id) || Vsb, V_B_prev.get(n.id) || Vsb));
             const dC = abs(sub(V_C.get(n.id) || Vsc, V_C_prev.get(n.id) || Vsc));
             const Vmag = abs(V_A.get(n.id) || Vsa) || 1;
             if (Math.max(dA, dB, dC) / Vmag >= ElectricalCalculator.CONVERGENCE_TOLERANCE) {
-              allConverged = false;
+              voltageConverged = false;
               break;
             }
           }
-          if (allConverged) {
+          let currentConverged = true;
+          if (voltageConverged) {
+            for (const [cabId, Ia] of I_A_branch.entries()) {
+              const Ia_p = I_A_prev.get(cabId);
+              const Ib = I_B_branch.get(cabId) || C(0, 0);
+              const Ib_p = I_B_prev.get(cabId);
+              const Ic = I_C_branch.get(cabId) || C(0, 0);
+              const Ic_p = I_C_prev.get(cabId);
+              const Imax = Math.max(abs(Ia), abs(Ib), abs(Ic));
+              if (Imax > 0.01) {
+                const dIa = Ia_p ? abs(sub(Ia, Ia_p)) : 0;
+                const dIb = Ib_p ? abs(sub(Ib, Ib_p)) : 0;
+                const dIc = Ic_p ? abs(sub(Ic, Ic_p)) : 0;
+                if (Math.max(dIa, dIb, dIc) / Imax >= ElectricalCalculator.CONVERGENCE_TOLERANCE) {
+                  currentConverged = false;
+                  break;
+                }
+              }
+            }
+          }
+          if (voltageConverged && currentConverged) {
             converged = true;
             console.log(`✅ [3-wire coupled BFS] Converged at iter ${iter + 1}`);
             break;
@@ -1734,6 +1801,19 @@ export class ElectricalCalculator {
         if (!converged) {
           console.warn('⚠️ [3-wire coupled BFS] Did not converge');
         }
+
+        // ── POST-BFS KCL VALIDATION ─────────────────────────────
+        // Verify I_A + I_B + I_C ≈ 0 on all branches (3-wire constraint)
+        for (const [cabId, Ia] of I_A_branch.entries()) {
+          const Ib = I_B_branch.get(cabId) || C(0, 0);
+          const Ic = I_C_branch.get(cabId) || C(0, 0);
+          const I_sum = abs(add(add(Ia, Ib), Ic));
+          const I_max = Math.max(abs(Ia), abs(Ib), abs(Ic));
+          if (I_max > 0.1 && I_sum / I_max > 0.01) {
+            console.warn(`⚠️ [KCL violation] Cable ${cabId}: |I_A+I_B+I_C|=${I_sum.toFixed(2)}A (${(I_sum/I_max*100).toFixed(1)}% of max phase)`);
+          }
+        }
+        // ─────────────────────────────────────────────────────────
 
         return {
           phaseA: { V_node_phase: V_A, I_branch_phase: I_A_branch },

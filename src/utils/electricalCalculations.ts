@@ -1552,10 +1552,13 @@ export class ElectricalCalculator {
 
         for (let iter = 0; iter < ElectricalCalculator.MAX_ITERATIONS; iter++) {
 
-          // Save previous voltages for convergence check
+          // Save previous voltages and currents for dual convergence check
           const V_A_prev = new Map(V_A);
           const V_B_prev = new Map(V_B);
           const V_C_prev = new Map(V_C);
+          const I_A_prev = new Map(I_A_branch);
+          const I_B_prev = new Map(I_B_branch);
+          const I_C_prev = new Map(I_C_branch);
 
           I_A_branch.clear();
           I_B_branch.clear();
@@ -1756,18 +1759,39 @@ export class ElectricalCalculator {
           }
 
           // ── CONVERGENCE CHECK ─────────────────────────────────────
-          let allConverged = true;
+          // Dual convergence: voltage AND current
+          let voltageConverged = true;
           for (const n of nodes) {
             const dA = abs(sub(V_A.get(n.id) || Vsa, V_A_prev.get(n.id) || Vsa));
             const dB = abs(sub(V_B.get(n.id) || Vsb, V_B_prev.get(n.id) || Vsb));
             const dC = abs(sub(V_C.get(n.id) || Vsc, V_C_prev.get(n.id) || Vsc));
             const Vmag = abs(V_A.get(n.id) || Vsa) || 1;
             if (Math.max(dA, dB, dC) / Vmag >= ElectricalCalculator.CONVERGENCE_TOLERANCE) {
-              allConverged = false;
+              voltageConverged = false;
               break;
             }
           }
-          if (allConverged) {
+          let currentConverged = true;
+          if (voltageConverged) {
+            for (const [cabId, Ia] of I_A_branch.entries()) {
+              const Ia_p = I_A_prev.get(cabId);
+              const Ib = I_B_branch.get(cabId) || C(0, 0);
+              const Ib_p = I_B_prev.get(cabId);
+              const Ic = I_C_branch.get(cabId) || C(0, 0);
+              const Ic_p = I_C_prev.get(cabId);
+              const Imax = Math.max(abs(Ia), abs(Ib), abs(Ic));
+              if (Imax > 0.01) {
+                const dIa = Ia_p ? abs(sub(Ia, Ia_p)) : 0;
+                const dIb = Ib_p ? abs(sub(Ib, Ib_p)) : 0;
+                const dIc = Ic_p ? abs(sub(Ic, Ic_p)) : 0;
+                if (Math.max(dIa, dIb, dIc) / Imax >= ElectricalCalculator.CONVERGENCE_TOLERANCE) {
+                  currentConverged = false;
+                  break;
+                }
+              }
+            }
+          }
+          if (voltageConverged && currentConverged) {
             converged = true;
             console.log(`✅ [3-wire coupled BFS] Converged at iter ${iter + 1}`);
             break;

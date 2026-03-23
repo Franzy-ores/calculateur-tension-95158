@@ -42,7 +42,7 @@ export const ParametersTab = () => {
   let totalProductionsContractuelles = 0;
 
   connectedNodesData.forEach(node => {
-    chargesManuelles += node.clients.reduce((sum, c) => sum + c.puissance, 0);
+    chargesManuelles += node.clients.reduce((sum, c) => sum + c.S_kVA, 0);
     productionsManuelles += node.productions.reduce((sum, p) => sum + p.S_kVA, 0);
     totalProductionsContractuelles += node.productions.reduce((sum, p) => sum + p.S_kVA, 0);
     const linkedClients = (currentProject.clientsImportes || []).filter(c => 

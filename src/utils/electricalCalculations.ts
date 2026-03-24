@@ -2436,9 +2436,27 @@ export class ElectricalCalculator {
           let Va_seq: Complex, Vb_seq: Complex, Vc_seq: Complex;
 
           if (is400V) {
+            // === DEBUG : Vérifier ce que contient Va, Vb, Vc ===
+            console.log(`\n🔍 [DEBUG Fortescue] Nœud ${n.name || n.id}:`);
+            console.log(`  Va = ${Va.re.toFixed(2)} + j${Va.im.toFixed(2)} → |Va| = ${abs(Va).toFixed(2)}V`);
+            console.log(`  Vb = ${Vb.re.toFixed(2)} + j${Vb.im.toFixed(2)} → |Vb| = ${abs(Vb).toFixed(2)}V`);
+            console.log(`  Vc = ${Vc.re.toFixed(2)} + j${Vc.im.toFixed(2)} → |Vc| = ${abs(Vc).toFixed(2)}V`);
+            
+            const sum_abc = add(add(Va, Vb), Vc);
+            const sum_mag = abs(sum_abc);
+            console.log(`  Va + Vb + Vc = ${sum_abc.re.toFixed(2)} + j${sum_abc.im.toFixed(2)}`);
+            console.log(`  |Va + Vb + Vc| = ${sum_mag.toFixed(2)}V`);
+            
+            if (sum_mag < 1) {
+              console.log(`  ✅ CORRECT : Annulation vectorielle OK → Va,Vb,Vc sont phase-neutre`);
+            } else if (sum_mag > 5) {
+              console.log(`  ❌ BUG : Pas d'annulation → Va,Vb,Vc sont probablement phase-terre`);
+            } else {
+              console.log(`  ⚠️ INCERTAIN : Annulation partielle → Vérifier les angles`);
+            }
+            console.log('');
+
             // 400V étoile : Va, Vb, Vc sont déjà phase-neutre (issues du BFS)
-            // NE PAS ajouter Vn — Fortescue doit recevoir les tensions phase-neutre
-            // pour détecter correctement le déséquilibre (U2/U1)
             Va_seq = Va;
             Vb_seq = Vb;
             Vc_seq = Vc;

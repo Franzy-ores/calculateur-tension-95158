@@ -365,50 +365,145 @@ export const EditPanel = () => {
                 </Card>
               )}
 
-              {/* Clients */}
+              {/* Charges standard */}
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center justify-between">
                     Charges
-                    <Button size="sm" variant="outline" onClick={addClient}>
-                      <Plus className="w-4 h-4" />
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button size="sm" variant="outline" onClick={addClient} title="Ajouter charge">
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={addBorneVE} title="Ajouter Borne VE" className="text-green-600 border-green-300 hover:bg-green-50">
+                        <Car className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {formData.clients?.map((client: ClientCharge, index: number) => (
-                    <div key={client.id} className="flex gap-2 items-end">
-                      <div className="flex-1">
-                        <Input
-                          placeholder="Nom"
-                          value={client.label}
-                          onChange={(e) => {
-                            const updated = [...formData.clients];
-                            updated[index].label = e.target.value;
-                            setFormData({ ...formData, clients: updated });
-                          }}
-                        />
+                    client.clientCategory === 'bornesVE' ? (
+                      /* Formulaire spécifique Borne VE */
+                      <div key={client.id} className="p-2 border border-green-200 dark:border-green-800 rounded bg-green-50/50 dark:bg-green-950/30 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium flex items-center gap-1">
+                            <Car className="w-3 h-3 text-green-600" /> {client.label}
+                          </span>
+                          <Button size="sm" variant="ghost" onClick={() => removeClient(client.id)} className="h-6 w-6 p-0">
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-[10px]">Puissance/borne</Label>
+                            <Select
+                              value={String(client.borneVEConfig?.puissanceParBorne_kVA || 11)}
+                              onValueChange={(v) => {
+                                const updated = [...formData.clients];
+                                const pBorne = parseInt(v);
+                                const nBornes = updated[index].borneVEConfig?.nombreBornes || 1;
+                                updated[index] = {
+                                  ...updated[index],
+                                  borneVEConfig: { ...updated[index].borneVEConfig!, puissanceParBorne_kVA: pBorne },
+                                  S_kVA: nBornes * pBorne,
+                                };
+                                setFormData({ ...formData, clients: updated });
+                              }}
+                            >
+                              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="11">11 kVA</SelectItem>
+                                <SelectItem value="22">22 kVA</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label className="text-[10px]">Nb bornes</Label>
+                            <Input
+                              type="number" min={1} max={4} className="h-7 text-xs"
+                              value={client.borneVEConfig?.nombreBornes || 1}
+                              onChange={(e) => {
+                                const updated = [...formData.clients];
+                                const nBornes = Math.max(1, Math.min(4, parseInt(e.target.value) || 1));
+                                const pBorne = updated[index].borneVEConfig?.puissanceParBorne_kVA || 11;
+                                updated[index] = {
+                                  ...updated[index],
+                                  borneVEConfig: { ...updated[index].borneVEConfig!, nombreBornes: nBornes },
+                                  S_kVA: nBornes * pBorne,
+                                };
+                                setFormData({ ...formData, clients: updated });
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-[10px]">Raccordement (kVA)</Label>
+                            <Input
+                              type="number" className="h-7 text-xs"
+                              value={client.S_kVA}
+                              onChange={(e) => {
+                                const updated = [...formData.clients];
+                                updated[index].S_kVA = parseFloat(e.target.value) || 0;
+                                setFormData({ ...formData, clients: updated });
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-[10px]">cos φ</Label>
+                            <Input
+                              type="number" step={0.01} min={0.8} max={1} className="h-7 text-xs"
+                              value={client.borneVEConfig?.cosPhi || 0.95}
+                              onChange={(e) => {
+                                const updated = [...formData.clients];
+                                updated[index] = {
+                                  ...updated[index],
+                                  borneVEConfig: { ...updated[index].borneVEConfig!, cosPhi: parseFloat(e.target.value) || 0.95 },
+                                };
+                                setFormData({ ...formData, clients: updated });
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div className="text-[9px] text-muted-foreground">
+                          Tétraphasé 400V — {client.borneVEConfig?.nombreBornes || 1} borne(s) × {client.borneVEConfig?.puissanceParBorne_kVA || 11} kVA — Raccordement : {client.S_kVA} kVA
+                        </div>
                       </div>
-                      <div className="w-20">
-                        <Input
-                          type="number"
-                          placeholder="kVA"
-                          value={client.S_kVA}
-                          onChange={(e) => {
-                            const updated = [...formData.clients];
-                            updated[index].S_kVA = parseFloat(e.target.value) || 0;
-                            setFormData({ ...formData, clients: updated });
-                          }}
-                        />
+                    ) : (
+                      /* Charge standard */
+                      <div key={client.id} className="flex gap-2 items-end">
+                        <div className="flex-1">
+                          <Input
+                            placeholder="Nom"
+                            value={client.label}
+                            onChange={(e) => {
+                              const updated = [...formData.clients];
+                              updated[index].label = e.target.value;
+                              setFormData({ ...formData, clients: updated });
+                            }}
+                          />
+                        </div>
+                        <div className="w-20">
+                          <Input
+                            type="number"
+                            placeholder="kVA"
+                            value={client.S_kVA}
+                            onChange={(e) => {
+                              const updated = [...formData.clients];
+                              updated[index].S_kVA = parseFloat(e.target.value) || 0;
+                              setFormData({ ...formData, clients: updated });
+                            }}
+                          />
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => removeClient(client.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => removeClient(client.id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
+                    )
                   ))}
                 </CardContent>
               </Card>

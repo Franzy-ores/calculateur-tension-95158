@@ -618,6 +618,7 @@ export class ElectricalCalculator {
     clientLinks?: ClientLink[],
     foisonnementChargesResidentiel?: number,
     foisonnementChargesIndustriel?: number,
+    foisonnementBornesVE?: number,
     // ✅ EQUI8 CME: Injections de courant shunt par nœud (source de courant)
     equi8CurrentInjections?: Map<string, { 
       I_neutral: { re: number; im: number };   // +I_EQUI8 sur neutre
@@ -704,11 +705,10 @@ export class ElectricalCalculator {
         S_pv = totalProduction_kVA * (foisonnementProductions / 100);
         
         // Charges manuelles du nœud (séparées par catégorie)
-        const foisonnementBornesVE = 50; // Default; overridden by calculateScenarioWithHTConfig
+        const foisBornesVE = foisonnementBornesVE ?? 50;
         for (const c of (n.clients || [])) {
           if (c.clientCategory === 'bornesVE') {
-            // Bornes VE : foisonnement indépendant, distribution équilibrée 3 phases
-            S_prel += (c.S_kVA || 0) * (foisonnementBornesVE / 100);
+            S_prel += (c.S_kVA || 0) * (foisBornesVE / 100);
           } else {
             S_prel += (c.S_kVA || 0) * (foisonnementResidentiel / 100);
           }

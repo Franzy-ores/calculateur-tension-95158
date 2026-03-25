@@ -817,8 +817,14 @@ export class ElectricalCalculator {
           totalProductions += client.puissancePV_kVA * (foisonnementProductions / 100);
         }
         
-        // Charges manuelles du nœud (considérées comme résidentielles)
-        totalLoads += (n.clients || []).reduce((s, c) => s + (c.S_kVA || 0), 0) * (foisonnementResidentiel / 100);
+        // Charges manuelles du nœud (séparées par catégorie)
+        for (const c of (n.clients || [])) {
+          if (c.clientCategory === 'bornesVE') {
+            totalLoads += (c.S_kVA || 0) * (50 / 100); // foisonnement VE default
+          } else {
+            totalLoads += (c.S_kVA || 0) * (foisonnementResidentiel / 100);
+          }
+        }
         totalProductions += (n.productions || []).reduce((s, p) => s + (p.S_kVA || 0), 0) * (foisonnementProductions / 100);
       } else {
         // Fallback : charges/productions manuelles uniquement (foisonnement global)

@@ -2,7 +2,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Home, Factory, Sun, Activity, Table, BarChart3, AlertTriangle, Snowflake, Thermometer } from "lucide-react";
+import { Home, Factory, Sun, Activity, Table, BarChart3, AlertTriangle, Snowflake, Thermometer, Car } from "lucide-react";
 import { useNetworkStore } from "@/store/networkStore";
 import { PhaseDistributionSliders } from "@/components/PhaseDistributionSliders";
 import { PhaseDistributionDisplay } from "@/components/PhaseDistributionDisplay";
@@ -16,6 +16,7 @@ export const ParametersTab = () => {
     setSelectedScenario,
     setFoisonnementChargesResidentiel,
     setFoisonnementChargesIndustriel,
+    setFoisonnementBornesVE,
     setFoisonnementProductions,
     simulationPreview,
     updateProjectConfig,
@@ -38,11 +39,18 @@ export const ParametersTab = () => {
 
   // Charges et productions manuelles sur nœuds (non-importées)
   let chargesManuelles = 0;
+  let chargesBornesVE = 0;
   let productionsManuelles = 0;
   let totalProductionsContractuelles = 0;
 
   connectedNodesData.forEach(node => {
-    chargesManuelles += node.clients.reduce((sum, c) => sum + c.S_kVA, 0);
+    node.clients.forEach(c => {
+      if (c.clientCategory === 'bornesVE') {
+        chargesBornesVE += c.S_kVA;
+      } else {
+        chargesManuelles += c.S_kVA;
+      }
+    });
     productionsManuelles += node.productions.reduce((sum, p) => sum + p.S_kVA, 0);
     totalProductionsContractuelles += node.productions.reduce((sum, p) => sum + p.S_kVA, 0);
     const linkedClients = (currentProject.clientsImportes || []).filter(c => 
@@ -53,16 +61,18 @@ export const ParametersTab = () => {
 
   const foisonnementResidentiel = currentProject.foisonnementChargesResidentiel ?? 15;
   const foisonnementIndustriel = currentProject.foisonnementChargesIndustriel ?? 70;
+  const foisonnementVE = currentProject.foisonnementBornesVE ?? 50;
   const foisonnementProductions = currentProject.foisonnementProductions;
     
   const chargesResidentiellesFoisonnees = chargesResidentielles * (foisonnementResidentiel / 100);
   const chargesIndustriellesFoisonnees = chargesIndustrielles * (foisonnementIndustriel / 100);
-  const totalChargesFoisonnees = chargesResidentiellesFoisonnees + chargesIndustriellesFoisonnees;
+  const chargesBornesVEFoisonnees = chargesBornesVE * (foisonnementVE / 100);
+  const totalChargesFoisonnees = chargesResidentiellesFoisonnees + chargesIndustriellesFoisonnees + chargesBornesVEFoisonnees;
   const productionsFoisonnees = totalProductionsContractuelles * (foisonnementProductions / 100);
 
   // Ventilation foisonnée : manuelles vs importées (circuit)
   const chargesManuellesFoisonnees = chargesManuelles * (foisonnementResidentiel / 100);
-  const chargesImporteesFoisonnees = totalChargesFoisonnees - chargesManuellesFoisonnees;
+  const chargesImporteesFoisonnees = totalChargesFoisonnees - chargesManuellesFoisonnees - chargesBornesVEFoisonnees;
   const productionsManuellesFoisonnees = productionsManuelles * (foisonnementProductions / 100);
   const productionsImporteesFoisonnees = productionsFoisonnees - productionsManuellesFoisonnees;
 
@@ -204,6 +214,34 @@ export const ParametersTab = () => {
             </div>
           </div>
 
+          {/* Séparateur Bornes VE */}
+          {chargesBornesVE > 0 && (
+            <>
+              <div className="w-px bg-border/50 self-stretch" />
+              <div className="flex items-center gap-2 min-w-[180px] flex-1 max-w-[220px]">
+                <Car className="h-4 w-4 text-green-500 flex-shrink-0" />
+                <div className="flex-1 flex flex-col gap-0.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-muted-foreground">Bornes VE</span>
+                    <span className="text-xs font-mono font-medium text-green-500">{foisonnementVE}%</span>
+                  </div>
+                  <Slider
+                    value={[foisonnementVE]}
+                    onValueChange={(value) => setFoisonnementBornesVE(value[0])}
+                    max={100}
+                    min={10}
+                    step={5}
+                    disabled={simulationPreview.isActive}
+                    className="h-3"
+                  />
+                  <span className="text-[10px] text-muted-foreground">
+                    {chargesBornesVE.toFixed(0)}→<span className="text-green-500 font-medium">{chargesBornesVEFoisonnees.toFixed(1)}</span>
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
+
           {/* Productions */}
           <div className="flex items-center gap-2 min-w-[180px] flex-1 max-w-[220px]">
             <Sun className="h-4 w-4 text-yellow-500 flex-shrink-0" />
@@ -231,9 +269,10 @@ export const ParametersTab = () => {
           <div className="flex flex-col items-end justify-center px-2 border-l border-border/50">
             <span className="text-[10px] text-muted-foreground">Circuit - Charges F.</span>
             <span className="text-sm font-bold text-primary">{totalChargesFoisonnees.toFixed(1)} kVA</span>
-            {(chargesManuellesFoisonnees > 0.01 || chargesImporteesFoisonnees > 0.01) && (
+            {(chargesManuellesFoisonnees > 0.01 || chargesImporteesFoisonnees > 0.01 || chargesBornesVEFoisonnees > 0.01) && (
               <span className="text-[9px] text-muted-foreground/70">
                 ↳ Clients: {chargesImporteesFoisonnees.toFixed(1)} | Nœuds: {chargesManuellesFoisonnees.toFixed(1)}
+                {chargesBornesVEFoisonnees > 0.01 && ` | VE: ${chargesBornesVEFoisonnees.toFixed(1)}`}
               </span>
             )}
             <span className="text-[10px] text-muted-foreground mt-0.5">Circuit - Prod. F.</span>

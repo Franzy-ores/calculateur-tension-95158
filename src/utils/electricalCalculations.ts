@@ -598,6 +598,7 @@ export class ElectricalCalculator {
       clientLinks,
       (project as any).foisonnementChargesResidentiel,
       (project as any).foisonnementChargesIndustriel,
+      (project as any).foisonnementBornesVE,
       undefined, // equi8CurrentInjections
       project.season as ThermalSeason | undefined,
       project.sagFactorPercent
@@ -618,6 +619,7 @@ export class ElectricalCalculator {
     clientLinks?: ClientLink[],
     foisonnementChargesResidentiel?: number,
     foisonnementChargesIndustriel?: number,
+    foisonnementBornesVE?: number,
     // ✅ EQUI8 CME: Injections de courant shunt par nœud (source de courant)
     equi8CurrentInjections?: Map<string, { 
       I_neutral: { re: number; im: number };   // +I_EQUI8 sur neutre
@@ -703,16 +705,23 @@ export class ElectricalCalculator {
         const totalProduction_kVA = linkedClients.reduce((sum, c) => sum + c.puissancePV_kVA, 0);
         S_pv = totalProduction_kVA * (foisonnementProductions / 100);
         
-        // Charges manuelles du nœud (considérées comme résidentielles)
-        const manualCharges = (n.clients || []).reduce((s, c) => s + (c.S_kVA || 0), 0);
-        S_prel += manualCharges * (foisonnementResidentiel / 100);
+        // Charges manuelles du nœud (séparées par catégorie)
+        const foisBornesVE = foisonnementBornesVE ?? 50;
+        for (const c of (n.clients || [])) {
+          if (c.clientCategory === 'bornesVE') {
+            S_prel += (c.S_kVA || 0) * (foisBornesVE / 100);
+          } else {
+            S_prel += (c.S_kVA || 0) * (foisonnementResidentiel / 100);
+          }
+        }
         
         // Productions manuelles du nœud
         const manualProductions = (n.productions || []).reduce((s, p) => s + (p.S_kVA || 0), 0);
         S_pv += manualProductions * (foisonnementProductions / 100);
         
         // 🔍 DIAGNOSTIC : Tracer les sources de puissance au nœud
-        if (linkedClients.length > 0 || manualCharges > 0) {
+        const manualChargesTotal = (n.clients || []).reduce((s, c) => s + (c.S_kVA || 0), 0);
+        if (linkedClients.length > 0 || manualChargesTotal > 0) {
           console.log(`🔍 [DEBUG] Nœud "${n.name || n.id}" - Calcul S_prel_map:`);
           console.log(`   📋 Clients liés: ${linkedClients.length}`);
           for (const client of linkedClients) {
@@ -721,7 +730,7 @@ export class ElectricalCalculator {
               : foisonnementResidentiel;
             console.log(`      - "${client.nomCircuit}": ${client.puissanceContractuelle_kVA} kVA × ${foisonnement}% = ${(client.puissanceContractuelle_kVA * foisonnement / 100).toFixed(2)} kVA (${client.clientType || 'résidentiel'}, ${client.connectionType || client.couplage})`);
           }
-          console.log(`   🔧 Charges manuelles: ${manualCharges} kVA × ${foisonnementResidentiel}% = ${(manualCharges * foisonnementResidentiel / 100).toFixed(2)} kVA`);
+          console.log(`   🔧 Charges manuelles: ${manualChargesTotal} kVA`);
           console.log(`   ➡️ S_prel TOTAL: ${S_prel.toFixed(2)} kVA`);
           
           // Comparer avec autoPhaseDistribution.foisonneAvecCurseurs
@@ -809,8 +818,14 @@ export class ElectricalCalculator {
           totalProductions += client.puissancePV_kVA * (foisonnementProductions / 100);
         }
         
-        // Charges manuelles du nœud (considérées comme résidentielles)
-        totalLoads += (n.clients || []).reduce((s, c) => s + (c.S_kVA || 0), 0) * (foisonnementResidentiel / 100);
+        // Charges manuelles du nœud (séparées par catégorie)
+        for (const c of (n.clients || [])) {
+          if (c.clientCategory === 'bornesVE') {
+            totalLoads += (c.S_kVA || 0) * (50 / 100); // foisonnement VE default
+          } else {
+            totalLoads += (c.S_kVA || 0) * (foisonnementResidentiel / 100);
+          }
+        }
         totalProductions += (n.productions || []).reduce((s, p) => s + (p.S_kVA || 0), 0) * (foisonnementProductions / 100);
       } else {
         // Fallback : charges/productions manuelles uniquement (foisonnement global)

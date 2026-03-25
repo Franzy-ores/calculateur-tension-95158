@@ -349,9 +349,15 @@ export const calculatePowersByClientType = (
     }
   });
 
-  // Ajouter les charges manuelles (considérées comme résidentielles par défaut)
+  // Ajouter les charges manuelles (résidentielles ou bornesVE)
   nodes.forEach(node => {
-    chargesResidentielles += node.clients.reduce((sum, c) => sum + c.S_kVA, 0);
+    node.clients.forEach(c => {
+      if (c.clientCategory === 'bornesVE') {
+        // Les bornes VE ne sont comptées ni en résidentiel ni en industriel
+      } else {
+        chargesResidentielles += c.S_kVA;
+      }
+    });
   });
 
   return {

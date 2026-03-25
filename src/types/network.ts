@@ -27,7 +27,7 @@ import { Complex } from '@/utils/complex';
 
 // Types pour les clients importés
 // Type de client
-export type ClientType = 'résidentiel' | 'industriel';
+export type ClientType = 'résidentiel' | 'industriel' | 'bornesVE';
 
 export interface ClientImporte {
   id: string;
@@ -161,6 +161,14 @@ export interface ClientCharge {
   // NOUVEAU : Phase assignée pour les charges manuelles en mode mixte MONO
   assignedPhase?: 'A' | 'B' | 'C';
   phaseCoupling?: 'A-B' | 'B-C' | 'A-C'; // Pour réseau 230V
+  // Bornes VE
+  clientCategory?: 'bornesVE';
+  borneVEConfig?: {
+    puissanceParBorne_kVA: number;
+    nombreBornes: number;
+    cosPhi: number;
+    profil24h?: number[];
+  };
 }
 
 export interface ProductionPV {
@@ -279,6 +287,7 @@ export interface Project {
   foisonnementCharges: number; // facteur de foisonnement des charges (0-100%) - legacy, utilisé comme moyenne
   foisonnementChargesResidentiel?: number; // facteur de foisonnement des charges résidentielles (0-100%), défaut 15%
   foisonnementChargesIndustriel?: number; // facteur de foisonnement des charges industrielles (0-100%), défaut 70%
+  foisonnementBornesVE?: number; // facteur de foisonnement des bornes VE (0-100%), défaut 50%
   foisonnementProductions: number; // facteur de foisonnement des productions (0-100%)
   defaultChargeKVA: number; // charge par défaut pour nouveaux nœuds (kVA)
   defaultProductionKVA: number; // production par défaut pour nouveaux nœuds (kVA)

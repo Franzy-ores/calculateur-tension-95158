@@ -202,6 +202,7 @@ interface NetworkActions {
   setFoisonnementCharges: (value: number) => void;
   setFoisonnementChargesResidentiel: (value: number) => void;
   setFoisonnementChargesIndustriel: (value: number) => void;
+  setFoisonnementBornesVE: (value: number) => void;
   setFoisonnementProductions: (value: number) => void;
   calculateWithTargetVoltage: (nodeId: string, targetVoltage: number) => void;
   updateCableTypes: () => void;
@@ -317,6 +318,7 @@ const createDefaultProject = (): Project => ({
   foisonnementCharges: 100, // Legacy (calculé comme moyenne pondérée)
   foisonnementChargesResidentiel: 15, // Défaut résidentiel
   foisonnementChargesIndustriel: 70, // Défaut industriel
+  foisonnementBornesVE: 50, // Défaut bornes VE
   foisonnementProductions: 100,
   defaultChargeKVA: 10,
   defaultProductionKVA: 5,
@@ -346,6 +348,7 @@ const createDefaultProject2 = (name: string, voltageSystem: VoltageSystem): Proj
   foisonnementCharges: 100, // Legacy (calculé comme moyenne pondérée)
   foisonnementChargesResidentiel: 15, // Défaut résidentiel
   foisonnementChargesIndustriel: 70, // Défaut industriel
+  foisonnementBornesVE: 50, // Défaut bornes VE
   foisonnementProductions: 100,
   defaultChargeKVA: 10,
   defaultProductionKVA: 5,
@@ -2071,6 +2074,30 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     const updatedProject = {
       ...currentProject,
       foisonnementChargesIndustriel: Math.max(0, Math.min(100, value))
+    };
+    
+    set({ currentProject: updatedProject });
+    get().updateAllCalculations();
+
+    const { simulationMode, isSimulationActive, simulationEquipment } = get();
+    const hasActiveEquipment = (simulationMode || isSimulationActive) && (
+      (simulationEquipment.srg2Devices?.some(s => s.enabled) || false) ||
+      simulationEquipment.neutralCompensators.some(c => c.enabled) ||
+      (simulationEquipment.cableReplacement?.enabled || false)
+    );
+
+    if (hasActiveEquipment) {
+      get().runSimulation();
+    }
+  },
+
+  setFoisonnementBornesVE: (value: number) => {
+    const { currentProject } = get();
+    if (!currentProject) return;
+
+    const updatedProject = {
+      ...currentProject,
+      foisonnementBornesVE: Math.max(0, Math.min(100, value))
     };
     
     set({ currentProject: updatedProject });

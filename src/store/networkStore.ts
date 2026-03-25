@@ -647,7 +647,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
             project.voltageSystem === 'TRIPHASÉ_230V' && project.manualPhaseDistribution?.productions
               ? { 'A-B': project.manualPhaseDistribution.productions.A, 'B-C': project.manualPhaseDistribution.productions.B, 'A-C': project.manualPhaseDistribution.productions.C }
               : undefined,
-            project.treatSmallPolyProductionsAsMono || false
+            project.treatSmallPolyProductionsAsMono || false,
+            project.foisonnementBornesVE
           );
           node.autoPhaseDistribution = distribution;
         }
@@ -1484,7 +1485,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
       state.currentProject.voltageSystem === 'TRIPHASÉ_230V' && state.currentProject.manualPhaseDistribution?.productions
         ? { 'A-B': state.currentProject.manualPhaseDistribution.productions.A, 'B-C': state.currentProject.manualPhaseDistribution.productions.B, 'A-C': state.currentProject.manualPhaseDistribution.productions.C }
         : undefined,
-      state.currentProject.treatSmallPolyProductionsAsMono || false
+      state.currentProject.treatSmallPolyProductionsAsMono || false,
+      state.currentProject.foisonnementBornesVE
     );
     
     // Mettre à jour le nœud
@@ -1701,7 +1703,8 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
             currentProject.voltageSystem === 'TRIPHASÉ_230V' && currentProject.manualPhaseDistribution?.productions
               ? { 'A-B': currentProject.manualPhaseDistribution.productions.A, 'B-C': currentProject.manualPhaseDistribution.productions.B, 'A-C': currentProject.manualPhaseDistribution.productions.C }
               : undefined,
-            currentProject.treatSmallPolyProductionsAsMono || false
+            currentProject.treatSmallPolyProductionsAsMono || false,
+            currentProject.foisonnementBornesVE
           );
           node.autoPhaseDistribution = autoPhaseDistribution;
         }

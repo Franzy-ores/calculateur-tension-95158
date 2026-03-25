@@ -703,9 +703,16 @@ export class ElectricalCalculator {
         const totalProduction_kVA = linkedClients.reduce((sum, c) => sum + c.puissancePV_kVA, 0);
         S_pv = totalProduction_kVA * (foisonnementProductions / 100);
         
-        // Charges manuelles du nœud (considérées comme résidentielles)
-        const manualCharges = (n.clients || []).reduce((s, c) => s + (c.S_kVA || 0), 0);
-        S_prel += manualCharges * (foisonnementResidentiel / 100);
+        // Charges manuelles du nœud (séparées par catégorie)
+        const foisonnementBornesVE = (project as any).foisonnementBornesVE ?? 50;
+        for (const c of (n.clients || [])) {
+          if (c.clientCategory === 'bornesVE') {
+            // Bornes VE : foisonnement indépendant, distribution équilibrée 3 phases
+            S_prel += (c.S_kVA || 0) * (foisonnementBornesVE / 100);
+          } else {
+            S_prel += (c.S_kVA || 0) * (foisonnementResidentiel / 100);
+          }
+        }
         
         // Productions manuelles du nœud
         const manualProductions = (n.productions || []).reduce((s, p) => s + (p.S_kVA || 0), 0);

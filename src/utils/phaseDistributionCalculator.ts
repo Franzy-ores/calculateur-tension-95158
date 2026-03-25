@@ -590,6 +590,7 @@ export function calculateNodeAutoPhaseDistribution(
     const monoResProdCoupling    = { 'A-B': 0, 'B-C': 0, 'A-C': 0 };
     const polyResChargesCoupling = { 'A-B': 0, 'B-C': 0, 'A-C': 0 };
     const polyIndChargesCoupling = { 'A-B': 0, 'B-C': 0, 'A-C': 0 };
+    const polyVEChargesCoupling  = { 'A-B': 0, 'B-C': 0, 'A-C': 0 };
     const polyProdCoupling       = { 'A-B': 0, 'B-C': 0, 'A-C': 0 };
 
     const monoResChargesPhase = { A: 0, B: 0, C: 0 };
@@ -597,6 +598,7 @@ export function calculateNodeAutoPhaseDistribution(
     const monoResProdPhase    = { A: 0, B: 0, C: 0 };
     const polyResChargesPhase = { A: 0, B: 0, C: 0 };
     const polyIndChargesPhase = { A: 0, B: 0, C: 0 };
+    const polyVEChargesPhase  = { A: 0, B: 0, C: 0 };
     const polyProdPhase       = { A: 0, B: 0, C: 0 };
 
     linkedClients.forEach(client => {
@@ -608,7 +610,7 @@ export function calculateNodeAutoPhaseDistribution(
       if (client.connectionType === 'MONO') {
         if (networkVoltage === 'TRIPHASÉ_230V' && client.phaseCoupling) {
           const c = client.phaseCoupling as 'A-B' | 'B-C' | 'A-C';
-          if (isInd) {
+          if (isInd || isVE) {
             monoIndChargesCoupling[c] += chargeKVA;
           } else {
             monoResChargesCoupling[c] += chargeKVA;

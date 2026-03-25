@@ -269,9 +269,10 @@ export const ParametersTab = () => {
           <div className="flex flex-col items-end justify-center px-2 border-l border-border/50">
             <span className="text-[10px] text-muted-foreground">Circuit - Charges F.</span>
             <span className="text-sm font-bold text-primary">{totalChargesFoisonnees.toFixed(1)} kVA</span>
-            {(chargesManuellesFoisonnees > 0.01 || chargesImporteesFoisonnees > 0.01) && (
+            {(chargesManuellesFoisonnees > 0.01 || chargesImporteesFoisonnees > 0.01 || chargesBornesVEFoisonnees > 0.01) && (
               <span className="text-[9px] text-muted-foreground/70">
                 ↳ Clients: {chargesImporteesFoisonnees.toFixed(1)} | Nœuds: {chargesManuellesFoisonnees.toFixed(1)}
+                {chargesBornesVEFoisonnees > 0.01 && ` | VE: ${chargesBornesVEFoisonnees.toFixed(1)}`}
               </span>
             )}
             <span className="text-[10px] text-muted-foreground mt-0.5">Circuit - Prod. F.</span>

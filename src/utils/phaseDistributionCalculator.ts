@@ -712,11 +712,13 @@ export function calculateNodeAutoPhaseDistribution(
       const chargeFoisonneParCouplage = {} as Record<'A-B'|'B-C'|'A-C', number>;
       const prodFoisonneParCouplage   = {} as Record<'A-B'|'B-C'|'A-C', number>;
 
+      const foisVE = foisonnementBornesVE ?? 50;
       couplings.forEach(c => {
         // MONO uniquement — POLY est géré via charges.poly / S_maps dans le BFS
         chargeFoisonneParCouplage[c] =
           monoResChargesCoupling[c] * (foisonnementChargesResidentiel / 100) +
-          monoIndChargesCoupling[c] * (foisonnementChargesIndustriel  / 100);
+          monoIndChargesCoupling[c] * (foisonnementChargesIndustriel  / 100) +
+          polyVEChargesCoupling[c]  * (foisVE / 100);
         prodFoisonneParCouplage[c] =
           monoResProdCoupling[c] * (foisonnementProductions / 100);
       });
@@ -805,20 +807,24 @@ export function calculateNodeAutoPhaseDistribution(
     // ── 5c. 400V ÉTOILE ─────────────────────────────────────────────────
     } else {
 
+      const foisVE400 = foisonnementBornesVE ?? 50;
       // Foisonnement par phase avant curseurs
       const chargeFoisonneParPhase = {
         A: monoResChargesPhase.A * (foisonnementChargesResidentiel / 100) +
            monoIndChargesPhase.A * (foisonnementChargesIndustriel  / 100) +
            polyResChargesPhase.A * (foisonnementChargesResidentiel / 100) +
-           polyIndChargesPhase.A * (foisonnementChargesIndustriel  / 100),
+           polyIndChargesPhase.A * (foisonnementChargesIndustriel  / 100) +
+           polyVEChargesPhase.A  * (foisVE400 / 100),
         B: monoResChargesPhase.B * (foisonnementChargesResidentiel / 100) +
            monoIndChargesPhase.B * (foisonnementChargesIndustriel  / 100) +
            polyResChargesPhase.B * (foisonnementChargesResidentiel / 100) +
-           polyIndChargesPhase.B * (foisonnementChargesIndustriel  / 100),
+           polyIndChargesPhase.B * (foisonnementChargesIndustriel  / 100) +
+           polyVEChargesPhase.B  * (foisVE400 / 100),
         C: monoResChargesPhase.C * (foisonnementChargesResidentiel / 100) +
            monoIndChargesPhase.C * (foisonnementChargesIndustriel  / 100) +
            polyResChargesPhase.C * (foisonnementChargesResidentiel / 100) +
-           polyIndChargesPhase.C * (foisonnementChargesIndustriel  / 100),
+           polyIndChargesPhase.C * (foisonnementChargesIndustriel  / 100) +
+           polyVEChargesPhase.C  * (foisVE400 / 100),
       };
       // Séparer MONO (phase fixe) et POLY (redistribuable) pour les productions
       const monoProdFoisonneParPhase = {

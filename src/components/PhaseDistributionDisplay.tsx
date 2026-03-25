@@ -25,6 +25,7 @@ function calculatePhaseData(
   phase: 'A' | 'B' | 'C',
   foisonnementChargesResidentiel: number,
   foisonnementChargesIndustriel: number,
+  foisonnementBornesVE: number,
   foisonnementProductions: number,
   totalFoisonneChargeGlobal: number,
   totalFoisonneProductionGlobal: number,
@@ -47,6 +48,11 @@ function calculatePhaseData(
   let nbPolyInd = 0;
   let chargePolyInd = 0;
   let productionPolyInd = 0;
+  
+  // Variables Poly Bornes VE
+  let nbPolyVE = 0;
+  let chargePolyVE = 0;
+  let productionPolyVE = 0; // toujours 0 pour VE
   
   const linkedClientIds = new Set(clientLinks?.map(link => link.clientId) || []);
   
@@ -72,18 +78,21 @@ function calculatePhaseData(
     }
     
     if (client.connectionType === 'TRI' || client.connectionType === 'TETRA') {
-      const isResidentiel = client.clientType !== 'industriel';
       const chargeParPhase = client.puissanceContractuelle_kVA / 3;
       const prodParPhase = (client.puissancePV_kVA || 0) / 3;
       
-      if (isResidentiel) {
-        nbPolyRes += 1/3; // Comptage fractionnel
-        chargePolyRes += chargeParPhase;
-        productionPolyRes += prodParPhase;
-      } else {
+      if (client.clientType === 'bornesVE') {
+        nbPolyVE += 1/3;
+        chargePolyVE += chargeParPhase;
+        productionPolyVE += prodParPhase;
+      } else if (client.clientType === 'industriel') {
         nbPolyInd += 1/3;
         chargePolyInd += chargeParPhase;
         productionPolyInd += prodParPhase;
+      } else {
+        nbPolyRes += 1/3;
+        chargePolyRes += chargeParPhase;
+        productionPolyRes += prodParPhase;
       }
     }
   });
@@ -98,16 +107,16 @@ function calculatePhaseData(
   const chargePolyIndFoisonne = chargePolyInd * (foisonnementChargesIndustriel / 100);
   const prodPolyIndFoisonne = productionPolyInd * (foisonnementProductions / 100);
   
+  const chargePolyVEFoisonne = chargePolyVE * (foisonnementBornesVE / 100);
+  const prodPolyVEFoisonne = productionPolyVE * (foisonnementProductions / 100);
+  
   // Totaux bruts (physiques) pour cette phase
-  const totalChargePhysique = chargeMono + chargePolyRes + chargePolyInd;
-  const totalProdPhysique = productionMono + productionPolyRes + productionPolyInd;
+  const totalChargePhysique = chargeMono + chargePolyRes + chargePolyInd + chargePolyVE;
+  const totalProdPhysique = productionMono + productionPolyRes + productionPolyInd + productionPolyVE;
   
   // Totaux foisonnés pour cette phase
-  const totalChargeFoisonne = chargeMonoFoisonne + chargePolyResFoisonne + chargePolyIndFoisonne;
-  const totalProdFoisonne = prodMonoFoisonne + prodPolyResFoisonne + prodPolyIndFoisonne;
-  
-  // NOTE: ecartChargePercent et ecartProductionPercent seront calculés 
-  // dans renderTable() à partir des totaux réels des 3 phases (pas des curseurs)
+  const totalChargeFoisonne = chargeMonoFoisonne + chargePolyResFoisonne + chargePolyIndFoisonne + chargePolyVEFoisonne;
+  const totalProdFoisonne = prodMonoFoisonne + prodPolyResFoisonne + prodPolyIndFoisonne + prodPolyVEFoisonne;
   
   // Intensité : Appliquer les curseurs de déséquilibre aux totaux globaux
   const voltage = 230;
@@ -139,6 +148,13 @@ function calculatePhaseData(
     chargePolyIndFoisonne,
     prodPolyIndFoisonne,
     
+    // Poly Bornes VE
+    nbPolyVE,
+    chargePolyVE,
+    prodPolyVE: productionPolyVE,
+    chargePolyVEFoisonne,
+    prodPolyVEFoisonne,
+    
     // Totaux globaux par phase
     totalChargePhysique,
     totalProdPhysique,
@@ -154,15 +170,18 @@ function calculateGlobalFoisonne(
   nodes: Node[],
   foisonnementChargesResidentiel: number,
   foisonnementChargesIndustriel: number,
+  foisonnementBornesVE: number,
   foisonnementProductions: number,
   clientsImportes: ClientImporte[] | undefined,
   clientLinks: { clientId: string; nodeId: string }[] | undefined
 ) {
   let totalChargePhysiqueResidentiel = 0;
   let totalChargePhysiqueIndustriel = 0;
+  let totalChargePhysiqueBornesVE = 0;
   let totalProductionPhysique = 0;
   let nbTotalResidentiel = 0;
   let nbTotalIndustriel = 0;
+  let nbTotalBornesVE = 0;
   
   let monoResidentielClients = 0;
   let monoResidentielCharge = 0;
@@ -170,21 +189,31 @@ function calculateGlobalFoisonne(
   let polyResidentielCharge = 0;
   let polyIndustrielClients = 0;
   let polyIndustrielCharge = 0;
+  let polyBornesVEClients = 0;
+  let polyBornesVECharge = 0;
   
   const linkedClientIds = new Set(clientLinks?.map(link => link.clientId) || []);
   
   clientsImportes?.forEach(client => {
     if (!linkedClientIds.has(client.id)) return;
     
-    const isResidentiel = client.clientType !== 'industriel';
     const isMono = client.connectionType === 'MONO';
     const charge = client.puissanceContractuelle_kVA;
     const prod = client.puissancePV_kVA || 0;
     
-    if (isResidentiel) {
+    if (client.clientType === 'bornesVE') {
+      totalChargePhysiqueBornesVE += charge;
+      nbTotalBornesVE++;
+      polyBornesVEClients++;
+      polyBornesVECharge += charge;
+    } else if (client.clientType === 'industriel') {
+      totalChargePhysiqueIndustriel += charge;
+      nbTotalIndustriel++;
+      polyIndustrielClients++;
+      polyIndustrielCharge += charge;
+    } else {
       totalChargePhysiqueResidentiel += charge;
       nbTotalResidentiel++;
-      
       if (isMono) {
         monoResidentielClients++;
         monoResidentielCharge += charge;
@@ -192,12 +221,6 @@ function calculateGlobalFoisonne(
         polyResidentielClients++;
         polyResidentielCharge += charge;
       }
-    } else {
-      totalChargePhysiqueIndustriel += charge;
-      nbTotalIndustriel++;
-      
-      polyIndustrielClients++;
-      polyIndustrielCharge += charge;
     }
     
     totalProductionPhysique += prod;
@@ -205,16 +228,20 @@ function calculateGlobalFoisonne(
   
   const totalChargeFoisonneResidentiel = totalChargePhysiqueResidentiel * (foisonnementChargesResidentiel / 100);
   const totalChargeFoisonneIndustriel = totalChargePhysiqueIndustriel * (foisonnementChargesIndustriel / 100);
+  const totalChargeFoisonneBornesVE = totalChargePhysiqueBornesVE * (foisonnementBornesVE / 100);
   
   return {
-    totalFoisonneChargeGlobal: totalChargeFoisonneResidentiel + totalChargeFoisonneIndustriel,
+    totalFoisonneChargeGlobal: totalChargeFoisonneResidentiel + totalChargeFoisonneIndustriel + totalChargeFoisonneBornesVE,
     totalFoisonneProductionGlobal: totalProductionPhysique * (foisonnementProductions / 100),
     totalChargeResidentiel: totalChargePhysiqueResidentiel,
     totalChargeIndustriel: totalChargePhysiqueIndustriel,
+    totalChargeBornesVE: totalChargePhysiqueBornesVE,
     totalChargeFoisonneResidentiel,
     totalChargeFoisonneIndustriel,
+    totalChargeFoisonneBornesVE,
     nbTotalResidentiel,
     nbTotalIndustriel,
+    nbTotalBornesVE,
     monoResidentiel: {
       nbClients: monoResidentielClients,
       charge: monoResidentielCharge,
@@ -229,6 +256,11 @@ function calculateGlobalFoisonne(
       nbClients: polyIndustrielClients,
       charge: polyIndustrielCharge,
       foisonne: polyIndustrielCharge * (foisonnementChargesIndustriel / 100)
+    },
+    polyBornesVE: {
+      nbClients: polyBornesVEClients,
+      charge: polyBornesVECharge,
+      foisonne: polyBornesVECharge * (foisonnementBornesVE / 100)
     }
   };
 }
@@ -246,6 +278,7 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
 
   const foisonnementResidentiel = currentProject.foisonnementChargesResidentiel ?? 15;
   const foisonnementIndustriel = currentProject.foisonnementChargesIndustriel ?? 70;
+  const foisonnementVE = currentProject.foisonnementBornesVE ?? 50;
   const foisonnementProductions = currentProject.foisonnementProductions;
 
   const is230V = currentProject.voltageSystem === "TRIPHASÉ_230V";
@@ -289,6 +322,7 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
     currentProject.nodes,
     foisonnementResidentiel,
     foisonnementIndustriel,
+    foisonnementVE,
     foisonnementProductions,
     currentProject.clientsImportes,
     currentProject.clientLinks
@@ -298,7 +332,10 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
     highPowerClientsPerPhase.B.length > 0 || 
     highPowerClientsPerPhase.C.length > 0;
 
-  // Section: Tableau récapitulatif (17 colonnes avec charges et productions)
+  // Détecter s'il y a des bornes VE (pour afficher ou masquer la colonne)
+  const hasBornesVE = globalFoisonne.polyBornesVE.nbClients > 0;
+
+  // Section: Tableau récapitulatif
   const renderTable = () => (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
@@ -332,6 +369,9 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
               <th colSpan={5} className="text-center py-1 px-0.5 font-semibold bg-primary/10 text-primary border-x border-border">MONO (Rés.)</th>
               <th colSpan={5} className="text-center py-1 px-0.5 font-semibold bg-green-500/10 text-green-700 dark:text-green-400 border-x border-border">Poly Rés.</th>
               <th colSpan={5} className="text-center py-1 px-0.5 font-semibold bg-orange-500/10 text-orange-700 dark:text-orange-400 border-x border-border">Poly Ind.</th>
+              {hasBornesVE && (
+                <th colSpan={5} className="text-center py-1 px-0.5 font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-x border-border">⚡ Bornes VE</th>
+              )}
               <th colSpan={4} className="text-center py-1 px-0.5 font-semibold bg-muted text-foreground border-x border-border">TOTAUX</th>
               <th colSpan={2} className="text-center py-1 px-0.5 font-semibold bg-purple-500/10 text-purple-700 dark:text-purple-400 border-x border-border">Déséq. %</th>
               <th rowSpan={2} className="text-right py-1.5 px-1 text-foreground font-semibold align-bottom">I (A)</th>
@@ -356,6 +396,16 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
               <th className="py-1 px-0.5 text-right bg-orange-500/5">Pr.</th>
               <th className="py-1 px-0.5 text-right bg-orange-500/5">Ch.F</th>
               <th className="py-1 px-0.5 text-right bg-orange-500/5 border-r border-border">Pr.F</th>
+              {/* Bornes VE */}
+              {hasBornesVE && (
+                <>
+                  <th className="py-1 px-0.5 text-center bg-emerald-500/5">Nb</th>
+                  <th className="py-1 px-0.5 text-right bg-emerald-500/5">Ch.</th>
+                  <th className="py-1 px-0.5 text-right bg-emerald-500/5">Pr.</th>
+                  <th className="py-1 px-0.5 text-right bg-emerald-500/5">Ch.F</th>
+                  <th className="py-1 px-0.5 text-right bg-emerald-500/5 border-r border-border">Pr.F</th>
+                </>
+              )}
               {/* TOTAUX */}
               <th className="py-1 px-0.5 text-right bg-muted/50">Ch.</th>
               <th className="py-1 px-0.5 text-right bg-muted/50">Ch.F</th>
@@ -368,19 +418,17 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
           </thead>
           <tbody>
             {(() => {
-              // Pré-calculer les données des 3 phases pour pouvoir calculer le déséquilibre réel
               const allPhaseData = (['A', 'B', 'C'] as const).map(phase => ({
                 phase,
                 data: calculatePhaseData(
                   currentProject.nodes, phase,
-                  foisonnementResidentiel, foisonnementIndustriel, foisonnementProductions,
+                  foisonnementResidentiel, foisonnementIndustriel, foisonnementVE, foisonnementProductions,
                   globalFoisonne.totalFoisonneChargeGlobal, globalFoisonne.totalFoisonneProductionGlobal,
                   currentProject.clientsImportes, currentProject.clientLinks, is230V,
                   currentProject.manualPhaseDistribution
                 )
               }));
               
-              // Moyennes des charges/productions foisonnées sur les 3 phases (cohérent avec les curseurs)
               const avgCharge = allPhaseData.reduce((s, p) => s + p.data.totalChargeFoisonne, 0) / 3;
               const avgProd = allPhaseData.reduce((s, p) => s + p.data.totalProdFoisonne, 0) / 3;
               
@@ -389,7 +437,6 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
                   ? (phase === 'A' ? 'L1-L2' : phase === 'B' ? 'L2-L3' : 'L3-L1')
                   : `L${phase === 'A' ? '1' : phase === 'B' ? '2' : '3'}`;
                 
-                // Déséquilibre réel basé sur les charges/productions foisonnées par phase
                 const ecartChargePercent = avgCharge > 0 
                   ? ((data.totalChargeFoisonne - avgCharge) / avgCharge) * 100 
                   : 0;
@@ -422,6 +469,16 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
                     <td className="text-right py-1 px-0.5 text-foreground">{data.prodPolyInd.toFixed(1)}</td>
                     <td className="text-right py-1 px-0.5 text-orange-700 dark:text-orange-400 font-medium">{data.chargePolyIndFoisonne.toFixed(1)}</td>
                     <td className="text-right py-1 px-0.5 text-orange-700 dark:text-orange-400 font-medium border-r border-border/50">{data.prodPolyIndFoisonne.toFixed(1)}</td>
+                    {/* Bornes VE */}
+                    {hasBornesVE && (
+                      <>
+                        <td className="text-center py-1 px-0.5 text-foreground">{Math.round(data.nbPolyVE)}</td>
+                        <td className="text-right py-1 px-0.5 text-foreground">{data.chargePolyVE.toFixed(1)}</td>
+                        <td className="text-right py-1 px-0.5 text-foreground">{data.prodPolyVE.toFixed(1)}</td>
+                        <td className="text-right py-1 px-0.5 text-emerald-700 dark:text-emerald-400 font-medium">{data.chargePolyVEFoisonne.toFixed(1)}</td>
+                        <td className="text-right py-1 px-0.5 text-emerald-700 dark:text-emerald-400 font-medium border-r border-border/50">{data.prodPolyVEFoisonne.toFixed(1)}</td>
+                      </>
+                    )}
                     {/* TOTAUX */}
                     <td className="text-right py-1 px-0.5 text-foreground font-medium">{data.totalChargePhysique.toFixed(1)}</td>
                     <td className="text-right py-1 px-0.5 text-foreground font-bold">{data.totalChargeFoisonne.toFixed(1)}</td>
@@ -442,11 +499,11 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
             })()}
             {/* LIGNE TOTAL */}
             {(() => {
-              // Calculer les totaux globaux pour toutes les phases
               const totals = { 
                 nbMono: 0, chargeMono: 0, prodMono: 0, chargeMonoFoisonne: 0, prodMonoFoisonne: 0,
                 nbPolyRes: 0, chargePolyRes: 0, prodPolyRes: 0, chargePolyResFoisonne: 0, prodPolyResFoisonne: 0,
                 nbPolyInd: 0, chargePolyInd: 0, prodPolyInd: 0, chargePolyIndFoisonne: 0, prodPolyIndFoisonne: 0,
+                nbPolyVE: 0, chargePolyVE: 0, prodPolyVE: 0, chargePolyVEFoisonne: 0, prodPolyVEFoisonne: 0,
                 totalChargePhysique: 0, totalProdPhysique: 0, totalChargeFoisonne: 0, totalProdFoisonne: 0,
                 courantTotal: 0
               };
@@ -454,7 +511,7 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
               (['A', 'B', 'C'] as const).forEach(phase => {
                 const data = calculatePhaseData(
                   currentProject.nodes, phase, foisonnementResidentiel, foisonnementIndustriel,
-                  foisonnementProductions, globalFoisonne.totalFoisonneChargeGlobal,
+                  foisonnementVE, foisonnementProductions, globalFoisonne.totalFoisonneChargeGlobal,
                   globalFoisonne.totalFoisonneProductionGlobal, currentProject.clientsImportes,
                   currentProject.clientLinks, is230V, currentProject.manualPhaseDistribution
                 );
@@ -473,6 +530,11 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
                 totals.prodPolyInd += data.prodPolyInd;
                 totals.chargePolyIndFoisonne += data.chargePolyIndFoisonne;
                 totals.prodPolyIndFoisonne += data.prodPolyIndFoisonne;
+                totals.nbPolyVE += data.nbPolyVE;
+                totals.chargePolyVE += data.chargePolyVE;
+                totals.prodPolyVE += data.prodPolyVE;
+                totals.chargePolyVEFoisonne += data.chargePolyVEFoisonne;
+                totals.prodPolyVEFoisonne += data.prodPolyVEFoisonne;
                 totals.totalChargePhysique += data.totalChargePhysique;
                 totals.totalProdPhysique += data.totalProdPhysique;
                 totals.totalChargeFoisonne += data.totalChargeFoisonne;
@@ -505,6 +567,16 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
                   <td className="text-right py-1 px-0.5 text-foreground">{totals.prodPolyInd.toFixed(1)}</td>
                   <td className="text-right py-1 px-0.5 text-orange-700 dark:text-orange-400 font-bold">{totals.chargePolyIndFoisonne.toFixed(1)}</td>
                   <td className="text-right py-1 px-0.5 text-orange-700 dark:text-orange-400 font-bold border-r border-border/50">{totals.prodPolyIndFoisonne.toFixed(1)}</td>
+                  {/* Bornes VE */}
+                  {hasBornesVE && (
+                    <>
+                      <td className="text-center py-1 px-0.5 text-foreground">{Math.round(totals.nbPolyVE)}</td>
+                      <td className="text-right py-1 px-0.5 text-foreground">{totals.chargePolyVE.toFixed(1)}</td>
+                      <td className="text-right py-1 px-0.5 text-foreground">{totals.prodPolyVE.toFixed(1)}</td>
+                      <td className="text-right py-1 px-0.5 text-emerald-700 dark:text-emerald-400 font-bold">{totals.chargePolyVEFoisonne.toFixed(1)}</td>
+                      <td className="text-right py-1 px-0.5 text-emerald-700 dark:text-emerald-400 font-bold border-r border-border/50">{totals.prodPolyVEFoisonne.toFixed(1)}</td>
+                    </>
+                  )}
                   {/* TOTAUX */}
                   <td className="text-right py-1 px-0.5 text-foreground font-medium">{totals.totalChargePhysique.toFixed(1)}</td>
                   <td className="text-right py-1 px-0.5 text-foreground font-bold">{totals.totalChargeFoisonne.toFixed(1)}</td>
@@ -555,6 +627,18 @@ export const PhaseDistributionDisplay = ({ section = 'all' }: PhaseDistributionD
           <span className="text-foreground">{globalFoisonne.polyIndustriel.charge.toFixed(1)} → <span className="font-bold text-orange-700 dark:text-orange-300">{globalFoisonne.polyIndustriel.foisonne.toFixed(1)} kVA</span></span>
         </div>
       </div>
+
+      {hasBornesVE && (
+        <div className="pl-2 border-l-2 border-emerald-500 space-y-1">
+          <div className="font-semibold text-emerald-600 dark:text-emerald-400">
+            ⚡ Bornes VE ({foisonnementVE}%)
+          </div>
+          <div className="flex justify-between text-muted-foreground">
+            <span>TÉTRA: {globalFoisonne.polyBornesVE.nbClients} clients</span>
+            <span className="text-foreground">{globalFoisonne.polyBornesVE.charge.toFixed(1)} → <span className="font-bold text-emerald-700 dark:text-emerald-300">{globalFoisonne.polyBornesVE.foisonne.toFixed(1)} kVA</span></span>
+          </div>
+        </div>
+      )}
     </div>
   );
 

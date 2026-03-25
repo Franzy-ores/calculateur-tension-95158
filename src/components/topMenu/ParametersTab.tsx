@@ -39,11 +39,18 @@ export const ParametersTab = () => {
 
   // Charges et productions manuelles sur nœuds (non-importées)
   let chargesManuelles = 0;
+  let chargesBornesVE = 0;
   let productionsManuelles = 0;
   let totalProductionsContractuelles = 0;
 
   connectedNodesData.forEach(node => {
-    chargesManuelles += node.clients.reduce((sum, c) => sum + c.S_kVA, 0);
+    node.clients.forEach(c => {
+      if (c.clientCategory === 'bornesVE') {
+        chargesBornesVE += c.S_kVA;
+      } else {
+        chargesManuelles += c.S_kVA;
+      }
+    });
     productionsManuelles += node.productions.reduce((sum, p) => sum + p.S_kVA, 0);
     totalProductionsContractuelles += node.productions.reduce((sum, p) => sum + p.S_kVA, 0);
     const linkedClients = (currentProject.clientsImportes || []).filter(c => 
@@ -54,16 +61,18 @@ export const ParametersTab = () => {
 
   const foisonnementResidentiel = currentProject.foisonnementChargesResidentiel ?? 15;
   const foisonnementIndustriel = currentProject.foisonnementChargesIndustriel ?? 70;
+  const foisonnementVE = currentProject.foisonnementBornesVE ?? 50;
   const foisonnementProductions = currentProject.foisonnementProductions;
     
   const chargesResidentiellesFoisonnees = chargesResidentielles * (foisonnementResidentiel / 100);
   const chargesIndustriellesFoisonnees = chargesIndustrielles * (foisonnementIndustriel / 100);
-  const totalChargesFoisonnees = chargesResidentiellesFoisonnees + chargesIndustriellesFoisonnees;
+  const chargesBornesVEFoisonnees = chargesBornesVE * (foisonnementVE / 100);
+  const totalChargesFoisonnees = chargesResidentiellesFoisonnees + chargesIndustriellesFoisonnees + chargesBornesVEFoisonnees;
   const productionsFoisonnees = totalProductionsContractuelles * (foisonnementProductions / 100);
 
   // Ventilation foisonnée : manuelles vs importées (circuit)
   const chargesManuellesFoisonnees = chargesManuelles * (foisonnementResidentiel / 100);
-  const chargesImporteesFoisonnees = totalChargesFoisonnees - chargesManuellesFoisonnees;
+  const chargesImporteesFoisonnees = totalChargesFoisonnees - chargesManuellesFoisonnees - chargesBornesVEFoisonnees;
   const productionsManuellesFoisonnees = productionsManuelles * (foisonnementProductions / 100);
   const productionsImporteesFoisonnees = productionsFoisonnees - productionsManuellesFoisonnees;
 

@@ -2090,6 +2090,30 @@ export const useNetworkStore = create<NetworkStoreState & NetworkActions>((set, 
     }
   },
 
+  setFoisonnementBornesVE: (value: number) => {
+    const { currentProject } = get();
+    if (!currentProject) return;
+
+    const updatedProject = {
+      ...currentProject,
+      foisonnementBornesVE: Math.max(0, Math.min(100, value))
+    };
+    
+    set({ currentProject: updatedProject });
+    get().updateAllCalculations();
+
+    const { simulationMode, isSimulationActive, simulationEquipment } = get();
+    const hasActiveEquipment = (simulationMode || isSimulationActive) && (
+      (simulationEquipment.srg2Devices?.some(s => s.enabled) || false) ||
+      simulationEquipment.neutralCompensators.some(c => c.enabled) ||
+      (simulationEquipment.cableReplacement?.enabled || false)
+    );
+
+    if (hasActiveEquipment) {
+      get().runSimulation();
+    }
+  },
+
   setFoisonnementProductions: (value: number) => {
     const { currentProject } = get();
     if (!currentProject) return;

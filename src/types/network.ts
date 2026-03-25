@@ -27,7 +27,7 @@ import { Complex } from '@/utils/complex';
 
 // Types pour les clients importés
 // Type de client
-export type ClientType = 'résidentiel' | 'industriel';
+export type ClientType = 'résidentiel' | 'industriel' | 'bornesVE';
 
 export interface ClientImporte {
   id: string;
@@ -161,6 +161,14 @@ export interface ClientCharge {
   // NOUVEAU : Phase assignée pour les charges manuelles en mode mixte MONO
   assignedPhase?: 'A' | 'B' | 'C';
   phaseCoupling?: 'A-B' | 'B-C' | 'A-C'; // Pour réseau 230V
+  // Bornes VE
+  clientCategory?: 'bornesVE';
+  borneVEConfig?: {
+    puissanceParBorne_kVA: number;
+    nombreBornes: number;
+    cosPhi: number;
+    profil24h?: number[];
+  };
 }
 
 export interface ProductionPV {

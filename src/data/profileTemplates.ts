@@ -60,4 +60,10 @@ export const profileTemplates: ProfileTemplate[] = [
     description: 'Usine 6h-22h',
     values: [10, 10, 10, 10, 10, 30, 70, 85, 90, 90, 90, 85, 80, 90, 90, 90, 85, 75, 60, 45, 30, 20, 15, 10],
   },
+  {
+    id: 'bimodal_VE',
+    name: 'Bimodal VE',
+    description: 'Bornes VE : pic jour (public) + pic soir (domicile)',
+    values: [5, 5, 5, 5, 5, 5, 10, 20, 45, 55, 60, 55, 45, 40, 35, 30, 35, 50, 65, 80, 85, 75, 55, 30],
+  },
 ];

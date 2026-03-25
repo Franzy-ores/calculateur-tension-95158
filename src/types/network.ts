@@ -287,6 +287,7 @@ export interface Project {
   foisonnementCharges: number; // facteur de foisonnement des charges (0-100%) - legacy, utilisé comme moyenne
   foisonnementChargesResidentiel?: number; // facteur de foisonnement des charges résidentielles (0-100%), défaut 15%
   foisonnementChargesIndustriel?: number; // facteur de foisonnement des charges industrielles (0-100%), défaut 70%
+  foisonnementBornesVE?: number; // facteur de foisonnement des bornes VE (0-100%), défaut 50%
   foisonnementProductions: number; // facteur de foisonnement des productions (0-100%)
   defaultChargeKVA: number; // charge par défaut pour nouveaux nœuds (kVA)
   defaultProductionKVA: number; // production par défaut pour nouveaux nœuds (kVA)

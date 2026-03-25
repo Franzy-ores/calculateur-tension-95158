@@ -912,6 +912,7 @@ export class SimulationCalculator extends ElectricalCalculator {
         workingProject.clientLinks,
         workingProject.foisonnementChargesResidentiel,
         workingProject.foisonnementChargesIndustriel,
+        workingProject.foisonnementBornesVE,
         networkEq.equi8Injections // Réutiliser les injections EQUI8 calibrées
       );
       
@@ -990,6 +991,7 @@ export class SimulationCalculator extends ElectricalCalculator {
       workingProject.clientLinks,
       workingProject.foisonnementChargesResidentiel,
       workingProject.foisonnementChargesIndustriel,
+      workingProject.foisonnementBornesVE,
       equi8FinalInjections // ✅ Injections EQUI8 CME incluses dans le calcul final
     );
     
@@ -1795,6 +1797,7 @@ export class SimulationCalculator extends ElectricalCalculator {
         project.clientLinks,
         project.foisonnementChargesResidentiel,
         project.foisonnementChargesIndustriel,
+        project.foisonnementBornesVE,
         equi8Injections // ✅ Injections EQUI8 CME
       );
       

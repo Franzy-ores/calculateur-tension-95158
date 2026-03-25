@@ -629,7 +629,11 @@ export function calculateNodeAutoPhaseDistribution(
         // POLY: default 1/3 per coupling/phase
         // ✅ FIX: POLY industriel now uses foisonnementChargesIndustriel
         if (networkVoltage === 'TRIPHASÉ_230V') {
-          if (isInd) {
+          if (isVE) {
+            polyVEChargesCoupling['A-B'] += chargeKVA / 3;
+            polyVEChargesCoupling['B-C'] += chargeKVA / 3;
+            polyVEChargesCoupling['A-C'] += chargeKVA / 3;
+          } else if (isInd) {
             polyIndChargesCoupling['A-B'] += chargeKVA / 3;
             polyIndChargesCoupling['B-C'] += chargeKVA / 3;
             polyIndChargesCoupling['A-C'] += chargeKVA / 3;
@@ -642,7 +646,11 @@ export function calculateNodeAutoPhaseDistribution(
           polyProdCoupling['B-C'] += prodKVA / 3;
           polyProdCoupling['A-C'] += prodKVA / 3;
         } else {
-          if (isInd) {
+          if (isVE) {
+            polyVEChargesPhase.A += chargeKVA / 3;
+            polyVEChargesPhase.B += chargeKVA / 3;
+            polyVEChargesPhase.C += chargeKVA / 3;
+          } else if (isInd) {
             polyIndChargesPhase.A += chargeKVA / 3;
             polyIndChargesPhase.B += chargeKVA / 3;
             polyIndChargesPhase.C += chargeKVA / 3;

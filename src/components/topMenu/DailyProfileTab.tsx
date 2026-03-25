@@ -44,7 +44,9 @@ const ClientStatsDisplay = ({ project }: { project: Project }) => {
       const isLinked = links.some(link => link.clientId === client.id);
       
       if (isLinked) {
-        if (client.clientType === 'industriel') {
+        if (client.clientType === 'bornesVE') {
+          // VE excluded from residential/industrial counts
+        } else if (client.clientType === 'industriel') {
           industrialCount++;
           industrialPower += client.puissanceContractuelle_kVA || 0;
         } else {

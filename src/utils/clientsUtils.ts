@@ -339,9 +339,13 @@ export const calculatePowersByClientType = (
   // Parcourir les clients liés aux nœuds
   const linkedClientIds = new Set(clientLinks.map(link => link.clientId));
   
+  let chargesBornesVE = 0;
+
   clientsImportes.forEach(client => {
     if (linkedClientIds.has(client.id)) {
-      if (client.clientType === 'industriel') {
+      if (client.clientType === 'bornesVE') {
+        chargesBornesVE += client.puissanceContractuelle_kVA;
+      } else if (client.clientType === 'industriel') {
         chargesIndustrielles += client.puissanceContractuelle_kVA;
       } else {
         chargesResidentielles += client.puissanceContractuelle_kVA;
@@ -363,7 +367,8 @@ export const calculatePowersByClientType = (
   return {
     chargesResidentielles,
     chargesIndustrielles,
-    totalCharges: chargesResidentielles + chargesIndustrielles
+    chargesBornesVE,
+    totalCharges: chargesResidentielles + chargesIndustrielles + chargesBornesVE
   };
 };
 
@@ -375,23 +380,27 @@ export const calculateFoisonnedPowers = (
   clientsImportes: ClientImporte[],
   clientLinks: ClientLink[],
   foisonnementResidentiel: number,
-  foisonnementIndustriel: number
+  foisonnementIndustriel: number,
+  foisonnementBornesVE: number = 50
 ): {
   chargesResidentiellesFoisonnees: number;
   chargesIndustriellesFoisonnees: number;
+  chargesBornesVEFoisonnees: number;
   totalFoisonne: number;
 } => {
-  const { chargesResidentielles, chargesIndustrielles } = calculatePowersByClientType(
+  const { chargesResidentielles, chargesIndustrielles, chargesBornesVE } = calculatePowersByClientType(
     nodes, clientsImportes, clientLinks
   );
 
   const chargesResidentiellesFoisonnees = chargesResidentielles * (foisonnementResidentiel / 100);
   const chargesIndustriellesFoisonnees = chargesIndustrielles * (foisonnementIndustriel / 100);
+  const chargesBornesVEFoisonnees = chargesBornesVE * (foisonnementBornesVE / 100);
 
   return {
     chargesResidentiellesFoisonnees,
     chargesIndustriellesFoisonnees,
-    totalFoisonne: chargesResidentiellesFoisonnees + chargesIndustriellesFoisonnees
+    chargesBornesVEFoisonnees,
+    totalFoisonne: chargesResidentiellesFoisonnees + chargesIndustriellesFoisonnees + chargesBornesVEFoisonnees
   };
 };
 

@@ -246,7 +246,8 @@ export function calculateNodeAutoPhaseDistribution(
   foisonnementProductions?: number,
   manualCouplingDistributionCharges?: { 'A-B': number; 'B-C': number; 'A-C': number },
   manualCouplingDistributionProductions?: { 'A-B': number; 'B-C': number; 'A-C': number },
-  treatSmallPolyProductionsAsMono: boolean = false
+  treatSmallPolyProductionsAsMono: boolean = false,
+  foisonnementBornesVE?: number
 ): NodePhaseDistributionResult {
   // Initialisation des résultats
   const result: NodePhaseDistributionResult = {
@@ -602,6 +603,7 @@ export function calculateNodeAutoPhaseDistribution(
       const chargeKVA = client.puissanceContractuelle_kVA;
       const prodKVA   = client.puissancePV_kVA || 0;
       const isInd     = client.clientType === 'industriel';
+      const isVE      = client.clientType === 'bornesVE';
 
       if (client.connectionType === 'MONO') {
         if (networkVoltage === 'TRIPHASÉ_230V' && client.phaseCoupling) {

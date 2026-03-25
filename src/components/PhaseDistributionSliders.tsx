@@ -262,9 +262,9 @@ function calculateAutoDistributionInternal(
     ) || [];
     
     linkedClients.forEach(client => {
-      const isIndustriel = client.clientType === 'industriel';
+      const foisonnementVE = project.foisonnementBornesVE ?? 50;
       const foisonnement = type === 'charges' 
-        ? (isIndustriel ? foisonnementIndustriel : foisonnementResidentiel)
+        ? (client.clientType === 'bornesVE' ? foisonnementVE : client.clientType === 'industriel' ? foisonnementIndustriel : foisonnementResidentiel)
         : foisonnementProductions;
       
       const rawValue = type === 'charges' ? client.puissanceContractuelle_kVA : (client.puissancePV_kVA || 0);

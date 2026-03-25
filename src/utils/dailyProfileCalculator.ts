@@ -145,7 +145,7 @@ export class DailyProfileCalculator {
   private countResidentialClients(): number {
     if (!this.project.clientsImportes || !this.project.clientLinks) return 0;
     const linkedIds = new Set(this.project.clientLinks.map(l => l.clientId));
-    return this.project.clientsImportes.filter(c => c.clientType !== 'industriel' && linkedIds.has(c.id)).length;
+    return this.project.clientsImportes.filter(c => c.clientType !== 'industriel' && c.clientType !== 'bornesVE' && linkedIds.has(c.id)).length;
   }
 
   /**
@@ -165,7 +165,7 @@ export class DailyProfileCalculator {
       const nodeLinks = links.filter(l => l.nodeId === nId);
       for (const l of nodeLinks) {
         const client = clients.find(c => c.id === l.clientId);
-        if (client && client.clientType !== 'industriel') count++;
+        if (client && client.clientType !== 'industriel' && client.clientType !== 'bornesVE') count++;
       }
     }
     return count;
@@ -199,9 +199,10 @@ export class DailyProfileCalculator {
         const power = client.puissanceContractuelle_kVA || 0;
         if (client.clientType === 'industriel') {
           industrialPower += power;
-        } else {
+        } else if (client.clientType !== 'bornesVE') {
           residentialPower += power;
         }
+        // bornesVE excluded from residential/industrial weighting
       }
     });
     

@@ -330,6 +330,7 @@ export const TensionClientTab = () => {
   // Récupérer les coefficients de foisonnement GLOBAUX selon le type de client (correspondance stricte avec Paramètres)
   const globalFoisonnementCharges = useMemo(() => {
     if (!selectedClient) return currentProject.foisonnementChargesResidentiel ?? 15;
+    if (selectedClient.clientType === 'bornesVE') return currentProject.foisonnementBornesVE ?? 50;
     return selectedClient.clientType === 'industriel' 
       ? (currentProject.foisonnementChargesIndustriel ?? 70)
       : (currentProject.foisonnementChargesResidentiel ?? 15);

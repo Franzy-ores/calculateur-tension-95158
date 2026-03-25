@@ -404,6 +404,7 @@ export const ClientsPanel = ({ onShowImporter }: ClientsPanelProps) => {
               <SelectItem value="ALL">Type</SelectItem>
               <SelectItem value="résidentiel">🏠 Rés.</SelectItem>
               <SelectItem value="industriel">🏭 Ind.</SelectItem>
+              <SelectItem value="bornesVE">⚡ VE</SelectItem>
             </SelectContent>
           </Select>
 

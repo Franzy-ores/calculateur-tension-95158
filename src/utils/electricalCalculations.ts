@@ -694,10 +694,13 @@ export class ElectricalCalculator {
         const foisonnementResidentiel = foisonnementChargesResidentiel ?? foisonnementCharges;
         const foisonnementIndustriel = foisonnementChargesIndustriel ?? foisonnementCharges;
         
+        const foisBornesVE = foisonnementBornesVE ?? 50;
         for (const client of linkedClients) {
-          const foisonnement = client.clientType === 'industriel' 
-            ? foisonnementIndustriel 
-            : foisonnementResidentiel;
+          const foisonnement = client.clientType === 'bornesVE'
+            ? foisBornesVE
+            : client.clientType === 'industriel' 
+              ? foisonnementIndustriel 
+              : foisonnementResidentiel;
           S_prel += client.puissanceContractuelle_kVA * (foisonnement / 100);
         }
         
@@ -706,7 +709,7 @@ export class ElectricalCalculator {
         S_pv = totalProduction_kVA * (foisonnementProductions / 100);
         
         // Charges manuelles du nœud (séparées par catégorie)
-        const foisBornesVE = foisonnementBornesVE ?? 50;
+        // foisBornesVE already declared above
         for (const c of (n.clients || [])) {
           if (c.clientCategory === 'bornesVE') {
             S_prel += (c.S_kVA || 0) * (foisBornesVE / 100);
@@ -725,9 +728,11 @@ export class ElectricalCalculator {
           console.log(`🔍 [DEBUG] Nœud "${n.name || n.id}" - Calcul S_prel_map:`);
           console.log(`   📋 Clients liés: ${linkedClients.length}`);
           for (const client of linkedClients) {
-            const foisonnement = client.clientType === 'industriel' 
-              ? foisonnementIndustriel 
-              : foisonnementResidentiel;
+            const foisonnement = client.clientType === 'bornesVE'
+              ? (foisonnementBornesVE ?? 50)
+              : client.clientType === 'industriel' 
+                ? foisonnementIndustriel 
+                : foisonnementResidentiel;
             console.log(`      - "${client.nomCircuit}": ${client.puissanceContractuelle_kVA} kVA × ${foisonnement}% = ${(client.puissanceContractuelle_kVA * foisonnement / 100).toFixed(2)} kVA (${client.clientType || 'résidentiel'}, ${client.connectionType || client.couplage})`);
           }
           console.log(`   🔧 Charges manuelles: ${manualChargesTotal} kVA`);
@@ -810,10 +815,13 @@ export class ElectricalCalculator {
         const foisonnementResidentiel = foisonnementChargesResidentiel ?? foisonnementCharges;
         const foisonnementIndustriel = foisonnementChargesIndustriel ?? foisonnementCharges;
         
+        const foisBornesVE2 = foisonnementBornesVE ?? 50;
         for (const client of linkedClients) {
-          const foisonnement = client.clientType === 'industriel' 
-            ? foisonnementIndustriel 
-            : foisonnementResidentiel;
+          const foisonnement = client.clientType === 'bornesVE'
+            ? foisBornesVE2
+            : client.clientType === 'industriel' 
+              ? foisonnementIndustriel 
+              : foisonnementResidentiel;
           totalLoads += client.puissanceContractuelle_kVA * (foisonnement / 100);
           totalProductions += client.puissancePV_kVA * (foisonnementProductions / 100);
         }
@@ -821,7 +829,7 @@ export class ElectricalCalculator {
         // Charges manuelles du nœud (séparées par catégorie)
         for (const c of (n.clients || [])) {
           if (c.clientCategory === 'bornesVE') {
-            totalLoads += (c.S_kVA || 0) * (50 / 100); // foisonnement VE default
+            totalLoads += (c.S_kVA || 0) * (foisBornesVE2 / 100);
           } else {
             totalLoads += (c.S_kVA || 0) * (foisonnementResidentiel / 100);
           }

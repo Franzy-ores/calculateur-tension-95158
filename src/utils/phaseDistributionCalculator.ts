@@ -246,7 +246,8 @@ export function calculateNodeAutoPhaseDistribution(
   foisonnementProductions?: number,
   manualCouplingDistributionCharges?: { 'A-B': number; 'B-C': number; 'A-C': number },
   manualCouplingDistributionProductions?: { 'A-B': number; 'B-C': number; 'A-C': number },
-  treatSmallPolyProductionsAsMono: boolean = false
+  treatSmallPolyProductionsAsMono: boolean = false,
+  foisonnementBornesVE?: number
 ): NodePhaseDistributionResult {
   // Initialisation des résultats
   const result: NodePhaseDistributionResult = {
@@ -589,6 +590,7 @@ export function calculateNodeAutoPhaseDistribution(
     const monoResProdCoupling    = { 'A-B': 0, 'B-C': 0, 'A-C': 0 };
     const polyResChargesCoupling = { 'A-B': 0, 'B-C': 0, 'A-C': 0 };
     const polyIndChargesCoupling = { 'A-B': 0, 'B-C': 0, 'A-C': 0 };
+    const polyVEChargesCoupling  = { 'A-B': 0, 'B-C': 0, 'A-C': 0 };
     const polyProdCoupling       = { 'A-B': 0, 'B-C': 0, 'A-C': 0 };
 
     const monoResChargesPhase = { A: 0, B: 0, C: 0 };
@@ -596,17 +598,19 @@ export function calculateNodeAutoPhaseDistribution(
     const monoResProdPhase    = { A: 0, B: 0, C: 0 };
     const polyResChargesPhase = { A: 0, B: 0, C: 0 };
     const polyIndChargesPhase = { A: 0, B: 0, C: 0 };
+    const polyVEChargesPhase  = { A: 0, B: 0, C: 0 };
     const polyProdPhase       = { A: 0, B: 0, C: 0 };
 
     linkedClients.forEach(client => {
       const chargeKVA = client.puissanceContractuelle_kVA;
       const prodKVA   = client.puissancePV_kVA || 0;
       const isInd     = client.clientType === 'industriel';
+      const isVE      = client.clientType === 'bornesVE';
 
       if (client.connectionType === 'MONO') {
         if (networkVoltage === 'TRIPHASÉ_230V' && client.phaseCoupling) {
           const c = client.phaseCoupling as 'A-B' | 'B-C' | 'A-C';
-          if (isInd) {
+          if (isInd || isVE) {
             monoIndChargesCoupling[c] += chargeKVA;
           } else {
             monoResChargesCoupling[c] += chargeKVA;
@@ -625,7 +629,11 @@ export function calculateNodeAutoPhaseDistribution(
         // POLY: default 1/3 per coupling/phase
         // ✅ FIX: POLY industriel now uses foisonnementChargesIndustriel
         if (networkVoltage === 'TRIPHASÉ_230V') {
-          if (isInd) {
+          if (isVE) {
+            polyVEChargesCoupling['A-B'] += chargeKVA / 3;
+            polyVEChargesCoupling['B-C'] += chargeKVA / 3;
+            polyVEChargesCoupling['A-C'] += chargeKVA / 3;
+          } else if (isInd) {
             polyIndChargesCoupling['A-B'] += chargeKVA / 3;
             polyIndChargesCoupling['B-C'] += chargeKVA / 3;
             polyIndChargesCoupling['A-C'] += chargeKVA / 3;
@@ -638,7 +646,11 @@ export function calculateNodeAutoPhaseDistribution(
           polyProdCoupling['B-C'] += prodKVA / 3;
           polyProdCoupling['A-C'] += prodKVA / 3;
         } else {
-          if (isInd) {
+          if (isVE) {
+            polyVEChargesPhase.A += chargeKVA / 3;
+            polyVEChargesPhase.B += chargeKVA / 3;
+            polyVEChargesPhase.C += chargeKVA / 3;
+          } else if (isInd) {
             polyIndChargesPhase.A += chargeKVA / 3;
             polyIndChargesPhase.B += chargeKVA / 3;
             polyIndChargesPhase.C += chargeKVA / 3;
@@ -700,11 +712,13 @@ export function calculateNodeAutoPhaseDistribution(
       const chargeFoisonneParCouplage = {} as Record<'A-B'|'B-C'|'A-C', number>;
       const prodFoisonneParCouplage   = {} as Record<'A-B'|'B-C'|'A-C', number>;
 
+      const foisVE = foisonnementBornesVE ?? 50;
       couplings.forEach(c => {
         // MONO uniquement — POLY est géré via charges.poly / S_maps dans le BFS
         chargeFoisonneParCouplage[c] =
           monoResChargesCoupling[c] * (foisonnementChargesResidentiel / 100) +
-          monoIndChargesCoupling[c] * (foisonnementChargesIndustriel  / 100);
+          monoIndChargesCoupling[c] * (foisonnementChargesIndustriel  / 100) +
+          polyVEChargesCoupling[c]  * (foisVE / 100);
         prodFoisonneParCouplage[c] =
           monoResProdCoupling[c] * (foisonnementProductions / 100);
       });
@@ -793,20 +807,24 @@ export function calculateNodeAutoPhaseDistribution(
     // ── 5c. 400V ÉTOILE ─────────────────────────────────────────────────
     } else {
 
+      const foisVE400 = foisonnementBornesVE ?? 50;
       // Foisonnement par phase avant curseurs
       const chargeFoisonneParPhase = {
         A: monoResChargesPhase.A * (foisonnementChargesResidentiel / 100) +
            monoIndChargesPhase.A * (foisonnementChargesIndustriel  / 100) +
            polyResChargesPhase.A * (foisonnementChargesResidentiel / 100) +
-           polyIndChargesPhase.A * (foisonnementChargesIndustriel  / 100),
+           polyIndChargesPhase.A * (foisonnementChargesIndustriel  / 100) +
+           polyVEChargesPhase.A  * (foisVE400 / 100),
         B: monoResChargesPhase.B * (foisonnementChargesResidentiel / 100) +
            monoIndChargesPhase.B * (foisonnementChargesIndustriel  / 100) +
            polyResChargesPhase.B * (foisonnementChargesResidentiel / 100) +
-           polyIndChargesPhase.B * (foisonnementChargesIndustriel  / 100),
+           polyIndChargesPhase.B * (foisonnementChargesIndustriel  / 100) +
+           polyVEChargesPhase.B  * (foisVE400 / 100),
         C: monoResChargesPhase.C * (foisonnementChargesResidentiel / 100) +
            monoIndChargesPhase.C * (foisonnementChargesIndustriel  / 100) +
            polyResChargesPhase.C * (foisonnementChargesResidentiel / 100) +
-           polyIndChargesPhase.C * (foisonnementChargesIndustriel  / 100),
+           polyIndChargesPhase.C * (foisonnementChargesIndustriel  / 100) +
+           polyVEChargesPhase.C  * (foisVE400 / 100),
       };
       // Séparer MONO (phase fixe) et POLY (redistribuable) pour les productions
       const monoProdFoisonneParPhase = {

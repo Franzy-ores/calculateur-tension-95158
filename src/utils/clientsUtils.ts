@@ -331,6 +331,7 @@ export const calculatePowersByClientType = (
 ): {
   chargesResidentielles: number;
   chargesIndustrielles: number;
+  chargesBornesVE: number;
   totalCharges: number;
 } => {
   let chargesResidentielles = 0;

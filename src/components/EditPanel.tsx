@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Trash2, Plus, Target, Zap, Network } from 'lucide-react';
+import { Trash2, Plus, Target, Zap, Network, Car } from 'lucide-react';
 import { useNetworkStore } from '@/store/networkStore';
 import { ConnectionType, VoltageSystem, ClientCharge, ProductionPV, LoadModel } from '@/types/network';
 import { getNodeConnectionType } from '@/utils/nodeConnectionType';
@@ -135,6 +135,24 @@ export const EditPanel = () => {
     setFormData({
       ...formData,
       clients: [...formData.clients, newClient]
+    });
+  };
+
+  const addBorneVE = () => {
+    const newBorne: ClientCharge = {
+      id: `borne-${Date.now()}`,
+      label: `Borne VE ${(formData.clients?.filter((c: ClientCharge) => c.clientCategory === 'bornesVE').length || 0) + 1}`,
+      S_kVA: 11,
+      clientCategory: 'bornesVE',
+      borneVEConfig: {
+        puissanceParBorne_kVA: 11,
+        nombreBornes: 1,
+        cosPhi: 0.95,
+      }
+    };
+    setFormData({
+      ...formData,
+      clients: [...formData.clients, newBorne]
     });
   };
 

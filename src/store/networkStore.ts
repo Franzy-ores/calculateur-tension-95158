@@ -202,6 +202,7 @@ interface NetworkActions {
   setFoisonnementCharges: (value: number) => void;
   setFoisonnementChargesResidentiel: (value: number) => void;
   setFoisonnementChargesIndustriel: (value: number) => void;
+  setFoisonnementBornesVE: (value: number) => void;
   setFoisonnementProductions: (value: number) => void;
   calculateWithTargetVoltage: (nodeId: string, targetVoltage: number) => void;
   updateCableTypes: () => void;

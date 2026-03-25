@@ -709,7 +709,7 @@ export class ElectricalCalculator {
         S_pv = totalProduction_kVA * (foisonnementProductions / 100);
         
         // Charges manuelles du nœud (séparées par catégorie)
-        const foisBornesVE = foisonnementBornesVE ?? 50;
+        // foisBornesVE already declared above
         for (const c of (n.clients || [])) {
           if (c.clientCategory === 'bornesVE') {
             S_prel += (c.S_kVA || 0) * (foisBornesVE / 100);

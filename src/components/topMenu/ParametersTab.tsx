@@ -2,7 +2,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Home, Factory, Sun, Activity, Table, BarChart3, AlertTriangle, Snowflake, Thermometer } from "lucide-react";
+import { Home, Factory, Sun, Activity, Table, BarChart3, AlertTriangle, Snowflake, Thermometer, Car } from "lucide-react";
 import { useNetworkStore } from "@/store/networkStore";
 import { PhaseDistributionSliders } from "@/components/PhaseDistributionSliders";
 import { PhaseDistributionDisplay } from "@/components/PhaseDistributionDisplay";
@@ -16,6 +16,7 @@ export const ParametersTab = () => {
     setSelectedScenario,
     setFoisonnementChargesResidentiel,
     setFoisonnementChargesIndustriel,
+    setFoisonnementBornesVE,
     setFoisonnementProductions,
     simulationPreview,
     updateProjectConfig,

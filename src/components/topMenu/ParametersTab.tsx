@@ -80,16 +80,19 @@ export const ParametersTab = () => {
   const clientsImportes = currentProject.clientsImportes || [];
   let cabineChargesResidentielles = 0;
   let cabineChargesIndustrielles = 0;
+  let cabineChargesBornesVE = 0;
   let cabineProductionsTotal = 0;
   clientsImportes.forEach(client => {
-    if (client.clientType === 'industriel') {
+    if (client.clientType === 'bornesVE') {
+      cabineChargesBornesVE += client.puissanceContractuelle_kVA;
+    } else if (client.clientType === 'industriel') {
       cabineChargesIndustrielles += client.puissanceContractuelle_kVA;
     } else {
       cabineChargesResidentielles += client.puissanceContractuelle_kVA;
     }
     cabineProductionsTotal += client.puissancePV_kVA;
   });
-  const cabineChargesFoisonnees = cabineChargesResidentielles * (foisonnementResidentiel / 100) + cabineChargesIndustrielles * (foisonnementIndustriel / 100);
+  const cabineChargesFoisonnees = cabineChargesResidentielles * (foisonnementResidentiel / 100) + cabineChargesIndustrielles * (foisonnementIndustriel / 100) + cabineChargesBornesVE * (foisonnementVE / 100);
   const cabineProductionsFoisonnees = cabineProductionsTotal * (foisonnementProductions / 100);
 
   // Alerte transfo

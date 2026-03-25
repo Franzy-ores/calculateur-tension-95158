@@ -348,6 +348,7 @@ const createDefaultProject2 = (name: string, voltageSystem: VoltageSystem): Proj
   foisonnementCharges: 100, // Legacy (calculé comme moyenne pondérée)
   foisonnementChargesResidentiel: 15, // Défaut résidentiel
   foisonnementChargesIndustriel: 70, // Défaut industriel
+  foisonnementBornesVE: 50, // Défaut bornes VE
   foisonnementProductions: 100,
   defaultChargeKVA: 10,
   defaultProductionKVA: 5,

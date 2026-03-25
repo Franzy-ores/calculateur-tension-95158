@@ -214,6 +214,34 @@ export const ParametersTab = () => {
             </div>
           </div>
 
+          {/* Séparateur Bornes VE */}
+          {chargesBornesVE > 0 && (
+            <>
+              <div className="w-px bg-border/50 self-stretch" />
+              <div className="flex items-center gap-2 min-w-[180px] flex-1 max-w-[220px]">
+                <Car className="h-4 w-4 text-green-500 flex-shrink-0" />
+                <div className="flex-1 flex flex-col gap-0.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-muted-foreground">Bornes VE</span>
+                    <span className="text-xs font-mono font-medium text-green-500">{foisonnementVE}%</span>
+                  </div>
+                  <Slider
+                    value={[foisonnementVE]}
+                    onValueChange={(value) => setFoisonnementBornesVE(value[0])}
+                    max={100}
+                    min={10}
+                    step={5}
+                    disabled={simulationPreview.isActive}
+                    className="h-3"
+                  />
+                  <span className="text-[10px] text-muted-foreground">
+                    {chargesBornesVE.toFixed(0)}→<span className="text-green-500 font-medium">{chargesBornesVEFoisonnees.toFixed(1)}</span>
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
+
           {/* Productions */}
           <div className="flex items-center gap-2 min-w-[180px] flex-1 max-w-[220px]">
             <Sun className="h-4 w-4 text-yellow-500 flex-shrink-0" />

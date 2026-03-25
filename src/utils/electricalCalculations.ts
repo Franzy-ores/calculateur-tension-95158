@@ -704,7 +704,7 @@ export class ElectricalCalculator {
         S_pv = totalProduction_kVA * (foisonnementProductions / 100);
         
         // Charges manuelles du nœud (séparées par catégorie)
-        const foisonnementBornesVE = (project as any).foisonnementBornesVE ?? 50;
+        const foisonnementBornesVE = 50; // Default; overridden by calculateScenarioWithHTConfig
         for (const c of (n.clients || [])) {
           if (c.clientCategory === 'bornesVE') {
             // Bornes VE : foisonnement indépendant, distribution équilibrée 3 phases
@@ -719,7 +719,8 @@ export class ElectricalCalculator {
         S_pv += manualProductions * (foisonnementProductions / 100);
         
         // 🔍 DIAGNOSTIC : Tracer les sources de puissance au nœud
-        if (linkedClients.length > 0 || manualCharges > 0) {
+        const manualChargesTotal = (n.clients || []).reduce((s, c) => s + (c.S_kVA || 0), 0);
+        if (linkedClients.length > 0 || manualChargesTotal > 0) {
           console.log(`🔍 [DEBUG] Nœud "${n.name || n.id}" - Calcul S_prel_map:`);
           console.log(`   📋 Clients liés: ${linkedClients.length}`);
           for (const client of linkedClients) {
@@ -728,7 +729,7 @@ export class ElectricalCalculator {
               : foisonnementResidentiel;
             console.log(`      - "${client.nomCircuit}": ${client.puissanceContractuelle_kVA} kVA × ${foisonnement}% = ${(client.puissanceContractuelle_kVA * foisonnement / 100).toFixed(2)} kVA (${client.clientType || 'résidentiel'}, ${client.connectionType || client.couplage})`);
           }
-          console.log(`   🔧 Charges manuelles: ${manualCharges} kVA × ${foisonnementResidentiel}% = ${(manualCharges * foisonnementResidentiel / 100).toFixed(2)} kVA`);
+          console.log(`   🔧 Charges manuelles: ${manualChargesTotal} kVA`);
           console.log(`   ➡️ S_prel TOTAL: ${S_prel.toFixed(2)} kVA`);
           
           // Comparer avec autoPhaseDistribution.foisonneAvecCurseurs

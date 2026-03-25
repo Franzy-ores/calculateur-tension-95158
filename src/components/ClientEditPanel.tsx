@@ -293,13 +293,20 @@ export const ClientEditPanel = () => {
 
         <div>
           <Label htmlFor="clientType">Type de raccordement</Label>
-          <Select value={clientType} onValueChange={(v: ClientType) => setClientType(v)}>
+          <Select value={clientType} onValueChange={(v: ClientType) => {
+            setClientType(v);
+            if (v === 'bornesVE') {
+              setConnectionType('TETRA');
+              if (puissanceContractuelle <= 12) setPuissanceContractuelle(11);
+            }
+          }}>
             <SelectTrigger id="clientType">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-popover border-border">
               <SelectItem value="résidentiel">🏠 Résidentiel</SelectItem>
               <SelectItem value="industriel">🏭 Industriel</SelectItem>
+              <SelectItem value="bornesVE">⚡ Bornes VE</SelectItem>
             </SelectContent>
           </Select>
         </div>

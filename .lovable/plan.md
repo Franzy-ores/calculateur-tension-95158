@@ -1,75 +1,102 @@
 
 
-# Ajout du type de charge "Bornes VE"
+# Audit : Traitement des clients "Bornes VE" sur phases et circuits
 
-## Résumé
+## Constat
 
-Ajouter un nouveau type de noeud de consommation "Bornes VE" (borne de recharge véhicules électriques) avec profil de charge bimodal dédié, foisonnement indépendant, et isolation vis-à-vis des curseurs VE/PAC globaux.
+Le type `bornesVE` n'est traité correctement que dans 2 fichiers (PhaseDistributionDisplay, ParametersTab). Dans **tous les autres fichiers**, les clients importés de type `bornesVE` tombent dans la branche `else` et sont traités comme **résidentiels** — foisonnement incorrect, comptage incorrect, distribution de phase incorrecte.
 
-## Architecture des modifications
+## Gaps identifiés (13 points)
 
-### Fichiers à créer
+### A. Moteur de calcul — `electricalCalculations.ts`
 
-**`src/data/bornesVEProfile.ts`** — Profil bimodal 24h et configuration type
-- Exporte `PROFIL_BIMODAL_VE: number[]` (24 valeurs normalisées 0-1)
-- Exporte l'interface `BorneVEConfig` avec les champs : `puissanceParBorne_kVA`, `nombreBornes`, `puissanceRaccordee_kVA`, `cosPhiDefaut`, `borneOptions`
+| Ligne | Problème |
+|-------|----------|
+| 698-700 | `S_prel_map` : clients importés bornesVE → foisonnement résidentiel au lieu de `foisonnementBornesVE` |
+| 728-730 | Logs DEBUG : même erreur |
+| 814-816 | `totalLoads` : même erreur |
+| 824 | Charges manuelles bornesVE : foisonnement **hardcodé 50%** au lieu de `foisonnementBornesVE` |
 
-### Fichiers à modifier
+**Fix** : Ajouter `client.clientType === 'bornesVE'` comme 3e branche avec `foisonnementBornesVE`.
 
-**1. `src/types/network.ts`** (~10 lignes)
-- Ajouter `ClientType = 'résidentiel' | 'industriel' | 'bornesVE'` (ligne 30)
-- Ajouter au type `Project` : `foisonnementBornesVE?: number` (défaut 50)
-- Ajouter à `ClientCharge` : `clientCategory?: 'bornesVE'` et `borneVEConfig?: { puissanceParBorne_kVA: number; nombreBornes: number; cosPhi: number; profil24h?: number[] }`
+### B. Profil journalier — `dailyProfileCalculator.ts`
 
-**2. `src/store/networkStore.ts`** (~15 lignes)
-- Ajouter action `setFoisonnementBornesVE(value: number)`
-- Initialiser `foisonnementBornesVE: 50` dans le projet par défaut
+| Ligne | Problème |
+|-------|----------|
+| 148 | `countResidentialClients()` : exclut industriel mais **pas** bornesVE → bornesVE compté comme résidentiel |
+| 168 | `countResidentialClientsTransitant()` : idem |
+| 200 | `calculateWeightedFoisonnement()` : puissance bornesVE ajoutée au résidentiel |
 
-**3. `src/components/EditPanel.tsx`** (~80 lignes)
-- Dans la section ajout de charges (après `addClient`, ligne ~129), ajouter un bouton "Ajouter Borne VE"
-- Fonction `addBorneVE()` : crée un `ClientCharge` avec `clientCategory: 'bornesVE'` et `borneVEConfig` par défaut (11 kVA, 1 borne, cosPhi 0.95)
-- Pour les charges de type bornesVE, afficher un formulaire spécifique :
-  - Sélecteur puissance par borne (11/22 kVA)
-  - Spinner nombre de bornes (1-4)
-  - Puissance raccordée (pré-remplie = N×P, éditable librement)
-  - cos φ
-  - Résumé : "Raccordement tétraphasé 400V — X bornes × Y kVA — Raccordement : Z kVA"
+**Fix** : Exclure `bornesVE` du comptage résidentiel. Ajouter une 3e catégorie VE avec son propre poids.
 
-**4. `src/components/topMenu/ParametersTab.tsx`** (~30 lignes)
-- Ajouter un slider "Bornes VE" (icône ⚡) après le slider Industriel, avec séparateur visuel
-- Plage 10-100%, pas de 5%, valeur par défaut 50%
-- Calcul et affichage des totaux Bornes VE foisonnés dans les blocs Circuit/Cabine
+### C. Utilitaires clients — `clientsUtils.ts`
 
-**5. `src/utils/electricalCalculations.ts`** (~20 lignes)
-- Dans le calcul `S_prel_map` (ligne ~683), ajouter la détection des charges `bornesVE` :
-  - Utiliser `foisonnementBornesVE` au lieu de `foisonnementResidentiel/Industriel`
-  - Distribution équilibrée sur 3 phases (L1=L2=L3=P/3)
-- **Ne PAS appliquer** les coefficients de pénétration VE/PAC globaux sur ces charges
+| Ligne | Problème |
+|-------|----------|
+| 344-348 | `calculatePowersByClientType()` : bornesVE importés comptés en résidentiel |
+| 384-394 | `calculateFoisonnedPowers()` : pas de retour `chargesBornesVEFoisonnees` |
 
-**6. `src/utils/clientsUtils.ts`** (~10 lignes)
-- Dans `calculatePowersByClientType`, ajouter un retour `chargesBornesVE` séparé
-- Adapter les fonctions qui filtrent par `clientType` pour gérer `bornesVE`
+**Fix** : Ajouter `chargesBornesVE` dans le retour et appliquer `foisonnementBornesVE`.
 
-**7. `src/utils/dailyProfileCalculator.ts`** (~15 lignes)
-- Dans le calcul horaire, détecter les charges de type `bornesVE`
-- Appliquer `PROFIL_BIMODAL_VE[hour]` × puissanceRaccordee × cosPhi × foisonnementBornesVE
-- Exclure ces charges du calcul VE/PAC résidentiel
+### D. Distribution de phases — `phaseDistributionCalculator.ts`
 
-**8. `src/data/profileTemplates.ts`** (~10 lignes)
-- Ajouter le template `bimodal_VE` dans la liste des profils disponibles
+| Ligne | Problème |
+|-------|----------|
+| 604 | Seul `industriel` est détecté. bornesVE traité comme résidentiel pour la répartition par phase |
 
-### Points d'isolation critique
+**Fix** : Ajouter branche `bornesVE` → distribution POLY équilibrée (1/3 par phase), foisonnement indépendant.
 
-- `foisonnementBornesVE` est un paramètre indépendant, jamais mélangé avec K(N) résidentiel
-- Les curseurs "Pénétration VE" et "Pénétration PAC" du labo vérifient `clientCategory !== 'bornesVE'` avant d'appliquer leurs coefficients
-- Dans les tableaux récapitulatifs (PhaseDistributionDisplay), les bornes VE apparaissent comme catégorie distincte
+### E. UI — Onglets
 
-## Ordre d'implémentation
+| Fichier | Ligne | Problème |
+|---------|-------|----------|
+| `TensionClientTab.tsx` | 333 | Foisonnement client VE → résidentiel |
+| `DailyProfileTab.tsx` | 47 | Comptage VE → résidentiel |
+| `PhaseDistributionSliders.tsx` | 265 | Foisonnement curseur → résidentiel |
+| `ClientsPanel.tsx` | 406 | Pas d'option filtre "Bornes VE" |
 
-1. Créer `bornesVEProfile.ts` + modifier `network.ts` (types)
-2. Modifier `networkStore.ts` (action foisonnement)
-3. Modifier `EditPanel.tsx` (UI création borne VE)
-4. Modifier `ParametersTab.tsx` (slider foisonnement)
-5. Modifier `electricalCalculations.ts` + `dailyProfileCalculator.ts` (moteur)
-6. Modifier `clientsUtils.ts` (catégorisation)
+## Corrections à appliquer
+
+### 1. `electricalCalculations.ts` — 3 endroits (lignes 698, 728, 814)
+Remplacer le ternaire `industriel ? ind : res` par :
+```typescript
+const foisonnement = client.clientType === 'bornesVE'
+  ? foisBornesVE
+  : client.clientType === 'industriel'
+    ? foisonnementIndustriel
+    : foisonnementResidentiel;
+```
+Ligne 824 : remplacer `50` par `foisBornesVE`.
+
+### 2. `dailyProfileCalculator.ts` — 3 endroits
+Exclure `bornesVE` du comptage résidentiel (`clientType !== 'industriel' && clientType !== 'bornesVE'`). Ajouter `vePower` dans `calculateWeightedFoisonnement`.
+
+### 3. `clientsUtils.ts` — `calculatePowersByClientType` et `calculateFoisonnedPowers`
+Ajouter `chargesBornesVE` dans le retour. Accepter `foisonnementBornesVE` en paramètre de `calculateFoisonnedPowers`.
+
+### 4. `phaseDistributionCalculator.ts` — ligne 604
+Ajouter `const isVE = client.clientType === 'bornesVE'`. Traiter comme POLY avec foisonnement indépendant.
+
+### 5. `TensionClientTab.tsx` — ligne 333
+Ajouter branche bornesVE → `foisonnementBornesVE ?? 50`.
+
+### 6. `DailyProfileTab.tsx` — ligne 47
+Ajouter branche bornesVE dans le comptage.
+
+### 7. `PhaseDistributionSliders.tsx` — ligne 265
+Ajouter branche bornesVE → foisonnement VE.
+
+### 8. `ClientsPanel.tsx` — ligne 406
+Ajouter `<SelectItem value="bornesVE">⚡ VE</SelectItem>`.
+
+## Fichiers modifiés (8)
+
+1. `src/utils/electricalCalculations.ts`
+2. `src/utils/dailyProfileCalculator.ts`
+3. `src/utils/clientsUtils.ts`
+4. `src/utils/phaseDistributionCalculator.ts`
+5. `src/components/topMenu/TensionClientTab.tsx`
+6. `src/components/topMenu/DailyProfileTab.tsx`
+7. `src/components/PhaseDistributionSliders.tsx`
+8. `src/components/ClientsPanel.tsx`
 

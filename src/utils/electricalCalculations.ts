@@ -598,6 +598,7 @@ export class ElectricalCalculator {
       clientLinks,
       (project as any).foisonnementChargesResidentiel,
       (project as any).foisonnementChargesIndustriel,
+      (project as any).foisonnementBornesVE,
       undefined, // equi8CurrentInjections
       project.season as ThermalSeason | undefined,
       project.sagFactorPercent

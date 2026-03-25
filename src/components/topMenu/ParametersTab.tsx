@@ -218,7 +218,7 @@ export const ParametersTab = () => {
           </div>
 
           {/* Séparateur Bornes VE */}
-          {chargesBornesVE > 0 && (
+          {(chargesBornesVE > 0 || cabineChargesBornesVE > 0) && (
             <>
               <div className="w-px bg-border/50 self-stretch" />
               <div className="flex items-center gap-2 min-w-[180px] flex-1 max-w-[220px]">
